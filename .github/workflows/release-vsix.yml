@@ -21,26 +21,30 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Resolve release tag
         id: release_tag
         shell: bash
         run: |
+          set -euo pipefail
+
           VERSION="$(node -p "require('./package.json').version")"
+          EXPLICIT_TAG="false"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             INPUT_TAG="${{ inputs.tag }}"
             if [ -n "${INPUT_TAG}" ]; then
               TAG="${INPUT_TAG}"
+              EXPLICIT_TAG="true"
             else
               TAG="v${VERSION}"
             fi
@@ -48,29 +52,32 @@ jobs:
             TAG="${GITHUB_REF_NAME}"
           fi
 
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          TAG_EXISTS="false"
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            TAG_EXISTS="true"
+          fi
 
-      - name: Create and push tag
-        if: github.event_name == 'workflow_dispatch'
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${EXPLICIT_TAG}" = "false" ] && [ "${TAG_EXISTS}" = "true" ]; then
+            echo "Tag ${TAG} already exists. Bump package.json version or provide an explicit tag to rebuild an existing release." >&2
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=${TAG_EXISTS}" >> "$GITHUB_OUTPUT"
+          echo "explicit_tag=${EXPLICIT_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout existing manual tag
+        if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.explicit_tag == 'true' && steps.release_tag.outputs.tag_exists == 'true'
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Tag ${RELEASE_TAG} already exists locally."
-            git checkout "refs/tags/${RELEASE_TAG}"
-          elif git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+          if ! git rev-parse "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
             git fetch origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-            echo "Tag ${RELEASE_TAG} already exists on origin."
-            git checkout "refs/tags/${RELEASE_TAG}"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
-            git push origin "refs/tags/${RELEASE_TAG}"
           fi
+          git checkout "refs/tags/${RELEASE_TAG}"
 
       - name: Install dependencies
         run: npm ci
@@ -93,8 +100,21 @@ jobs:
           mkdir -p dist
           npm run package -- --out "dist/gitstorm-${{ steps.package.outputs.version }}.vsix"
 
+      - name: Create and push tag
+        if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.tag_exists == 'false'
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
+          git push origin "refs/tags/${RELEASE_TAG}"
+
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gitstorm-vsix
           path: dist/*.vsix

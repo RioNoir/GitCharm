@@ -746,11 +746,15 @@ export class GitService {
     return this.git.raw(['stash', 'show', '-p', stashRef, '--', filePath]).catch(() => '');
   }
 
+  async stashPush(message: string): Promise<void> {
+    await this.git.raw(['stash', 'push', '-u', '-m', message]);
+  }
+
   async stashApply(stashRef: string): Promise<void> {
     await this.git.raw(['stash', 'apply', stashRef]);
   }
 
-  async stashPop(stashRef: string): Promise<void> {
+  async stashPop(stashRef = 'stash@{0}'): Promise<void> {
     // git stash pop always pops stash@{0}, so we apply then drop
     await this.git.raw(['stash', 'apply', stashRef]);
     await this.git.raw(['stash', 'drop', stashRef]);
@@ -758,6 +762,18 @@ export class GitService {
 
   async stashDrop(stashRef: string): Promise<void> {
     await this.git.raw(['stash', 'drop', stashRef]);
+  }
+
+  async getStashFileContent(stashRef: string, filePath: string): Promise<string> {
+    try {
+      return await this.git.show([`${stashRef}:${filePath}`]);
+    } catch {
+      try {
+        return await this.git.show([`${stashRef}^3:${filePath}`]);
+      } catch {
+        return '';
+      }
+    }
   }
 
   // ── Unpushed commits ──────────────────────────────────────────────────────

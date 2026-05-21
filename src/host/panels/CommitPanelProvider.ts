@@ -350,7 +350,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const absUri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
         // git.openChange opens the native VS Code diff (index↔worktree or HEAD↔index)
         // depending on which group the file is in. Passing the file URI is enough.
-        await vscode.commands.executeCommand('git.openChange', absUri).catch(async () => {
+        try {
+          await vscode.commands.executeCommand('git.openChange', absUri);
+        } catch {
           // Fallback: manual vscode.diff with git: URI scheme
           const ref = msg.staged ? '' : '~';
           const gitUri = absUri.with({
@@ -361,7 +363,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             ? `${msg.filePath} (Index ↔ HEAD)`
             : `${msg.filePath} (Working Tree)`;
           await vscode.commands.executeCommand('vscode.diff', gitUri, absUri, title);
-        });
+        }
         break;
       }
 
@@ -525,8 +527,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }
 
           // Try VS Code LM API (Copilot)
-          const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' })
-            .catch(() => [] as vscode.LanguageModelChat[]);
+          let models: vscode.LanguageModelChat[] = [];
+          try {
+            models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+          } catch {
+            models = [];
+          }
           const model = models[0];
 
           if (!model) {
@@ -602,9 +608,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             const path = require('path') as typeof import('path');
             for (const filePath of err.conflictFiles) {
               const absUri = vscode.Uri.file(path.join(repo.rootPath, filePath));
-              await vscode.commands.executeCommand('git.openMergeEditor', absUri).catch(async () => {
+              try {
+                await vscode.commands.executeCommand('git.openMergeEditor', absUri);
+              } catch {
                 await vscode.window.showTextDocument(absUri, { preview: false });
-              });
+              }
             }
           } else {
             this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: String(e) });
@@ -705,15 +713,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const currentUri = ShelveDocumentProvider.buildUri(msg.repoId, `${safeRef}-current`, msg.filePath);
           this.shelveDocProvider.set(currentUri, currentContent);
 
-          // Right: stashed version — try tracked path first, then untracked (stash@{N}^3)
-          let stashedContent = '';
-          try {
-            stashedContent = await repo.git.show([`${msg.stashRef}:${msg.filePath}`]);
-          } catch {
-            try {
-              stashedContent = await repo.git.show([`${msg.stashRef}^3:${msg.filePath}`]);
-            } catch { /* file not in stash, leave empty */ }
-          }
+          // Right: stashed version — tracked path first, then untracked (stash@{N}^3)
+          const stashedContent = await repo.getStashFileContent(msg.stashRef, msg.filePath);
           const stashUri = ShelveDocumentProvider.buildUri(msg.repoId, safeRef, msg.filePath);
           this.shelveDocProvider.set(stashUri, stashedContent);
 

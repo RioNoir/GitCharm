@@ -26,6 +26,23 @@ interface IconDefinitionSvg { iconPath: string }
 interface IconDefinitionFont { fontCharacter: string; fontColor?: string; fontSize?: string }
 type IconDef = IconDefinitionSvg | IconDefinitionFont;
 
+interface FontSource { path: string; format: string }
+interface FontDefinition { id: string; src: FontSource[] }
+
+interface IconThemeJson {
+  iconDefinitions?: Record<string, IconDef>;
+  fonts?: FontDefinition[];
+  light?: IconThemeJson;
+  fileExtensions?: Record<string, string>;
+  fileNames?: Record<string, string>;
+  languageIds?: Record<string, string>;
+  folderNames?: Record<string, string>;
+  folderNamesExpanded?: Record<string, string>;
+  file?: string;
+  folder?: string;
+  folderExpanded?: string;
+}
+
 function isSvg(d: IconDef): d is IconDefinitionSvg {
   return 'iconPath' in d;
 }
@@ -135,7 +152,7 @@ export async function loadIconTheme(webview: vscode.Webview): Promise<IconThemeD
 }
 
 // Parse JSONC (JSON with // and /* */ comments and trailing commas)
-function stripJsonComments(text: string): unknown {
+function stripJsonComments(text: string): IconThemeJson {
   let result = '';
   let i = 0;
   while (i < text.length) {
@@ -165,19 +182,100 @@ function stripJsonComments(text: string): unknown {
   }
   // Remove trailing commas before } or ]
   result = result.replace(/,(\s*[}\]])/g, '$1');
-  return JSON.parse(result);
+  return normalizeIconThemeJson(JSON.parse(result));
 }
 
-function mergeVariant(base: Record<string, unknown>, light: Record<string, unknown>): Record<string, unknown> {
-  const result = { ...base };
-  for (const key of ['fileExtensions', 'fileNames', 'languageIds', 'folderNames', 'folderNamesExpanded', 'file', 'folder', 'folderExpanded'] as const) {
-    if (light[key]) {
-      if (typeof light[key] === 'object' && typeof base[key] === 'object') {
-        result[key] = { ...(base[key] as object), ...(light[key] as object) };
-      } else {
-        result[key] = light[key];
-      }
+function mergeVariant(base: IconThemeJson, light: IconThemeJson): IconThemeJson {
+  return {
+    ...base,
+    fileExtensions: mergeStringMap(base.fileExtensions, light.fileExtensions),
+    fileNames: mergeStringMap(base.fileNames, light.fileNames),
+    languageIds: mergeStringMap(base.languageIds, light.languageIds),
+    folderNames: mergeStringMap(base.folderNames, light.folderNames),
+    folderNamesExpanded: mergeStringMap(base.folderNamesExpanded, light.folderNamesExpanded),
+    file: light.file ?? base.file,
+    folder: light.folder ?? base.folder,
+    folderExpanded: light.folderExpanded ?? base.folderExpanded,
+  };
+}
+
+function mergeStringMap(base?: Record<string, string>, override?: Record<string, string>): Record<string, string> | undefined {
+  if (!base && !override) return undefined;
+  return { ...(base ?? {}), ...(override ?? {}) };
+}
+
+function normalizeIconThemeJson(value: unknown): IconThemeJson {
+  if (!isRecord(value)) return {};
+
+  return {
+    iconDefinitions: readIconDefinitions(value.iconDefinitions),
+    fonts: readFonts(value.fonts),
+    light: isRecord(value.light) ? normalizeIconThemeJson(value.light) : undefined,
+    fileExtensions: readStringMap(value.fileExtensions),
+    fileNames: readStringMap(value.fileNames),
+    languageIds: readStringMap(value.languageIds),
+    folderNames: readStringMap(value.folderNames),
+    folderNamesExpanded: readStringMap(value.folderNamesExpanded),
+    file: readString(value.file),
+    folder: readString(value.folder),
+    folderExpanded: readString(value.folderExpanded),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readStringMap(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const entries = Object.entries(value).filter((entry): entry is [string, string] =>
+    typeof entry[1] === 'string'
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function readIconDefinitions(value: unknown): Record<string, IconDef> | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const result: Record<string, IconDef> = {};
+  for (const [name, def] of Object.entries(value)) {
+    if (!isRecord(def)) continue;
+    if (typeof def.iconPath === 'string') {
+      result[name] = { iconPath: def.iconPath };
+    } else if (typeof def.fontCharacter === 'string') {
+      result[name] = {
+        fontCharacter: def.fontCharacter,
+        fontColor: readString(def.fontColor),
+        fontSize: readString(def.fontSize),
+      };
     }
   }
-  return result;
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function readFonts(value: unknown): FontDefinition[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const fonts: FontDefinition[] = [];
+  for (const font of value) {
+    if (!isRecord(font) || typeof font.id !== 'string' || !Array.isArray(font.src)) continue;
+
+    const src = font.src
+      .filter((item): item is Record<string, unknown> => isRecord(item))
+      .map(item => ({
+        path: readString(item.path),
+        format: readString(item.format),
+      }))
+      .filter((item): item is FontSource => !!item.path && !!item.format);
+
+    if (src.length > 0) fonts.push({ id: font.id, src });
+  }
+
+  return fonts.length > 0 ? fonts : undefined;
 }
