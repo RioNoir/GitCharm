@@ -2,7 +2,7 @@
   "name": "gitstorm",
   "displayName": "GitStorm",
   "description": "IntelliJ/PhpStorm-style Git management for VS Code — Commit panel, Git Log with graph, and 3-way merge editor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "rionoir",
   "license": "MIT",
   "repository": {
