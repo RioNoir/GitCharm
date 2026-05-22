@@ -1,5 +1,14 @@
 // Mirror of src/host/types/git.ts for use in webview (no Node.js imports)
 
+export interface MergeParentCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  authorName: string;
+  authorDate: string;
+  parentIndex: number;
+}
+
 export interface RepoMeta {
   id: string;
   name: string;

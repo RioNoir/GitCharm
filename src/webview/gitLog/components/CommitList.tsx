@@ -30,6 +30,7 @@ interface RepoBlock {
 }
 
 const REPO_LABEL_WIDTH = 6;
+const REPO_LABEL_WIDTH_EXPANDED = 110;
 const BLOCK_GAP = 4;
 
 function generateId() {
@@ -66,36 +67,29 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
     return blocks;
   }, [commits, repoMeta, multiRepo]);
 
-  const commitGapOffset = useMemo((): ((i: number) => number) => {
-    if (!multiRepo || repoBlocks.length === 0) return () => 0;
-    const gapsBefore = new Array(commits.length).fill(0);
-    let accumulated = 0;
-    for (const block of repoBlocks) {
-      if (block.startRow > 0) accumulated += BLOCK_GAP;
-      for (let i = block.startRow; i < block.startRow + block.rowCount; i++) {
-        gapsBefore[i] = accumulated;
-      }
-    }
-    return (i: number) => gapsBefore[i] ?? 0;
-  }, [commits.length, repoBlocks, multiRepo]);
 
-  const totalGap = multiRepo ? Math.max(0, repoBlocks.length - 1) * BLOCK_GAP : 0;
+  // Last index of each block — the gap is added after these rows.
+  const blockLastIndex = useMemo(() => {
+    const s = new Set<number>();
+    for (const block of repoBlocks) {
+      if (block.startRow > 0) s.add(block.startRow - 1);
+    }
+    return s;
+  }, [repoBlocks]);
 
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    // Tell the virtualizer the true height of each row, including the gap
+    // that follows the last row of each block.
+    estimateSize: (i) => ROW_HEIGHT + (multiRepo && blockLastIndex.has(i) ? BLOCK_GAP : 0),
     overscan: 10,
   });
 
   const rawItems = virtualizer.getVirtualItems();
-  const items = useMemo(() => {
-    if (!multiRepo) return rawItems;
-    return rawItems.map(item => ({
-      ...item,
-      start: item.index * ROW_HEIGHT + commitGapOffset(item.index),
-    }));
-  }, [rawItems, commitGapOffset, multiRepo]);
+  // Use the virtualizer's own start positions — they already account for the
+  // variable sizes above, so no manual offset calculation is needed.
+  const items = rawItems;
 
   const handleScroll = useCallback(() => {
     const el = parentRef.current;
@@ -113,8 +107,15 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  const totalHeight = virtualizer.getTotalSize() + totalGap;
-  const labelColWidth = multiRepo ? REPO_LABEL_WIDTH + 2 : 0;
+  const anyExpanded = expandedRepos.size > 0;
+  const labelColWidth = multiRepo ? (anyExpanded ? REPO_LABEL_WIDTH_EXPANDED : REPO_LABEL_WIDTH + 2) : 0;
+
+  // Map from commit index → virtualizer start position, for strip positioning.
+  const itemStartByIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const item of virtualizer.getVirtualItems()) map.set(item.index, item.start);
+    return map;
+  }, [virtualizer.getVirtualItems()]);
 
   function toggleRepo(repoId: string) {
     setExpandedRepos(prev => {
@@ -126,19 +127,20 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
 
   return (
     <div ref={parentRef} style={styles.container} onClick={() => setContextMenu(null)}>
-      <div style={{ height: totalHeight, position: 'relative' }}>
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
         {/* Repo label strips */}
         {multiRepo && repoBlocks.map((block) => {
-          const topPx = block.startRow * ROW_HEIGHT + commitGapOffset(block.startRow);
-          const heightPx = block.rowCount * ROW_HEIGHT;
+          const topPx = itemStartByIndex.get(block.startRow) ?? block.startRow * ROW_HEIGHT;
+          const lastRowStart = itemStartByIndex.get(block.startRow + block.rowCount - 1) ?? ((block.startRow + block.rowCount - 1) * ROW_HEIGHT);
+          const heightPx = lastRowStart + ROW_HEIGHT - topPx;
           const expanded = expandedRepos.has(block.repoId);
           return (
             <div
               key={`strip-${block.repoId}-${block.startRow}`}
               style={styles.repoStrip(topPx, heightPx, block.color, expanded)}
               onClick={() => toggleRepo(block.repoId)}
-              title={expanded ? '' : block.name}
+              title={block.name}
             >
               <span style={styles.repoStripBar(block.color)} />
               {expanded && (
@@ -173,22 +175,22 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
                 totalCommits={commits.length}
               />
 
-              <div style={styles.info}>
-                {commit.refs.length > 0 && (
-                  <div style={styles.refs}>
-                    {mergeLocalRemote(groupRefs(commit.refs)).slice(0, 4).map(group => {
-                      const color = branchColor(group.label);
-                      return (
-                        <span key={group.key} style={styles.refBadge(color, group.isTag)} title={badgeTitle(group)}>
-                          <RefBadgeIcon group={group} />
-                          <span style={styles.refBadgeLabel}>
-                            {group.isLocal && group.isRemote ? `origin & ${group.label}` : group.isRemote ? `origin/${group.label}` : group.label}
-                          </span>
+              {commit.refs.length > 0 && (
+                <div style={styles.refs}>
+                  {mergeLocalRemote(groupRefs(commit.refs)).slice(0, 4).map(group => {
+                    const color = branchColor(group.label);
+                    return (
+                      <span key={group.key} style={styles.refBadge(color, group.isTag)} title={badgeTitle(group)}>
+                        <RefBadgeIcon group={group} />
+                        <span style={styles.refBadgeLabel}>
+                          {group.isLocal && group.isRemote ? `origin & ${group.label}` : group.isRemote ? `origin/${group.label}` : group.label}
                         </span>
-                      );
-                    })}
-                  </div>
-                )}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={styles.info}>
                 <span style={styles.message}>{commit.message}</span>
               </div>
 
@@ -401,8 +403,7 @@ const styles = {
     position: 'absolute',
     top,
     left: 0,
-    width: expanded ? 'auto' : REPO_LABEL_WIDTH,
-    maxWidth: expanded ? '160px' : REPO_LABEL_WIDTH,
+    width: expanded ? REPO_LABEL_WIDTH_EXPANDED : REPO_LABEL_WIDTH,
     height,
     display: 'flex',
     flexDirection: 'row',
@@ -415,7 +416,7 @@ const styles = {
     background: expanded ? `${color}22` : 'transparent',
     border: expanded ? `1px solid ${color}55` : 'none',
     borderLeft: 'none',
-    transition: 'max-width 0.15s ease, background 0.1s',
+    transition: 'width 0.15s ease, background 0.1s',
   }),
   repoStripBar: (color: string): React.CSSProperties => ({
     width: REPO_LABEL_WIDTH,
@@ -434,9 +435,10 @@ const styles = {
     opacity: 0.8,
     whiteSpace: 'nowrap' as const,
     padding: '0 6px',
-    display: 'flex',
-    alignItems: 'center',
+    display: 'block',
     overflow: 'hidden',
+    textOverflow: 'ellipsis' as const,
+    lineHeight: `${ROW_HEIGHT}px`,
   } as React.CSSProperties,
   row: (top: number, selected: boolean): React.CSSProperties => ({
     position: 'absolute' as const,
@@ -458,7 +460,6 @@ const styles = {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
     overflow: 'hidden',
     minWidth: 0,
   },
@@ -466,6 +467,7 @@ const styles = {
     display: 'flex',
     gap: '3px',
     flexShrink: 0,
+    alignItems: 'center',
   },
   refBadge: (color: string, isTag: boolean): React.CSSProperties => ({
     fontSize: '10px',
@@ -504,8 +506,10 @@ const styles = {
     gap: '8px',
     alignItems: 'center',
     flexShrink: 0,
+    width: '220px',
     fontSize: '11px',
     opacity: 0.65,
+    overflow: 'hidden',
   },
   unpushedIcon: {
     fontSize: '12px',
@@ -514,15 +518,19 @@ const styles = {
     flexShrink: 0,
   } as React.CSSProperties,
   author: {
-    maxWidth: '100px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
+    width: '90px',
+    marginLeft: 'auto',
   },
   date: {
     whiteSpace: 'nowrap' as const,
-    minWidth: '110px',
+    flexShrink: 0,
     textAlign: 'right' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   loading: {
     padding: '8px',

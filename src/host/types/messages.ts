@@ -8,6 +8,15 @@ import type {
 } from './git';
 import type { IconThemeData } from '../utils/IconThemeService';
 
+export interface MergeParentCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  authorName: string;
+  authorDate: string;
+  parentIndex: number; // which parent branch (1 = first non-main, 2 = second, ...)
+}
+
 // ─── Shelve (patch-based, PhpStorm-style) ────────────────────────────────────
 
 export interface ShelveEntry {
@@ -110,7 +119,8 @@ export type HostToLogMsg =
   | { type: 'LOG_BRANCH_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'LOG_REFS_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'LOG_REMOTES_RESULT'; requestId: string; remotes: string[]; error?: string }
-  | { type: 'LOG_REFRESH' };
+  | { type: 'LOG_REFRESH' }
+  | { type: 'LOG_MERGE_COMMITS_RESULT'; requestId: string; commits: MergeParentCommit[]; error?: string };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
@@ -132,7 +142,8 @@ export type LogToHostMsg =
   | { type: 'LOG_CHERRY_PICK'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_REVERT_COMMIT'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_RESET_TO'; requestId: string; repoId: string; hash: string; mode: 'soft' | 'mixed' | 'hard' }
-  | { type: 'LOG_CREATE_PATCH'; requestId: string; repoId: string; hash: string };
+  | { type: 'LOG_CREATE_PATCH'; requestId: string; repoId: string; hash: string }
+  | { type: 'LOG_REQUEST_MERGE_COMMITS'; requestId: string; repoId: string; hash: string; parents: string[] };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 

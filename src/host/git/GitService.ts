@@ -352,6 +352,25 @@ export class GitService {
     }
   }
 
+  async getMergeCommits(hash: string, parents: string[]): Promise<import('../types/messages').MergeParentCommit[]> {
+    const result: import('../types/messages').MergeParentCommit[] = [];
+    // parents[0] is the main branch tip, parents[1..] are the merged-in branches.
+    // For each secondary parent, list commits that it introduced (not in parents[0]).
+    for (let i = 1; i < parents.length; i++) {
+      const range = `${parents[0]}..${parents[i]}`;
+      const raw = await this.git.raw([
+        'log', range,
+        '--format=%H%x00%h%x00%an%x00%ai%x00%s',
+      ]).catch(() => '');
+      for (const line of raw.trim().split('\n')) {
+        if (!line.trim()) continue;
+        const [h, sh, an, ad, ...msgParts] = line.split('\x00');
+        result.push({ hash: h, shortHash: sh, message: msgParts.join('\x00'), authorName: an, authorDate: ad, parentIndex: i });
+      }
+    }
+    return result;
+  }
+
   async getCommitFiles(hash: string): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
     const [nameStatus, numStat] = await Promise.all([
       this.git.raw(['diff-tree', '--no-commit-id', '-r', '--name-status', hash]),

@@ -74,9 +74,9 @@ export function CommitFiltersBar({ filters, branches, repos, onFilterChange, onR
 
       {/* Fetch All — pushed to the right */}
       <div style={{ flex: 1 }} />
-      <button style={styles.fetchBtn} onClick={onFetchAll} title="Fetch all remotes">
-        <Codicon name="cloud-download" style={{ fontSize: '13px' }} />
-        <span>Fetch All</span>
+      <button style={styles.fetchBtn} onClick={onFetchAll} title="Fetch all remotes and refresh log">
+        <Codicon name="sync" style={{ fontSize: '13px' }} />
+        <span>Update</span>
       </button>
     </div>
   );

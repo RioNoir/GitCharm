@@ -149,7 +149,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
     items.push(
       {
-        label: `${this.hasBehind ? '$(arrow-down) ' : '$(sync) '}Update Project…`,
+        label: `${this.hasBehind ? '$(arrow-down) ' : '$(cloud-download) '}Update Project…`,
         description: this.hasBehind ? 'Pull all repositories (incoming commits available)' : 'Pull all repositories',
         action: () => this.updateProject(),
       },
@@ -296,7 +296,7 @@ export class BranchStatusBar implements vscode.Disposable {
         action: () => this.newBranchFrom(branchName, metas),
       },
       {
-        label: '$(sync) Update (Pull)',
+        label: '$(cloud-download) Update (Pull)',
         description: `Pull ${branchName} in all repos`,
         action: () => this.pullBranchAllRepos(branchName, metas),
       },
@@ -616,7 +616,7 @@ export class BranchStatusBar implements vscode.Disposable {
         action: () => this.newBranchFromSingleRepo(branchName, meta),
       },
       {
-        label: '$(sync) Update (Pull)',
+        label: '$(cloud-download) Update (Pull)',
         action: () => this.pullSingleRepo(meta),
       },
       {

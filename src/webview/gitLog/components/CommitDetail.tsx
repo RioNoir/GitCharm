@@ -1,11 +1,15 @@
-import React, { useState, useMemo } from 'react';
-import type { CommitNode, RepoMeta } from '../../shared/types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import type { CommitNode, RepoMeta, MergeParentCommit } from '../../shared/types';
 import { getVsCodeApi } from '../../shared/vscodeApi';
-import type { LogToHostMsg, IconThemeData } from '../../../host/types/messages';
+import type { LogToHostMsg, HostToLogMsg, IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
 import { groupRefs, branchColor } from '../utils/refs';
 import type { RefGroup } from '../utils/refs';
+
+function generateId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 interface Props {
   commit: CommitNode | null;
@@ -170,21 +174,88 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
 export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile }: Props) {
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree');
   const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
+  const [mergeCommits, setMergeCommits] = useState<MergeParentCommit[]>([]);
+  const [loadingMerge, setLoadingMerge] = useState(false);
+  const [selectedMergeHash, setSelectedMergeHash] = useState<string | null>(null);
+  const [mergeFiles, setMergeFiles] = useState<Array<{ path: string; status: string; added?: number; removed?: number }>>([]);
+  const [loadingMergeFiles, setLoadingMergeFiles] = useState(false);
+  const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
 
   const repoName = useMemo(() => {
     if (!commit) return null;
     return repos.find(r => r.id === commit.repoId)?.name ?? null;
   }, [commit, repos]);
 
-  function openVscodeDiff(file: { path: string; status: string }) {
+  const isMerge = (commit?.parents.length ?? 0) >= 2;
+
+  useEffect(() => {
+    const handler = (event: MessageEvent<HostToLogMsg>) => {
+      const msg = event.data;
+      if (!msg?.type) return;
+      if ('requestId' in msg && msg.requestId && pendingRef.current.has(msg.requestId as string)) {
+        const resolve = pendingRef.current.get(msg.requestId as string)!;
+        pendingRef.current.delete(msg.requestId as string);
+        resolve(msg);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  useEffect(() => {
+    setSelectedMergeHash(null);
+    setMergeFiles([]);
+    if (!commit || !isMerge) { setMergeCommits([]); return; }
+    setLoadingMerge(true);
+    const reqId = generateId();
+    pendingRef.current.set(reqId, (msg) => {
+      if (msg.type === 'LOG_MERGE_COMMITS_RESULT') {
+        setMergeCommits(msg.commits);
+        setLoadingMerge(false);
+      }
+    });
+    getVsCodeApi().postMessage({
+      type: 'LOG_REQUEST_MERGE_COMMITS',
+      requestId: reqId,
+      repoId: commit.repoId,
+      hash: commit.hash,
+      parents: commit.parents,
+    } satisfies LogToHostMsg);
+  }, [commit?.hash]);
+
+  function openVscodeDiff(file: { path: string; status: string }, hash?: string) {
     onSelectFile(file);
     if (!commit) return;
     getVsCodeApi().postMessage({
       type: 'LOG_OPEN_FILE_DIFF',
       repoId: commit.repoId,
-      hash: commit.hash,
+      hash: hash ?? commit.hash,
       filePath: file.path,
     } as LogToHostMsg);
+  }
+
+  function selectMergeCommit(c: MergeParentCommit) {
+    if (selectedMergeHash === c.hash) {
+      setSelectedMergeHash(null);
+      setMergeFiles([]);
+      return;
+    }
+    setSelectedMergeHash(c.hash);
+    setMergeFiles([]);
+    setLoadingMergeFiles(true);
+    const reqId = generateId();
+    pendingRef.current.set(reqId, (msg) => {
+      if (msg.type === 'LOG_COMMIT_FILES') {
+        setMergeFiles(msg.files);
+        setLoadingMergeFiles(false);
+      }
+    });
+    getVsCodeApi().postMessage({
+      type: 'LOG_REQUEST_COMMIT_FILES',
+      requestId: reqId,
+      repoId: commit!.repoId,
+      hash: c.hash,
+    } satisfies LogToHostMsg);
   }
 
   if (!commit) {
@@ -195,8 +266,12 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     );
   }
 
-  const tree = viewMode === 'tree' && files.length > 0
-    ? collapseSingleChildDirs(buildTree(files))
+  const activeFiles = selectedMergeHash ? mergeFiles : files;
+  const activeLoading = selectedMergeHash ? loadingMergeFiles : loadingFiles;
+  const activeHash = selectedMergeHash ?? commit?.hash;
+
+  const tree = viewMode === 'tree' && activeFiles.length > 0
+    ? collapseSingleChildDirs(buildTree(activeFiles))
     : null;
 
   return (
@@ -233,11 +308,70 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             })}
           </div>
         )}
+
+        {/* Merged commits section */}
+        {isMerge && (
+          <div style={styles.mergeSection}>
+            <div style={styles.mergeSectionTitle}>
+              <Codicon name="git-merge" style={{ fontSize: '11px', opacity: 0.7 }} />
+              <span>Merged commits</span>
+            </div>
+            {loadingMerge && <div style={styles.mergeLoading}>Loading...</div>}
+            {!loadingMerge && mergeCommits.length === 0 && (
+              <div style={styles.mergeLoading}>No commits found</div>
+            )}
+            {!loadingMerge && mergeCommits.map(c => {
+              const isActive = selectedMergeHash === c.hash;
+              return (
+                <div key={c.hash}>
+                  <div
+                    style={styles.mergeCommitRow(isActive)}
+                    title={`${c.hash}\nClick to view files`}
+                    onClick={() => selectMergeCommit(c)}
+                  >
+                    <Codicon name={isActive ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
+                    <span style={styles.mergeHash}>{c.shortHash}</span>
+                    <span style={styles.mergeMessage}>{c.message}</span>
+                    <span style={styles.mergeMeta}>{c.authorName}</span>
+                  </div>
+                  {isActive && (
+                    <div style={styles.mergeFileList}>
+                      {loadingMergeFiles && <div style={styles.mergeLoading}>Loading files...</div>}
+                      {!loadingMergeFiles && mergeFiles.length === 0 && <div style={styles.mergeLoading}>No changed files</div>}
+                      {!loadingMergeFiles && mergeFiles.map(f => {
+                        const statusColor = STATUS_COLORS[f.status] ?? 'var(--vscode-foreground)';
+                        const fileName = f.path.split('/').pop() ?? f.path;
+                        return (
+                          <div
+                            key={f.path}
+                            style={styles.mergeFileRow}
+                            title={f.path}
+                            onClick={() => openVscodeDiff(f, c.hash)}
+                          >
+                            <FileIcon name={fileName} theme={iconTheme} size={13} style={{ opacity: 0.85, flexShrink: 0 }} />
+                            <span style={{ ...styles.mergeMessage, color: statusColor }}>{fileName}</span>
+                            {(f.added != null || f.removed != null) && (
+                              <span style={styles.lineStats}>
+                                {f.added != null && <span style={styles.added}>+{f.added}</span>}
+                                {f.removed != null && <span style={styles.removed}>-{f.removed}</span>}
+                              </span>
+                            )}
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: statusColor, flexShrink: 0 }}>{f.status}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* File list toolbar */}
       <div style={styles.fileListToolbar}>
-        <span style={styles.fileCount}>{files.length} file{files.length !== 1 ? 's' : ''}</span>
+        <span style={styles.fileCount}>{activeFiles.length} file{activeFiles.length !== 1 ? 's' : ''}{selectedMergeHash ? ` · ${mergeCommits.find(c => c.hash === selectedMergeHash)?.shortHash}` : ''}</span>
         {viewMode === 'tree' && (
           <div style={styles.expandBtns}>
             <button
@@ -276,8 +410,8 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
 
       {/* File list */}
       <div style={styles.fileList}>
-        {loadingFiles && <div style={styles.loading}>Loading files...</div>}
-        {!loadingFiles && files.length === 0 && (
+        {activeLoading && <div style={styles.loading}>Loading files...</div>}
+        {!activeLoading && activeFiles.length === 0 && (
           <div style={styles.loading}>No changed files</div>
         )}
 
@@ -289,11 +423,11 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
               return a.name.localeCompare(b.name);
             })
             .map(child => (
-              <TreeDir key={child.fullPath} node={child} depth={0} selectedFile={selectedFile} onOpen={openVscodeDiff} allExpanded={allExpanded} iconTheme={iconTheme} />
+              <TreeDir key={child.fullPath} node={child} depth={0} selectedFile={selectedFile} onOpen={f => openVscodeDiff(f, activeHash)} allExpanded={allExpanded} iconTheme={iconTheme} />
             ))
         )}
 
-        {viewMode === 'flat' && files.map(file => {
+        {viewMode === 'flat' && activeFiles.map(file => {
           const isSelected = selectedFile?.path === file.path;
           const statusColor = STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)';
           const fileName = file.path.split('/').pop() ?? file.path;
@@ -303,7 +437,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             <div
               key={file.path}
               style={styles.fileRow(isSelected)}
-              onClick={() => openVscodeDiff(file)}
+              onClick={() => openVscodeDiff(file, activeHash)}
               title={`${file.path}\nClick to open diff`}
             >
               <div style={{ width: 4, flexShrink: 0 }} />
@@ -429,6 +563,79 @@ const styles = {
     boxSizing: 'border-box' as const,
     fontWeight: 500,
   }),
+  mergeSection: {
+    marginTop: '6px',
+    borderTop: '1px solid var(--vscode-panel-border)',
+    paddingTop: '6px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '2px',
+  },
+  mergeSectionTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    fontSize: '11px',
+    opacity: 0.6,
+    marginBottom: '2px',
+    userSelect: 'none' as const,
+  } as React.CSSProperties,
+  mergeLoading: {
+    fontSize: '11px',
+    opacity: 0.45,
+    padding: '2px 0',
+  } as React.CSSProperties,
+  mergeCommitRow: (active: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '2px 4px',
+    fontSize: '11px',
+    cursor: 'pointer',
+    borderRadius: '3px',
+    background: active ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
+    color: active ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
+  }),
+  mergeFileList: {
+    marginLeft: '16px',
+    marginBottom: '2px',
+    borderLeft: '1px solid var(--vscode-panel-border)',
+    paddingLeft: '6px',
+  } as React.CSSProperties,
+  mergeFileRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '1px 4px',
+    fontSize: '11px',
+    cursor: 'pointer',
+    borderRadius: '2px',
+  } as React.CSSProperties,
+  mergeHash: {
+    fontFamily: 'monospace',
+    fontSize: '10px',
+    opacity: 0.6,
+    background: 'var(--vscode-badge-background)',
+    padding: '0 3px',
+    borderRadius: '2px',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  mergeMessage: {
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    color: 'var(--vscode-foreground)',
+  } as React.CSSProperties,
+  mergeMeta: {
+    fontSize: '10px',
+    opacity: 0.5,
+    flexShrink: 0,
+    maxWidth: '80px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
   fileListToolbar: {
     display: 'flex',
     alignItems: 'center',

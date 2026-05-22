@@ -46,10 +46,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repos = this.manager.getRepoMetas();
         const branches = await this.manager.getAllBranches();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
-      }),
-      this.manager.onStatusChange(() => {
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 500);
+        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
       }),
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.colorTheme')) {
@@ -108,6 +106,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.post({ type: 'LOG_COMMIT_FILES', requestId: msg.requestId, files });
         } catch (e: unknown) {
           this.post({ type: 'LOG_COMMIT_FILES', requestId: msg.requestId, files: [], error: String(e) });
+        }
+        break;
+      }
+
+      case 'LOG_REQUEST_MERGE_COMMITS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_MERGE_COMMITS_RESULT', requestId: msg.requestId, commits: [], error: 'Repo not found' }); return; }
+        try {
+          const commits = await repo.getMergeCommits(msg.hash, msg.parents);
+          this.post({ type: 'LOG_MERGE_COMMITS_RESULT', requestId: msg.requestId, commits });
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_MERGE_COMMITS_RESULT', requestId: msg.requestId, commits: [], error: String(e) });
         }
         break;
       }
@@ -276,6 +286,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const branches = await this.manager.getAllBranches();
         const repos = this.manager.getRepoMetas();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
+        this.post({ type: 'LOG_REFRESH' });
         break;
       }
 

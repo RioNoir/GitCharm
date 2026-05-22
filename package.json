@@ -117,7 +117,7 @@
       {
         "command": "gitstorm.updateProject",
         "title": "GitStorm: Update Project",
-        "icon": "$(arrow-down)"
+        "icon": "$(cloud-download)"
       },
       {
         "command": "gitstorm.openSettings",
