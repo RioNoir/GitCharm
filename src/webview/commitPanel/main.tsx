@@ -637,6 +637,7 @@ function App() {
             loading={store.loading}
             getSelectedFilesForRepo={store.getSelectedFilesForRepo}
             onMessageChange={msg => store.setCommitMessage(msg)}
+            onAmendToggle={repoId => store.setAmend(repoId, !(store.amendFlags[repoId] ?? false))}
             onCommit={() => doCommit(false)}
             onCommitAndPush={() => doCommit(true)}
             onPush={doPush}

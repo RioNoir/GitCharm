@@ -10,6 +10,7 @@ interface Props {
   loading: boolean;
   getSelectedFilesForRepo: (repoId: string) => string[];
   onMessageChange: (msg: string) => void;
+  onAmendToggle: (repoId: string) => void;
   onCommit: () => void;
   onCommitAndPush: () => void;
   onShelve: () => void;
@@ -21,7 +22,7 @@ interface Props {
 
 export function UnifiedCommitForm({
   message, repoStatuses, repoMetas, amendFlags,
-  loading, getSelectedFilesForRepo, onMessageChange, onCommit, onCommitAndPush, onShelve,
+  loading, getSelectedFilesForRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve,
   onPush, onPushAll, onAutopilot, generatingMessage,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
@@ -75,6 +76,19 @@ export function UnifiedCommitForm({
         </div>
       )}
 
+      {/* Amend toggle — shown above textarea when a single repo is selected */}
+      {showAmend && (
+        <label style={styles.amendLabel} title="Modify the last commit instead of creating a new one. Rewrites history — avoid on shared branches.">
+          <input
+            type="checkbox"
+            checked={amend}
+            onChange={() => onAmendToggle(amendRepoId!)}
+            style={{ marginRight: '4px' }}
+          />
+          Amend last commit
+        </label>
+      )}
+
       {/* Message textarea — auto-height */}
       <div style={styles.textareaWrap}>
         <textarea
@@ -113,18 +127,6 @@ export function UnifiedCommitForm({
             <Codicon name="archive" style={{ marginRight: '4px' }} />
             Shelve
           </button>
-          {showAmend && (
-            <label style={styles.amendLabel}>
-              <input
-                type="checkbox"
-                checked={amend}
-                onChange={() => {/* handled in main */}}
-                style={{ marginRight: '4px' }}
-                disabled
-              />
-              Amend
-            </label>
-          )}
         </div>
 
         <div style={styles.rightActions}>
@@ -282,6 +284,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap' as const,
     gap: '6px',
   },
   leftActions: {
@@ -291,6 +294,7 @@ const styles = {
   },
   rightActions: {
     display: 'flex',
+    flexWrap: 'wrap' as const,
     gap: '4px',
   },
   stashBtn: {
@@ -310,9 +314,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     fontSize: '11px',
-    cursor: 'default',
+    cursor: 'pointer',
     color: 'var(--vscode-foreground)',
-    opacity: 0.7,
+    opacity: 0.75,
+    userSelect: 'none' as const,
   } as React.CSSProperties,
   commitBtn: (enabled: boolean): React.CSSProperties => ({
     padding: '4px 12px',
