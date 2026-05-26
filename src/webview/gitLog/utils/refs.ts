@@ -89,16 +89,25 @@ export function groupRefs(refs: string[]): RefGroup[] {
   return groups;
 }
 
-const BADGE_PALETTE = [
+const BADGE_PALETTE_DARK = [
   '#569cd6', '#c586c0', '#4ec9b0', '#ce9178',
   '#4fc1ff', '#dcdcaa', '#6796e6', '#cd9731',
   '#b5cea8', '#d7ba7d', '#9cdcfe', '#f44747',
 ];
 
+const BADGE_PALETTE_LIGHT = [
+  '#1565c0', '#6a1b9a', '#00695c', '#bf360c',
+  '#0277bd', '#f57f17', '#283593', '#e65100',
+  '#2e7d32', '#4e342e', '#01579b', '#b71c1c',
+];
+
 export function branchColor(name: string): string {
+  const isDark = typeof document !== 'undefined' &&
+    (document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast'));
+  const palette = isDark ? BADGE_PALETTE_DARK : BADGE_PALETTE_LIGHT;
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
   }
-  return BADGE_PALETTE[hash % BADGE_PALETTE.length];
+  return palette[hash % palette.length];
 }

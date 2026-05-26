@@ -62,7 +62,7 @@ export type HostToCommitMsg =
   | { type: 'SHELVE_OP_RESULT'; requestId: string; repoId: string; op: 'push' | 'apply' | 'drop'; ok: boolean; error?: string; hasConflicts?: boolean; conflictFiles?: string[] }
   | { type: 'STASH_LIST_RESULT'; requestId: string; repoId: string; stashes: StashEntry[]; error?: string }
   | { type: 'STASH_SHOW_RESULT'; requestId: string; diff: string; error?: string }
-  | { type: 'STASH_OP_RESULT'; requestId: string; repoId: string; op: 'apply' | 'pop' | 'drop'; ok: boolean; error?: string }
+  | { type: 'STASH_OP_RESULT'; requestId: string; repoId: string; op: 'apply' | 'pop' | 'drop' | 'push'; ok: boolean; error?: string }
   | { type: 'PUSH_UNPUSHED_RESULT'; requestId: string; repoId: string; commits: UnpushedCommit[]; error?: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
@@ -100,12 +100,14 @@ export type CommitToHostMsg =
   | { type: 'SHELVE_GET_FILE_DIFF'; requestId: string; repoId: string; shelveId: string; filePath: string }
   | { type: 'SHELVE_OPEN_FILE_DIFF'; repoId: string; shelveId: string; filePath: string }
   | { type: 'STASH_LIST'; requestId: string; repoId: string }
+  | { type: 'STASH_PUSH'; requestId: string; repoId: string; message: string; paths?: string[] }
   | { type: 'STASH_SHOW'; requestId: string; repoId: string; stashRef: string; filePath: string }
   | { type: 'STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_POP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_DROP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_OPEN_FILE_DIFF'; repoId: string; stashRef: string; filePath: string }
-  | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string };
+  | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string }
+  | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 
@@ -120,7 +122,8 @@ export type HostToLogMsg =
   | { type: 'LOG_REFS_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'LOG_REMOTES_RESULT'; requestId: string; remotes: string[]; error?: string }
   | { type: 'LOG_REFRESH' }
-  | { type: 'LOG_MERGE_COMMITS_RESULT'; requestId: string; commits: MergeParentCommit[]; error?: string };
+  | { type: 'LOG_MERGE_COMMITS_RESULT'; requestId: string; commits: MergeParentCommit[]; error?: string }
+  | { type: 'LOG_FILE_OP_RESULT'; requestId: string; ok: boolean; error?: string };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
@@ -128,7 +131,9 @@ export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
-  | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string }
+  | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string }
+  | { type: 'LOG_OPEN_FILE'; repoId: string; filePath: string }
+  | { type: 'LOG_REVERT_FILE'; requestId: string; repoId: string; hash: string; filePath: string; fileStatus?: string }
   | { type: 'LOG_CHECKOUT'; requestId: string; repoId: string; branchName: string; createNew?: boolean; from?: string }
   | { type: 'LOG_PULL'; requestId: string; repoId: string }
   | { type: 'LOG_PUSH'; requestId: string; repoId: string; remote?: string; force?: boolean }

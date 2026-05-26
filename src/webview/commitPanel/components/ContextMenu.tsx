@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Codicon } from '../../shared/Codicon';
 
 export interface ContextMenuItem {
@@ -23,6 +23,18 @@ interface Props {
 
 export function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const margin = 4;
+    setPos({
+      x: Math.max(margin, Math.min(x, window.innerWidth  - w - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - h - margin)),
+    });
+  }, [x, y]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -37,12 +49,12 @@ export function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
     };
   }, [onClose]);
 
-  // Clamp to viewport
   const style: React.CSSProperties = {
     position: 'fixed',
-    top: y,
-    left: x,
+    top: pos?.y ?? y,
+    left: pos?.x ?? x,
     zIndex: 9999,
+    visibility: pos ? 'visible' : 'hidden',
   };
 
   return (

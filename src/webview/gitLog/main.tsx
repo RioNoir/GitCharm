@@ -208,6 +208,8 @@ function App() {
     reloadCommits(cleared);
   }, [reloadCommits]);
 
+  const hasSelectedCommit = !!store.selectedCommit;
+
   return (
     <div style={appStyle} onContextMenu={e => e.preventDefault()}>
       {/* Filters bar (contains Fetch All on the right) */}
@@ -287,21 +289,23 @@ function App() {
           loading={store.loadingCommits}
         />
 
-        <ResizeHandle onMouseDown={onDetailResize} />
+        {hasSelectedCommit && <ResizeHandle onMouseDown={onDetailResize} />}
 
-        {/* Commit detail (right) */}
-        <div ref={detailRef} style={detailPane}>
-          <CommitDetail
-            commit={store.selectedCommit}
-            files={store.commitFiles}
-            selectedFile={store.selectedFile}
-            loadingFiles={store.loadingFiles}
-            repoColor={selectedRepoColor}
-            repos={store.repos}
-            iconTheme={store.iconTheme}
-            onSelectFile={store.selectFile}
-          />
-        </div>
+        {/* Commit detail (right) — hidden when no commit selected */}
+        {hasSelectedCommit && (
+          <div ref={detailRef} style={detailPane}>
+            <CommitDetail
+              commit={store.selectedCommit}
+              files={store.commitFiles}
+              selectedFile={store.selectedFile}
+              loadingFiles={store.loadingFiles}
+              repoColor={selectedRepoColor}
+              repos={store.repos}
+              iconTheme={store.iconTheme}
+              onSelectFile={store.selectFile}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -316,6 +320,7 @@ const appStyle: React.CSSProperties = {
   fontFamily: 'var(--vscode-font-family)',
   fontSize: 'var(--vscode-font-size)',
   overflow: 'hidden',
+  userSelect: 'none',
 };
 
 

@@ -225,7 +225,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
           )}
           <button
             style={styles.actionBtn}
-            title="Apri file"
+            title="Open file"
             onClick={(e) => { e.stopPropagation(); onOpenFile(file); }}
           >
             <Codicon name="go-to-file" />

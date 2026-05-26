@@ -139,27 +139,74 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) return;
         try {
           const path = await import('path');
-          const prevRef = `${msg.hash}~1`;
-          const currRef = msg.hash;
+          const status = msg.fileStatus ?? 'M';
           const fileName = path.basename(msg.filePath);
           const rootPath = repo.rootPath;
+          // git empty tree SHA — used as "no file" side for added/deleted diffs
+          const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-          // Create git-show URIs via a virtual document scheme or use the vscode.git scheme
-          const gitUri = (ref: string) => vscode.Uri.from({
+          const gitUri = (ref: string, filePath?: string) => vscode.Uri.from({
             scheme: 'git',
-            path: path.join(rootPath, msg.filePath),
-            query: JSON.stringify({ path: path.join(rootPath, msg.filePath), ref }),
+            path: path.join(rootPath, filePath ?? msg.filePath),
+            query: JSON.stringify({ path: path.join(rootPath, filePath ?? msg.filePath), ref }),
           });
 
-          await vscode.commands.executeCommand(
-            'vscode.diff',
-            gitUri(prevRef),
-            gitUri(currRef),
-            `${fileName} (${msg.hash.slice(0, 7)})`,
-            { preview: true }
-          );
+          let leftUri: vscode.Uri;
+          let rightUri: vscode.Uri;
+          let title: string;
+
+          if (status === 'A') {
+            // File was added in this commit — left side is empty
+            leftUri  = gitUri(EMPTY_TREE);
+            rightUri = gitUri(msg.hash);
+            title    = `${fileName} (added in ${msg.hash.slice(0, 7)})`;
+          } else if (status === 'D') {
+            // File was deleted in this commit — right side is empty
+            leftUri  = gitUri(`${msg.hash}~1`);
+            rightUri = gitUri(EMPTY_TREE);
+            title    = `${fileName} (deleted in ${msg.hash.slice(0, 7)})`;
+          } else {
+            leftUri  = gitUri(`${msg.hash}~1`);
+            rightUri = gitUri(msg.hash);
+            title    = `${fileName} (${msg.hash.slice(0, 7)})`;
+          }
+
+          await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
         } catch (e: unknown) {
           vscode.window.showErrorMessage(`GitStorm: Cannot open diff: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_OPEN_FILE': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        try {
+          const path = await import('path');
+          const uri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
+          await vscode.commands.executeCommand('vscode.open', uri);
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`GitStorm: Cannot open file: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_REVERT_FILE': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          if (msg.fileStatus === 'A') {
+            // File was added in this commit — reverting means deleting it from the working tree
+            const path = await import('path');
+            const uri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
+            await vscode.workspace.fs.delete(uri, { useTrash: false });
+          } else {
+            await repo.revertFileToParent(msg.hash, msg.filePath);
+          }
+          this.post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: true });
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitStorm: Cannot revert file: ${String(e)}`);
         }
         break;
       }

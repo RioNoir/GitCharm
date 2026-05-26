@@ -20,8 +20,9 @@ function generateId() {
 // ── Context menu items ────────────────────────────────────────────────────────
 
 const FILE_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
-  { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
+  { id: 'rollback',  label: 'Rollback',            icon: 'discard' },
+  { id: 'shelve',    label: 'Shelve',              icon: 'archive' },
+  { id: 'stash',     label: 'Stash',               icon: 'save' },
   { id: 'diff',      label: 'Show Diff',           icon: 'diff' },
   { id: 'jump',      label: 'Jump to Source',      icon: 'go-to-file' },
   { separator: true },
@@ -41,10 +42,19 @@ const FILE_CONTEXT_ITEMS_CONFLICT: ContextMenuEntry[] = [
 const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
   { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
+  { id: 'stash',     label: 'Stash Changes',       icon: 'save' },
   { separator: true },
   { id: 'gitignore', label: 'Add to .gitignore',  icon: 'exclude' },
   { separator: true },
   { id: 'delete',    label: 'Delete',              icon: 'trash', danger: true },
+  { separator: true },
+  { id: 'refresh',   label: 'Refresh',             icon: 'refresh' },
+];
+
+const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
+  { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
+  { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
+  { id: 'stash',     label: 'Stash Changes',       icon: 'save' },
   { separator: true },
   { id: 'refresh',   label: 'Refresh',             icon: 'refresh' },
 ];
@@ -113,11 +123,15 @@ function App() {
   const viewMenuRef       = useRef<HTMLDivElement>(null);
   const shelveViewMenuRef = useRef<HTMLDivElement>(null);
 
+  // ── Selected file (highlighted when diff is open or on right-click) ──────
+  const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
+
   // ── Context menus ─────────────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; file: FileStatus } | null>(null);
   const [folderCtxMenu, setFolderCtxMenu] = useState<{
     x: number; y: number; repoId: string; folderPath: string; files: FileStatus[];
   } | null>(null);
+  const [repoCtxMenu, setRepoCtxMenu] = useState<{ x: number; y: number; repoId: string } | null>(null);
 
   const send = useCallback((msg: CommitToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -292,6 +306,10 @@ function App() {
 
   // ── Context menu handlers ─────────────────────────────────────────────────
 
+  const doStash = useCallback((repoId: string, message: string, paths?: string[]) => {
+    send({ type: 'STASH_PUSH', requestId: generateId(), repoId, message, paths } satisfies CommitToHostMsg);
+  }, [send]);
+
   const handleContextMenuSelect = useCallback((id: string) => {
     const file = ctxMenu?.file;
     if (!file) return;
@@ -304,6 +322,9 @@ function App() {
         break;
       case 'shelve':
         confirmShelve(file.repoId, 'Changes', [file.path]);
+        break;
+      case 'stash':
+        doStash(file.repoId, 'WIP stash', [file.path]);
         break;
       case 'diff':
         openDiff(file.repoId, file.path);
@@ -321,7 +342,7 @@ function App() {
         send({ type: 'COMMIT_REQUEST_STATUS' });
         break;
     }
-  }, [ctxMenu, openDiff, send]);
+  }, [ctxMenu, openDiff, doStash, send]);
 
   const handleFolderContextMenuSelect = useCallback((id: string) => {
     const ctx = folderCtxMenu;
@@ -333,6 +354,9 @@ function App() {
       case 'shelve':
         confirmShelve(ctx.repoId, 'Changes', ctx.files.map(f => f.path));
         break;
+      case 'stash':
+        doStash(ctx.repoId, 'WIP stash', ctx.files.map(f => f.path));
+        break;
       case 'gitignore':
         send({ type: 'COMMIT_ADD_TO_GITIGNORE', repoId: ctx.repoId, entryPath: ctx.folderPath });
         break;
@@ -343,7 +367,34 @@ function App() {
         send({ type: 'COMMIT_REQUEST_STATUS' });
         break;
     }
-  }, [folderCtxMenu, send]);
+  }, [folderCtxMenu, doStash, send]);
+
+  const handleRepoContextMenuSelect = useCallback((id: string) => {
+    const ctx = repoCtxMenu;
+    if (!ctx) return;
+    const repoStatus = repos.find(r => r.repoId === ctx.repoId);
+    switch (id) {
+      case 'rollback': {
+        const fileMap = new Map<string, FileStatus>();
+        for (const f of repoStatus?.unstagedFiles ?? []) fileMap.set(f.path, f);
+        for (const f of repoStatus?.stagedFiles ?? []) fileMap.set(f.path, f);
+        const allFiles = Array.from(fileMap.values());
+        if (allFiles.length > 0) {
+          send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: allFiles.map(f => ({ repoId: f.repoId, path: f.path })) });
+        }
+        break;
+      }
+      case 'shelve':
+        confirmShelve(ctx.repoId, 'Changes');
+        break;
+      case 'stash':
+        doStash(ctx.repoId, 'WIP stash');
+        break;
+      case 'refresh':
+        send({ type: 'COMMIT_REQUEST_STATUS' });
+        break;
+    }
+  }, [repoCtxMenu, repos, doStash, confirmShelve, send]);
 
   // ── Push actions ──────────────────────────────────────────────────────────
 
@@ -420,7 +471,7 @@ function App() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={css.app}>
+    <div style={css.app} onContextMenu={e => e.preventDefault()}>
 
       {/* ── Toolbar ── */}
       <div style={css.toolbar}>
@@ -574,15 +625,15 @@ function App() {
                   repoName={repoName}
                   repoColor={repoColor}
                   multiRepo={multiRepo}
-                  selectedFile={null}
+                  selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                   viewMode={store.viewMode}
                   isFileSelected={store.isFileSelected}
                   isCollapsed={store.isCollapsed}
                   toggleCollapsed={store.toggleCollapsed}
                   onToggleFile={store.toggleFileSelection}
                   onSetFiles={store.setFileSelections}
-                  onSelectFile={f => openDiff(f.repoId, f.path)}
-                  onContextMenu={(e, file) => setCtxMenu({ x: e.clientX, y: e.clientY, file })}
+                  onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
+                  onContextMenu={(e, file) => { setSelectedFile(file); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
                   onFolderContextMenu={(e, rid, folderPath, files) => setFolderCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, folderPath, files })}
                   onOpenFile={f => send({ type: 'COMMIT_OPEN_FILE', repoId: f.repoId, filePath: f.path })}
                   onRollback={files => {
@@ -594,6 +645,8 @@ function App() {
                   }}
                   onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                   onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
+                  onRepoContextMenu={(e, rid) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid })}
+                  onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
                   iconTheme={store.iconTheme}
                 />
               );
@@ -619,10 +672,11 @@ function App() {
                 style={css.shelvePromptOk}
                 onClick={() => confirmShelve(shelvePrompt.repoId, shelvePromptName, shelvePrompt.paths)}
                 disabled={!shelvePromptName.trim()}
+                title="Confirm shelve"
               >
                 <Codicon name="check" />
               </button>
-              <button style={css.shelvePromptCancel} onClick={() => setShelvePrompt(null)}>
+              <button style={css.shelvePromptCancel} onClick={() => setShelvePrompt(null)} title="Cancel">
                 <Codicon name="close" />
               </button>
             </div>
@@ -653,6 +707,14 @@ function App() {
                 confirmShelve(repoStatus.repoId, name, selectedPaths);
               }
               store.setCommitMessage('');
+            }}
+            onStash={() => {
+              const message = store.commitMessage.trim() || 'WIP stash';
+              for (const repoStatus of repos) {
+                const selectedPaths = store.getSelectedFilesForRepo(repoStatus.repoId);
+                if (selectedPaths.length === 0) continue;
+                doStash(repoStatus.repoId, message, selectedPaths);
+              }
             }}
           />
 
@@ -766,6 +828,14 @@ function App() {
           onClose={() => setFolderCtxMenu(null)}
         />
       )}
+      {repoCtxMenu && (
+        <ContextMenu
+          x={repoCtxMenu.x} y={repoCtxMenu.y}
+          items={REPO_CONTEXT_ITEMS}
+          onSelect={handleRepoContextMenuSelect}
+          onClose={() => setRepoCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }
@@ -777,6 +847,7 @@ const css = {
     display: 'flex', flexDirection: 'column' as const, height: '100vh',
     background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-foreground)',
     fontFamily: 'var(--vscode-font-family)', fontSize: 'var(--vscode-font-size)', overflow: 'hidden',
+    userSelect: 'none' as const,
   },
   toolbar: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',

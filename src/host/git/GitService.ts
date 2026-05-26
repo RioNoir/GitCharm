@@ -96,14 +96,25 @@ export class GitService {
     return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
   }
 
+  private async resolveHeadName(hint?: string): Promise<string> {
+    if (hint) return hint;
+    try {
+      const name = (await this.git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+      return (name && name !== 'HEAD') ? name : (await this.git.raw(['branch', '--show-current'])).trim() || 'HEAD';
+    } catch {
+      return 'HEAD';
+    }
+  }
+
   async getStatus(): Promise<RepoStatus> {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       const head = vsRepo.state.HEAD;
+      const branchName = await this.resolveHeadName(head?.name);
       const branchInfo: BranchInfo = {
         repoId: this.repoId,
-        name: head?.name ?? 'HEAD',
-        fullName: head?.name ? `refs/heads/${head.name}` : 'HEAD',
+        name: branchName,
+        fullName: `refs/heads/${branchName}`,
         isHead: true,
         isRemote: false,
         upstream: head?.upstream ? `${head.upstream.remote}/${head.upstream.name}` : undefined,
@@ -208,10 +219,11 @@ export class GitService {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       const head = vsRepo.state.HEAD;
+      const branchName = await this.resolveHeadName(head?.name);
       return {
         repoId: this.repoId,
-        name: head?.name ?? 'HEAD',
-        fullName: head?.name ? `refs/heads/${head.name}` : 'HEAD',
+        name: branchName,
+        fullName: `refs/heads/${branchName}`,
         isHead: true,
         isRemote: false,
         upstream: head?.upstream ? `${head.upstream.remote}/${head.upstream.name}` : undefined,
@@ -221,10 +233,11 @@ export class GitService {
       };
     }
     const status = await this.git.status();
+    const branchName = await this.resolveHeadName(status.current ?? undefined);
     return {
       repoId: this.repoId,
-      name: status.current ?? 'HEAD',
-      fullName: `refs/heads/${status.current ?? 'HEAD'}`,
+      name: branchName,
+      fullName: `refs/heads/${branchName}`,
       isHead: true,
       isRemote: false,
       upstream: status.tracking ?? undefined,
@@ -741,6 +754,13 @@ export class GitService {
     await this.git.raw(['revert', '--no-edit', hash]);
   }
 
+  async revertFileToParent(hash: string, filePath: string): Promise<void> {
+    // For added files, 'A' status: the file was created in this commit, so reverting
+    // means deleting it from working tree by checking out from the empty tree.
+    // For other statuses: restore the file to its state in the parent commit.
+    await this.git.raw(['checkout', `${hash}~1`, '--', filePath]);
+  }
+
   async revertContinue(): Promise<void> {
     await this.git.raw(['revert', '--continue', '--no-edit']);
   }
@@ -806,6 +826,18 @@ export class GitService {
         }
       } catch { /* stash might have no files */ }
 
+      // Also include untracked files saved in stash^3 (created by `git stash -u`)
+      try {
+        const untrackedRaw = await this.git.raw(['ls-tree', '--name-only', `${ref}^3`]);
+        const trackedPaths = new Set(files.map(f => f.path));
+        for (const f of untrackedRaw.trim().split('\n')) {
+          const filePath = f.trim();
+          if (filePath && !trackedPaths.has(filePath)) {
+            files.push({ path: filePath, status: 'untracked' });
+          }
+        }
+      } catch { /* stash^3 may not exist for tracked-only stashes */ }
+
       entries.push({ ref, index, message, date, branch, files });
     }
     return entries;
@@ -815,8 +847,32 @@ export class GitService {
     return this.git.raw(['stash', 'show', '-p', stashRef, '--', filePath]).catch(() => '');
   }
 
-  async stashPush(message: string): Promise<void> {
-    await this.git.raw(['stash', 'push', '-u', '-m', message]);
+  async stashPush(message: string, paths?: string[]): Promise<void> {
+    if (!paths || paths.length === 0) {
+      await this.git.raw(['stash', 'push', '-u', '-m', message]);
+      return;
+    }
+
+    // git builds the stash commit tree from the current index, so staged files
+    // outside the pathspec (especially new 'A' files) appear in the stash even
+    // though they weren't requested. Fix: temporarily unstage them, stash, re-stage.
+    const status = await this.git.status();
+    const pathSet = new Set(paths);
+    const addedOutside = status.files
+      .filter(f => f.index.trim() === 'A' && !pathSet.has(f.path))
+      .map(f => f.path);
+
+    if (addedOutside.length > 0) {
+      await this.git.raw(['reset', 'HEAD', '--', ...addedOutside]).catch(() => {});
+    }
+
+    try {
+      await this.git.raw(['stash', 'push', '-m', message, '--', ...paths]);
+    } finally {
+      if (addedOutside.length > 0) {
+        await this.git.add(addedOutside).catch(() => {});
+      }
+    }
   }
 
   async stashApply(stashRef: string): Promise<void> {

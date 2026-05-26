@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import type { CommitNode, RepoMeta, MergeParentCommit } from '../../shared/types';
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg, HostToLogMsg, IconThemeData } from '../../../host/types/messages';
@@ -9,6 +9,91 @@ import type { RefGroup } from '../utils/refs';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+interface FileContextMenuProps {
+  x: number;
+  y: number;
+  file: { path: string; status: string };
+  onShowDiff: () => void;
+  onEditSource: () => void;
+  onRevertFile: () => void;
+  onClose: () => void;
+}
+
+function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onClose }: FileContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const margin = 4;
+    setPos({
+      x: Math.max(margin, Math.min(x, window.innerWidth  - w - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - h - margin)),
+    });
+  }, [x, y]);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      onClose();
+    };
+    document.addEventListener('mousedown', h, true);
+    return () => document.removeEventListener('mousedown', h, true);
+  }, [onClose]);
+
+  const menuStyle: React.CSSProperties = {
+    position: 'fixed',
+    left: pos?.x ?? x,
+    top: pos?.y ?? y,
+    visibility: pos ? 'visible' : 'hidden',
+    background: 'var(--vscode-menu-background)',
+    border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+    borderRadius: '4px',
+    padding: '3px 0',
+    zIndex: 9999,
+    minWidth: '160px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+  };
+
+  const itemStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '4px 12px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    color: 'var(--vscode-menu-foreground)',
+    userSelect: 'none',
+  };
+
+  const hoverStyle = { background: 'var(--vscode-menu-selectionBackground)', color: 'var(--vscode-menu-selectionForeground)' };
+
+  const Item = ({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) => {
+    const [hovered, setHovered] = useState(false);
+    return (
+      <div
+        style={{ ...itemStyle, ...(hovered ? hoverStyle : {}) }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => { onClick(); onClose(); }}
+      >
+        <Codicon name={icon} style={{ fontSize: '13px', flexShrink: 0 }} />
+        {label}
+      </div>
+    );
+  };
+
+  return (
+    <div ref={menuRef} style={menuStyle} onContextMenu={e => e.preventDefault()}>
+      <Item icon="diff" label="Show Diff" onClick={onShowDiff} />
+      <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
+      <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
+    </div>
+  );
 }
 
 interface Props {
@@ -93,11 +178,12 @@ function collapseSingleChildDirs(node: TreeNode): TreeNode {
 
 /* ─── Tree renderer ───────────────────────────────────────────────────────── */
 
-function TreeDir({ node, depth, selectedFile, onOpen, allExpanded, iconTheme }: {
+function TreeDir({ node, depth, selectedFile, onOpen, onContextMenu, allExpanded, iconTheme }: {
   node: TreeNode;
   depth: number;
   selectedFile: FileEntry | null;
   onOpen: (f: FileEntry) => void;
+  onContextMenu: (e: React.MouseEvent, f: FileEntry) => void;
   allExpanded: boolean | null;
   iconTheme?: IconThemeData | null;
 }) {
@@ -112,6 +198,7 @@ function TreeDir({ node, depth, selectedFile, onOpen, allExpanded, iconTheme }: 
       <div
         style={styles.fileRow(isSelected)}
         onClick={() => onOpen(node.file!)}
+        onContextMenu={e => { e.preventDefault(); onContextMenu(e, node.file!); }}
         title={`${node.file.path}\nClick to open diff`}
       >
         <div style={{ width: indent + 18, flexShrink: 0 }} />
@@ -147,7 +234,7 @@ function TreeDir({ node, depth, selectedFile, onOpen, allExpanded, iconTheme }: 
           return a.name.localeCompare(b.name);
         })
         .map(child => (
-          <TreeDir key={child.fullPath} node={child} depth={depth + 1} selectedFile={selectedFile} onOpen={onOpen} allExpanded={allExpanded} iconTheme={iconTheme} />
+          <TreeDir key={child.fullPath} node={child} depth={depth + 1} selectedFile={selectedFile} onOpen={onOpen} onContextMenu={onContextMenu} allExpanded={allExpanded} iconTheme={iconTheme} />
         ))
       }
     </>
@@ -180,6 +267,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   const [mergeFiles, setMergeFiles] = useState<Array<{ path: string; status: string; added?: number; removed?: number }>>([]);
   const [loadingMergeFiles, setLoadingMergeFiles] = useState(false);
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
 
   const repoName = useMemo(() => {
     if (!commit) return null;
@@ -231,8 +319,35 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       repoId: commit.repoId,
       hash: hash ?? commit.hash,
       filePath: file.path,
+      fileStatus: file.status,
     } as LogToHostMsg);
   }
+
+  const handleCtxShowDiff = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    openVscodeDiff(ctxMenu.file);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
+
+  const handleCtxEditSource = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    getVsCodeApi().postMessage({ type: 'LOG_OPEN_FILE', repoId: commit.repoId, filePath: ctxMenu.file.path } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
+
+  const handleCtxRevertFile = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    const reqId = generateId();
+    getVsCodeApi().postMessage({
+      type: 'LOG_REVERT_FILE',
+      requestId: reqId,
+      repoId: commit.repoId,
+      hash: commit.hash,
+      filePath: ctxMenu.file.path,
+      fileStatus: ctxMenu.file.status,
+    } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
 
   function selectMergeCommit(c: MergeParentCommit) {
     if (selectedMergeHash === c.hash) {
@@ -271,11 +386,11 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   const activeHash = selectedMergeHash ?? commit?.hash;
 
   const tree = viewMode === 'tree' && activeFiles.length > 0
-    ? collapseSingleChildDirs(buildTree(activeFiles))
+    ? buildTree(activeFiles)
     : null;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} onContextMenu={e => e.preventDefault()}>
       {/* Commit header */}
       <div style={styles.header}>
         {repoName && (
@@ -408,6 +523,19 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
         </div>
       </div>
 
+      {/* File context menu */}
+      {ctxMenu && commit && (
+        <FileContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          file={ctxMenu.file}
+          onShowDiff={handleCtxShowDiff}
+          onEditSource={handleCtxEditSource}
+          onRevertFile={handleCtxRevertFile}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+
       {/* File list */}
       <div style={styles.fileList}>
         {activeLoading && <div style={styles.loading}>Loading files...</div>}
@@ -422,8 +550,18 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
               if (a.file && !b.file) return 1;
               return a.name.localeCompare(b.name);
             })
+            .map(child => collapseSingleChildDirs(child))
             .map(child => (
-              <TreeDir key={child.fullPath} node={child} depth={0} selectedFile={selectedFile} onOpen={f => openVscodeDiff(f, activeHash)} allExpanded={allExpanded} iconTheme={iconTheme} />
+              <TreeDir
+                key={child.fullPath}
+                node={child}
+                depth={0}
+                selectedFile={selectedFile}
+                onOpen={f => openVscodeDiff(f, activeHash)}
+                onContextMenu={(e, f) => setCtxMenu({ x: e.clientX, y: e.clientY, file: f })}
+                allExpanded={allExpanded}
+                iconTheme={iconTheme}
+              />
             ))
         )}
 
@@ -438,6 +576,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
               key={file.path}
               style={styles.fileRow(isSelected)}
               onClick={() => openVscodeDiff(file, activeHash)}
+              onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
               title={`${file.path}\nClick to open diff`}
             >
               <div style={{ width: 4, flexShrink: 0 }} />

@@ -206,6 +206,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               await repo.commit(msg.message, msg.amend);
               await repo.push();
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              const status = await this.manager.getAllStatusesFresh();
+              this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
             }
@@ -215,6 +217,23 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_DO_COMMIT_MULTI': {
+        // Check for missing remotes before pushing
+        if (msg.andPush) {
+          const noRemoteRepos: string[] = [];
+          for (const r of msg.repos) {
+            const repo = this.manager.getRepo(r.repoId);
+            if (!repo) continue;
+            const remotes = await repo.getRemotes().catch(() => []);
+            if (remotes.length === 0) noRemoteRepos.push(r.repoId.split('/').pop() ?? r.repoId);
+          }
+          if (noRemoteRepos.length > 0) {
+            vscode.window.showInformationMessage(
+              `GitStorm: Cannot push — no remote configured for: ${noRemoteRepos.join(', ')}. Add a remote first (git remote add origin <url>).`
+            );
+            this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'No remote configured' });
+            return;
+          }
+        }
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: `GitStorm: Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
           async () => {
@@ -237,6 +256,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             } else {
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
             }
+            const status = await this.manager.getAllStatusesFresh();
+            this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
           }
         );
         break;
@@ -262,6 +283,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           const output = await repo.pull();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
+          const pullStatus = await this.manager.getAllStatusesFresh();
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: pullStatus });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -289,6 +312,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             try {
               await repo.push(false, msg.remote);
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              const status = await this.manager.getAllStatusesFresh();
+              this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
             }
@@ -526,14 +551,18 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             for (const f of files.slice(0, 30)) lines.push(`${f.status[0].toUpperCase()} ${f.path}`);
           }
 
-          // Try VS Code LM API (Copilot)
-          let models: vscode.LanguageModelChat[] = [];
+          // Try VS Code LM API (Copilot) — prefer gpt-4o but fall back to any available Copilot model
+          let model: vscode.LanguageModelChat | undefined;
           try {
-            models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+            const preferred = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+            model = preferred[0];
+            if (!model) {
+              const any = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+              model = any[0];
+            }
           } catch {
-            models = [];
+            model = undefined;
           }
-          const model = models[0];
 
           if (!model) {
             this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, error: 'No AI model available. Install GitHub Copilot to use this feature.' });
@@ -829,6 +858,54 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         } catch (e: unknown) {
           this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits: [], error: String(e) });
         }
+        break;
+      }
+
+      case 'STASH_PUSH': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) {
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await repo.stashPush(msg.message, msg.paths);
+          const status = await this.manager.getAllStatusesFresh();
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: true });
+        } catch (e: unknown) {
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'COMMIT_OPEN_ALL_CHANGES': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        try {
+          const repoUri = vscode.Uri.file(repo.rootPath);
+          const status = await repo.getStatus();
+
+          const hasUnstaged  = status.unstagedFiles.filter((f: { status: string }) => f.status !== 'untracked').length > 0;
+          const hasUntracked = status.unstagedFiles.filter((f: { status: string }) => f.status === 'untracked').length > 0;
+          const hasStaged    = status.stagedFiles.length > 0;
+
+          const options: vscode.QuickPickItem[] = [];
+          if (hasUnstaged)  options.push({ label: '$(diff) Unstaged Changes',  description: 'git.viewChanges' });
+          if (hasUntracked) options.push({ label: '$(new-file) Untracked Files', description: 'git.viewUntrackedChanges' });
+          if (hasStaged)    options.push({ label: '$(diff-added) Staged Changes', description: 'git.viewStagedChanges' });
+
+          if (options.length === 0) return;
+
+          if (options.length === 1) {
+            await vscode.commands.executeCommand(options[0].description!, repoUri);
+            return;
+          }
+
+          const picked = await vscode.window.showQuickPick(options, { placeHolder: 'Open changes…' });
+          if (picked) {
+            await vscode.commands.executeCommand(picked.description!, repoUri);
+          }
+        } catch { /* command unavailable */ }
         break;
       }
     }

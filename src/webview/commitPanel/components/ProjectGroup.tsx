@@ -24,10 +24,15 @@ function branchHue(name: string): number {
 
 function branchColor(name: string): { bg: string; fg: string; border: string } {
   const hue = branchHue(name);
-  return {
-    bg:     `hsl(${hue}, 55%, 22%)`,
-    fg:     `hsl(${hue}, 90%, 80%)`,
-    border: `hsl(${hue}, 60%, 38%)`,
+  const isDark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
+  return isDark ? {
+    bg:     `hsla(${hue}, 55%, 50%, 0.15)`,
+    fg:     `hsl(${hue}, 70%, 65%)`,
+    border: `hsla(${hue}, 55%, 55%, 0.4)`,
+  } : {
+    bg:     `hsla(${hue}, 55%, 50%, 0.12)`,
+    fg:     `hsl(${hue}, 55%, 28%)`,
+    border: `hsla(${hue}, 55%, 40%, 0.55)`,
   };
 }
 
@@ -50,6 +55,8 @@ interface Props {
   onRollback: (files: FileStatus[]) => void;
   onResolveMerge: (file: FileStatus) => void;
   onBranchClick: (repoId: string) => void;
+  onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
+  onOpenAllChanges: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
 }
 
@@ -58,7 +65,7 @@ export function ProjectGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
-  onBranchClick, iconTheme,
+  onBranchClick, onRepoContextMenu, onOpenAllChanges, iconTheme,
 }: Props) {
   const repoId = repoStatus.repoId;
   const collapsed = isCollapsed(repoId);
@@ -85,7 +92,10 @@ export function ProjectGroup({
 
   return (
     <div style={styles.container}>
-      <div style={styles.header(repoColor)}>
+      <div
+        style={styles.header(repoColor)}
+        onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId); }}
+      >
         <input
           ref={checkboxRef}
           type="checkbox"
@@ -109,9 +119,18 @@ export function ProjectGroup({
             {repoStatus.branch.name}
           </span>
           {totalFiles > 0 && (
-            <span style={styles.countBadge(selectedCount > 0)}>
-              {selectedCount}/{totalFiles}
-            </span>
+            <div style={styles.rightGroup}>
+              <button
+                style={styles.openChangesBtn}
+                onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
+                title="Open all changes"
+              >
+                <Codicon name="diff-multiple" style={{ fontSize: '12px' }} />
+              </button>
+              <span style={styles.countBadge(selectedCount > 0)}>
+                {selectedCount}/{totalFiles}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -216,6 +235,13 @@ const styles = {
     marginLeft: '4px',
     cursor: 'pointer',
   }),
+  rightGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1px',
+    marginLeft: 'auto',
+    flexShrink: 0,
+  } as React.CSSProperties,
   countBadge: (hasSelected: boolean): React.CSSProperties => ({
     background: hasSelected ? 'var(--vscode-badge-background)' : 'transparent',
     color: hasSelected ? 'var(--vscode-badge-foreground)' : 'var(--vscode-foreground)',
@@ -224,9 +250,20 @@ const styles = {
     fontSize: '10px',
     fontWeight: 'bold',
     flexShrink: 0,
-    marginLeft: 'auto',
     opacity: hasSelected ? 1 : 0.4,
   }),
+  openChangesBtn: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.45,
+    padding: '2px 4px',
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    borderRadius: '3px',
+  } as React.CSSProperties,
   body: {
     display: 'flex',
     flexDirection: 'column' as const,
