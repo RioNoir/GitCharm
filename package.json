@@ -2,7 +2,7 @@
   "name": "gitstorm",
   "displayName": "GitStorm",
   "description": "IntelliJ/PhpStorm-style Git management for VS Code — Commit panel, Git Log with graph, and 3-way merge editor",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "rionoir",
   "license": "MIT",
   "repository": {
@@ -31,7 +31,8 @@
     "theme": "dark"
   },
   "activationEvents": [
-    "workspaceContains:**/.git"
+    "workspaceContains:**/.git",
+    "onStartupFinished"
   ],
   "main": "./out/host/extension.js",
   "contributes": {

@@ -9,12 +9,26 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   private view?: vscode.WebviewView;
   private disposables: vscode.Disposable[] = [];
+  private readonly managerListeners: vscode.Disposable[] = [];
   private refreshDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly manager: WorkspaceGitManager
-  ) {}
+  ) {
+    // Register manager listeners here so they fire even when the panel has never been opened.
+    // this.post() silently drops messages when the webview is not yet resolved — that's fine,
+    // because resolveWebviewView performs an explicit initial sync when the panel first opens.
+    this.managerListeners.push(
+      this.manager.onBranchChange(async () => {
+        const repos = this.manager.getRepoMetas();
+        const branches = await this.manager.getAllBranches();
+        this.post({ type: 'LOG_INIT_DATA', repos, branches });
+        if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
+        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
+      })
+    );
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -42,13 +56,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     );
 
     this.disposables.push(
-      this.manager.onBranchChange(async () => {
-        const repos = this.manager.getRepoMetas();
-        const branches = await this.manager.getAllBranches();
-        this.post({ type: 'LOG_INIT_DATA', repos, branches });
-        if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
-      }),
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.colorTheme')) {
           if (this.view) {
@@ -825,6 +832,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   dispose(): void {
+    this.managerListeners.forEach(d => d.dispose());
     this.disposables.forEach(d => d.dispose());
+    if (this.refreshDebounce) { clearTimeout(this.refreshDebounce); this.refreshDebounce = null; }
   }
 }

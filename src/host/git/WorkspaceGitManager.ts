@@ -20,12 +20,13 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private branchListeners: BranchListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
-  private prevHeads = new Map<string, string>(); // repoId → branch name
+  private prevHeads = new Map<string, string>();   // repoId → branch name
+  private prevCommits = new Map<string, string>(); // repoId → commit hash
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.globalListeners.push(
-      // Workspace folder changes → rebuild everything
-      vscode.workspace.onDidChangeWorkspaceFolders(() => this.reinitialize()),
+      // Workspace folder changes → rebuild everything and push fresh status to listeners
+      vscode.workspace.onDidChangeWorkspaceFolders(() => { this.reinitialize(); this.scheduleRefresh(); }),
 
       // File saved inside a repo → refresh status
       vscode.workspace.onDidSaveTextDocument((doc) => {
@@ -55,6 +56,18 @@ export class WorkspaceGitManager implements vscode.Disposable {
         }
       });
       this.globalListeners.push(d);
+    } else if (!gitApi) {
+      // vscode.git extension is not yet active (activates after us) — watch for it.
+      // When it activates, reinitialize so proper vsRepo watchers replace the
+      // FileSystemWatcher fallback.
+      const d = vscode.extensions.onDidChange(() => {
+        if (getVscodeGitApi()) {
+          d.dispose();
+          this.reinitialize();
+          this.scheduleRefresh();
+        }
+      });
+      this.globalListeners.push(d);
     }
   }
 
@@ -63,6 +76,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.repos.clear();
     this.repoMetas.clear();
     this.prevHeads.clear();
+    this.prevCommits.clear();
 
     const folders = vscode.workspace.workspaceFolders ?? [];
     const customColors = vscode.workspace.getConfiguration('gitstorm').get<Record<string, string>>('projectColors', {});
@@ -91,11 +105,22 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const vsRepo = getVscodeGitApi()?.getRepository(vscode.Uri.file(repoPath));
     if (vsRepo) {
       this.prevHeads.set(repoId, vsRepo.state.HEAD?.name ?? '');
+      this.prevCommits.set(repoId, vsRepo.state.HEAD?.commit ?? '');
       const d = vsRepo.state.onDidChange(() => {
         const currentHead = vsRepo.state.HEAD?.name ?? '';
+        const currentCommit = vsRepo.state.HEAD?.commit ?? '';
         const prevHead = this.prevHeads.get(repoId) ?? '';
+        const prevCommit = this.prevCommits.get(repoId) ?? '';
         if (currentHead !== prevHead) {
+          // Branch checkout — fire both refresh and branch listeners.
           this.prevHeads.set(repoId, currentHead);
+          this.prevCommits.set(repoId, currentCommit);
+          this.scheduleRefresh();
+          this.scheduleBranchRefresh();
+        } else if (currentCommit !== prevCommit) {
+          // New commit / pull / rebase — branch name unchanged but commit moved.
+          // Fire branch listeners so the log panel refreshes.
+          this.prevCommits.set(repoId, currentCommit);
           this.scheduleRefresh();
           this.scheduleBranchRefresh();
         } else {
