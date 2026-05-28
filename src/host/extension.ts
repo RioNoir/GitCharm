@@ -38,7 +38,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.executeCommand('gitstorm.commitPanel.focus');
   });
 
-  const profileStatusBar = new ProfileStatusBar(profileService);
+  const profileStatusBar = new ProfileStatusBar(profileService, manager);
 
   const annotationController = new FileAnnotationController(manager, logPanel);
 

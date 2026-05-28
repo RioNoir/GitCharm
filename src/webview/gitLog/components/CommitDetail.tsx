@@ -6,6 +6,7 @@ import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
 import { groupRefs, branchColor } from '../utils/refs';
 import type { RefGroup } from '../utils/refs';
+import { AuthorAvatar } from './AuthorAvatar';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -450,12 +451,15 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             {commit.message}
           </span>
         </div>
-        <div style={styles.meta}>
-          <span>{commit.authorName}</span>
-          <span style={styles.dot}>·</span>
-          <span>{commit.authorEmail}</span>
-          <span style={styles.dot}>·</span>
-          <span>{new Date(commit.authorDate).toLocaleString()}</span>
+        <div style={styles.authorRow}>
+          <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
+          <div style={styles.meta}>
+            <span>{commit.authorName}</span>
+            <span style={styles.dot}>·</span>
+            <span>{commit.authorEmail}</span>
+            <span style={styles.dot}>·</span>
+            <span>{new Date(commit.authorDate).toLocaleString()}</span>
+          </div>
         </div>
         {(() => {
           const refGroups = groupRefs(commit.refs);
@@ -746,6 +750,13 @@ const styles = {
     textOverflow: 'clip',
     wordBreak: 'break-word' as const,
   },
+  authorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginTop: '8px',
+    marginBottom: '8px',
+  },
   meta: {
     display: 'flex',
     gap: '6px',
@@ -753,6 +764,7 @@ const styles = {
     color: 'var(--vscode-foreground)',
     opacity: 0.7,
     flexWrap: 'wrap' as const,
+    alignItems: 'center',
   },
   dot: {
     opacity: 0.4,

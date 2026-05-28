@@ -1,12 +1,17 @@
 import * as vscode from 'vscode';
 import type { GitProfile } from '../git/GitProfileService';
 import { GitProfileService } from '../git/GitProfileService';
+import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 
 export class ProfileStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
   private profileChangeDisposable?: vscode.Disposable;
+  private editorChangeDisposable?: vscode.Disposable;
 
-  constructor(private readonly profileService: GitProfileService) {
+  constructor(
+    private readonly profileService: GitProfileService,
+    private readonly manager?: WorkspaceGitManager,
+  ) {
     this.statusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
       99   // just below BranchStatusBar (100)
@@ -15,18 +20,69 @@ export class ProfileStatusBar implements vscode.Disposable {
     this.statusBarItem.show();
 
     this.profileChangeDisposable = this.profileService.onProfileChange(() => this.refresh());
+
+    if (this.manager) {
+      this.editorChangeDisposable = vscode.window.onDidChangeActiveTextEditor(() => this.refresh());
+    }
+
     this.refresh();
   }
 
+  private getActiveRepoPath(): string | undefined {
+    if (!this.manager) return undefined;
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      const metas = this.manager.getRepoMetas();
+      return metas[0]?.rootPath;
+    }
+    const result = this.manager.getServiceForFile(editor.document.uri.fsPath);
+    return result?.rootPath;
+  }
+
   refresh(): void {
-    const profile = this.profileService.getActiveProfile();
-    if (profile) {
-      this.statusBarItem.text = `$(account) ${profile.name}`;
-      this.statusBarItem.tooltip = `GitStorm Profile: ${profile.gitName} <${profile.gitEmail}>\nClick to manage profiles`;
+    const repoPath = this.getActiveRepoPath();
+    if (repoPath) {
+      this.refreshAsync(repoPath);
     } else {
+      // No repo context: show active GitStorm profile only
+      const active = this.profileService.getActiveProfile();
+      this.renderProfile(active, 'gitstorm');
+    }
+  }
+
+  private async refreshAsync(repoPath: string): Promise<void> {
+    const result = await this.profileService.getEffectiveProfile(repoPath);
+    if (result) {
+      this.renderProfile(result.profile, result.source);
+    } else {
+      this.renderProfile(undefined, 'gitstorm');
+    }
+  }
+
+  private renderProfile(
+    profile: GitProfile | { gitName: string; gitEmail: string } | undefined,
+    source: 'gitstorm' | 'local' | 'global',
+  ): void {
+    if (!profile) {
       this.statusBarItem.text = `$(account) No profile`;
       this.statusBarItem.tooltip = 'GitStorm: No Git profile selected — click to set one';
+      return;
     }
+
+    const displayName =
+      source === 'local' ? 'Local' :
+      source === 'global' ? 'Global' :
+      (profile as GitProfile).name ?? 'Profile';
+
+    this.statusBarItem.text = `$(account) ${displayName}`;
+    this.statusBarItem.tooltip =
+      `GitStorm Profile: ${profile.gitName} <${profile.gitEmail}>\n` +
+      (source === 'local'
+        ? 'Source: local .git/config of this repo\n'
+        : source === 'global'
+          ? 'Source: global git config (~/.gitconfig)\n'
+          : '') +
+      'Click to manage profiles';
   }
 
   // ── Main menu ────────────────────────────────────────────────────────────────
@@ -34,6 +90,8 @@ export class ProfileStatusBar implements vscode.Disposable {
   async showMenu(): Promise<void> {
     const profiles = this.profileService.getProfiles();
     const activeId = this.profileService.getActiveProfileId();
+    const defaultSource = this.profileService.getDefaultSource();
+    const repoPath = this.getActiveRepoPath();
 
     type MenuItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
 
@@ -41,16 +99,15 @@ export class ProfileStatusBar implements vscode.Disposable {
 
     if (profiles.length > 0) {
       items.push({
-        label: 'ACTIVE PROFILE',
+        label: 'PROFILES',
         kind: vscode.QuickPickItemKind.Separator,
         action: async () => {},
       } as unknown as MenuItem);
 
       for (const p of profiles) {
         const isActive = p.id === activeId;
-        const isDefault = p.isDefault;
         const icon = isActive ? '$(check)' : '$(account)';
-        const badges = [isActive ? 'active' : '', isDefault ? 'default' : ''].filter(Boolean).join(', ');
+        const badges = [isActive ? 'active' : '', p.isDefault ? 'default' : ''].filter(Boolean).join(', ');
         items.push({
           label: `${icon} ${p.name}`,
           description: `${p.gitName} <${p.gitEmail}>${badges ? `  ·  ${badges}` : ''}`,
@@ -61,7 +118,34 @@ export class ProfileStatusBar implements vscode.Disposable {
       items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} } as unknown as MenuItem);
     }
 
+    // Show Local entry only if the current repo has local git config credentials
+    if (repoPath) {
+      const localCreds = await this.profileService.detectFromRepo(repoPath);
+      if (localCreds) {
+        const isDefault = defaultSource === 'local';
+        const icon = isDefault ? '$(check)' : '$(home)';
+        items.push({
+          label: `${icon} Local${isDefault ? '  ·  default' : ''}`,
+          description: `${localCreds.gitName} <${localCreds.gitEmail}>  ·  from .git/config of this repo`,
+          action: () => this.showLocalActionMenu(localCreds),
+        });
+      }
+    }
+
+    // Show Global entry
+    const globalCreds = await this.profileService.detectGlobal();
+    if (globalCreds) {
+      const isDefault = defaultSource === 'global';
+      const icon = isDefault ? '$(check)' : '$(globe)';
+      items.push({
+        label: `${icon} Global${isDefault ? '  ·  default' : ''}`,
+        description: `${globalCreds.gitName} <${globalCreds.gitEmail}>  ·  from ~/.gitconfig`,
+        action: () => this.showGlobalActionMenu(globalCreds),
+      });
+    }
+
     items.push(
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} } as unknown as MenuItem,
       {
         label: '$(add) New Profile…',
         description: 'Create a new Git identity profile',
@@ -88,6 +172,102 @@ export class ProfileStatusBar implements vscode.Disposable {
     });
 
     if (pick) await (pick as MenuItem).action();
+  }
+
+  // ── Local action menu ────────────────────────────────────────────────────────
+
+  private async showLocalActionMenu(creds: { gitName: string; gitEmail: string }): Promise<void> {
+    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
+    const isDefault = this.profileService.getDefaultSource() === 'local';
+
+    const items: ActionItem[] = [
+      { label: '$(arrow-left) Back', action: () => this.showMenu() },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+    ];
+
+    if (!isDefault) {
+      items.push({
+        label: '$(check) Set as default for this workspace',
+        description: 'Use local .git/config when no profile is active',
+        action: async () => {
+          await this.profileService.setDefaultSource('local');
+          this.refresh();
+          vscode.window.showInformationMessage('GitStorm: Local set as default source for this workspace.');
+        },
+      });
+    } else {
+      items.push(
+        {
+          label: '$(check) Default (in use)',
+          description: 'Local .git/config is the default source for this workspace',
+          action: async () => { await this.showMenu(); },
+        },
+        {
+          label: '$(circle-slash) Remove as default',
+          description: 'Revert to automatic fallback (local → global)',
+          action: async () => {
+            await this.profileService.setDefaultSource(undefined);
+            this.refresh();
+            vscode.window.showInformationMessage('GitStorm: Default source cleared.');
+          },
+        },
+      );
+    }
+
+    const pick = await vscode.window.showQuickPick(items, {
+      title: `Local — ${creds.gitName} <${creds.gitEmail}>`,
+      matchOnDescription: true,
+    }) as ActionItem | undefined;
+
+    if (pick) await pick.action();
+  }
+
+  // ── Global action menu ───────────────────────────────────────────────────────
+
+  private async showGlobalActionMenu(creds: { gitName: string; gitEmail: string }): Promise<void> {
+    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
+    const isDefault = this.profileService.getDefaultSource() === 'global';
+
+    const items: ActionItem[] = [
+      { label: '$(arrow-left) Back', action: () => this.showMenu() },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+    ];
+
+    if (!isDefault) {
+      items.push({
+        label: '$(check) Set as default for this workspace',
+        description: 'Use ~/.gitconfig when no profile is active',
+        action: async () => {
+          await this.profileService.setDefaultSource('global');
+          this.refresh();
+          vscode.window.showInformationMessage('GitStorm: Global set as default source for this workspace.');
+        },
+      });
+    } else {
+      items.push(
+        {
+          label: '$(check) Default (in use)',
+          description: 'Global ~/.gitconfig is the default source for this workspace',
+          action: async () => { await this.showMenu(); },
+        },
+        {
+          label: '$(circle-slash) Remove as default',
+          description: 'Revert to automatic fallback (local → global)',
+          action: async () => {
+            await this.profileService.setDefaultSource(undefined);
+            this.refresh();
+            vscode.window.showInformationMessage('GitStorm: Default source cleared.');
+          },
+        },
+      );
+    }
+
+    const pick = await vscode.window.showQuickPick(items, {
+      title: `Global — ${creds.gitName} <${creds.gitEmail}>`,
+      matchOnDescription: true,
+    }) as ActionItem | undefined;
+
+    if (pick) await pick.action();
   }
 
   // ── Per-profile action menu ──────────────────────────────────────────────────
@@ -168,7 +348,11 @@ export class ProfileStatusBar implements vscode.Disposable {
       title: 'New Git Profile — Display Name',
       prompt: 'A label for this profile (e.g. Work, Personal)',
       placeHolder: 'Work',
-      validateInput: v => (v.trim() ? undefined : 'Name cannot be empty'),
+      validateInput: v => {
+        if (!v.trim()) return 'Name cannot be empty';
+        if (RESERVED_PROFILE_NAMES.includes(v.trim().toLowerCase())) return `"${v.trim()}" is a reserved name`;
+        return undefined;
+      },
     });
     if (!displayName) return;
 
@@ -217,7 +401,11 @@ export class ProfileStatusBar implements vscode.Disposable {
     const displayName = await vscode.window.showInputBox({
       title: `Edit Profile — Display Name`,
       value: profile.name,
-      validateInput: v => (v.trim() ? undefined : 'Name cannot be empty'),
+      validateInput: v => {
+        if (!v.trim()) return 'Name cannot be empty';
+        if (RESERVED_PROFILE_NAMES.includes(v.trim().toLowerCase())) return `"${v.trim()}" is a reserved name`;
+        return undefined;
+      },
     });
     if (!displayName) return;
 
@@ -268,10 +456,9 @@ export class ProfileStatusBar implements vscode.Disposable {
     }
     const profile: GitProfile = {
       id: generateId(),
-      name: 'Default',
+      name: detected.gitName || 'Imported',
       gitName: detected.gitName,
       gitEmail: detected.gitEmail,
-      isDefault: true,
     };
     await this.profileService.saveProfile(profile);
     await this.profileService.setActiveProfile(profile.id);
@@ -317,8 +504,11 @@ export class ProfileStatusBar implements vscode.Disposable {
   dispose(): void {
     this.statusBarItem.dispose();
     this.profileChangeDisposable?.dispose();
+    this.editorChangeDisposable?.dispose();
   }
 }
+
+const RESERVED_PROFILE_NAMES = ['local', 'default'];
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);

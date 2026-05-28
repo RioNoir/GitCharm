@@ -11,6 +11,7 @@ export interface GitProfile {
 
 const CONFIG_KEY = 'gitstorm.gitProfiles';
 const ACTIVE_KEY = 'gitstorm.activeGitProfileId';
+const DEFAULT_SOURCE_KEY = 'gitstorm.defaultProfileSource';
 
 export class GitProfileService implements vscode.Disposable {
   private _onProfileChange = new vscode.EventEmitter<void>();
@@ -20,7 +21,11 @@ export class GitProfileService implements vscode.Disposable {
 
   constructor() {
     this.configWatcher = vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration(CONFIG_KEY) || e.affectsConfiguration(ACTIVE_KEY)) {
+      if (
+        e.affectsConfiguration(CONFIG_KEY) ||
+        e.affectsConfiguration(ACTIVE_KEY) ||
+        e.affectsConfiguration(DEFAULT_SOURCE_KEY)
+      ) {
         this._onProfileChange.fire();
       }
     });
@@ -38,12 +43,12 @@ export class GitProfileService implements vscode.Disposable {
 
   getActiveProfile(): GitProfile | undefined {
     const id = this.getActiveProfileId();
-    if (!id) return this.getDefaultProfile();
+    if (!id) return undefined;
     const profiles = this.getProfiles();
-    return profiles.find(p => p.id === id) ?? this.getDefaultProfile();
+    return profiles.find(p => p.id === id);
   }
 
-  private getDefaultProfile(): GitProfile | undefined {
+  getDefaultProfile(): GitProfile | undefined {
     const profiles = this.getProfiles();
     return profiles.find(p => p.isDefault) ?? profiles[0];
   }
@@ -51,6 +56,20 @@ export class GitProfileService implements vscode.Disposable {
   async setActiveProfile(id: string): Promise<void> {
     const cfg = vscode.workspace.getConfiguration();
     await cfg.update(ACTIVE_KEY, id, vscode.ConfigurationTarget.Workspace);
+  }
+
+  getDefaultSource(): 'local' | 'global' | undefined {
+    const val = vscode.workspace.getConfiguration().get<string>(DEFAULT_SOURCE_KEY, '');
+    if (val === 'local' || val === 'global') return val;
+    return undefined;
+  }
+
+  async setDefaultSource(source: 'local' | 'global' | undefined): Promise<void> {
+    await vscode.workspace.getConfiguration().update(
+      DEFAULT_SOURCE_KEY,
+      source ?? '',
+      vscode.ConfigurationTarget.Workspace,
+    );
   }
 
   async saveProfile(profile: GitProfile): Promise<void> {
@@ -110,34 +129,61 @@ export class GitProfileService implements vscode.Disposable {
     return undefined;
   }
 
-  /**
-   * On first activation: if no profiles exist, auto-create from global git config.
-   */
   async autoInitIfEmpty(): Promise<void> {
-    if (this.getProfiles().length > 0) return;
-    const global = await this.detectGlobal();
-    if (!global || (!global.gitName && !global.gitEmail)) return;
-    const profile: GitProfile = {
-      id: generateId(),
-      name: 'Default',
-      gitName: global.gitName,
-      gitEmail: global.gitEmail,
-      isDefault: true,
-    };
-    await this.saveProfile(profile);
+    // Global git config is now always the implicit fallback — no need to create a profile from it.
   }
 
   /**
-   * Applies the active profile to a repo by writing git config user.name/email locally.
-   * Does nothing if no profile is active.
+   * Returns the effective profile for a repo, with the source of resolution:
+   * - 'gitstorm': an explicitly set active profile in GitStorm
+   * - 'local': read from the repo's own .git/config
+   * - 'global': read from git config --global
+   *
+   * Priority: active GitStorm profile → defaultSource (if set) → local → global
+   */
+  async getEffectiveProfile(repoPath: string): Promise<
+    | { profile: GitProfile; source: 'gitstorm' }
+    | { profile: { gitName: string; gitEmail: string }; source: 'local' | 'global' }
+    | undefined
+  > {
+    const id = this.getActiveProfileId();
+    if (id) {
+      const profiles = this.getProfiles();
+      const active = profiles.find(p => p.id === id);
+      if (active) return { profile: active, source: 'gitstorm' };
+    }
+
+    const defaultSource = this.getDefaultSource();
+    if (defaultSource === 'local') {
+      const local = await this.detectFromRepo(repoPath);
+      if (local) return { profile: local, source: 'local' };
+    }
+    if (defaultSource === 'global') {
+      const global = await this.detectGlobal();
+      if (global) return { profile: global, source: 'global' };
+    }
+
+    const local = await this.detectFromRepo(repoPath);
+    if (local) return { profile: local, source: 'local' };
+
+    const global = await this.detectGlobal();
+    if (global) return { profile: global, source: 'global' };
+
+    return undefined;
+  }
+
+  /**
+   * Applies the effective profile credentials to a repo's local git config.
+   * Skips writing if the source is already 'local' (repo has its own credentials).
+   * For 'global' source, writes the global credentials locally so the commit uses them explicitly.
    */
   async applyToRepo(repoPath: string): Promise<void> {
-    const profile = this.getActiveProfile();
-    if (!profile) return;
+    const result = await this.getEffectiveProfile(repoPath);
+    if (!result || result.source === 'local') return;
     const git = simpleGit(repoPath);
     const ops: Promise<unknown>[] = [];
-    if (profile.gitName) ops.push(git.raw(['config', 'user.name', profile.gitName]));
-    if (profile.gitEmail) ops.push(git.raw(['config', 'user.email', profile.gitEmail]));
+    if (result.profile.gitName) ops.push(git.raw(['config', 'user.name', result.profile.gitName]));
+    if (result.profile.gitEmail) ops.push(git.raw(['config', 'user.email', result.profile.gitEmail]));
     if (ops.length) await Promise.all(ops);
   }
 

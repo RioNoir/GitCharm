@@ -9,6 +9,7 @@ import type { RefGroup } from '../utils/refs';
 import { Codicon } from '../../shared/Codicon';
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg } from '../../../host/types/messages';
+import { AuthorAvatar } from './AuthorAvatar';
 
 // Suppress unused import warning — LANE_WIDTH is used by CommitRowSvg indirectly
 void LANE_WIDTH;
@@ -241,6 +242,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
                 {commit.unpushed && (
                   <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
                 )}
+                <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={20} />
                 <span style={styles.author}>{commit.authorName}</span>
                 <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
               </div>
@@ -650,11 +652,11 @@ const styles = {
     zIndex: 2,
   }),
   info: {
-    flex: 1,
+    flex: '1 2 0',
     display: 'flex',
     alignItems: 'center',
     overflow: 'hidden',
-    minWidth: 0,
+    minWidth: '60px',
   },
   refs: {
     display: 'flex',
@@ -692,14 +694,16 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
-    flex: 1,
+    flex: '1 1 0',
+    minWidth: 0,
   },
   meta: {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     alignItems: 'center',
-    flexShrink: 0,
-    width: '220px',
+    flexShrink: 1,
+    maxWidth: '300px',
+    minWidth: 0,
     fontSize: '11px',
     opacity: 0.65,
     overflow: 'hidden',
@@ -714,9 +718,8 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
-    flexShrink: 0,
-    width: '90px',
-    marginLeft: 'auto',
+    flexShrink: 1,
+    minWidth: '40px',
   },
   date: {
     whiteSpace: 'nowrap' as const,
