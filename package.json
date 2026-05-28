@@ -31,7 +31,8 @@
     "theme": "dark"
   },
   "activationEvents": [
-    "workspaceContains:**/.git"
+    "workspaceContains:**/.git",
+    "onStartupFinished"
   ],
   "main": "./out/host/extension.js",
   "contributes": {
