@@ -3,6 +3,7 @@ import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
 import { loadIconTheme } from '../utils/IconThemeService';
+import type { CommitPanelProvider } from './CommitPanelProvider';
 
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitstorm.gitLog';
@@ -11,6 +12,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private disposables: vscode.Disposable[] = [];
   private readonly managerListeners: vscode.Disposable[] = [];
   private refreshDebounce: ReturnType<typeof setTimeout> | null = null;
+  private commitPanel?: CommitPanelProvider;
+
+  setCommitPanel(provider: CommitPanelProvider): void {
+    this.commitPanel = provider;
+  }
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -296,6 +302,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const errMsg = String(e);
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT')) {
+            repo.getCurrentBranch().then(current => {
+              const mergeMsg = `Merge branch '${msg.from}' into '${current.name}'`;
+              this.commitPanel?.prefillCommitMessage(mergeMsg);
+            }).catch(() => {});
             vscode.window.showWarningMessage(
               'GitStorm: Merge conflicts detected. Use the Merge Editor to resolve them.',
               'Open Commit Panel'

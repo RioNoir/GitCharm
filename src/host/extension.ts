@@ -32,6 +32,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
+  logPanel.setCommitPanel(commitPanel);
 
   const branchStatusBar = new BranchStatusBar(manager, () => {
     vscode.commands.executeCommand('gitstorm.commitPanel.focus');

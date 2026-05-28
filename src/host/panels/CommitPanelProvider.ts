@@ -22,6 +22,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   setLogProvider(provider: GitLogPanelProvider): void {
     this.logProvider = provider;
   }
+
+  prefillCommitMessage(message: string): void {
+    this.post({ type: 'COMMIT_SET_MESSAGE', message });
+  }
   private shelveServices = new Map<string, ShelveService>();
 
   private getShelveService(repoId: string): ShelveService | undefined {

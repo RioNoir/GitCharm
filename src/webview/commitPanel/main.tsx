@@ -4,7 +4,6 @@ import { useCommitStore } from './store/commitStore';
 import { ProjectGroup } from './components/ProjectGroup';
 import { UnifiedCommitForm } from './components/UnifiedCommitForm';
 import { ContextMenu, type ContextMenuEntry } from './components/ContextMenu';
-import { RollbackModal } from './components/RollbackModal';
 import { ShelvePanel } from './components/ShelvePanel';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
@@ -119,7 +118,6 @@ function App() {
   // ── Dropdowns ─────────────────────────────────────────────────────────────
   const [viewMenuOpen, setViewMenuOpen]             = useState(false);
   const [shelveViewMenuOpen, setShelveViewMenuOpen] = useState(false);
-  const [rollbackModalOpen, setRollbackModalOpen]   = useState(false);
   const viewMenuRef       = useRef<HTMLDivElement>(null);
   const shelveViewMenuRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +182,9 @@ function App() {
           setGeneratingMessage(false);
           if (msg.message) store.setCommitMessage(msg.message);
           else if (msg.error && msg.error !== 'Cancelled') store.setError(msg.error);
+          break;
+        case 'COMMIT_SET_MESSAGE':
+          store.setCommitMessage(msg.message);
           break;
         case 'SHELVE_LIST_RESULT':
           setShelveLoading(prev => ({ ...prev, [msg.repoId]: false }));
@@ -509,7 +510,16 @@ function App() {
             <Codicon name="refresh" />
           </button>
           {activeTab === 'changes' && (<>
-            <button style={css.iconBtn} title="Rollback" onClick={() => setRollbackModalOpen(true)}>
+            <button style={css.iconBtn} title="Rollback" onClick={() => {
+              const allFiles: Array<{ repoId: string; path: string }> = [];
+              for (const r of repos) {
+                const seen = new Set<string>();
+                for (const f of [...r.unstagedFiles, ...r.stagedFiles]) {
+                  if (!seen.has(f.path)) { seen.add(f.path); allFiles.push({ repoId: f.repoId, path: f.path }); }
+                }
+              }
+              if (allFiles.length > 0) send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: allFiles });
+            }}>
               <Codicon name="discard" />
             </button>
             <button style={css.iconBtn} title="Expand all" onClick={() => store.expandAll()}>
@@ -837,19 +847,6 @@ function App() {
         )}
 
       </div>
-
-      {/* Rollback modal */}
-      {rollbackModalOpen && (
-        <RollbackModal
-          repos={repos}
-          repoMetas={store.repoMetas}
-          onConfirm={files => {
-            setRollbackModalOpen(false);
-            send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files });
-          }}
-          onClose={() => setRollbackModalOpen(false)}
-        />
-      )}
 
       {/* File context menu */}
       {ctxMenu && (
