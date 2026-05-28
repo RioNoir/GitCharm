@@ -247,6 +247,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             try {
               const output = await repo.pull();
               this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true, output });
+              this.post({ type: 'LOG_REFRESH' });
             } catch (e: unknown) {
               this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
             }
@@ -264,6 +265,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             try {
               await repo.push(msg.force, msg.remote);
               this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.post({ type: 'LOG_REFRESH' });
             } catch (e: unknown) {
               this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
             }
