@@ -474,18 +474,23 @@ function App() {
 
   const doCommit = (andPush: boolean) => {
     if (!store.commitMessage.trim()) return;
-    const targets = repos
-      .filter(r => store.repoSelections[r.repoId] !== false)
+    // Read fresh state at commit time to avoid stale closure values
+    const freshState = useCommitStore.getState();
+    const currentRepos = freshState.status?.repos ?? [];
+    const targets = currentRepos
+      .filter(r => freshState.repoSelections[r.repoId] !== false)
       .map(r => {
         const repoId = r.repoId;
-        const selectedPaths = new Set(store.getSelectedFilesForRepo(repoId));
+        const selectedPaths = new Set(freshState.getSelectedFilesForRepo(repoId));
         const stagedPaths = new Set(r.stagedFiles.map(f => f.path));
-        const filesToStage = Array.from(selectedPaths).filter(p => !stagedPaths.has(p));
+        const unstagedPaths = new Set(r.unstagedFiles.map(f => f.path));
+        // Include partially-staged files so their unstaged changes are also committed.
+        const filesToStage = Array.from(selectedPaths).filter(p => !stagedPaths.has(p) || unstagedPaths.has(p));
         const filesToUnstage = r.stagedFiles.map(f => f.path).filter(p => !selectedPaths.has(p));
-        return { repoId, message: store.commitMessage, amend: store.amendFlags[repoId] ?? false, filesToStage, filesToUnstage };
+        return { repoId, message: freshState.commitMessage, amend: freshState.amendFlags[repoId] ?? false, filesToStage, filesToUnstage };
       })
       .filter(r => {
-        const repoStatus = repos.find(rs => rs.repoId === r.repoId)!;
+        const repoStatus = currentRepos.find(rs => rs.repoId === r.repoId)!;
         const stagedAfter = new Set(repoStatus.stagedFiles.map(f => f.path));
         for (const p of r.filesToUnstage) stagedAfter.delete(p);
         for (const p of r.filesToStage) stagedAfter.add(p);
