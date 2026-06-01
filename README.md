@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://buymeacoffee.com/rionoir"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20Me%20A-Coffee-FFDD00?logo=buymeacoffee&logoColor=#FFDD00"></a>
+  <a href="https://buymeacoffee.com/rionoir" target="_blank"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20Me%20A-Coffee-FFDD00?logo=buymeacoffee&logoColor=#FFDD00"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.85%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-red">
