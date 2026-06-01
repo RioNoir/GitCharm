@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publisher": "RioNoir",
   "license": "MIT",
   "repository": {
@@ -310,27 +310,6 @@
           "type": "boolean",
           "default": true,
           "description": "Enable inline Git ghost text in the editor."
-        },
-        "gitcharm.gitProfiles": {
-          "type": "array",
-          "default": [],
-          "description": "Git identity profiles (name, email) managed by GitCharm.",
-          "items": {
-            "type": "object",
-            "required": ["id", "name", "gitName", "gitEmail"],
-            "properties": {
-              "id":        { "type": "string", "description": "Unique profile ID" },
-              "name":      { "type": "string", "description": "Display name for the profile (e.g. Work, Personal)" },
-              "gitName":   { "type": "string", "description": "git user.name" },
-              "gitEmail":  { "type": "string", "description": "git user.email" },
-              "isDefault": { "type": "boolean", "description": "Whether this is the default profile" }
-            }
-          }
-        },
-        "gitcharm.activeGitProfileId": {
-          "type": "string",
-          "default": "",
-          "description": "ID of the currently active Git profile for this workspace."
         }
       }
     }

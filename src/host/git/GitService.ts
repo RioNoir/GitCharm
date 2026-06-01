@@ -565,7 +565,20 @@ export class GitService {
       .catch(() => this.git.checkout(['--', filePath]));
   }
 
-  async commit(message: string, amend: boolean): Promise<string> {
+  async commit(message: string, amend: boolean, credentials?: { gitName: string; gitEmail: string }, log?: (s: string) => void): Promise<string> {
+    log?.(`GitService.commit — credentials=${JSON.stringify(credentials)} amend=${amend}`);
+    if (credentials?.gitName && credentials?.gitEmail) {
+      const flags = [
+        '-c', `user.name=${credentials.gitName}`,
+        '-c', `user.email=${credentials.gitEmail}`,
+        'commit', '-m', message,
+        ...(amend ? ['--amend'] : []),
+      ];
+      log?.(`GitService.commit — running git.raw with flags: ${JSON.stringify(flags)}`);
+      await this.git.raw(flags);
+      return '';
+    }
+    log?.(`GitService.commit — no credentials, using vsRepo/simple-git`);
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       await vsRepo.commit(message, { amend });

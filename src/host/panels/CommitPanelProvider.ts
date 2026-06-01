@@ -9,6 +9,7 @@ import { loadIconTheme } from '../utils/IconThemeService';
 import type { MergeEditorProvider } from './MergeEditorProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import type { GitProfileService } from '../git/GitProfileService';
+import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 
 export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
@@ -59,10 +60,25 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async applyActiveProfile(repoPath: string): Promise<void> {
-    if (this.profileService) {
-      await this.profileService.applyToRepo(repoPath);
+  /**
+   * Resolves the effective profile for the repo, writes its credentials into
+   * .git/config (so all Git tools see them), and returns them for -c injection.
+   * For implicit local/global fallback no injection is needed — git already
+   * has the right config natively.
+   */
+  private async getCommitCredentials(repoPath: string): Promise<{ gitName: string; gitEmail: string } | undefined> {
+    if (!this.profileService) return undefined;
+    const result = await this.profileService.getEffectiveProfile(repoPath);
+    if (!result) {
+      vscode.window.showWarningMessage('GitCharm: No Git identity configured. Set a profile before committing.');
+      return undefined;
     }
+    if (result.source === 'local' || result.source === 'global') return undefined;
+    const { gitName, gitEmail } = result.profile;
+    if (!gitName && !gitEmail) return undefined;
+    // Persist into .git/config so the identity is visible to all Git tools
+    await this.profileService.writeLocalCreds(repoPath, gitName, gitEmail).catch(() => {});
+    return { gitName, gitEmail };
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -203,11 +219,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_DO_COMMIT': {
+        this.profileService?.trace(`COMMIT_DO_COMMIT received repoId=${msg.repoId}`);
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         try {
-          await this.applyActiveProfile(repo.rootPath);
-          const output = await repo.commit(msg.message, msg.amend);
+          const creds = await this.getCommitCredentials(repo.rootPath);
+          const output = await repo.commit(msg.message, msg.amend, creds, s => this.profileService?.trace(s));
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
@@ -216,14 +233,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_DO_COMMIT_PUSH': {
+        this.profileService?.trace(`COMMIT_DO_COMMIT_PUSH received repoId=${msg.repoId}`);
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Commit & Push', cancellable: false },
           async () => {
             try {
-              await this.applyActiveProfile(repo.rootPath);
-              await repo.commit(msg.message, msg.amend);
+              const creds = await this.getCommitCredentials(repo.rootPath);
+              await repo.commit(msg.message, msg.amend, creds, s => this.profileService?.trace(s));
               await repo.push();
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
               const status = await this.manager.getAllStatusesFresh();
@@ -237,6 +255,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_DO_COMMIT_MULTI': {
+        this.profileService?.trace(`COMMIT_DO_COMMIT_MULTI received repos=${msg.repos.map(r=>r.repoId).join(',')}`);
         // Check for missing remotes before pushing
         if (msg.andPush) {
           const noRemoteRepos: string[] = [];
@@ -265,8 +284,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                 // Stage/unstage according to user selection before committing
                 if (r.filesToUnstage.length > 0) await repo.unstageFiles(r.filesToUnstage);
                 if (r.filesToStage.length > 0) await repo.stageFiles(r.filesToStage);
-                await this.applyActiveProfile(repo.rootPath);
-                await repo.commit(r.message, r.amend);
+                const creds = await this.getCommitCredentials(repo.rootPath);
+                await repo.commit(r.message, r.amend, creds, s => this.profileService?.trace(s));
                 if (msg.andPush) await repo.push();
               } catch (e: unknown) {
                 errors.push(`${r.repoId.split('/').pop()}: ${String(e)}`);

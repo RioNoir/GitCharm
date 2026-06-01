@@ -24,7 +24,10 @@ export function activate(context: vscode.ExtensionContext): void {
   manager.onStatusChange(status => badge.update(status));
   manager.getAllStatusesFresh().then(status => badge.update(status));
 
-  const profileService = new GitProfileService();
+  const log = vscode.window.createOutputChannel('GitCharm Profiles');
+  context.subscriptions.push(log);
+
+  const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();
 
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, profileService);
