@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Git branch fork -->
+  <circle cx="6" cy="6" r="2"/>
+  <circle cx="6" cy="18" r="2"/>
+  <circle cx="18" cy="10" r="2"/>
+  <line x1="6" y1="8" x2="6" y2="16"/>
+  <path d="M6 8 Q6 10 18 10"/>
+  <!-- Lightning bolt (storm) -->
+  <polyline points="13,2 9,13 13,13 11,22 16,11 12,11 15,2" fill="currentColor" stroke="none"/>
+</svg>

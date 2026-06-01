@@ -9,9 +9,9 @@ export interface GitProfile {
   isDefault?: boolean;
 }
 
-const CONFIG_KEY = 'gitstorm.gitProfiles';
-const ACTIVE_KEY = 'gitstorm.activeGitProfileId';
-const DEFAULT_SOURCE_KEY = 'gitstorm.defaultProfileSource';
+const CONFIG_KEY = 'gitcharm.gitProfiles';
+const ACTIVE_KEY = 'gitcharm.activeGitProfileId';
+const DEFAULT_SOURCE_KEY = 'gitcharm.defaultProfileSource';
 
 export class GitProfileService implements vscode.Disposable {
   private _onProfileChange = new vscode.EventEmitter<void>();
@@ -135,14 +135,14 @@ export class GitProfileService implements vscode.Disposable {
 
   /**
    * Returns the effective profile for a repo, with the source of resolution:
-   * - 'gitstorm': an explicitly set active profile in GitStorm
+   * - 'gitcharm': an explicitly set active profile in GitCharm
    * - 'local': read from the repo's own .git/config
    * - 'global': read from git config --global
    *
-   * Priority: active GitStorm profile → defaultSource (if set) → local → global
+   * Priority: active GitCharm profile → defaultSource (if set) → local → global
    */
   async getEffectiveProfile(repoPath: string): Promise<
-    | { profile: GitProfile; source: 'gitstorm' }
+    | { profile: GitProfile; source: 'gitcharm' }
     | { profile: { gitName: string; gitEmail: string }; source: 'local' | 'global' }
     | undefined
   > {
@@ -150,7 +150,7 @@ export class GitProfileService implements vscode.Disposable {
     if (id) {
       const profiles = this.getProfiles();
       const active = profiles.find(p => p.id === id);
-      if (active) return { profile: active, source: 'gitstorm' };
+      if (active) return { profile: active, source: 'gitcharm' };
     }
 
     const defaultSource = this.getDefaultSource();

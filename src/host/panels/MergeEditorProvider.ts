@@ -23,7 +23,7 @@ export class MergeEditorProvider implements vscode.Disposable {
 
     const fileName = path.basename(filePath);
     const panel = vscode.window.createWebviewPanel(
-      'gitstorm.mergeEditor',
+      'gitcharm.mergeEditor',
       `Merge: ${fileName}`,
       vscode.ViewColumn.One,
       {
@@ -52,7 +52,7 @@ export class MergeEditorProvider implements vscode.Disposable {
     if (conflictFile) {
       panel.webview.postMessage({ type: 'MERGE_FILE_LOADED', file: conflictFile } satisfies HostToMergeMsg);
     } else {
-      vscode.window.showErrorMessage(`GitStorm: No conflict markers found in ${fileName}`);
+      vscode.window.showErrorMessage(`GitCharm: No conflict markers found in ${fileName}`);
       panel.dispose();
     }
   }
@@ -78,8 +78,8 @@ export class MergeEditorProvider implements vscode.Disposable {
             await repo?.stageFiles([relPath]);
           }
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: true });
-          vscode.window.showInformationMessage(`GitStorm: File resolved and staged: ${path.basename(filePath)}`);
-          vscode.commands.executeCommand('gitstorm.commitPanel.focus');
+          vscode.window.showInformationMessage(`GitCharm: File resolved and staged: ${path.basename(filePath)}`);
+          vscode.commands.executeCommand('gitcharm.commitPanel.focus');
         } catch (e: unknown) {
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -97,13 +97,13 @@ export class MergeEditorProvider implements vscode.Disposable {
   openCurrentEditorFile(): void {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-      vscode.window.showWarningMessage('GitStorm: No active file');
+      vscode.window.showWarningMessage('GitCharm: No active file');
       return;
     }
     const filePath = editor.document.uri.fsPath;
     const content = editor.document.getText();
     if (!hasConflictMarkers(content)) {
-      vscode.window.showWarningMessage('GitStorm: No conflict markers found in the current file');
+      vscode.window.showWarningMessage('GitCharm: No conflict markers found in the current file');
       return;
     }
     this.openForFile(filePath);

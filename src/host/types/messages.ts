@@ -24,7 +24,7 @@ export interface ShelveEntry {
   name: string;         // user-provided description
   date: string;         // ISO date string
   files: Array<{ path: string; status: string }>;
-  patchFile: string;    // relative path inside .gitstorm/shelf/
+  patchFile: string;    // relative path inside .gitcharm/shelf/
 }
 
 // ─── Stash (native git stash) ────────────────────────────────────────────────

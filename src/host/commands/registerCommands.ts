@@ -17,56 +17,56 @@ export function registerCommands(
 ): void {
   context.subscriptions.push(
     // Focus the Git Log panel in the bottom bar
-    vscode.commands.registerCommand('gitstorm.openLog', () => {
+    vscode.commands.registerCommand('gitcharm.openLog', () => {
       logPanel.focus();
     }),
 
-    vscode.commands.registerCommand('gitstorm.refreshCommitPanel', () => {
+    vscode.commands.registerCommand('gitcharm.refreshCommitPanel', () => {
       commitPanel.refresh();
     }),
 
-    vscode.commands.registerCommand('gitstorm.openMergeEditor', () => {
+    vscode.commands.registerCommand('gitcharm.openMergeEditor', () => {
       mergeEditor.openCurrentEditorFile();
     }),
 
-    vscode.commands.registerCommand('gitstorm.fetchAll', async () => {
+    vscode.commands.registerCommand('gitcharm.fetchAll', async () => {
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'GitStorm: Fetching all remotes', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Fetching all remotes', cancellable: false },
         async () => { /* delegated to panel message handler */ }
       );
     }),
 
-    vscode.commands.registerCommand('gitstorm.showBranchMenu', (repoId?: string) => {
+    vscode.commands.registerCommand('gitcharm.showBranchMenu', (repoId?: string) => {
       branchStatusBar.showMenu(repoId);
     }),
 
-    vscode.commands.registerCommand('gitstorm.updateProject', () => {
+    vscode.commands.registerCommand('gitcharm.updateProject', () => {
       branchStatusBar.updateProject();
     }),
 
-    vscode.commands.registerCommand('gitstorm.openSettings', () => {
-      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitstorm');
+    vscode.commands.registerCommand('gitcharm.openSettings', () => {
+      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm');
     }),
 
-    vscode.commands.registerCommand('gitstorm.openGitAnnotations', async () => {
+    vscode.commands.registerCommand('gitcharm.openGitAnnotations', async () => {
       const editor = vscode.window.activeTextEditor;
       if (editor) await annotationController.openAnnotations(editor);
     }),
 
-    vscode.commands.registerCommand('gitstorm.closeGitAnnotations', () => {
+    vscode.commands.registerCommand('gitcharm.closeGitAnnotations', () => {
       const editor = vscode.window.activeTextEditor;
       if (editor) annotationController.closeAnnotations(editor);
     }),
 
-    vscode.commands.registerCommand('gitstorm.navigateToAnnotationCommit', (hash: string, repoId: string) => {
+    vscode.commands.registerCommand('gitcharm.navigateToAnnotationCommit', (hash: string, repoId: string) => {
       annotationController.navigateToCommit(hash, repoId);
     }),
 
-    vscode.commands.registerCommand('gitstorm.manageProfiles', () => {
+    vscode.commands.registerCommand('gitcharm.manageProfiles', () => {
       profileStatusBar.showMenu();
     }),
 
-    vscode.commands.registerCommand('gitstorm.switchProfile', () => {
+    vscode.commands.registerCommand('gitcharm.switchProfile', () => {
       profileStatusBar.switchProfile();
     }),
   );
@@ -96,7 +96,7 @@ export function registerCommands(
         conflictedFiles.delete(doc.uri.fsPath);
         // Delay to run after VS Code's built-in SCM view focus
         setTimeout(() => {
-          vscode.commands.executeCommand('gitstorm.commitPanel.focus');
+          vscode.commands.executeCommand('gitcharm.commitPanel.focus');
         }, 300);
       }
     }),

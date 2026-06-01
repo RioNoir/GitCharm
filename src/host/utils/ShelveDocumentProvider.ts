@@ -2,11 +2,11 @@ import * as vscode from 'vscode';
 
 /**
  * Virtual document provider for shelved file diffs.
- * URI scheme: gitstorm-shelf
+ * URI scheme: gitcharm-shelf
  * Content is the "after" state of the file (current content + patch applied).
  */
 export class ShelveDocumentProvider implements vscode.TextDocumentContentProvider {
-  static readonly scheme = 'gitstorm-shelf';
+  static readonly scheme = 'gitcharm-shelf';
 
   private readonly _onDidChange = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this._onDidChange.event;

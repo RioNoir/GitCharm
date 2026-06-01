@@ -54,7 +54,7 @@ function ensureFontInjected(theme: IconThemeData) {
   if (theme.type !== 'font' || !theme.fontFaceUri || !theme.fontId) return;
   if (injectedFontId === theme.fontId) return;
   injectedFontId = theme.fontId;
-  const styleId = `gitstorm-icon-font-${theme.fontId}`;
+  const styleId = `gitcharm-icon-font-${theme.fontId}`;
   if (document.getElementById(styleId)) return;
   const style = document.createElement('style');
   style.id = styleId;

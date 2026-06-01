@@ -99,7 +99,7 @@ function App() {
 
   // ── Inject tab label animation keyframes once ─────────────────────────────
   useEffect(() => {
-    const id = 'gitstorm-tab-kf';
+    const id = 'gitcharm-tab-kf';
     if (document.getElementById(id)) return;
     const s = document.createElement('style');
     s.id = id;

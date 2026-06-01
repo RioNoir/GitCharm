@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
   logPanel.setCommitPanel(commitPanel);
 
   const branchStatusBar = new BranchStatusBar(manager, () => {
-    vscode.commands.executeCommand('gitstorm.commitPanel.focus');
+    vscode.commands.executeCommand('gitcharm.commitPanel.focus');
   });
 
   const profileStatusBar = new ProfileStatusBar(profileService, manager);

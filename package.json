@@ -1,13 +1,13 @@
 {
-  "name": "gitstorm",
-  "displayName": "GitStorm",
-  "description": "IntelliJ/PhpStorm-style Git management for VS Code — Commit panel, Git Log with graph, and 3-way merge editor",
+  "name": "gitcharm",
+  "displayName": "GitCharm",
+  "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
   "version": "0.2.5",
   "publisher": "RioNoir",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/RioNoir/GitStorm.git"
+    "url": "https://github.com/RioNoir/GitCharm.git"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -25,7 +25,7 @@
     "intellij",
     "phpstorm"
   ],
-  "icon": "media/icons/gitstorm.png",
+  "icon": "media/icons/gitcharm.png",
   "galleryBanner": {
     "color": "#1e1e2e",
     "theme": "dark"
@@ -39,37 +39,37 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "gitstorm-commit",
-          "title": "GitStorm Commit",
+          "id": "gitcharm-commit",
+          "title": "GitCharm Commit",
           "icon": "media/icons/git-commit.svg"
         }
       ],
       "panel": [
         {
-          "id": "gitstorm-log",
-          "title": "GitStorm Log",
+          "id": "gitcharm-log",
+          "title": "GitCharm Log",
           "icon": "media/icons/git-branch.svg"
         }
       ]
     },
     "views": {
-      "gitstorm-commit": [
+      "gitcharm-commit": [
         {
           "type": "webview",
-          "id": "gitstorm.commitPanel",
-          "name": "GitStorm Commit",
+          "id": "gitcharm.commitPanel",
+          "name": "GitCharm Commit",
           "retainContextWhenHidden": true
         },
         {
-          "id": "gitstorm.commitBadge",
+          "id": "gitcharm.commitBadge",
           "name": "",
           "when": "false"
         }
       ],
-      "gitstorm-log": [
+      "gitcharm-log": [
         {
           "type": "webview",
-          "id": "gitstorm.gitLog",
+          "id": "gitcharm.gitLog",
           "name": "Git Log",
           "retainContextWhenHidden": true
         }
@@ -77,175 +77,175 @@
     },
     "commands": [
       {
-        "command": "gitstorm.openLog",
-        "title": "GitStorm: Focus Git Log",
+        "command": "gitcharm.openLog",
+        "title": "GitCharm: Focus Git Log",
         "icon": "$(history)"
       },
       {
-        "command": "gitstorm.commit",
-        "title": "GitStorm: Commit"
+        "command": "gitcharm.commit",
+        "title": "GitCharm: Commit"
       },
       {
-        "command": "gitstorm.commitAndPush",
-        "title": "GitStorm: Commit & Push"
+        "command": "gitcharm.commitAndPush",
+        "title": "GitCharm: Commit & Push"
       },
       {
-        "command": "gitstorm.pull",
-        "title": "GitStorm: Pull"
+        "command": "gitcharm.pull",
+        "title": "GitCharm: Pull"
       },
       {
-        "command": "gitstorm.push",
-        "title": "GitStorm: Push"
+        "command": "gitcharm.push",
+        "title": "GitCharm: Push"
       },
       {
-        "command": "gitstorm.fetchAll",
-        "title": "GitStorm: Fetch All Remotes"
+        "command": "gitcharm.fetchAll",
+        "title": "GitCharm: Fetch All Remotes"
       },
       {
-        "command": "gitstorm.openMergeEditor",
+        "command": "gitcharm.openMergeEditor",
         "title": "Open Merge Editor"
       },
       {
-        "command": "gitstorm.refreshCommitPanel",
-        "title": "GitStorm: Refresh Commit Panel",
+        "command": "gitcharm.refreshCommitPanel",
+        "title": "GitCharm: Refresh Commit Panel",
         "icon": "$(refresh)"
       },
       {
-        "command": "gitstorm.showBranchMenu",
-        "title": "GitStorm: Branch Menu",
+        "command": "gitcharm.showBranchMenu",
+        "title": "GitCharm: Branch Menu",
         "icon": "$(git-branch)"
       },
       {
-        "command": "gitstorm.updateProject",
-        "title": "GitStorm: Update Project",
+        "command": "gitcharm.updateProject",
+        "title": "GitCharm: Update Project",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "gitstorm.openSettings",
-        "title": "GitStorm: Settings",
+        "command": "gitcharm.openSettings",
+        "title": "GitCharm: Settings",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "gitstorm.openGitAnnotations",
+        "command": "gitcharm.openGitAnnotations",
         "title": "Open Git Annotations",
         "icon": "$(git-commit)"
       },
       {
-        "command": "gitstorm.closeGitAnnotations",
+        "command": "gitcharm.closeGitAnnotations",
         "title": "Close Git Annotations",
         "icon": "$(git-commit)"
       },
       {
-        "command": "gitstorm.navigateToAnnotationCommit",
-        "title": "GitStorm: Navigate to Commit"
+        "command": "gitcharm.navigateToAnnotationCommit",
+        "title": "GitCharm: Navigate to Commit"
       },
       {
-        "command": "gitstorm.manageProfiles",
-        "title": "GitStorm: Manage Git Profiles",
+        "command": "gitcharm.manageProfiles",
+        "title": "GitCharm: Manage Git Profiles",
         "icon": "$(account)"
       },
       {
-        "command": "gitstorm.switchProfile",
-        "title": "GitStorm: Switch Git Profile",
+        "command": "gitcharm.switchProfile",
+        "title": "GitCharm: Switch Git Profile",
         "icon": "$(account)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "gitstorm.updateProject",
-          "when": "view == gitstorm.commitPanel",
+          "command": "gitcharm.updateProject",
+          "when": "view == gitcharm.commitPanel",
           "group": "navigation@1"
         },
         {
-          "command": "gitstorm.refreshCommitPanel",
-          "when": "view == gitstorm.commitPanel",
+          "command": "gitcharm.refreshCommitPanel",
+          "when": "view == gitcharm.commitPanel",
           "group": "navigation@2"
         },
         {
-          "command": "gitstorm.showBranchMenu",
-          "when": "view == gitstorm.commitPanel",
+          "command": "gitcharm.showBranchMenu",
+          "when": "view == gitcharm.commitPanel",
           "group": "navigation@3"
         },
         {
-          "command": "gitstorm.openLog",
-          "when": "view == gitstorm.commitPanel",
+          "command": "gitcharm.openLog",
+          "when": "view == gitcharm.commitPanel",
           "group": "navigation@4"
         },
         {
-          "command": "gitstorm.openSettings",
-          "when": "view == gitstorm.commitPanel",
+          "command": "gitcharm.openSettings",
+          "when": "view == gitcharm.commitPanel",
           "group": "navigation@5"
         }
       ],
       "commandPalette": [
         {
-          "command": "gitstorm.openLog"
+          "command": "gitcharm.openLog"
         },
         {
-          "command": "gitstorm.fetchAll"
+          "command": "gitcharm.fetchAll"
         },
         {
-          "command": "gitstorm.openMergeEditor"
+          "command": "gitcharm.openMergeEditor"
         },
         {
-          "command": "gitstorm.openGitAnnotations",
-          "when": "resourceScheme == file && config.gitstorm.gitAnnotations.enabled"
+          "command": "gitcharm.openGitAnnotations",
+          "when": "resourceScheme == file && config.gitcharm.gitAnnotations.enabled"
         },
         {
-          "command": "gitstorm.closeGitAnnotations",
-          "when": "resourceScheme == file && gitstorm.annotationsVisible"
+          "command": "gitcharm.closeGitAnnotations",
+          "when": "resourceScheme == file && gitcharm.annotationsVisible"
         },
         {
-          "command": "gitstorm.navigateToAnnotationCommit",
+          "command": "gitcharm.navigateToAnnotationCommit",
           "when": "false"
         }
       ],
       "editor/lineNumber/context": [
         {
-          "command": "gitstorm.openGitAnnotations",
-          "when": "resourceScheme == file && config.gitstorm.gitAnnotations.enabled && !gitstorm.annotationsVisible",
-          "group": "gitstorm@1"
+          "command": "gitcharm.openGitAnnotations",
+          "when": "resourceScheme == file && config.gitcharm.gitAnnotations.enabled && !gitcharm.annotationsVisible",
+          "group": "gitcharm@1"
         },
         {
-          "command": "gitstorm.closeGitAnnotations",
-          "when": "resourceScheme == file && gitstorm.annotationsVisible",
-          "group": "gitstorm@1"
+          "command": "gitcharm.closeGitAnnotations",
+          "when": "resourceScheme == file && gitcharm.annotationsVisible",
+          "group": "gitcharm@1"
         }
       ],
       "editor/context": [
         {
-          "command": "gitstorm.openMergeEditor",
+          "command": "gitcharm.openMergeEditor",
           "when": "resourceScheme == file",
-          "group": "gitstorm"
+          "group": "gitcharm"
         },
         {
-          "command": "gitstorm.openGitAnnotations",
-          "when": "resourceScheme == file && config.gitstorm.gitAnnotations.enabled && !gitstorm.annotationsVisible",
-          "group": "gitstorm@1"
+          "command": "gitcharm.openGitAnnotations",
+          "when": "resourceScheme == file && config.gitcharm.gitAnnotations.enabled && !gitcharm.annotationsVisible",
+          "group": "gitcharm@1"
         },
         {
-          "command": "gitstorm.closeGitAnnotations",
-          "when": "resourceScheme == file && gitstorm.annotationsVisible",
-          "group": "gitstorm@1"
+          "command": "gitcharm.closeGitAnnotations",
+          "when": "resourceScheme == file && gitcharm.annotationsVisible",
+          "group": "gitcharm@1"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "gitstorm.openLog",
+        "command": "gitcharm.openLog",
         "key": "ctrl+alt+l",
         "mac": "cmd+alt+l"
       },
       {
-        "command": "gitstorm.commit",
+        "command": "gitcharm.commit",
         "key": "ctrl+alt+k",
         "mac": "cmd+alt+k"
       }
     ],
     "colors": [
       {
-        "id": "gitstorm.statusBarPullForeground",
+        "id": "gitcharm.statusBarPullForeground",
         "description": "Status bar text color when incoming commits are available (pull needed)",
         "defaults": {
           "dark": "#64b5f6",
@@ -255,7 +255,7 @@
         }
       },
       {
-        "id": "gitstorm.statusBarPushForeground",
+        "id": "gitcharm.statusBarPushForeground",
         "description": "Status bar text color when there are unpushed commits or the branch is not on remote",
         "defaults": {
           "dark": "#ce93d8",
@@ -265,7 +265,7 @@
         }
       },
       {
-        "id": "gitstorm.statusBarDirtyForeground",
+        "id": "gitcharm.statusBarDirtyForeground",
         "description": "Status bar text color when there are uncommitted changes",
         "defaults": {
           "dark": "#81c784",
@@ -276,45 +276,45 @@
       }
     ],
     "configuration": {
-      "title": "GitStorm",
+      "title": "GitCharm",
       "properties": {
-        "gitstorm.graphMaxCommits": {
+        "gitcharm.graphMaxCommits": {
           "type": "number",
           "default": 1000,
           "minimum": 100,
           "maximum": 10000,
           "description": "Maximum commits to load in the Git Log graph"
         },
-        "gitstorm.fetchOnStartup": {
+        "gitcharm.fetchOnStartup": {
           "type": "boolean",
           "default": false,
           "description": "Automatically fetch all remotes when the extension activates"
         },
-        "gitstorm.projectColors": {
+        "gitcharm.projectColors": {
           "type": "object",
           "default": {},
           "description": "Map of workspace folder name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
         },
-        "gitstorm.autoRefreshInterval": {
+        "gitcharm.autoRefreshInterval": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "description": "Auto-refresh interval in seconds (0 = disabled, use file watchers only)"
         },
-        "gitstorm.gitAnnotations.enabled": {
+        "gitcharm.gitAnnotations.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable Git Annotations in the editor."
         },
-        "gitstorm.gitGhostText.enabled": {
+        "gitcharm.gitGhostText.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable inline Git ghost text in the editor."
         },
-        "gitstorm.gitProfiles": {
+        "gitcharm.gitProfiles": {
           "type": "array",
           "default": [],
-          "description": "Git identity profiles (name, email) managed by GitStorm.",
+          "description": "Git identity profiles (name, email) managed by GitCharm.",
           "items": {
             "type": "object",
             "required": ["id", "name", "gitName", "gitEmail"],
@@ -327,7 +327,7 @@
             }
           }
         },
-        "gitstorm.activeGitProfileId": {
+        "gitcharm.activeGitProfileId": {
           "type": "string",
           "default": "",
           "description": "ID of the currently active Git profile for this workspace."

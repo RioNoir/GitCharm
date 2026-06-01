@@ -79,7 +79,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.prevCommits.clear();
 
     const folders = vscode.workspace.workspaceFolders ?? [];
-    const customColors = vscode.workspace.getConfiguration('gitstorm').get<Record<string, string>>('projectColors', {});
+    const customColors = vscode.workspace.getConfiguration('gitcharm').get<Record<string, string>>('projectColors', {});
 
     folders.forEach((folder, index) => {
       const gitDir = path.join(folder.uri.fsPath, '.git');
@@ -93,7 +93,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
       }
     });
 
-    const fetchOnStartup = vscode.workspace.getConfiguration('gitstorm').get<boolean>('fetchOnStartup', false);
+    const fetchOnStartup = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchOnStartup', false);
     if (fetchOnStartup) {
       this.fetchAll().catch(console.error);
     }
@@ -101,7 +101,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
   private setupWatcher(repoPath: string, repoId: string): void {
     // Primary: VS Code Git API state changes — fired for all git operations
-    // (built-in git, GitStorm, terminal, other extensions).
+    // (built-in git, GitCharm, terminal, other extensions).
     const vsRepo = getVscodeGitApi()?.getRepository(vscode.Uri.file(repoPath));
     if (vsRepo) {
       this.prevHeads.set(repoId, vsRepo.state.HEAD?.name ?? '');

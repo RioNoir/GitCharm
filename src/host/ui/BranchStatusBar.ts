@@ -19,8 +19,8 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.StatusBarAlignment.Left,
       100
     );
-    this.statusBarItem.command = 'gitstorm.showBranchMenu';
-    this.statusBarItem.tooltip = 'GitStorm: Git Menu';
+    this.statusBarItem.command = 'gitcharm.showBranchMenu';
+    this.statusBarItem.tooltip = 'GitCharm: Git Menu';
     this.statusBarItem.show();
 
     this.statusDisposable = this.manager.onStatusChange(() => this.refresh());
@@ -75,21 +75,21 @@ export class BranchStatusBar implements vscode.Disposable {
     if (this.hasUnpushed) tooltipParts.push('Unpushed commits or branch not on remote');
     if (this.hasBehind) tooltipParts.push('Incoming commits available');
     this.statusBarItem.tooltip = tooltipParts.length > 0
-      ? `GitStorm: ${tooltipParts.join(' · ')}`
-      : 'GitStorm: Git Menu';
+      ? `GitCharm: ${tooltipParts.join(' · ')}`
+      : 'GitCharm: Git Menu';
 
     if (this.branchesDiverged) {
       this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
       this.statusBarItem.color = undefined;
     } else if (this.hasBehind) {
       this.statusBarItem.backgroundColor = undefined;
-      this.statusBarItem.color = new vscode.ThemeColor('gitstorm.statusBarPullForeground');
+      this.statusBarItem.color = new vscode.ThemeColor('gitcharm.statusBarPullForeground');
     } else if (this.hasUnpushed) {
       this.statusBarItem.backgroundColor = undefined;
-      this.statusBarItem.color = new vscode.ThemeColor('gitstorm.statusBarPushForeground');
+      this.statusBarItem.color = new vscode.ThemeColor('gitcharm.statusBarPushForeground');
     } else if (this.hasUncommitted) {
       this.statusBarItem.backgroundColor = undefined;
-      this.statusBarItem.color = new vscode.ThemeColor('gitstorm.statusBarDirtyForeground');
+      this.statusBarItem.color = new vscode.ThemeColor('gitcharm.statusBarDirtyForeground');
     } else {
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
@@ -171,7 +171,7 @@ export class BranchStatusBar implements vscode.Disposable {
       {
         label: '$(history) Log',
         description: 'Open Git Log panel',
-        action: async () => { await vscode.commands.executeCommand('gitstorm.openLog'); },
+        action: async () => { await vscode.commands.executeCommand('gitcharm.openLog'); },
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
     );
@@ -212,7 +212,7 @@ export class BranchStatusBar implements vscode.Disposable {
     }
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: 'GitStorm — Git Menu',
+      title: 'GitCharm — Git Menu',
       matchOnDescription: true,
     });
 
@@ -357,12 +357,12 @@ export class BranchStatusBar implements vscode.Disposable {
     }
 
     if (items.length === 0) {
-      vscode.window.showWarningMessage('GitStorm: No remotes configured in any repository.');
+      vscode.window.showWarningMessage('GitCharm: No remotes configured in any repository.');
       return;
     }
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: 'GitStorm — Push: select repository and remote',
+      title: 'GitCharm — Push: select repository and remote',
       matchOnDescription: true,
     }) as RepoRemoteItem | undefined;
 
@@ -372,13 +372,13 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
 
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Pushing to ${pick.remote}…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing to ${pick.remote}…`, cancellable: false },
       async () => {
         try {
           await repo.push(false, pick.remote);
-          vscode.window.showInformationMessage(`GitStorm [${pick.label.replace('$(cloud-upload) ', '')}]: pushed to "${pick.remote}" successfully.`);
+          vscode.window.showInformationMessage(`GitCharm [${pick.label.replace('$(cloud-upload) ', '')}]: pushed to "${pick.remote}" successfully.`);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`GitStorm: Push failed — ${String(e)}`);
+          vscode.window.showErrorMessage(`GitCharm: Push failed — ${String(e)}`);
         }
       }
     );
@@ -395,10 +395,10 @@ export class BranchStatusBar implements vscode.Disposable {
         await repo.abortRebase();
       }
       vscode.window.showInformationMessage(
-        `GitStorm [${meta.name}]: ${state} aborted successfully.`
+        `GitCharm [${meta.name}]: ${state} aborted successfully.`
       );
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -426,7 +426,7 @@ export class BranchStatusBar implements vscode.Disposable {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: 'GitStorm: Updating all projects…',
+        title: 'GitCharm: Updating all projects…',
         cancellable: false,
       },
       async () => {
@@ -435,7 +435,7 @@ export class BranchStatusBar implements vscode.Disposable {
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
           vscode.window.showInformationMessage(
-            `GitStorm: ${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
+            `GitCharm: ${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
           );
         } else {
           const failedDesc = failed.map(r => {
@@ -443,10 +443,10 @@ export class BranchStatusBar implements vscode.Disposable {
             return `${name}: ${r.message}`;
           }).join('; ');
           vscode.window.showWarningMessage(
-            `GitStorm: ${ok.length} updated, ${failed.length} failed: ${failedDesc}`
+            `GitCharm: ${ok.length} updated, ${failed.length} failed: ${failedDesc}`
           );
         }
-        await vscode.commands.executeCommand('gitstorm.openLog');
+        await vscode.commands.executeCommand('gitcharm.openLog');
       }
     );
   }
@@ -506,7 +506,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
     // Execute
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Creating branch "${branchName}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Creating branch "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const item of pickedRepos) {
@@ -523,10 +523,10 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
           vscode.window.showInformationMessage(
-            `GitStorm: Branch "${branchName}" created in ${pickedRepos.length} ${pickedRepos.length === 1 ? 'repo' : 'repos'}.`
+            `GitCharm: Branch "${branchName}" created in ${pickedRepos.length} ${pickedRepos.length === 1 ? 'repo' : 'repos'}.`
           );
         }
       }
@@ -726,10 +726,10 @@ export class BranchStatusBar implements vscode.Disposable {
         await repo.createBranch(branchName, baseFrom);
       }
       vscode.window.showInformationMessage(
-        `GitStorm [${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`
+        `GitCharm [${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`
       );
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -739,10 +739,10 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.checkout(branchName);
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: switched to "${branchName}"`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: switched to "${branchName}"`);
     } catch (e: unknown) {
       const handled = await this.handleDirtyCheckout(repo, meta, branchName, e);
-      if (!handled) vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      if (!handled) vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -768,7 +768,7 @@ export class BranchStatusBar implements vscode.Disposable {
           await repo.stashPush(`WIP before checkout to ${branchName}`);
           await repo.checkout(branchName);
           vscode.window.showInformationMessage(
-            `GitStorm [${meta.name}]: changes stashed, switched to "${branchName}"`
+            `GitCharm [${meta.name}]: changes stashed, switched to "${branchName}"`
           );
         },
       },
@@ -780,7 +780,7 @@ export class BranchStatusBar implements vscode.Disposable {
           await repo.checkout(branchName);
           await repo.stashPop();
           vscode.window.showInformationMessage(
-            `GitStorm [${meta.name}]: changes migrated to "${branchName}"`
+            `GitCharm [${meta.name}]: changes migrated to "${branchName}"`
           );
         },
       },
@@ -790,7 +790,7 @@ export class BranchStatusBar implements vscode.Disposable {
         action: async () => {
           await repo.checkoutForce(branchName);
           vscode.window.showInformationMessage(
-            `GitStorm [${meta.name}]: force checkout to "${branchName}" (changes discarded)`
+            `GitCharm [${meta.name}]: force checkout to "${branchName}" (changes discarded)`
           );
         },
       },
@@ -802,7 +802,7 @@ export class BranchStatusBar implements vscode.Disposable {
     ];
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: `GitStorm [${meta.name}]: Uncommitted changes`,
+      title: `GitCharm [${meta.name}]: Uncommitted changes`,
       placeHolder: `Choose how to handle local changes before switching to "${branchName}"`,
       ignoreFocusOut: true,
     });
@@ -832,12 +832,12 @@ export class BranchStatusBar implements vscode.Disposable {
       .filter(r => r.hasBranch);
 
     if (candidates.length === 0) {
-      vscode.window.showWarningMessage(`GitStorm: Branch "${branchName}" not found in any repository.`);
+      vscode.window.showWarningMessage(`GitCharm: Branch "${branchName}" not found in any repository.`);
       return;
     }
 
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Checking out "${branchName}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Checking out "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const { meta, fullName } of candidates) {
@@ -851,10 +851,10 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
           vscode.window.showInformationMessage(
-            `GitStorm: Checked out "${branchName}" in ${candidates.length} ${candidates.length === 1 ? 'repo' : 'repos'}.`
+            `GitCharm: Checked out "${branchName}" in ${candidates.length} ${candidates.length === 1 ? 'repo' : 'repos'}.`
           );
         }
       }
@@ -891,10 +891,10 @@ export class BranchStatusBar implements vscode.Disposable {
         await repo.createBranch(branchName, fromBranch);
       }
       vscode.window.showInformationMessage(
-        `GitStorm [${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`
+        `GitCharm [${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`
       );
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -903,13 +903,13 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm [${meta.name}]: Pulling…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm [${meta.name}]: Pulling…`, cancellable: false },
       async () => {
         try {
           await repo.pull();
-          vscode.window.showInformationMessage(`GitStorm [${meta.name}]: pulled successfully.`);
+          vscode.window.showInformationMessage(`GitCharm [${meta.name}]: pulled successfully.`);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+          vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
         }
       }
     );
@@ -929,9 +929,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.renameBranch(oldName, newName);
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: renamed "${oldName}" → "${newName}".`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: renamed "${oldName}" → "${newName}".`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -941,9 +941,9 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.push();
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: pushed successfully.`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: pushed successfully.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -961,9 +961,9 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.rebase(onto);
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: rebased onto "${onto}".`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: rebased onto "${onto}".`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -973,9 +973,9 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.merge(from);
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: merged "${from}".`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: merged "${from}".`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -995,9 +995,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.deleteBranch(branchName, confirm.value === 'force');
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: deleted "${branchName}".`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: deleted "${branchName}".`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -1011,10 +1011,10 @@ export class BranchStatusBar implements vscode.Disposable {
     try {
       await repo.pullFromRemote(remote, branch, useRebase);
       vscode.window.showInformationMessage(
-        `GitStorm [${meta.name}]: pulled "${remoteBranch}" using ${useRebase ? 'rebase' : 'merge'}.`
+        `GitCharm [${meta.name}]: pulled "${remoteBranch}" using ${useRebase ? 'rebase' : 'merge'}.`
       );
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
   }
@@ -1039,7 +1039,7 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!checkoutPick) return;
 
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Creating branch "${branchName}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Creating branch "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const meta of metas) {
@@ -1056,9 +1056,9 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
-          vscode.window.showInformationMessage(`GitStorm: Branch "${branchName}" created in ${metas.length} repos.`);
+          vscode.window.showInformationMessage(`GitCharm: Branch "${branchName}" created in ${metas.length} repos.`);
         }
       }
     );
@@ -1067,7 +1067,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
   private async pullBranchAllRepos(branchName: string, metas: RepoMeta[]): Promise<void> {
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Pulling "${branchName}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pulling "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const meta of metas) {
@@ -1080,9 +1080,9 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
-          vscode.window.showInformationMessage(`GitStorm: Pulled in ${metas.length} repos.`);
+          vscode.window.showInformationMessage(`GitCharm: Pulled in ${metas.length} repos.`);
         }
       }
     );
@@ -1098,7 +1098,7 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!newName || newName === oldName) return;
 
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Renaming "${oldName}" → "${newName}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Renaming "${oldName}" → "${newName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const meta of metas) {
@@ -1111,9 +1111,9 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
-          vscode.window.showInformationMessage(`GitStorm: Renamed "${oldName}" → "${newName}" in ${metas.length} repos.`);
+          vscode.window.showInformationMessage(`GitCharm: Renamed "${oldName}" → "${newName}" in ${metas.length} repos.`);
         }
       }
     );
@@ -1132,7 +1132,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
   private async rebaseAllRepos(onto: string, metas: RepoMeta[]): Promise<void> {
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Rebasing onto "${onto}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Rebasing onto "${onto}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const meta of metas) {
@@ -1145,9 +1145,9 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
-          vscode.window.showInformationMessage(`GitStorm: Rebased onto "${onto}" in ${metas.length} repos.`);
+          vscode.window.showInformationMessage(`GitCharm: Rebased onto "${onto}" in ${metas.length} repos.`);
         }
       }
     );
@@ -1156,7 +1156,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
   private async mergeBranchAllRepos(from: string, metas: RepoMeta[]): Promise<void> {
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Merging "${from}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Merging "${from}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const meta of metas) {
@@ -1169,9 +1169,9 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
-          vscode.window.showInformationMessage(`GitStorm: Merged "${from}" in ${metas.length} repos.`);
+          vscode.window.showInformationMessage(`GitCharm: Merged "${from}" in ${metas.length} repos.`);
         }
       }
     );
@@ -1189,7 +1189,7 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!confirm) return;
 
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `GitStorm: Deleting "${branchName}"…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Deleting "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
         for (const meta of metas) {
@@ -1202,9 +1202,9 @@ export class BranchStatusBar implements vscode.Disposable {
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`GitStorm: ${errors.length} error(s): ${errors.join('; ')}`);
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
         } else {
-          vscode.window.showInformationMessage(`GitStorm: Deleted "${branchName}" in ${metas.length} repos.`);
+          vscode.window.showInformationMessage(`GitCharm: Deleted "${branchName}" in ${metas.length} repos.`);
         }
       }
     );
@@ -1334,9 +1334,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.addRemote(name.trim(), url.trim());
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: remote "${name}" added.`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: remote "${name}" added.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.showRepoRemotesMenu(meta);
   }
@@ -1357,9 +1357,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.renameRemote(remote.name, newName.trim());
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: remote renamed "${remote.name}" → "${newName}".`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: remote renamed "${remote.name}" → "${newName}".`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.showRepoRemotesMenu(meta);
   }
@@ -1380,9 +1380,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.setRemoteUrl(remote.name, newUrl.trim());
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: URL of "${remote.name}" updated.`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: URL of "${remote.name}" updated.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.showRepoRemotesMenu(meta);
   }
@@ -1406,9 +1406,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.removeRemote(remote.name);
-      vscode.window.showInformationMessage(`GitStorm [${meta.name}]: remote "${remote.name}" removed.`);
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: remote "${remote.name}" removed.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`GitStorm [${meta.name}]: ${String(e)}`);
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.showRepoRemotesMenu(meta);
   }

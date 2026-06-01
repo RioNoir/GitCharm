@@ -98,7 +98,7 @@ jobs:
       - name: Package VSIX
         run: |
           mkdir -p dist
-          npm run package -- --out "dist/gitstorm-${{ steps.package.outputs.version }}.vsix"
+          npm run package -- --out "dist/gitcharm-${{ steps.package.outputs.version }}.vsix"
 
       - name: Create and push tag
         if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.tag_exists == 'false'
@@ -116,7 +116,7 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v6
         with:
-          name: gitstorm-vsix
+          name: gitcharm-vsix
           path: dist/*.vsix
           if-no-files-found: error
 
@@ -132,6 +132,6 @@ jobs:
             gh release upload "${RELEASE_TAG}" dist/*.vsix --clobber
           else
             gh release create "${RELEASE_TAG}" dist/*.vsix \
-              --title "GitStorm ${RELEASE_TAG}" \
+              --title "GitCharm ${RELEASE_TAG}" \
               --generate-notes
           fi
