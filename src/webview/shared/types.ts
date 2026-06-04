@@ -35,6 +35,7 @@ export interface BranchInfo {
   lastCommitHash?: string;
   lastCommitDate?: string;
   detachedTag?: string;
+  detachedHash?: string;
 }
 
 export interface CommitNode {
