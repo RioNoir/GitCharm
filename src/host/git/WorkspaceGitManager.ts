@@ -253,7 +253,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     for (const r of currentBranches) {
       if (r.status !== 'fulfilled') continue;
       const cur = r.value;
-      if (!cur.detachedTag) continue; // normal branch — already handled by getBranches()
+      if (!cur.detachedTag && !cur.detachedHash) continue; // normal branch — already handled by getBranches()
       // Remove any existing entry for this repoId that might have isHead:true (safety)
       const idx = branches.findIndex(b => b.repoId === cur.repoId && b.isHead);
       if (idx >= 0) branches.splice(idx, 1);

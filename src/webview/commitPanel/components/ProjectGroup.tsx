@@ -113,10 +113,10 @@ export function ProjectGroup({
           <span
             style={styles.branchBadge(branchClr)}
             onClick={(e) => { e.stopPropagation(); onBranchClick(repoId); }}
-            title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.name}
+            title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
           >
-            <Codicon name={repoStatus.branch.detachedTag ? 'tag' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
-            <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.name}</span>
+            <Codicon name={repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+            <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
           </span>
           {totalFiles > 0 && (
             <div style={styles.rightGroup}>

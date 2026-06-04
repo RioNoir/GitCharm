@@ -306,6 +306,17 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
     .filter(r => r.startsWith('tag: '))
     .map(r => r.replace('tag: ', ''));
 
+  // Local branch names from commit refs (exclude tags, HEAD marker, remote refs)
+  const localBranchesFromRefs = commit.refs
+    .filter(r => !r.startsWith('tag: ') && r !== 'HEAD' && !r.includes('/'))
+    .map(r => r.startsWith('HEAD -> ') ? r.slice('HEAD -> '.length) : r);
+  // Remote-only branch names (origin/branchname → branchname), used as fallback
+  const remoteBranchesFromRefs = commit.refs
+    .filter(r => r.includes('/') && !r.startsWith('tag: '))
+    .map(r => r.slice(r.indexOf('/') + 1));
+  const branchesFromRefs = localBranchesFromRefs.length > 0 ? localBranchesFromRefs : remoteBranchesFromRefs;
+  const primaryBranch = branchesFromRefs[0] ?? null;
+
   // Clamp menu position so it stays within the viewport (useLayoutEffect avoids flash)
   const [menuPos, setMenuPos] = useState({ left: x, top: y });
   useLayoutEffect(() => {
@@ -415,6 +426,24 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
           >
             <Codicon name="tag" style={ctxStyles.icon} />
             <span>Manage Tags...</span>
+          </div>
+        )}
+        <div style={ctxStyles.separator} />
+        {primaryBranch ? (
+          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, branchName: primaryBranch })}>
+            <Codicon name="arrow-right" style={ctxStyles.icon} />
+            <span>Checkout...</span>
+          </div>
+        ) : (
+          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+            <Codicon name="arrow-right" style={ctxStyles.icon} />
+            <span>Checkout Revision</span>
+          </div>
+        )}
+        {primaryBranch && (
+          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_SHOW_BRANCH_OPTIONS', repoId: commit.repoId, branchName: primaryBranch })}>
+            <Codicon name="git-branch" style={ctxStyles.icon} />
+            <span>Branch options...</span>
           </div>
         )}
         <div style={ctxStyles.separator} />

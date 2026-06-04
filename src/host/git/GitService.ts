@@ -102,6 +102,14 @@ export class GitService {
     return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
   }
 
+  private async getShortHash(): Promise<string | undefined> {
+    try {
+      return (await this.git.raw(['rev-parse', '--short', 'HEAD'])).trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async resolveHeadName(hint?: string): Promise<string> {
     if (hint) return hint;
     try {
@@ -140,6 +148,9 @@ export class GitService {
       const branchName = isDetached ? 'HEAD' : (head.name ?? 'HEAD');
       // When type === Tag, head.name is the exact tag checked out
       const detachedTag = isDetached ? await this.getDetachedTag(head?.type === RefType.Tag ? head.name : undefined) : undefined;
+      const detachedHash = (isDetached && !detachedTag)
+        ? (head?.commit ? head.commit.slice(0, 8) : await this.getShortHash())
+        : undefined;
       const branchInfo: BranchInfo = {
         repoId: this.repoId,
         name: branchName,
@@ -151,6 +162,7 @@ export class GitService {
           ? { ahead: head.ahead, behind: head.behind }
           : undefined,
         detachedTag,
+        detachedHash,
       };
 
       const stagedFiles: FileStatus[] = [];
@@ -259,6 +271,9 @@ export class GitService {
       // If VS Code API reports a branch (no longer detached), clear pending.
       if (!isDetached) this._pendingDetachedTag = undefined;
       const detachedTag = isDetached ? await this.getDetachedTag(vsTagName) : undefined;
+      const detachedHash = (isDetached && !detachedTag)
+        ? (head?.commit ? head.commit.slice(0, 8) : await this.getShortHash())
+        : undefined;
       return {
         repoId: this.repoId,
         name: branchName,
@@ -270,12 +285,14 @@ export class GitService {
           ? { ahead: head.ahead, behind: head.behind }
           : undefined,
         detachedTag,
+        detachedHash,
       };
     }
     const status = await this.git.status();
     const isDetached = status.detached;
     const branchName = await this.resolveHeadName(status.current ?? undefined);
     const detachedTag = isDetached ? await this.getDetachedTag() : undefined;
+    const detachedHash = (isDetached && !detachedTag) ? await this.getShortHash() : undefined;
     return {
       repoId: this.repoId,
       name: branchName,
@@ -285,6 +302,7 @@ export class GitService {
       upstream: status.tracking ?? undefined,
       aheadBehind: status.tracking ? { ahead: status.ahead, behind: status.behind } : undefined,
       detachedTag,
+      detachedHash,
     };
   }
 
@@ -339,6 +357,8 @@ export class GitService {
     const result = await this.git.branch(['-avv', '--sort=-committerdate']);
     const branches: BranchInfo[] = [];
     for (const [name, branch] of Object.entries(result.branches)) {
+      // Skip the detached HEAD pseudo-entry (e.g. "(HEAD detached at a9b68a1)")
+      if (branch.current && name.startsWith('(HEAD detached')) continue;
       const isRemote = name.startsWith('remotes/');
       const cleanName = isRemote ? name.replace(/^remotes\//, '') : name;
       const remoteName = isRemote ? cleanName.split('/')[0] : undefined;

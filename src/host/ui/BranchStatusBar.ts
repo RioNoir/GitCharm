@@ -51,8 +51,8 @@ export class BranchStatusBar implements vscode.Disposable {
       .map(r => r.value)
       .filter(Boolean) as Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>>[];
 
-    // Use effective name: detachedTag if detached, otherwise branch name
-    const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.name))];
+    // Use effective name: detachedTag, detachedHash, or branch name
+    const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
     this.branchesDiverged = effectiveNames.length > 1;
     this.hasBehind = branches.some(b => (b.aheadBehind?.behind ?? 0) > 0);
     this.hasUnpushed = branches.some(b => !b.upstream || (b.aheadBehind?.ahead ?? 0) > 0);
@@ -64,11 +64,10 @@ export class BranchStatusBar implements vscode.Disposable {
       ? effectiveNames[0]
       : `${effectiveNames[0]} +${effectiveNames.length - 1}`;
 
-    // Icon: tag if every repo that has a current ref is either detached on a tag
-    // or has no branch name (pure detached HEAD). Fall back to git-branch only when
-    // at least one repo is actually on a named branch.
-    const anyOnNamedBranch = branches.some(b => !b.detachedTag && b.name !== 'HEAD');
-    const headIcon = anyOnNamedBranch ? '$(git-branch)' : '$(tag)';
+    // Icon: git-branch on a named branch, tag on detached tag, git-commit on detached hash
+    const anyOnNamedBranch = branches.some(b => !b.detachedTag && !b.detachedHash && b.name !== 'HEAD');
+    const anyOnTag = !anyOnNamedBranch && branches.some(b => !!b.detachedTag);
+    const headIcon = anyOnNamedBranch ? '$(git-branch)' : anyOnTag ? '$(tag)' : '$(git-commit)';
 
     const divergeIcon = this.branchesDiverged ? '$(warning) ' : '';
     const pullIcon = this.hasBehind ? ' $(arrow-down)' : '';
@@ -101,6 +100,23 @@ export class BranchStatusBar implements vscode.Disposable {
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
     }
+  }
+
+  async showBranchOptions(repoId: string, branchName: string): Promise<void> {
+    const metas = this.manager.getRepoMetas();
+    const meta = metas.find(m => m.id === repoId);
+    if (!meta) return;
+    const repo = this.manager.getRepo(repoId);
+    if (!repo) return;
+    const [branches, currentBranch] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+    const remote = branches.filter(b => b.isRemote);
+    const remoteNames = new Set(remote.map(r => r.name.replace(/^[^/]+\//, '')));
+    const branch = branches.find(b => !b.isRemote && b.name === branchName);
+    const isCurrent = branch?.isHead ?? false;
+    const hasRemote = isCurrent ? !!currentBranch.upstream : remoteNames.has(branchName);
+    const hasUnpushed = !hasRemote || ((branch?.aheadBehind?.ahead ?? 0) > 0);
+    const effectiveBranchName = currentBranch.detachedTag ?? currentBranch.detachedHash ?? currentBranch.name;
+    await this.showSingleBranchActionMenu(branchName, meta, isCurrent, false, hasUnpushed, effectiveBranchName);
   }
 
   async showMenu(repoId?: string): Promise<void> {
@@ -200,7 +216,7 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             const current = await repo.getCurrentBranch();
             isDetachedOnTag = !!current.detachedTag;
-            branchName = current.detachedTag ?? current.name;
+            branchName = current.detachedTag ?? current.detachedHash ?? current.name;
             repoHasUnpushed = !current.upstream || (current.aheadBehind?.ahead ?? 0) > 0;
           } catch { /* */ }
         }
@@ -802,8 +818,8 @@ export class BranchStatusBar implements vscode.Disposable {
     ]);
     const local = branches.filter(b => !b.isRemote);
     const remote = branches.filter(b => b.isRemote);
-    const effectiveBranchName = currentBranch.detachedTag ?? currentBranch.name;
-    const isDetached = !!currentBranch.detachedTag || currentBranch.name === 'HEAD';
+    const effectiveBranchName = currentBranch.detachedTag ?? currentBranch.detachedHash ?? currentBranch.name;
+    const isDetached = !!currentBranch.detachedTag || !!currentBranch.detachedHash || currentBranch.name === 'HEAD';
 
     type BranchItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
 

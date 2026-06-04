@@ -40,6 +40,10 @@ export function registerCommands(
       branchStatusBar.showMenu(repoId);
     }),
 
+    vscode.commands.registerCommand('gitcharm.showBranchOptions', (repoId: string, branchName: string) => {
+      branchStatusBar.showBranchOptions(repoId, branchName);
+    }),
+
     vscode.commands.registerCommand('gitcharm.updateProject', () => {
       branchStatusBar.updateProject();
     }),

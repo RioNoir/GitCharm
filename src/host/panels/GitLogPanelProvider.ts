@@ -7,7 +7,7 @@ import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 
 function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
-  if (!current.detachedTag) return branches; // normal branch — already in list
+  if (!current.detachedTag && !current.detachedHash) return branches; // normal branch — already in list
   const filtered = branches.filter(b => !(b.repoId === current.repoId && b.isHead));
   return [...filtered, current];
 }
@@ -1239,6 +1239,41 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.post({ type: 'LOG_COMMIT_BODY_RESULT', requestId: msg.requestId, hasBody });
         } catch (e: unknown) {
           this.post({ type: 'LOG_COMMIT_BODY_RESULT', requestId: msg.requestId, hasBody: false });
+        }
+        break;
+      }
+
+      case 'LOG_SHOW_BRANCH_OPTIONS': {
+        await vscode.commands.executeCommand('gitcharm.showBranchOptions', msg.repoId, msg.branchName);
+        break;
+      }
+
+      case 'LOG_CHECKOUT_COMMIT': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        let target: string;
+        if (msg.branchName) {
+          type CheckoutItem = vscode.QuickPickItem & { value: 'branch' | 'revision' };
+          const pick = await vscode.window.showQuickPick<CheckoutItem>(
+            [
+              { label: `$(arrow-right) Checkout branch '${msg.branchName}'`, description: msg.branchName, value: 'branch' },
+              { label: '$(git-commit) Checkout revision (detached HEAD)', description: msg.hash.slice(0, 8), value: 'revision' },
+            ],
+            { title: 'Checkout' }
+          );
+          if (!pick) break;
+          target = pick.value === 'branch' ? msg.branchName : msg.hash;
+        } else {
+          target = msg.hash;
+        }
+        try {
+          await repo.checkout(target);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+          const merged = mergeCurrentIntoBranches(branches, current);
+          this.post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
         break;
       }

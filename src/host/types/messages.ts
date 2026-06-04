@@ -188,7 +188,9 @@ export type LogToHostMsg =
   | { type: 'LOG_PUSH_PICK'; repoId: string }
   | { type: 'LOG_PUSH_TAG_PICK'; repoId: string; tagName: string }
   | { type: 'LOG_REQUEST_COMMIT_BRANCHES'; requestId: string; repoId: string; hash: string }
-  | { type: 'LOG_OPEN_COMMIT_BODY'; requestId: string; repoId: string; hash: string };
+  | { type: 'LOG_OPEN_COMMIT_BODY'; requestId: string; repoId: string; hash: string }
+  | { type: 'LOG_SHOW_BRANCH_OPTIONS'; repoId: string; branchName: string }
+  | { type: 'LOG_CHECKOUT_COMMIT'; requestId: string; repoId: string; hash: string; branchName?: string };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 
