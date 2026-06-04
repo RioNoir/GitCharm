@@ -146,39 +146,39 @@ jobs:
             exit 0
           fi
 
-          # Group by conventional commit prefix
-          build_section() {
+          # Group by conventional commit prefix — write directly to file to preserve newlines
+          NOTES_FILE="/tmp/release-notes.md"
+          > "${NOTES_FILE}"
+
+          append_section() {
             local title="$1"; local prefix="$2"
             local lines
             lines="$(echo "${COMMITS}" | grep -E "^${prefix}" | sed "s/^${prefix}[^:]*: /- /" || true)"
             if [ -n "${lines}" ]; then
-              printf "### %s\n%s\n\n" "${title}" "${lines}"
+              printf "### %s\n%s\n\n" "${title}" "${lines}" >> "${NOTES_FILE}"
             fi
           }
 
-          NOTES=""
-          NOTES+="$(build_section "Features" "feat")"
-          NOTES+="$(build_section "Bug Fixes" "fix")"
-          NOTES+="$(build_section "Performance" "perf")"
-          NOTES+="$(build_section "Refactoring" "refactor")"
-          NOTES+="$(build_section "Documentation" "docs")"
-          NOTES+="$(build_section "Chores" "chore")"
+          append_section "Features"      "feat"
+          append_section "Bug Fixes"     "fix"
+          append_section "Performance"   "perf"
+          append_section "Refactoring"   "refactor"
+          append_section "Documentation" "docs"
+          append_section "Chores"        "chore"
 
           # Any commits that don't match a conventional prefix go into "Other"
           OTHER="$(echo "${COMMITS}" | grep -Ev "^(feat|fix|perf|refactor|docs|chore|test|style|ci|build)[(:!]" \
             | sed 's/^/- /' || true)"
           if [ -n "${OTHER}" ]; then
-            NOTES+="$(printf "### Other\n%s\n\n" "${OTHER}")"
+            printf "### Other\n%s\n\n" "${OTHER}" >> "${NOTES_FILE}"
           fi
 
           if [ -n "${PREV_TAG}" ]; then
             REPO="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-            NOTES+="**Full diff**: ${REPO}/compare/${PREV_TAG}...${RELEASE_TAG}"
+            printf "**Full diff**: %s/compare/%s...%s\n" "${REPO}" "${PREV_TAG}" "${RELEASE_TAG}" >> "${NOTES_FILE}"
           fi
 
-          # Write to a file to safely pass multiline content to the next step
-          echo "${NOTES}" > /tmp/release-notes.md
-          echo "notes_file=/tmp/release-notes.md" >> "$GITHUB_OUTPUT"
+          echo "notes_file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         env:
