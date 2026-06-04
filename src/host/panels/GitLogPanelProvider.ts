@@ -152,6 +152,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId });
   }
 
+  /** Trigger a full log refresh — call this after any operation that creates new commits. */
+  refresh(): void {
+    this.post({ type: 'LOG_REFRESH' });
+  }
+
   private post(msg: HostToLogMsg): void {
     this.view?.webview.postMessage(msg);
   }

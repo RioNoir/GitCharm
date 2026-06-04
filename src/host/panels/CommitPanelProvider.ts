@@ -226,6 +226,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const creds = await this.getCommitCredentials(repo.rootPath);
           const output = await repo.commit(msg.message, msg.amend, creds, s => this.profileService?.trace(s));
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
+          this.logProvider?.refresh();
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -244,6 +245,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               await repo.commit(msg.message, msg.amend, creds, s => this.profileService?.trace(s));
               await repo.push();
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.logProvider?.refresh();
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
@@ -295,6 +297,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n') });
             } else {
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.logProvider?.refresh();
             }
             const status = await this.manager.getAllStatusesFresh();
             this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
@@ -352,6 +355,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             try {
               await repo.push(false, msg.remote);
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.logProvider?.refresh();
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {

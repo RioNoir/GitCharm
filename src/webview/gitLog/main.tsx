@@ -16,8 +16,9 @@ function generateId() {
 }
 
 const BATCH_SIZE = 200;
-// Minimum commits to show before stopping auto-load on filter/search
-const AUTOLOAD_MIN_RESULTS = 50;
+const BG_BATCH_SIZE = 500;
+// Delay between background batches (ms) — keeps the UI thread free
+const BG_DELAY = 120;
 
 function App() {
   const store = useLogStore();
@@ -26,6 +27,9 @@ function App() {
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadRef = useRef<() => void>(() => {});
+  // Generation counter — incremented on every reload so stale bg batches are ignored
+  const bgGenRef = useRef(0);
+  const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const send = useCallback((msg: LogToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -59,25 +63,10 @@ function App() {
           break;
         case 'LOG_COMMITS_BATCH': {
           store.appendCommits(msg.commits, msg.isLast);
-          // If not enough results to fill the viewport and there are more commits,
-          // keep loading automatically without waiting for scroll.
           if (!msg.isLast) {
-            const s = useLogStore.getState();
-            if (s.commits.length < AUTOLOAD_MIN_RESULTS) {
-              s.setLoadingCommits(true);
-              const f = s.commitFilters;
-              send({
-                type: 'LOG_REQUEST_COMMITS',
-                repoIds: f.repoId ? [f.repoId] : [],
-                limit: BATCH_SIZE,
-                skip: s.commits.length,
-                filterText: f.text || undefined,
-                filterAuthor: f.author || undefined,
-                filterBranch: f.branch || undefined,
-                filterDateFrom: f.dateFrom || undefined,
-                filterDateTo: f.dateTo || undefined,
-              });
-            }
+            scheduleBgLoad(bgGenRef.current);
+          } else {
+            useLogStore.getState().setBackgroundLoading(false);
           }
           break;
         }
@@ -119,9 +108,32 @@ function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  const scheduleBgLoad = useCallback((gen: number) => {
+    if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+    bgTimerRef.current = setTimeout(() => {
+      if (gen !== bgGenRef.current) return;
+      const s = useLogStore.getState();
+      if (!s.hasMore) { s.setBackgroundLoading(false); return; }
+      const f = s.commitFilters;
+      getVsCodeApi().postMessage({
+        type: 'LOG_REQUEST_COMMITS',
+        repoIds: f.repoId ? [f.repoId] : [],
+        limit: BG_BATCH_SIZE,
+        skip: s.commits.length,
+        filterText: f.text || undefined,
+        filterAuthor: f.author || undefined,
+        filterBranch: f.branch || undefined,
+        filterDateFrom: f.dateFrom || undefined,
+        filterDateTo: f.dateTo || undefined,
+      });
+    }, BG_DELAY);
+  }, []);
+
   const reloadCommits = useCallback((overrides?: Partial<import('./store/logStore').CommitFilters>) => {
-    // Read filters from store state at call time to avoid stale closure —
-    // callers may have just called setCommitFilters before reloadCommits.
+    // Cancel any in-flight background load
+    if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+    const gen = ++bgGenRef.current;
+
     const f = { ...useLogStore.getState().commitFilters, ...overrides };
     useLogStore.getState().resetCommits();
     useLogStore.getState().setLoadingCommits(true);
@@ -141,24 +153,15 @@ function App() {
   // Keep reloadRef current so the message handler (mounted once) always calls the latest version
   reloadRef.current = reloadCommits;
 
-  // Load more on scroll
+  // Load more on scroll (manual trigger — kept for scroll-to-hash fallback)
   const handleLoadMore = useCallback(() => {
+    // Background loading is already fetching everything; nothing to do
     const s = useLogStore.getState();
-    if (s.loadingCommits) return;
-    s.setLoadingCommits(true);
-    const f = s.commitFilters;
-    send({
-      type: 'LOG_REQUEST_COMMITS',
-      repoIds: f.repoId ? [f.repoId] : [],
-      limit: BATCH_SIZE,
-      skip: s.commits.length,
-      filterText: f.text || undefined,
-      filterAuthor: f.author || undefined,
-      filterBranch: f.branch || undefined,
-      filterDateFrom: f.dateFrom || undefined,
-      filterDateTo: f.dateTo || undefined,
-    });
-  }, [send]);
+    if (s.loadingCommits || s.backgroundLoading || !s.hasMore) return;
+    // Force an immediate bg fetch instead of waiting for the next scheduled one
+    if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+    scheduleBgLoad(bgGenRef.current);
+  }, [scheduleBgLoad]);
 
   // When a commit is selected, load its files
   useEffect(() => {
@@ -302,8 +305,9 @@ function App() {
           currentBranchByRepo={currentBranchByRepo}
           onSelect={(commit) => store.selectCommit(commit)}
           onLoadMore={handleLoadMore}
-          hasMore={store.hasMore && !store.loadingCommits}
+          hasMore={store.hasMore && !store.loadingCommits && !store.backgroundLoading}
           loading={store.loadingCommits}
+          backgroundLoading={store.backgroundLoading}
           scrollToHash={store.pendingScrollHash}
           onScrolledToHash={() => store.setPendingScrollHash(null)}
         />

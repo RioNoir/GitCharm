@@ -23,6 +23,7 @@ interface LogState {
   commitFiles: Array<{ path: string; status: string; added?: number; removed?: number }>;
   currentDiff: FileDiff | null;
   loadingCommits: boolean;
+  backgroundLoading: boolean;
   loadingFiles: boolean;
   loadingDiff: boolean;
   totalLanes: number;
@@ -44,6 +45,7 @@ interface LogState {
   selectFile: (file: { path: string; status: string } | null) => void;
   setDiff: (diff: FileDiff | null) => void;
   setLoadingCommits: (v: boolean) => void;
+  setBackgroundLoading: (v: boolean) => void;
   setLoadingFiles: (v: boolean) => void;
   setLoadingDiff: (v: boolean) => void;
   setFilterRepoId: (id: string | null) => void;
@@ -75,6 +77,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   commitFiles: [],
   currentDiff: null,
   loadingCommits: false,
+  backgroundLoading: false,
   loadingFiles: false,
   loadingDiff: false,
   totalLanes: 1,
@@ -94,14 +97,16 @@ export const useLogStore = create<LogState>((set, get) => ({
   appendCommits: (commits, isLast) => set(s => ({
     commits: [...s.commits, ...commits],
     loadingCommits: false,
+    backgroundLoading: !isLast,
     hasMore: !isLast,
   })),
-  resetCommits: () => set({ commits: [], hasMore: true, selectedCommit: null, commitFiles: [], currentDiff: null }),
+  resetCommits: () => set({ commits: [], hasMore: true, backgroundLoading: false, selectedCommit: null, commitFiles: [], currentDiff: null }),
   selectCommit: (commit) => set(s => ({ selectedCommit: commit, commitFiles: [], currentDiff: null, selectedFile: null, fileLoadSeq: s.fileLoadSeq + 1 })),
   setCommitFiles: (files) => set({ commitFiles: files, loadingFiles: false }),
   selectFile: (file) => set({ selectedFile: file }),
   setDiff: (diff) => set({ currentDiff: diff, loadingDiff: false }),
   setLoadingCommits: (v) => set({ loadingCommits: v }),
+  setBackgroundLoading: (v) => set({ backgroundLoading: v }),
   setLoadingFiles: (v) => set({ loadingFiles: v }),
   setLoadingDiff: (v) => set({ loadingDiff: v }),
   setFilterRepoId: (id) => set({ filterRepoId: id }),

@@ -24,6 +24,7 @@ interface Props {
   onLoadMore: () => void;
   hasMore: boolean;
   loading: boolean;
+  backgroundLoading?: boolean;
   scrollToHash?: string | null;
   onScrolledToHash?: () => void;
 }
@@ -44,8 +45,59 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, onSelect, onLoadMore, hasMore, loading, scrollToHash, onScrolledToHash }: Props) {
+const BG_ANIM_STYLE = `
+@keyframes gitcharm-bg-load {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(150%); }
+  100% { transform: translateX(150%); }
+}
+@keyframes gitcharm-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+`;
+
+function CommitSkeleton() {
+  const rows = Math.ceil(window.innerHeight / ROW_HEIGHT) + 2;
+  return (
+    <div style={skeletonStyles.container}>
+      <style>{BG_ANIM_STYLE}</style>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} style={skeletonStyles.row(i, rows)}>
+          <div style={skeletonStyles.graph} />
+          <div style={skeletonStyles.message(i)} />
+          <div style={skeletonStyles.meta} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const SKELETON_MIN_MS = 400;
+
+export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, onSelect, onLoadMore, hasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
+  // Start as true — skeleton is always shown until commits arrive (handles first load correctly)
+  const [showSkeleton, setShowSkeleton] = useState(true);
+  const skeletonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shownSinceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (commits.length === 0) {
+      // Reset: show skeleton again (e.g. on reload/refresh)
+      if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
+      setShowSkeleton(true);
+      shownSinceRef.current = Date.now();
+    } else if (showSkeleton) {
+      // Commits arrived — hide skeleton, but respect the minimum display time
+      const elapsed = shownSinceRef.current ? Date.now() - shownSinceRef.current : SKELETON_MIN_MS;
+      const remaining = Math.max(0, SKELETON_MIN_MS - elapsed);
+      if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
+      skeletonTimerRef.current = setTimeout(() => setShowSkeleton(false), remaining);
+    }
+    return () => { if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current); };
+  }, [commits.length]);
+
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
@@ -146,8 +198,13 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
     });
   }
 
+  if (showSkeleton) {
+    return <CommitSkeleton />;
+  }
+
   return (
     <div ref={parentRef} style={styles.container} onClick={() => setContextMenu(null)}>
+      <style>{BG_ANIM_STYLE}</style>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
         {/* Repo label strips */}
@@ -252,8 +309,10 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
         })}
       </div>
 
-      {loading && commits.length > 0 && (
-        <div style={styles.loading}>Loading more commits...</div>
+      {backgroundLoading && (
+        <div style={styles.bgLoadingBar}>
+          <div style={styles.bgLoadingBarFill} />
+        </div>
       )}
 
       {contextMenu && (
@@ -607,6 +666,53 @@ function formatDateTime(dateStr: string): string {
   } catch { return dateStr; }
 }
 
+const skeletonStyles = {
+  container: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'hidden' as const,
+    overflowX: 'hidden' as const,
+    background: 'var(--vscode-editor-background)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignSelf: 'stretch' as const,
+  },
+  row: (i: number, total: number): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    height: ROW_HEIGHT,
+    paddingRight: '8px',
+    flexShrink: 0,
+    opacity: 1 - i * (0.6 / total),
+    animation: `gitcharm-skeleton-pulse 1.8s ease-in-out ${(i * 0.04).toFixed(2)}s infinite`,
+  }),
+  graph: {
+    width: 24,
+    height: 12,
+    borderRadius: 6,
+    background: 'var(--vscode-editor-foreground)',
+    opacity: 0.1,
+    flexShrink: 0,
+  } as React.CSSProperties,
+  message: (i: number): React.CSSProperties => ({
+    flex: 1,
+    height: 10,
+    borderRadius: 5,
+    background: 'var(--vscode-editor-foreground)',
+    opacity: 0.08,
+    maxWidth: `${55 + ((i * 37) % 30)}%`,
+  }),
+  meta: {
+    width: 120,
+    height: 10,
+    borderRadius: 5,
+    background: 'var(--vscode-editor-foreground)',
+    opacity: 0.06,
+    flexShrink: 0,
+  } as React.CSSProperties,
+};
+
 const styles = {
   container: {
     flex: 1,
@@ -753,11 +859,20 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
-  loading: {
-    padding: '8px',
-    textAlign: 'center' as const,
-    fontSize: '11px',
-    opacity: 0.6,
-    color: 'var(--vscode-foreground)',
+  bgLoadingBar: {
+    position: 'sticky' as const,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    background: 'var(--vscode-editor-background)',
+    overflow: 'hidden' as const,
+    zIndex: 10,
   },
+  bgLoadingBarFill: {
+    height: '100%',
+    width: '40%',
+    background: 'var(--vscode-progressBar-background)',
+    animation: 'gitcharm-bg-load 1.4s ease-in-out infinite',
+  } as React.CSSProperties,
 };
