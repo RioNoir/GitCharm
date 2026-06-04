@@ -47,9 +47,15 @@ function vsStatusToGitFileStatus(s: Status): GitFileStatus {
 
 export class GitService {
   private git: SimpleGit;
+  // Set immediately after a tag checkout, cleared when VS Code API confirms the update.
+  private _pendingDetachedTag: string | undefined;
 
   constructor(public readonly repoId: string, public readonly rootPath: string) {
     this.git = simpleGit(rootPath);
+  }
+
+  setPendingDetachedTag(tagName: string | undefined): void {
+    this._pendingDetachedTag = tagName;
   }
 
   private vsRepo() {
@@ -106,21 +112,45 @@ export class GitService {
     }
   }
 
+  private async getDetachedTag(vsTagName?: string): Promise<string | undefined> {
+    // Highest priority: explicitly set after a tag checkout, before VS Code API updates.
+    if (this._pendingDetachedTag) return this._pendingDetachedTag;
+    // VS Code API already knows the exact tag name.
+    if (vsTagName) return vsTagName;
+    try {
+      // git describe --tags --exact-match returns the tag whose ref IS HEAD,
+      // which is precise when multiple tags point at the same commit.
+      const tag = (await this.git.raw(['describe', '--tags', '--exact-match', 'HEAD'])).trim();
+      return tag || undefined;
+    } catch {
+      try {
+        const tag = (await this.git.raw(['tag', '--points-at', 'HEAD', '--sort=-creatordate'])).trim().split('\n')[0].trim();
+        return tag || undefined;
+      } catch {
+        return undefined;
+      }
+    }
+  }
+
   async getStatus(): Promise<RepoStatus> {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       const head = vsRepo.state.HEAD;
-      const branchName = await this.resolveHeadName(head?.name);
+      const isDetached = !head?.name || head.type === RefType.Tag;
+      const branchName = isDetached ? 'HEAD' : (head.name ?? 'HEAD');
+      // When type === Tag, head.name is the exact tag checked out
+      const detachedTag = isDetached ? await this.getDetachedTag(head?.type === RefType.Tag ? head.name : undefined) : undefined;
       const branchInfo: BranchInfo = {
         repoId: this.repoId,
         name: branchName,
-        fullName: `refs/heads/${branchName}`,
+        fullName: isDetached ? 'HEAD' : `refs/heads/${branchName}`,
         isHead: true,
         isRemote: false,
         upstream: head?.upstream ? `${head.upstream.remote}/${head.upstream.name}` : undefined,
         aheadBehind: (head?.ahead !== undefined && head?.behind !== undefined)
           ? { ahead: head.ahead, behind: head.behind }
           : undefined,
+        detachedTag,
       };
 
       const stagedFiles: FileStatus[] = [];
@@ -177,7 +207,7 @@ export class GitService {
         branch: branchInfo,
         stagedFiles,
         unstagedFiles,
-        isDetachedHead: !head?.name,
+        isDetachedHead: !head?.name || head.type === RefType.Tag,
         conflictCount,
       };
     }
@@ -219,29 +249,42 @@ export class GitService {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       const head = vsRepo.state.HEAD;
-      const branchName = await this.resolveHeadName(head?.name);
+      const isDetached = !head?.name || head.type === RefType.Tag;
+      const branchName = isDetached ? 'HEAD' : (head.name ?? 'HEAD');
+      const vsTagName = head?.type === RefType.Tag ? head.name : undefined;
+      // If VS Code API now reports the same tag as pending, the update has arrived — clear it.
+      if (this._pendingDetachedTag && vsTagName === this._pendingDetachedTag) {
+        this._pendingDetachedTag = undefined;
+      }
+      // If VS Code API reports a branch (no longer detached), clear pending.
+      if (!isDetached) this._pendingDetachedTag = undefined;
+      const detachedTag = isDetached ? await this.getDetachedTag(vsTagName) : undefined;
       return {
         repoId: this.repoId,
         name: branchName,
-        fullName: `refs/heads/${branchName}`,
+        fullName: isDetached ? `HEAD` : `refs/heads/${branchName}`,
         isHead: true,
         isRemote: false,
         upstream: head?.upstream ? `${head.upstream.remote}/${head.upstream.name}` : undefined,
         aheadBehind: (head?.ahead !== undefined && head?.behind !== undefined)
           ? { ahead: head.ahead, behind: head.behind }
           : undefined,
+        detachedTag,
       };
     }
     const status = await this.git.status();
+    const isDetached = status.detached;
     const branchName = await this.resolveHeadName(status.current ?? undefined);
+    const detachedTag = isDetached ? await this.getDetachedTag() : undefined;
     return {
       repoId: this.repoId,
       name: branchName,
-      fullName: `refs/heads/${branchName}`,
+      fullName: isDetached ? 'HEAD' : `refs/heads/${branchName}`,
       isHead: true,
       isRemote: false,
       upstream: status.tracking ?? undefined,
       aheadBehind: status.tracking ? { ahead: status.ahead, behind: status.behind } : undefined,
+      detachedTag,
     };
   }
 
@@ -258,17 +301,19 @@ export class GitService {
       const head = vsRepo.state.HEAD;
       const branches: BranchInfo[] = [];
 
+      const headIsOnBranch = head?.type === RefType.Head;
       for (const ref of localRefs.filter(r => r.type === RefType.Head)) {
         const name = ref.name ?? '';
+        const isHead = headIsOnBranch && name === head?.name;
         branches.push({
           repoId: this.repoId,
           name,
           fullName: `refs/heads/${name}`,
-          isHead: name === head?.name,
+          isHead,
           isRemote: false,
           lastCommitHash: ref.commit,
-          aheadBehind: (name === head?.name && head.ahead !== undefined && head.behind !== undefined)
-            ? { ahead: head.ahead, behind: head.behind }
+          aheadBehind: (isHead && head!.ahead !== undefined && head!.behind !== undefined)
+            ? { ahead: head!.ahead, behind: head!.behind }
             : undefined,
         });
       }
@@ -723,6 +768,7 @@ export class GitService {
   }
 
   async checkout(branchName: string, createNew?: boolean, from?: string): Promise<void> {
+    this._pendingDetachedTag = undefined;
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       if (createNew) {
@@ -882,6 +928,46 @@ export class GitService {
 
   async createTag(name: string, hash: string): Promise<void> {
     await this.git.raw(['tag', name, hash]);
+  }
+
+  async getTags(): Promise<Array<{ name: string; hash: string; date: string }>> {
+    // Use %(refname:strip=2) instead of %(refname:short) to always strip refs/tags/
+    // prefix — %(refname:short) may return "tags/<name>" when a branch with the
+    // same name exists, which causes display and matching issues.
+    const out = await this.git.raw([
+      'tag', '--sort=-creatordate',
+      '--format=%(refname:strip=2)%09%(objectname:short)%09%(creatordate:iso)',
+    ]).catch(() => '');
+    return out.trim().split('\n').filter(Boolean).map(line => {
+      const [name, hash, ...dateParts] = line.split('\t');
+      return { name: name.trim(), hash: hash.trim(), date: dateParts.join('\t').trim() };
+    });
+  }
+
+  async getTagsForCommit(hash: string): Promise<string[]> {
+    const out = await this.git.raw(['tag', '--points-at', hash]).catch(() => '');
+    return out.trim().split('\n').map(t => t.trim()).filter(Boolean);
+  }
+
+  async deleteTag(name: string): Promise<void> {
+    await this.git.raw(['tag', '-d', name]);
+  }
+
+  async pushTag(name: string, remote: string): Promise<void> {
+    await this.git.raw(['push', remote, `refs/tags/${name}`]);
+  }
+
+  async deleteTagRemote(name: string, remote: string): Promise<void> {
+    await this.git.raw(['push', remote, `--delete`, `refs/tags/${name}`]);
+  }
+
+  async checkoutTag(name: string): Promise<void> {
+    await this.git.raw(['checkout', name]);
+    this._pendingDetachedTag = name;
+  }
+
+  async mergeTag(name: string): Promise<void> {
+    await this.git.raw(['merge', name]);
   }
 
   async getBranchesContaining(hash: string): Promise<string[]> {

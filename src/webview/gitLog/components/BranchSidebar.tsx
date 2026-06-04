@@ -1,26 +1,30 @@
-import React, { useState, forwardRef } from 'react';
-import type { BranchInfo, RepoMeta } from '../../shared/types';
+import React, { useState, useRef, useLayoutEffect, forwardRef } from 'react';
+import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 import { Codicon } from '../../shared/Codicon';
 
 interface Props {
   repos: RepoMeta[];
   branches: BranchInfo[];
+  tags: TagInfo[];
   filter: string;
   selectedBranchFilter: string;
   onFilterChange: (v: string) => void;
   onBranchFilterSelect: (branchName: string) => void;
-  onCheckout: (repoId: string, branchName: string) => void;
+  onCheckout: (repoIds: string[], branchName: string) => void;
   onMerge: (repoId: string, from: string) => void;
   onRebase: (repoId: string, onto: string) => void;
-  onDelete: (repoId: string, branchName: string, force: boolean) => void;
+  onDelete: (repoIds: string[], branchName: string) => void;
   onFetchRepo: (repoId: string) => void;
   onPull: (repoId: string) => void;
-  onPush: (repoId: string, remote: string) => void;
-  onGetRemotes: (repoId: string) => Promise<string[]>;
+  onPush: (repoId: string) => void;
+  onCheckoutTag: (repoIds: string[], tagName: string) => void;
+  onMergeTag: (repoIds: string[], tagName: string) => void;
+  onPushTag: (repoId: string, tagName: string) => void;
+  onDeleteTag: (repoIds: string[], tagName: string) => void;
 }
 
-type SectionKey = 'local' | 'remote';
+type SectionKey = 'local' | 'remote' | 'tags';
 
 function stripRemotePrefix(name: string): string {
   return name.includes('/') ? name.slice(name.indexOf('/') + 1) : name;
@@ -64,13 +68,32 @@ function sortMerged(list: MergedBranch[]): MergedBranch[] {
   });
 }
 
+interface MergedTag {
+  name: string;
+  repoIds: string[];
+}
+
+function buildMergedTags(tags: TagInfo[]): MergedTag[] {
+  const map = new Map<string, MergedTag>();
+  for (const t of tags) {
+    const existing = map.get(t.name);
+    if (existing) {
+      if (!existing.repoIds.includes(t.repoId)) existing.repoIds.push(t.repoId);
+    } else {
+      map.set(t.name, { name: t.name, repoIds: [t.repoId] });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
-  repos, branches, filter, selectedBranchFilter, onFilterChange, onBranchFilterSelect,
-  onCheckout, onMerge, onRebase, onDelete, onFetchRepo, onPull, onPush, onGetRemotes,
+  repos, branches, tags, filter, selectedBranchFilter, onFilterChange, onBranchFilterSelect,
+  onCheckout, onMerge, onRebase, onDelete, onFetchRepo, onPull, onPush,
+  onCheckoutTag, onMergeTag, onPushTag, onDeleteTag,
 }, ref) {
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
-  const [pushMenu, setPushMenu] = useState<{ x: number; y: number; repoId: string; remotes: string[] } | null>(null);
+  const [tagContextMenu, setTagContextMenu] = useState<{ mergedTag: MergedTag; x: number; y: number } | null>(null);
 
   function toggle(key: SectionKey) {
     setCollapsed(prev => {
@@ -84,10 +107,16 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     ? branches.filter(b => b.name.toLowerCase().includes(filter.toLowerCase()))
     : branches;
 
-  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote)));
+  // Exclude detached HEAD pseudo-branch from Local list — it shows up as a tag row instead
+  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD')));
   const remoteMerged = sortMerged(buildMergedBranches(filtered.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD')));
 
-  function closePushMenu() { setPushMenu(null); }
+  // Active detached tag name(s) — shown as "current" in the Tags section
+  const activeDetachedTags = new Set(branches.filter(b => b.detachedTag).map(b => b.detachedTag!));
+
+  const mergedTags = buildMergedTags(
+    filter ? tags.filter(t => t.name.toLowerCase().includes(filter.toLowerCase())) : tags
+  );
 
   const repoColorMap = Object.fromEntries(repos.map(r => [r.id, r.color]));
   const multiRepo = repos.length > 1;
@@ -97,7 +126,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   }
 
   return (
-    <div ref={ref} style={styles.container} onClick={() => { setContextMenu(null); closePushMenu(); }}>
+    <div ref={ref} style={styles.container} onClick={() => { setContextMenu(null); setTagContextMenu(null); }}>
       {/* Sticky header: search + repo list */}
       <div style={styles.stickyHeader}>
         <div style={styles.searchBox}>
@@ -105,7 +134,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             style={styles.searchInput}
             value={filter}
             onChange={e => onFilterChange(e.target.value)}
-            placeholder="Filter branches..."
+            placeholder="Filter branches & tags..."
           />
         </div>
 
@@ -171,7 +200,33 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
         </>
       )}
 
-      {/* Context menu */}
+      {/* TAGS section */}
+      {mergedTags.length > 0 && (
+        <>
+          <div style={styles.sectionHeader} onClick={() => toggle('tags')}>
+            <span style={styles.chevron}>{collapsed.has('tags') ? '▶' : '▼'}</span>
+            <Codicon name="tag" style={styles.sectionIcon} />
+            <span style={styles.sectionLabel}>Tags</span>
+            <span style={styles.count}>{mergedTags.length}</span>
+          </div>
+          {!collapsed.has('tags') && mergedTags.map(mt => (
+            <TagRow
+              key={mt.name}
+              mergedTag={mt}
+              repoColorMap={repoColorMap}
+              multiRepo={multiRepo}
+              isActive={activeDetachedTags.has(mt.name)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setTagContextMenu({ mergedTag: mt, x: e.clientX, y: e.clientY });
+              }}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Branch context menu */}
       {contextMenu && (() => {
         const inst = primaryInstance(contextMenu.merged);
         return (
@@ -179,29 +234,30 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             merged={contextMenu.merged}
             x={contextMenu.x}
             y={contextMenu.y}
+            canDelete={!contextMenu.merged.isHead}
             onClose={() => setContextMenu(null)}
-            onCheckout={() => { onCheckout(inst.repoId, inst.name); setContextMenu(null); }}
+            onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onMerge={() => { onMerge(inst.repoId, inst.name); setContextMenu(null); }}
             onRebase={() => { onRebase(inst.repoId, inst.name); setContextMenu(null); }}
-            onDelete={() => { onDelete(inst.repoId, inst.name, false); setContextMenu(null); }}
+            onDelete={() => { onDelete(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onPull={() => { onPull(inst.repoId); setContextMenu(null); }}
-            onPushMenu={async (x, y) => {
-              setContextMenu(null);
-              const remotes = await onGetRemotes(inst.repoId);
-              setPushMenu({ x, y, repoId: inst.repoId, remotes });
-            }}
+            onPush={() => { onPush(inst.repoId); setContextMenu(null); }}
           />
         );
       })()}
 
-      {/* Push remote picker */}
-      {pushMenu && (
-        <PushRemoteMenu
-          x={pushMenu.x}
-          y={pushMenu.y}
-          remotes={pushMenu.remotes}
-          onClose={closePushMenu}
-          onSelect={(remote) => { onPush(pushMenu.repoId, remote); closePushMenu(); }}
+      {/* Tag context menu */}
+      {tagContextMenu && (
+        <TagContextMenu
+          mergedTag={tagContextMenu.mergedTag}
+          x={tagContextMenu.x}
+          y={tagContextMenu.y}
+          canDelete={!activeDetachedTags.has(tagContextMenu.mergedTag.name)}
+          onClose={() => setTagContextMenu(null)}
+          onCheckout={() => { onCheckoutTag(tagContextMenu.mergedTag.repoIds, tagContextMenu.mergedTag.name); setTagContextMenu(null); }}
+          onMerge={() => { onMergeTag(tagContextMenu.mergedTag.repoIds, tagContextMenu.mergedTag.name); setTagContextMenu(null); }}
+          onPush={() => { onPushTag(tagContextMenu.mergedTag.repoIds[0], tagContextMenu.mergedTag.name); setTagContextMenu(null); }}
+          onDelete={() => { onDeleteTag(tagContextMenu.mergedTag.repoIds, tagContextMenu.mergedTag.name); setTagContextMenu(null); }}
         />
       )}
     </div>
@@ -251,83 +307,131 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, onContex
   );
 }
 
-function ContextMenu({ merged, x, y, onClose, onCheckout, onMerge, onRebase, onDelete, onPull, onPushMenu }: {
+function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, onContextMenu }: {
+  mergedTag: MergedTag;
+  repoColorMap: Record<string, string>;
+  multiRepo: boolean;
+  isActive: boolean;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      style={styles.branchRow(isActive, false)}
+      onContextMenu={onContextMenu}
+      title={`Tag: ${mergedTag.name}${isActive ? ' (current)' : ''}\nRight-click for actions`}
+    >
+      <Codicon
+        name="tag"
+        style={{
+          ...styles.branchIcon(false, isActive),
+          color: isActive
+            ? 'var(--vscode-gitDecoration-addedResourceForeground)'
+            : 'var(--vscode-gitDecoration-modifiedResourceForeground)',
+          opacity: 1,
+        }}
+      />
+      <span style={styles.branchName(isActive, false)}>{mergedTag.name}</span>
+      {multiRepo && (
+        <span style={styles.dotGroup}>
+          {mergedTag.repoIds.map(id => (
+            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
+          ))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function useClampedPosition(x: number, y: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const left = rect.right > vw ? Math.max(0, x - (rect.right - vw) - 4) : x;
+    const top = rect.bottom > vh ? Math.max(0, y - (rect.bottom - vh) - 4) : y;
+    if (left !== x || top !== y) setPos({ left, top });
+  }, []);
+  return { ref, pos };
+}
+
+type MenuItem = { icon: string; label: string; action: () => void; danger?: boolean } | { sep: true };
+
+function MenuItemRow({ item }: { item: MenuItem }) {
+  if ('sep' in item) return <div style={styles.separator} />;
+  return (
+    <div style={styles.menuItem(item.danger)} onClick={item.action}>
+      <Codicon name={item.icon} style={styles.menuIcon} />
+      {item.label}
+    </div>
+  );
+}
+
+function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMerge, onPush, onDelete }: {
+  mergedTag: MergedTag;
+  x: number; y: number;
+  canDelete: boolean;
+  onClose: () => void;
+  onCheckout: () => void;
+  onMerge: () => void;
+  onPush: () => void;
+  onDelete: () => void;
+}) {
+  const { ref, pos } = useClampedPosition(x, y);
+  const items: MenuItem[] = [
+    { icon: 'arrow-right', label: `Checkout "${mergedTag.name}"`, action: onCheckout },
+    { sep: true },
+    { icon: 'git-merge', label: 'Merge into current', action: onMerge },
+    { icon: 'cloud-upload', label: 'Push to remote...', action: onPush },
+    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete tag', action: onDelete, danger: true }] : []),
+  ];
+
+  return (
+    <>
+      <div style={styles.backdrop} onClick={onClose} />
+      <div ref={ref} style={styles.contextMenu(pos.left, pos.top)}>
+        {items.map((item, i) => <MenuItemRow key={i} item={item} />)}
+      </div>
+    </>
+  );
+}
+
+function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, onRebase, onDelete, onPull, onPush }: {
   merged: MergedBranch;
   x: number; y: number;
+  canDelete: boolean;
   onClose: () => void;
   onCheckout: () => void;
   onMerge: () => void;
   onRebase: () => void;
   onDelete: () => void;
   onPull: () => void;
-  onPushMenu: (x: number, y: number) => void;
+  onPush: () => void;
 }) {
-  const items: Array<{ label: string; action: (() => void) | null; danger?: boolean }> = [
-    { label: `Checkout "${merged.baseName}"`, action: onCheckout },
-    { label: '─', action: null },
-    { label: 'Merge into current', action: onMerge },
-    { label: `Rebase onto "${merged.baseName}"`, action: onRebase },
-    { label: '─', action: null },
-    { label: 'Pull', action: onPull },
-    { label: 'Push...', action: null },
-    { label: '─', action: null },
-    { label: 'Delete branch', action: onDelete, danger: true },
+  const { ref, pos } = useClampedPosition(x, y);
+  const items: MenuItem[] = [
+    { icon: 'arrow-right', label: `Checkout "${merged.baseName}"`, action: onCheckout },
+    { sep: true },
+    { icon: 'git-merge', label: 'Merge into current', action: onMerge },
+    { icon: 'repo-forked', label: `Rebase onto "${merged.baseName}"`, action: onRebase },
+    { sep: true },
+    { icon: 'cloud-download', label: 'Pull', action: onPull },
+    { icon: 'cloud-upload', label: 'Push...', action: onPush },
+    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete branch', action: onDelete, danger: true }] : []),
   ];
 
   return (
     <>
       <div style={styles.backdrop} onClick={onClose} />
-      <div style={styles.contextMenu(x, y)}>
-        {items.map((item, i) =>
-          item.label === '─' ? (
-            <div key={i} style={styles.separator} />
-          ) : item.label === 'Push...' ? (
-            <div
-              key={i}
-              style={styles.menuItemWithArrow}
-              onClick={(e) => { e.stopPropagation(); onPushMenu(e.clientX, e.clientY); }}
-            >
-              <span>Push...</span>
-              <span style={styles.menuArrow}>▶</span>
-            </div>
-          ) : (
-            <div
-              key={i}
-              style={styles.menuItem(item.danger)}
-              onClick={item.action ?? undefined}
-            >
-              {item.label}
-            </div>
-          )
-        )}
+      <div ref={ref} style={styles.contextMenu(pos.left, pos.top)}>
+        {items.map((item, i) => <MenuItemRow key={i} item={item} />)}
       </div>
     </>
   );
 }
 
-function PushRemoteMenu({ x, y, remotes, onClose, onSelect }: {
-  x: number; y: number;
-  remotes: string[];
-  onClose: () => void;
-  onSelect: (remote: string) => void;
-}) {
-  return (
-    <>
-      <div style={styles.backdrop} onClick={onClose} />
-      <div style={styles.contextMenu(x, y)}>
-        {remotes.length === 0 ? (
-          <div style={styles.menuItemDisabled}>No remotes configured</div>
-        ) : (
-          remotes.map(remote => (
-            <div key={remote} style={styles.menuItem(false)} onClick={() => onSelect(remote)}>
-              {remote}
-            </div>
-          ))
-        )}
-      </div>
-    </>
-  );
-}
 
 const styles = {
   container: {
@@ -514,18 +618,15 @@ const styles = {
     cursor: 'pointer',
     color: danger ? 'var(--vscode-errorForeground)' : 'var(--vscode-menu-foreground)',
     whiteSpace: 'nowrap' as const,
-  }),
-  menuItemWithArrow: {
-    padding: '4px 12px',
-    cursor: 'pointer',
-    color: 'var(--vscode-menu-foreground)',
-    whiteSpace: 'nowrap' as const,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '16px',
+    gap: '8px',
+  }),
+  menuIcon: {
+    fontSize: '14px',
+    flexShrink: 0,
+    opacity: 0.8,
   } as React.CSSProperties,
-  menuArrow: { fontSize: '9px', opacity: 0.6 } as React.CSSProperties,
   menuItemDisabled: {
     padding: '4px 12px',
     color: 'var(--vscode-disabledForeground)',

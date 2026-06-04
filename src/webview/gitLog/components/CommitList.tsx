@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { LaidOutCommit } from '../utils/graphLayout';
 import { CommitRowSvg } from './CommitGraph';
@@ -19,6 +19,7 @@ interface Props {
   selectedHash: string | null;
   repoColors: Record<string, string>;
   repos: RepoMeta[];
+  currentBranchByRepo: Record<string, string>;
   onSelect: (commit: LaidOutCommit) => void;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -43,7 +44,7 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function CommitList({ commits, selectedHash, repoColors, repos, onSelect, onLoadMore, hasMore, loading, scrollToHash, onScrolledToHash }: Props) {
+export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, onSelect, onLoadMore, hasMore, loading, scrollToHash, onScrolledToHash }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
@@ -262,6 +263,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
           y={contextMenu.y}
           multiSelected={contextMenu.multiSelected}
           allCommits={commits}
+          currentBranchByRepo={currentBranchByRepo}
           onClose={() => setContextMenu(null)}
           onSquash={(selected) => {
             setContextMenu(null);
@@ -287,16 +289,34 @@ export function CommitList({ commits, selectedHash, repoColors, repos, onSelect,
   );
 }
 
-function CommitContextMenu({ commit, x, y, multiSelected, allCommits, onClose, onSquash }: {
+function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, onClose, onSquash }: {
   commit: LaidOutCommit;
   x: number;
   y: number;
   multiSelected: LaidOutCommit[];
   allCommits: LaidOutCommit[];
+  currentBranchByRepo: Record<string, string>;
   onClose: () => void;
   onSquash: (selected: LaidOutCommit[]) => void;
 }) {
-  const [showResetSub, setShowResetSub] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Tags from commit refs (format "tag: <name>")
+  const tagsFromRefs = commit.refs
+    .filter(r => r.startsWith('tag: '))
+    .map(r => r.replace('tag: ', ''));
+
+  // Clamp menu position so it stays within the viewport (useLayoutEffect avoids flash)
+  const [menuPos, setMenuPos] = useState({ left: x, top: y });
+  useLayoutEffect(() => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const left = rect.right > vw ? Math.max(0, x - (rect.right - vw) - 4) : x;
+    const top = rect.bottom > vh ? Math.max(0, y - (rect.bottom - vh) - 4) : y;
+    if (left !== x || top !== y) setMenuPos({ left, top });
+  }, []);
 
   const isMulti = multiSelected.length > 1 && multiSelected.every(c => c.repoId === multiSelected[0].repoId);
   const allUnpushed = isMulti && multiSelected.every(c => c.unpushed);
@@ -326,7 +346,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, onClose, o
     return (
       <>
         <div style={ctxStyles.backdrop} onClick={onClose} />
-        <div style={ctxStyles.menu(x, y)}>
+        <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top)}>
           <div style={ctxStyles.header}>{multiSelected.length} commits selected</div>
           <div style={ctxStyles.separator} />
           <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH_MULTI', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}>
@@ -370,7 +390,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, onClose, o
   return (
     <>
       <div style={ctxStyles.backdrop} onClick={onClose} />
-      <div style={ctxStyles.menu(x, y)}>
+      <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top)}>
         <div style={ctxStyles.item} onClick={copyHash}>
           <Codicon name="copy" style={ctxStyles.icon} />
           <span>Copy Revision Number</span>
@@ -380,10 +400,23 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, onClose, o
           <Codicon name="git-branch" style={ctxStyles.icon} />
           <span>New Branch...</span>
         </div>
-        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_TAG', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-          <Codicon name="tag" style={ctxStyles.icon} />
-          <span>New Tag...</span>
-        </div>
+        {tagsFromRefs.length === 0 ? (
+          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_TAG', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+            <Codicon name="tag" style={ctxStyles.icon} />
+            <span>New Tag...</span>
+          </div>
+        ) : (
+          <div
+            style={ctxStyles.item}
+            onClick={() => {
+              const currentBranch = currentBranchByRepo[commit.repoId] ?? '';
+              send({ type: 'LOG_MANAGE_COMMIT_TAGS', repoId: commit.repoId, hash: commit.hash, currentBranch } satisfies LogToHostMsg);
+            }}
+          >
+            <Codicon name="tag" style={ctxStyles.icon} />
+            <span>Manage Tags...</span>
+          </div>
+        )}
         <div style={ctxStyles.separator} />
         <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="diff" style={ctxStyles.icon} />
@@ -395,26 +428,11 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, onClose, o
         </div>
         <div style={ctxStyles.separator} />
         <div
-          style={ctxStyles.itemWithArrow}
-          onMouseEnter={() => setShowResetSub(true)}
-          onMouseLeave={() => setShowResetSub(false)}
+          style={ctxStyles.item}
+          onClick={() => send({ type: 'LOG_RESET_TO_PICK', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
         >
           <Codicon name="history" style={ctxStyles.icon} />
-          <span style={{ flex: 1 }}>Reset Current Branch to Here</span>
-          <span style={ctxStyles.arrow}>▶</span>
-          {showResetSub && (
-            <div style={ctxStyles.submenu}>
-              {(['soft', 'mixed', 'hard'] as const).map(mode => (
-                <div
-                  key={mode}
-                  style={mode === 'hard' ? { ...ctxStyles.item, color: 'var(--vscode-errorForeground)' } : ctxStyles.item}
-                  onClick={e => { e.stopPropagation(); send({ type: 'LOG_RESET_TO', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, mode }); }}
-                >
-                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </div>
-              ))}
-            </div>
-          )}
+          <span>Reset Current Branch to Here...</span>
         </div>
         <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="discard" style={ctxStyles.icon} />
@@ -497,33 +515,10 @@ const ctxStyles = {
     opacity: 0.35,
     pointerEvents: 'none' as const,
   } as React.CSSProperties,
-  itemWithArrow: {
-    padding: '4px 12px',
-    cursor: 'pointer',
-    color: 'var(--vscode-menu-foreground)',
-    whiteSpace: 'nowrap' as const,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    position: 'relative' as const,
-  } as React.CSSProperties,
   icon: {
     fontSize: '14px',
     flexShrink: 0,
     opacity: 0.8,
-  } as React.CSSProperties,
-  arrow: { fontSize: '9px', opacity: 0.6, marginLeft: 'auto' } as React.CSSProperties,
-  submenu: {
-    position: 'absolute' as const,
-    left: '100%',
-    top: 0,
-    background: 'var(--vscode-menu-background)',
-    border: '1px solid var(--vscode-menu-border)',
-    borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-    minWidth: '100px',
-    padding: '4px 0',
-    zIndex: 202,
   } as React.CSSProperties,
   separator: {
     height: '1px',
@@ -551,7 +546,7 @@ function mergeLocalRemote(groups: RefGroup[]): RefGroup[] {
 }
 
 function badgeTitle(group: RefGroup): string {
-  if (group.isTag) return `Tag: ${group.label}`;
+  if (group.isTag) return group.isDetached ? `Tag: ${group.label} (HEAD)` : `Tag: ${group.label}`;
   if (group.isLocal && group.isRemote) return `Local & remote: ${group.label}`;
   if (group.isRemote) return `Remote: origin/${group.label}`;
   return `Local: ${group.label}`;
@@ -567,6 +562,7 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
     </>
   );
   if (group.isRemote) return <Codicon name="cloud" style={s} />;
+  if (group.isHead) return <Codicon name="git-branch" style={{ ...s, opacity: 1 }} />;
   return <Codicon name="git-branch" style={s} />;
 }
 

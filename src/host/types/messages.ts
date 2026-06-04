@@ -116,6 +116,13 @@ export type CommitToHostMsg =
 
 export type { IconThemeData };
 
+export interface TagInfo {
+  name: string;
+  hash: string;
+  date: string;
+  repoId: string;
+}
+
 export type HostToLogMsg =
   | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData }
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number }
@@ -123,6 +130,8 @@ export type HostToLogMsg =
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number }>; error?: string }
   | { type: 'LOG_BRANCH_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'LOG_REFS_UPDATE'; repoId: string; branches: BranchInfo[] }
+  | { type: 'LOG_TAGS_UPDATE'; repoId: string; tags: TagInfo[] }
+  | { type: 'LOG_COMMIT_TAGS_RESULT'; requestId: string; tags: string[] }
   | { type: 'LOG_REMOTES_RESULT'; requestId: string; remotes: string[]; error?: string }
   | { type: 'LOG_REFRESH' }
   | { type: 'LOG_MERGE_COMMITS_RESULT'; requestId: string; commits: MergeParentCommit[]; error?: string }
@@ -147,6 +156,7 @@ export type LogToHostMsg =
   | { type: 'LOG_REBASE'; requestId: string; repoId: string; onto: string }
   | { type: 'LOG_COMPARE'; requestId: string; repoId: string; refA: string; refB: string }
   | { type: 'LOG_DELETE_BRANCH'; requestId: string; repoId: string; branchName: string; force: boolean }
+  | { type: 'LOG_DELETE_BRANCH_MULTI'; requestId: string; repoIds: string[]; branchName: string }
   | { type: 'LOG_FETCH_ALL' }
   | { type: 'LOG_FETCH_REPO'; requestId: string; repoId: string }
   | { type: 'LOG_GET_REMOTES'; requestId: string; repoId: string }
@@ -165,6 +175,18 @@ export type LogToHostMsg =
   | { type: 'LOG_EDIT_COMMIT_MESSAGE'; requestId: string; repoId: string; hash: string; currentMessage: string }
   | { type: 'LOG_NEW_BRANCH_FROM_COMMIT'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_CREATE_TAG'; requestId: string; repoId: string; hash: string }
+  | { type: 'LOG_DELETE_TAG'; requestId: string; repoId: string; tagName: string }
+  | { type: 'LOG_DELETE_TAG_MULTI'; requestId: string; repoIds: string[]; tagName: string }
+  | { type: 'LOG_PUSH_TAG'; requestId: string; repoId: string; tagName: string; remote: string }
+  | { type: 'LOG_CHECKOUT_TAG'; requestId: string; repoId: string; tagName: string }
+  | { type: 'LOG_MERGE_TAG'; requestId: string; repoId: string; tagName: string }
+  | { type: 'LOG_MERGE_TAG_MULTI'; requestId: string; repoIds: string[]; tagName: string }
+  | { type: 'LOG_REQUEST_COMMIT_TAGS'; requestId: string; repoId: string; hash: string }
+  | { type: 'LOG_REQUEST_TAGS'; repoId: string }
+  | { type: 'LOG_MANAGE_COMMIT_TAGS'; repoId: string; hash: string; currentBranch: string }
+  | { type: 'LOG_RESET_TO_PICK'; repoId: string; hash: string }
+  | { type: 'LOG_PUSH_PICK'; repoId: string }
+  | { type: 'LOG_PUSH_TAG_PICK'; repoId: string; tagName: string }
   | { type: 'LOG_REQUEST_COMMIT_BRANCHES'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_OPEN_COMMIT_BODY'; requestId: string; repoId: string; hash: string };
 

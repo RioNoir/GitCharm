@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BranchInfo, CommitNode, FileDiff, RepoMeta } from '../../shared/types';
+import type { BranchInfo, CommitNode, FileDiff, RepoMeta, TagInfo } from '../../shared/types';
 import type { IconThemeData } from '../../../host/types/messages';
 
 export interface CommitFilters {
@@ -14,6 +14,7 @@ export interface CommitFilters {
 interface LogState {
   repos: RepoMeta[];
   branches: BranchInfo[];
+  tags: TagInfo[];
   iconTheme: IconThemeData | null;
   commits: CommitNode[];
   hasMore: boolean;
@@ -34,6 +35,7 @@ interface LogState {
 
   setRepos: (repos: RepoMeta[]) => void;
   setBranches: (branches: BranchInfo[]) => void;
+  updateTags: (repoId: string, tags: TagInfo[]) => void;
   setIconTheme: (theme: IconThemeData | null) => void;
   appendCommits: (commits: CommitNode[], isLast: boolean) => void;
   resetCommits: () => void;
@@ -64,6 +66,7 @@ const defaultCommitFilters: CommitFilters = {
 export const useLogStore = create<LogState>((set, get) => ({
   repos: [],
   branches: [],
+  tags: [],
   iconTheme: null,
   commits: [],
   hasMore: true,
@@ -84,6 +87,9 @@ export const useLogStore = create<LogState>((set, get) => ({
 
   setRepos: (repos) => set({ repos }),
   setBranches: (branches) => set({ branches }),
+  updateTags: (repoId, tags) => set(s => ({
+    tags: [...s.tags.filter(t => t.repoId !== repoId), ...tags],
+  })),
   setIconTheme: (iconTheme) => set({ iconTheme }),
   appendCommits: (commits, isLast) => set(s => ({
     commits: [...s.commits, ...commits],

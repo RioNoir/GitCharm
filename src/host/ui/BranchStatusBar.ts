@@ -51,23 +51,30 @@ export class BranchStatusBar implements vscode.Disposable {
       .map(r => r.value)
       .filter(Boolean) as Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>>[];
 
-    const uniqueNames = [...new Set(branches.map(b => b.name))];
-    this.branchesDiverged = uniqueNames.length > 1;
+    // Use effective name: detachedTag if detached, otherwise branch name
+    const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.name))];
+    this.branchesDiverged = effectiveNames.length > 1;
     this.hasBehind = branches.some(b => (b.aheadBehind?.behind ?? 0) > 0);
     this.hasUnpushed = branches.some(b => !b.upstream || (b.aheadBehind?.ahead ?? 0) > 0);
     this.hasUncommitted = statusResult.repos.some(
       r => r.stagedFiles.length > 0 || r.unstagedFiles.length > 0
     );
 
-    const branchLabel = uniqueNames.length === 1
-      ? uniqueNames[0]
-      : `${uniqueNames[0]} +${uniqueNames.length - 1}`;
+    const headLabel = effectiveNames.length === 1
+      ? effectiveNames[0]
+      : `${effectiveNames[0]} +${effectiveNames.length - 1}`;
+
+    // Icon: tag if every repo that has a current ref is either detached on a tag
+    // or has no branch name (pure detached HEAD). Fall back to git-branch only when
+    // at least one repo is actually on a named branch.
+    const anyOnNamedBranch = branches.some(b => !b.detachedTag && b.name !== 'HEAD');
+    const headIcon = anyOnNamedBranch ? '$(git-branch)' : '$(tag)';
 
     const divergeIcon = this.branchesDiverged ? '$(warning) ' : '';
     const pullIcon = this.hasBehind ? ' $(arrow-down)' : '';
     const pushIcon = this.hasUnpushed ? ' $(arrow-up)' : '';
     const dirtyDot = this.hasUncommitted ? ' ●' : '';
-    this.statusBarItem.text = `${divergeIcon}$(git-branch) ${branchLabel}${dirtyDot}${pushIcon}${pullIcon}`;
+    this.statusBarItem.text = `${divergeIcon}${headIcon} ${headLabel}${dirtyDot}${pushIcon}${pullIcon}`;
 
     const tooltipParts: string[] = [];
     if (this.branchesDiverged) tooltipParts.push('Branches have diverged across repositories');
@@ -188,27 +195,25 @@ export class BranchStatusBar implements vscode.Disposable {
         const repo = this.manager.getRepo(meta.id);
         let branchName = 'HEAD';
         let repoHasUnpushed = false;
+        let isDetachedOnTag = false;
         if (repo) {
           try {
             const current = await repo.getCurrentBranch();
-            branchName = current.name;
+            isDetachedOnTag = !!current.detachedTag;
+            branchName = current.detachedTag ?? current.name;
             repoHasUnpushed = !current.upstream || (current.aheadBehind?.ahead ?? 0) > 0;
           } catch { /* */ }
         }
+        const refIcon = isDetachedOnTag ? '$(tag)' : '$(git-branch)';
         items.push({
           label: `$(root-folder) ${meta.name}`,
-          description: `$(git-branch) ${branchName}${repoHasUnpushed ? '  $(arrow-up)' : ''}`,
+          description: `${refIcon} ${branchName}${repoHasUnpushed ? '  $(arrow-up)' : ''}`,
           action: () => this.showRepoBranchMenu(meta),
         });
       }
 
-      items.push({
-        label: 'COMMON BRANCHES',
-        kind: vscode.QuickPickItemKind.Separator,
-        action: async () => {},
-      } as unknown as MenuItem);
-
       await this.appendCommonBranches(items, metas);
+      await this.appendCommonTags(items, metas);
     }
 
     const pick = await vscode.window.showQuickPick(items, {
@@ -223,7 +228,6 @@ export class BranchStatusBar implements vscode.Disposable {
     items: Array<vscode.QuickPickItem & { action: () => Promise<void> | void }>,
     metas: RepoMeta[]
   ): Promise<void> {
-    // Gather all branches per repo
     const perRepo = await Promise.allSettled(
       metas.map(async m => {
         const repo = this.manager.getRepo(m.id);
@@ -231,45 +235,295 @@ export class BranchStatusBar implements vscode.Disposable {
       })
     );
 
-    // Build name → count across repos (local + remote)
-    const nameCount = new Map<string, number>();
+    // Count local branches present in ALL repos
+    const localCount = new Map<string, number>();
+    const remoteCount = new Map<string, number>();
+
     for (const r of perRepo) {
       if (r.status !== 'fulfilled') continue;
-      const seen = new Set<string>();
+      const seenLocal = new Set<string>();
+      const seenRemote = new Set<string>();
       for (const b of r.value) {
-        const key = b.isRemote
-          ? b.name.replace(/^[^/]+\//, '') // strip remote prefix
-          : b.name;
-        if (!seen.has(key)) {
-          seen.add(key);
-          nameCount.set(key, (nameCount.get(key) ?? 0) + 1);
+        if (b.isRemote) {
+          const name = b.name.replace(/^[^/]+\//, '');
+          if (!seenRemote.has(name)) {
+            seenRemote.add(name);
+            remoteCount.set(name, (remoteCount.get(name) ?? 0) + 1);
+          }
+        } else {
+          if (!seenLocal.has(b.name)) {
+            seenLocal.add(b.name);
+            localCount.set(b.name, (localCount.get(b.name) ?? 0) + 1);
+          }
         }
       }
     }
 
-    // Only branches present in ALL repos, sorted alphabetically
-    const sorted = [...nameCount.entries()]
-      .filter(([, count]) => count === metas.length)
-      .sort((a, b) => a[0].localeCompare(b[0]));
+    const commonLocal = [...localCount.entries()]
+      .filter(([, c]) => c === metas.length)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name]) => name);
 
-    // Collect current HEAD per repo for highlighting
+    const commonRemote = [...remoteCount.entries()]
+      .filter(([, c]) => c === metas.length)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+
+    // Collect current HEAD names for highlighting
     const heads = new Set<string>();
     for (const r of perRepo) {
       if (r.status !== 'fulfilled') continue;
       const head = r.value.find(b => b.isHead && !b.isRemote);
       if (head) heads.add(head.name);
     }
+    const headLabel = [...heads].join(', ');
 
-    for (const [name] of sorted) {
-      const isCurrentSomewhere = heads.has(name);
-      const primary = isPrimaryBranch(name);
-      const icon = isCurrentSomewhere ? '$(check)' : primary ? '$(star)' : '$(git-branch)';
+    if (commonLocal.length > 0) {
       items.push({
-        label: `${icon} ${name}`,
-        description: isCurrentSomewhere ? 'current' : '',
-        action: () => this.showCommonBranchActionMenu(name, metas, isCurrentSomewhere, [...heads].join(', ')),
+        label: 'COMMON LOCAL BRANCHES',
+        kind: vscode.QuickPickItemKind.Separator,
+        action: async () => {},
+      } as unknown as typeof items[0]);
+      for (const name of commonLocal) {
+        const isCurrentSomewhere = heads.has(name);
+        const icon = isCurrentSomewhere ? '$(check)' : isPrimaryBranch(name) ? '$(star)' : '$(git-branch)';
+        items.push({
+          label: `${icon} ${name}`,
+          description: isCurrentSomewhere ? 'current' : '',
+          action: () => this.showCommonBranchActionMenu(name, metas, isCurrentSomewhere, headLabel),
+        });
+      }
+    }
+
+    if (commonRemote.length > 0) {
+      items.push({
+        label: 'COMMON REMOTE BRANCHES',
+        kind: vscode.QuickPickItemKind.Separator,
+        action: async () => {},
+      } as unknown as typeof items[0]);
+      for (const name of commonRemote) {
+        items.push({
+          label: `$(cloud) ${name}`,
+          description: '',
+          action: () => this.showCommonBranchActionMenu(name, metas, false, headLabel),
+        });
+      }
+    }
+  }
+
+  private async appendCommonTags(
+    items: Array<vscode.QuickPickItem & { action: () => Promise<void> | void }>,
+    metas: RepoMeta[]
+  ): Promise<void> {
+    // Fetch tags and current branch for all repos in parallel
+    const [perRepoTags, perRepoCurrent] = await Promise.all([
+      Promise.allSettled(metas.map(async m => {
+        const repo = this.manager.getRepo(m.id);
+        return { metaId: m.id, tags: repo ? await repo.getTags() : [] };
+      })),
+      Promise.allSettled(metas.map(async m => {
+        const repo = this.manager.getRepo(m.id);
+        return repo ? repo.getCurrentBranch() : null;
+      })),
+    ]);
+
+    // Active detached tags for highlighting
+    const activeDetachedTags = new Set<string>();
+    for (const r of perRepoCurrent) {
+      if (r.status === 'fulfilled' && r.value?.detachedTag) {
+        activeDetachedTags.add(r.value.detachedTag);
+      }
+    }
+
+    // Build tag → set of repoIds that have it
+    const tagRepoIds = new Map<string, string[]>();
+    for (const r of perRepoTags) {
+      if (r.status !== 'fulfilled') continue;
+      const { metaId, tags } = r.value;
+      const seen = new Set<string>();
+      for (const t of tags) {
+        if (!seen.has(t.name)) {
+          seen.add(t.name);
+          if (!tagRepoIds.has(t.name)) tagRepoIds.set(t.name, []);
+          tagRepoIds.get(t.name)!.push(metaId);
+        }
+      }
+    }
+
+    // For multi-repo: only show tags present in ALL repos that responded.
+    // fulfilled count tells us how many repos actually loaded tags.
+    const fulfilledCount = perRepoTags.filter(r => r.status === 'fulfilled').length;
+    const minCount = metas.length === 1 ? 1 : fulfilledCount;
+
+    const tagNames = [...tagRepoIds.entries()]
+      .filter(([, ids]) => ids.length >= minCount)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+
+    if (tagNames.length === 0) return;
+
+    const sectionLabel = metas.length === 1 ? 'TAGS' : 'COMMON TAGS';
+    items.push({
+      label: sectionLabel,
+      kind: vscode.QuickPickItemKind.Separator,
+      action: async () => {},
+    } as unknown as typeof items[0]);
+
+    for (const tagName of tagNames) {
+      const isActive = activeDetachedTags.has(tagName);
+      // Only pass the repos that actually have this tag
+      const tagMetas = metas.filter(m => tagRepoIds.get(tagName)?.includes(m.id));
+      const icon = isActive ? '$(check)' : '$(tag)';
+      items.push({
+        label: `${icon} ${tagName}`,
+        description: isActive ? 'current' : '',
+        action: () => this.showCommonTagActionMenu(tagName, tagMetas),
       });
     }
+  }
+
+  private async showCommonTagActionMenu(
+    tagName: string,
+    metas: RepoMeta[],
+  ): Promise<void> {
+    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
+
+    // Get current branch names for label
+    const currentBranchNames = await Promise.allSettled(
+      metas.map(async m => {
+        const repo = this.manager.getRepo(m.id);
+        return repo ? (await repo.getCurrentBranch()).name : '';
+      })
+    );
+    const branchLabel = [...new Set(
+      currentBranchNames
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+        .map(r => r.value)
+        .filter(Boolean)
+    )].join(', ') || 'current branch';
+
+    const remotes = await Promise.allSettled(metas.map(async m => {
+      const repo = this.manager.getRepo(m.id);
+      return repo ? repo.getRemotes() : [];
+    }));
+    const allRemotes = [...new Set(
+      remotes
+        .filter((r): r is PromiseFulfilledResult<string[]> => r.status === 'fulfilled')
+        .flatMap(r => r.value)
+    )];
+
+    const pushItems: ActionItem[] = allRemotes.map(remote => ({
+      label: `$(cloud-upload) Push to "${remote}"`,
+      action: async () => {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${tagName}" to ${remote}…`, cancellable: false },
+          async () => {
+            const errors: string[] = [];
+            for (const meta of metas) {
+              const repo = this.manager.getRepo(meta.id);
+              if (!repo) continue;
+              try { await repo.pushTag(tagName, remote); } catch (e: unknown) { errors.push(`${meta.name}: ${String(e)}`); }
+            }
+            if (errors.length > 0) {
+              vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+            } else {
+              vscode.window.showInformationMessage(`GitCharm: tag "${tagName}" pushed to "${remote}" in ${metas.length} repos.`);
+            }
+          }
+        );
+      },
+    }));
+
+    const items: ActionItem[] = [
+      {
+        label: '$(arrow-left) Back',
+        action: () => this.showMenu(),
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(arrow-right) Checkout',
+        description: `Checkout tag "${tagName}" in all repos (detached HEAD)`,
+        action: async () => {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm: Checking out tag "${tagName}"…`, cancellable: false },
+            async () => {
+              const errors: string[] = [];
+              for (const meta of metas) {
+                const repo = this.manager.getRepo(meta.id);
+                if (!repo) continue;
+                try { await repo.checkoutTag(tagName); } catch (e: unknown) { errors.push(`${meta.name}: ${String(e)}`); }
+              }
+              if (errors.length > 0) vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+              else vscode.window.showInformationMessage(`GitCharm: checked out tag "${tagName}" in ${metas.length} repos.`);
+            }
+          );
+          await this.refresh();
+        },
+      },
+      {
+        label: `$(git-merge) Merge "${tagName}" into "${branchLabel}"`,
+        action: async () => {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm: Merging tag "${tagName}"…`, cancellable: false },
+            async () => {
+              const errors: string[] = [];
+              for (const meta of metas) {
+                const repo = this.manager.getRepo(meta.id);
+                if (!repo) continue;
+                try { await repo.mergeTag(tagName); } catch (e: unknown) { errors.push(`${meta.name}: ${String(e)}`); }
+              }
+              if (errors.length > 0) vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+              else vscode.window.showInformationMessage(`GitCharm: merged tag "${tagName}" in ${metas.length} repos.`);
+            }
+          );
+          await this.refresh();
+        },
+      },
+      ...pushItems,
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(trash) Delete tag',
+        description: `Delete tag "${tagName}" in all repos`,
+        action: async () => {
+          const pick = await vscode.window.showWarningMessage(
+            `Delete tag "${tagName}" in ${metas.length} ${metas.length === 1 ? 'repository' : 'repositories'}?`,
+            { modal: true }, 'Delete Local', 'Delete on Remote', 'Delete Local and Remote'
+          );
+          if (!pick) return;
+          const deleteLocal = pick !== 'Delete on Remote';
+          const deleteRemote = pick === 'Delete on Remote' || pick === 'Delete Local and Remote';
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm: Deleting tag "${tagName}"…`, cancellable: false },
+            async () => {
+              const errors: string[] = [];
+              for (const meta of metas) {
+                const repo = this.manager.getRepo(meta.id);
+                if (!repo) continue;
+                try {
+                  if (deleteLocal) await repo.deleteTag(tagName);
+                  if (deleteRemote) {
+                    const remotes = await repo.getRemotes().catch(() => [] as string[]);
+                    for (const remote of remotes) {
+                      await repo.deleteTagRemote(tagName, remote).catch(() => {});
+                    }
+                  }
+                } catch (e: unknown) { errors.push(`${meta.name}: ${String(e)}`); }
+              }
+              if (errors.length > 0) vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+              else vscode.window.showInformationMessage(`GitCharm: deleted tag "${tagName}" in ${metas.length} repos.`);
+            }
+          );
+          await this.refresh();
+        },
+      },
+    ];
+
+    const pick = await vscode.window.showQuickPick(items, {
+      title: `Tag: ${tagName}`,
+      matchOnDescription: true,
+    }) as ActionItem | undefined;
+
+    if (pick) await pick.action();
   }
 
   private async showCommonBranchActionMenu(
@@ -321,13 +575,16 @@ export class BranchStatusBar implements vscode.Disposable {
           label: `$(git-merge) Merge '${branchName}' into '${currentBranchName}'`,
           action: () => this.mergeBranchAllRepos(branchName, metas),
         },
-        { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
-        {
-          label: '$(trash) Delete…',
-          action: () => this.deleteBranchAllRepos(branchName, metas),
-        },
       );
     }
+
+    items.push(
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(trash) Delete…',
+        action: () => this.deleteBranchAllRepos(branchName, metas),
+      },
+    );
 
     const pick = await vscode.window.showQuickPick(items, {
       title: branchName,
@@ -538,12 +795,15 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
 
-    const [branches, currentBranch] = await Promise.all([
+    const [branches, currentBranch, tags] = await Promise.all([
       repo.getBranches(),
       repo.getCurrentBranch(),
+      repo.getTags(),
     ]);
     const local = branches.filter(b => !b.isRemote);
     const remote = branches.filter(b => b.isRemote);
+    const effectiveBranchName = currentBranch.detachedTag ?? currentBranch.name;
+    const isDetached = !!currentBranch.detachedTag || currentBranch.name === 'HEAD';
 
     type BranchItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
 
@@ -573,7 +833,7 @@ export class BranchStatusBar implements vscode.Disposable {
         return {
           label: `${icon} ${b.name}`,
           description: b.aheadBehind ? `↑${b.aheadBehind.ahead} ↓${b.aheadBehind.behind}` : '',
-          action: () => this.showSingleBranchActionMenu(b.name, meta, b.isHead, false, hasUnpushed, currentBranch.name),
+          action: () => this.showSingleBranchActionMenu(b.name, meta, b.isHead, false, hasUnpushed, effectiveBranchName),
         };
       }),
       { label: 'REMOTE', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
@@ -583,15 +843,133 @@ export class BranchStatusBar implements vscode.Disposable {
         return {
           label: `${icon} ${b.name}`,
           description: '',
-          action: () => this.showSingleBranchActionMenu(b.name, meta, false, true, false, currentBranch.name),
+          action: () => this.showSingleBranchActionMenu(b.name, meta, false, true, false, effectiveBranchName),
         };
       }),
     ];
+
+    if (tags.length > 0) {
+      items.push({ label: 'TAGS', kind: vscode.QuickPickItemKind.Separator, action: async () => {} });
+      for (const tag of tags) {
+        const isActiveTag = currentBranch.detachedTag === tag.name;
+        const icon = isActiveTag ? '$(check)' : '$(tag)';
+        items.push({
+          label: `${icon} ${tag.name}`,
+          description: isActiveTag ? 'current' : tag.hash,
+          action: () => this.showSingleTagActionMenu(tag.name, meta, effectiveBranchName, isDetached),
+        });
+      }
+    }
 
     const pick = await vscode.window.showQuickPick(items, {
       title: `${meta.name} — Branches`,
       matchOnDescription: true,
     }) as BranchItem | undefined;
+
+    if (pick) await pick.action();
+  }
+
+  private async showSingleTagActionMenu(
+    tagName: string,
+    meta: RepoMeta,
+    currentBranchName: string,
+    isDetached = false,
+  ): Promise<void> {
+    const repo = this.manager.getRepo(meta.id);
+    if (!repo) return;
+
+    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
+
+    const remotes = await repo.getRemotes().catch(() => [] as string[]);
+    const pushItems: ActionItem[] = remotes.map(r => ({
+      label: `$(cloud-upload) Push to "${r}"`,
+      action: async () => {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${tagName}" to ${r}…`, cancellable: false },
+          async () => {
+            try {
+              await repo.pushTag(tagName, r);
+              vscode.window.showInformationMessage(`GitCharm [${meta.name}]: tag "${tagName}" pushed to "${r}".`);
+            } catch (e: unknown) {
+              vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
+            }
+          }
+        );
+      },
+    }));
+
+    const mergeItem: ActionItem = {
+      label: `$(git-merge) Merge "${tagName}" into "${currentBranchName}"`,
+      action: async () => {
+        try {
+          await repo.mergeTag(tagName);
+          vscode.window.showInformationMessage(`GitCharm [${meta.name}]: merged tag "${tagName}".`);
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
+        }
+        await this.refresh();
+      },
+    };
+
+    const items: ActionItem[] = [
+      {
+        label: '$(arrow-left) Back',
+        action: () => this.showRepoBranchMenu(meta),
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(arrow-right) Checkout',
+        description: `Checkout tag "${tagName}" (detached HEAD)`,
+        action: async () => {
+          try {
+            await repo.checkoutTag(tagName);
+            vscode.window.showInformationMessage(`GitCharm [${meta.name}]: checked out tag "${tagName}" (detached HEAD).`);
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
+          }
+          await this.refresh();
+        },
+      },
+      ...(isDetached ? [] : [mergeItem]),
+      ...pushItems,
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(trash) Delete tag',
+        description: `Delete tag "${tagName}"`,
+        action: async () => {
+          const pick = await vscode.window.showWarningMessage(
+            `Delete tag "${tagName}" in ${meta.name}?`,
+            { modal: true }, 'Delete Local', 'Delete on Remote', 'Delete Local and Remote'
+          );
+          if (!pick) return;
+          const deleteLocal = pick !== 'Delete on Remote';
+          const deleteRemote = pick === 'Delete on Remote' || pick === 'Delete Local and Remote';
+          try {
+            if (deleteLocal) await repo.deleteTag(tagName);
+            if (deleteRemote) {
+              const remotes = await repo.getRemotes().catch(() => [] as string[]);
+              if (remotes.length === 0) {
+                vscode.window.showWarningMessage(`GitCharm [${meta.name}]: no remotes configured.`);
+              } else {
+                const remote = remotes.length === 1
+                  ? remotes[0]
+                  : (await vscode.window.showQuickPick(remotes, { title: `Delete "${tagName}" from remote` }));
+                if (remote) await repo.deleteTagRemote(tagName, remote);
+              }
+            }
+            vscode.window.showInformationMessage(`GitCharm [${meta.name}]: tag "${tagName}" deleted.`);
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
+          }
+          await this.refresh();
+        },
+      },
+    ];
+
+    const pick = await vscode.window.showQuickPick(items, {
+      title: `Tag: ${tagName} — ${meta.name}`,
+      matchOnDescription: true,
+    }) as ActionItem | undefined;
 
     if (pick) await pick.action();
   }

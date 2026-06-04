@@ -16,6 +16,7 @@ export interface BranchInfo {
   aheadBehind?: { ahead: number; behind: number };
   lastCommitHash?: string;
   lastCommitDate?: string;
+  detachedTag?: string;  // set when HEAD is detached on a tag
 }
 
 export interface CommitNode {

@@ -2,8 +2,69 @@ import * as vscode from 'vscode';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
+import type { BranchInfo } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
+
+function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
+  if (!current.detachedTag) return branches; // normal branch — already in list
+  const filtered = branches.filter(b => !(b.repoId === current.repoId && b.isHead));
+  return [...filtered, current];
+}
+
+type DeleteTagChoice = 'local' | 'remote' | 'both' | null;
+
+async function confirmDeleteTag(tagName: string, title: string): Promise<DeleteTagChoice> {
+  const pick = await vscode.window.showWarningMessage(
+    `Delete tag "${tagName}"?`,
+    { modal: true },
+    'Delete Local',
+    'Delete on Remote',
+    'Delete Local and Remote',
+  );
+  if (!pick) return null;
+  if (pick === 'Delete on Remote') return 'remote';
+  if (pick === 'Delete Local and Remote') return 'both';
+  return 'local';
+}
+
+async function deleteTagWithRemoteOption(
+  repo: import('../git/GitService').GitService,
+  tagName: string,
+  choice: DeleteTagChoice,
+): Promise<void> {
+  if (!choice) return;
+  if (choice === 'local') {
+    await repo.deleteTag(tagName);
+    return;
+  }
+  const remotes = await repo.getRemotes().catch(() => [] as string[]);
+  if (choice === 'remote') {
+    // Remote only — don't delete locally
+    if (remotes.length === 0) {
+      vscode.window.showWarningMessage(`GitCharm: No remotes configured.`);
+      return;
+    }
+    const remote = remotes.length === 1
+      ? remotes[0]
+      : (await vscode.window.showQuickPick(remotes.map(r => ({ label: r })), { title: `Delete "${tagName}" from remote` }))?.label;
+    if (!remote) return;
+    await repo.deleteTagRemote(tagName, remote);
+    return;
+  }
+  // 'both': delete local first, then remote
+  await repo.deleteTag(tagName);
+  if (remotes.length === 0) {
+    vscode.window.showWarningMessage(`GitCharm: Tag "${tagName}" deleted locally, but no remotes configured.`);
+    return;
+  }
+  const remote = remotes.length === 1
+    ? remotes[0]
+    : (await vscode.window.showQuickPick(remotes.map(r => ({ label: r })), { title: `Delete "${tagName}" from remote` }))?.label;
+  if (!remote) return;
+  await repo.deleteTagRemote(tagName, remote);
+}
+
 
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
@@ -102,9 +163,20 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const limit = Math.min(msg.limit, maxCommits);
 
         const repos = this.manager.getRepoMetas();
-        const branches = await this.manager.getAllBranches();
-        const iconTheme = this.view ? await loadIconTheme(this.view.webview) : undefined;
+        const [branches, iconTheme] = await Promise.all([
+          this.manager.getAllBranches(),
+          this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
+        ]);
         this.post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
+
+        // Send tags for all repos
+        for (const meta of repos) {
+          const repo = this.manager.getRepo(meta.id);
+          if (!repo) continue;
+          repo.getTags().then(rawTags => {
+            this.post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
+          }).catch(() => {});
+        }
 
         const commits = await this.manager.getInterleavedLog(msg.repoIds, limit, msg.skip, {
           filterText: msg.filterText,
@@ -235,9 +307,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         try {
           await repo.checkout(msg.branchName, msg.createNew, msg.from);
+          // _pendingDetachedTag is cleared inside GitService.checkout().
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
-          const branches = await repo.getBranches();
-          this.post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches });
+          const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+          const merged = mergeCurrentIntoBranches(branches, current);
+          this.post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
         } catch (e: unknown) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -346,6 +420,63 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches });
         } catch (e: unknown) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'LOG_DELETE_BRANCH_MULTI': {
+        // Check if the branch is currently checked out in any of the target repos
+        const checkedOutIn: string[] = [];
+        for (const repoId of msg.repoIds) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          const current = await repo.getCurrentBranch().catch(() => null);
+          if (current && (current.name === msg.branchName || current.detachedTag === msg.branchName)) {
+            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            checkedOutIn.push(meta?.name ?? repoId);
+          }
+        }
+        const eligibleRepoIds = msg.repoIds.filter(id => {
+          const meta = this.manager.getRepoMetas().find(m => m.id === id);
+          return !checkedOutIn.includes(meta?.name ?? id);
+        });
+        if (eligibleRepoIds.length === 0) {
+          vscode.window.showWarningMessage(`GitCharm: Cannot delete "${msg.branchName}" — it is currently checked out in all target repositories.`);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Checked out' });
+          return;
+        }
+        const skippedMsg = checkedOutIn.length > 0
+          ? ` (skipped in: ${checkedOutIn.join(', ')} — currently checked out)`
+          : '';
+        const repoCount = eligibleRepoIds.length;
+        const confirm = await vscode.window.showWarningMessage(
+          `Delete branch "${msg.branchName}" in ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}?${skippedMsg}`,
+          { modal: true }, 'Delete', 'Force Delete'
+        );
+        if (!confirm) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+          return;
+        }
+        const force = confirm === 'Force Delete';
+        const errors: string[] = [];
+        for (const repoId of eligibleRepoIds) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          try {
+            await repo.deleteBranch(msg.branchName, force);
+            const branches = await repo.getBranches();
+            this.post({ type: 'LOG_REFS_UPDATE', repoId, branches });
+          } catch (e: unknown) {
+            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            errors.push(`${meta?.name ?? repoId}: ${String(e)}`);
+          }
+        }
+        if (errors.length > 0) {
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
+        } else {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          this.post({ type: 'LOG_REFRESH' });
         }
         break;
       }
@@ -805,6 +936,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         }
         try {
           await repo.createTag(tagName.trim(), msg.hash);
+          const rawTags = await repo.getTags();
+          this.post({ type: 'LOG_TAGS_UPDATE', repoId: msg.repoId, tags: rawTags.map(t => ({ ...t, repoId: msg.repoId })) });
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           this.post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
@@ -821,13 +954,282 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_REQUEST_TAGS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        try {
+          const rawTags = await repo.getTags();
+          const tags = rawTags.map(t => ({ ...t, repoId: msg.repoId }));
+          this.post({ type: 'LOG_TAGS_UPDATE', repoId: msg.repoId, tags });
+        } catch { /* ignore */ }
+        break;
+      }
+
+      case 'LOG_REQUEST_COMMIT_TAGS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        const tags = repo ? await repo.getTagsForCommit(msg.hash).catch(() => []) : [];
+        this.post({ type: 'LOG_COMMIT_TAGS_RESULT', requestId: msg.requestId, tags });
+        break;
+      }
+
+      case 'LOG_MANAGE_COMMIT_TAGS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        const tags = await repo.getTagsForCommit(msg.hash).catch(() => [] as string[]);
+        if (tags.length === 0) {
+          vscode.window.showInformationMessage('GitCharm: No tags on this commit.');
+          return;
+        }
+        await this.showManageCommitTagsMenu(repo, msg.repoId, msg.hash, tags, msg.currentBranch);
+        break;
+      }
+
+      case 'LOG_DELETE_TAG': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          await repo.deleteTag(msg.tagName);
+          const rawTags = await repo.getTags();
+          this.post({ type: 'LOG_TAGS_UPDATE', repoId: msg.repoId, tags: rawTags.map(t => ({ ...t, repoId: msg.repoId })) });
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          this.post({ type: 'LOG_REFRESH' });
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Delete tag failed: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_DELETE_TAG_MULTI': {
+        // Tags can't be "checked out" in the same sense, but prevent deleting the
+        // tag that HEAD is currently detached on.
+        const checkedOutTagIn: string[] = [];
+        for (const repoId of msg.repoIds) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          const current = await repo.getCurrentBranch().catch(() => null);
+          if (current?.detachedTag === msg.tagName) {
+            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            checkedOutTagIn.push(meta?.name ?? repoId);
+          }
+        }
+        const eligibleRepoIds = msg.repoIds.filter(id => {
+          const meta = this.manager.getRepoMetas().find(m => m.id === id);
+          return !checkedOutTagIn.includes(meta?.name ?? id);
+        });
+        if (eligibleRepoIds.length === 0) {
+          vscode.window.showWarningMessage(`GitCharm: Cannot delete tag "${msg.tagName}" — HEAD is detached on it in all target repositories.`);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Checked out' });
+          return;
+        }
+        const skippedMsg = checkedOutTagIn.length > 0
+          ? ` (skipped in: ${checkedOutTagIn.join(', ')} — HEAD detached on this tag)`
+          : '';
+        const repoCount = eligibleRepoIds.length;
+        const choice = await (async (): Promise<DeleteTagChoice> => {
+          const pick = await vscode.window.showWarningMessage(
+            `Delete tag "${msg.tagName}" in ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}?${skippedMsg}`,
+            { modal: true }, 'Delete Local', 'Delete on Remote', 'Delete Local and Remote'
+          );
+          if (!pick) return null;
+          if (pick === 'Delete on Remote') return 'remote';
+          if (pick === 'Delete Local and Remote') return 'both';
+          return 'local';
+        })();
+        if (!choice) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+          return;
+        }
+        const errors: string[] = [];
+        for (const repoId of eligibleRepoIds) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          try {
+            await deleteTagWithRemoteOption(repo, msg.tagName, choice);
+            const rawTags = await repo.getTags();
+            this.post({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
+          } catch (e: unknown) {
+            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            errors.push(`${meta?.name ?? repoId}: ${String(e)}`);
+          }
+        }
+        if (errors.length > 0) {
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
+        } else {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+        }
+        this.post({ type: 'LOG_REFRESH' });
+        break;
+      }
+
+      case 'LOG_PUSH_TAG': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${msg.tagName}" to ${msg.remote}…`, cancellable: false },
+          async () => {
+            try {
+              await repo.pushTag(msg.tagName, msg.remote);
+              this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+              vscode.window.showInformationMessage(`GitCharm: Tag "${msg.tagName}" pushed to "${msg.remote}".`);
+            } catch (e: unknown) {
+              this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+              vscode.window.showErrorMessage(`GitCharm: Push tag failed: ${String(e)}`);
+            }
+          }
+        );
+        break;
+      }
+
+      case 'LOG_CHECKOUT_TAG': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          await repo.checkoutTag(msg.tagName);
+          // _pendingDetachedTag is now set inside GitService.checkoutTag().
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          const branches = await repo.getBranches();
+          const detachedHeadEntry: BranchInfo = {
+            repoId: msg.repoId,
+            name: 'HEAD',
+            fullName: 'HEAD',
+            isHead: true,
+            isRemote: false,
+            detachedTag: msg.tagName,
+          };
+          this.post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: [...branches, detachedHeadEntry] });
+          this.post({ type: 'LOG_REFRESH' });
+          vscode.window.showInformationMessage(`GitCharm: Checked out tag "${msg.tagName}" (detached HEAD).`);
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Checkout tag failed: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_MERGE_TAG': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          await repo.mergeTag(msg.tagName);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          this.post({ type: 'LOG_REFRESH' });
+          vscode.window.showInformationMessage(`GitCharm: Merged tag "${msg.tagName}".`);
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Merge tag failed: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_MERGE_TAG_MULTI': {
+        const errors: string[] = [];
+        for (const repoId of msg.repoIds) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          try {
+            await repo.mergeTag(msg.tagName);
+          } catch (e: unknown) {
+            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            errors.push(`${meta?.name ?? repoId}: ${String(e)}`);
+          }
+        }
+        if (errors.length > 0) {
+          vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
+        } else {
+          vscode.window.showInformationMessage(`GitCharm: Merged tag "${msg.tagName}" in ${msg.repoIds.length} ${msg.repoIds.length === 1 ? 'repository' : 'repositories'}.`);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+        }
+        this.post({ type: 'LOG_REFRESH' });
+        break;
+      }
+
+      case 'LOG_RESET_TO_PICK': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        type ModeItem = vscode.QuickPickItem & { mode: 'soft' | 'mixed' | 'hard' };
+        const pick = await vscode.window.showQuickPick(
+          [
+            { label: '$(arrow-down) Soft', description: 'Keep staged and unstaged changes', mode: 'soft' as const },
+            { label: '$(discard) Mixed', description: 'Keep unstaged changes, unstage staged changes', mode: 'mixed' as const },
+            { label: '$(trash) Hard', description: 'Discard all local changes', mode: 'hard' as const },
+          ] satisfies ModeItem[],
+          { title: `Reset Current Branch to ${msg.hash.slice(0, 7)}` }
+        ) as ModeItem | undefined;
+        if (!pick) return;
+        const reqId = msg.hash + pick.mode;
+        try {
+          await repo.resetTo(msg.hash, pick.mode);
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: reqId, ok: true });
+          this.post({ type: 'LOG_REFRESH' });
+        } catch (e: unknown) {
+          this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: reqId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Reset failed: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_PUSH_PICK': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        const remotes = await repo.getRemotes().catch(() => [] as string[]);
+        if (remotes.length === 0) { vscode.window.showWarningMessage('GitCharm: No remotes configured.'); return; }
+        const remotePick = remotes.length === 1
+          ? remotes[0]
+          : (await vscode.window.showQuickPick(
+              remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
+              { title: 'Push — Select remote' }
+            ) as { label: string; remote: string } | undefined)?.remote;
+        if (!remotePick) return;
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing to ${remotePick}…`, cancellable: false },
+          async () => {
+            try {
+              await repo.push(false, remotePick);
+              vscode.window.showInformationMessage(`GitCharm: Pushed to "${remotePick}" successfully.`);
+            } catch (e: unknown) {
+              vscode.window.showErrorMessage(`GitCharm: Push failed: ${String(e)}`);
+            }
+          }
+        );
+        this.post({ type: 'LOG_REFRESH' });
+        break;
+      }
+
+      case 'LOG_PUSH_TAG_PICK': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        const remotes = await repo.getRemotes().catch(() => [] as string[]);
+        if (remotes.length === 0) { vscode.window.showWarningMessage('GitCharm: No remotes configured.'); return; }
+        const remotePick = remotes.length === 1
+          ? remotes[0]
+          : (await vscode.window.showQuickPick(
+              remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
+              { title: `Push tag "${msg.tagName}" — Select remote` }
+            ) as { label: string; remote: string } | undefined)?.remote;
+        if (!remotePick) return;
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${msg.tagName}" to ${remotePick}…`, cancellable: false },
+          async () => {
+            try {
+              await repo.pushTag(msg.tagName, remotePick);
+              vscode.window.showInformationMessage(`GitCharm: Tag "${msg.tagName}" pushed to "${remotePick}".`);
+            } catch (e: unknown) {
+              vscode.window.showErrorMessage(`GitCharm: Push tag failed: ${String(e)}`);
+            }
+          }
+        );
+        break;
+      }
+
       case 'LOG_OPEN_COMMIT_BODY': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_COMMIT_BODY_RESULT', requestId: msg.requestId, hasBody: false }); return; }
         try {
           const full = (await repo.getFullCommitMessage(msg.hash)).trim();
           const lines = full.split('\n');
-          // A body exists when there are non-empty lines after the subject line
           const bodyLines = lines.slice(1).filter(l => l.trim() !== '');
           const hasBody = bodyLines.length > 0;
           if (hasBody) {
@@ -841,6 +1243,94 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
     }
+  }
+
+  private async showManageCommitTagsMenu(
+    repo: import('../git/GitService').GitService,
+    repoId: string,
+    hash: string,
+    tags: string[],
+    currentBranch: string,
+  ): Promise<void> {
+    type TagListItem = vscode.QuickPickItem & { tagName: string | null };
+
+    // Step 1: always show the tag list + "New Tag..." so the user picks a tag first
+    const tagListItems: TagListItem[] = [
+      { label: '$(add) New Tag...', tagName: null },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, tagName: null },
+      ...tags.map(t => ({ label: `$(tag) ${t}`, tagName: t })),
+    ];
+
+    const tagPick = await vscode.window.showQuickPick(tagListItems, {
+      title: `Tags on commit ${hash.slice(0, 7)}`,
+      placeHolder: 'Select a tag or create a new one',
+    }) as TagListItem | undefined;
+    if (!tagPick) return;
+
+    // "New Tag..." selected
+    if (tagPick.tagName === null) {
+      const newName = await vscode.window.showInputBox({
+        prompt: `Tag name for commit ${hash.slice(0, 7)}`,
+        placeHolder: 'v1.0.0',
+        validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
+      });
+      if (!newName) return;
+      try {
+        await repo.createTag(newName.trim(), hash);
+        const rawTags = await repo.getTags();
+        this.post({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
+        this.post({ type: 'LOG_REFRESH' });
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(`GitCharm: Create tag failed: ${String(e)}`);
+      }
+      return;
+    }
+
+    // Step 2: show actions for the selected tag
+    const tagName = tagPick.tagName;
+    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
+    const actionItems: ActionItem[] = [
+      {
+        label: '$(arrow-left) Back',
+        action: () => this.showManageCommitTagsMenu(repo, repoId, hash, tags, currentBranch),
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: `$(git-merge) Merge "${tagName}" into "${currentBranch}"`,
+        action: async () => {
+          try {
+            await repo.mergeTag(tagName);
+            this.post({ type: 'LOG_REFRESH' });
+            vscode.window.showInformationMessage(`GitCharm: Merged tag "${tagName}" into "${currentBranch}".`);
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(`GitCharm: Merge tag failed: ${String(e)}`);
+          }
+        },
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: `$(trash) Delete "${tagName}"`,
+        action: async () => {
+          const choice = await confirmDeleteTag(tagName, `Delete tag "${tagName}"?`);
+          if (!choice) return;
+          try {
+            await deleteTagWithRemoteOption(repo, tagName, choice);
+            const rawTags = await repo.getTags();
+            this.post({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
+            this.post({ type: 'LOG_REFRESH' });
+            vscode.window.showInformationMessage(`GitCharm: Deleted tag "${tagName}".`);
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(`GitCharm: Delete tag failed: ${String(e)}`);
+          }
+        },
+      },
+    ];
+
+    const pick = await vscode.window.showQuickPick(actionItems, {
+      title: `Tag: ${tagName}`,
+    }) as ActionItem | undefined;
+
+    if (pick) await pick.action();
   }
 
   dispose(): void {

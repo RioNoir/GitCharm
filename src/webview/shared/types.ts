@@ -1,5 +1,12 @@
 // Mirror of src/host/types/git.ts for use in webview (no Node.js imports)
 
+export interface TagInfo {
+  name: string;
+  hash: string;
+  date: string;
+  repoId: string;
+}
+
 export interface MergeParentCommit {
   hash: string;
   shortHash: string;
@@ -27,6 +34,7 @@ export interface BranchInfo {
   aheadBehind?: { ahead: number; behind: number };
   lastCommitHash?: string;
   lastCommitDate?: string;
+  detachedTag?: string;
 }
 
 export interface CommitNode {

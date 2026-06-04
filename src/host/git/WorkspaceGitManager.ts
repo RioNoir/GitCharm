@@ -236,12 +236,31 @@ export class WorkspaceGitManager implements vscode.Disposable {
   }
 
   async getAllBranches(): Promise<BranchInfo[]> {
-    const results = await Promise.allSettled(
-      Array.from(this.repos.values()).map(r => r.getBranches())
-    );
-    return results
+    const [allBranches, currentBranches] = await Promise.all([
+      Promise.allSettled(Array.from(this.repos.values()).map(r => r.getBranches())),
+      Promise.allSettled(Array.from(this.repos.values()).map(r => r.getCurrentBranch())),
+    ]);
+
+    const branches = allBranches
       .filter((r): r is PromiseFulfilledResult<BranchInfo[]> => r.status === 'fulfilled')
       .flatMap(r => r.value);
+
+    // Merge in getCurrentBranch results: they carry isHead:true and detachedTag.
+    // In normal HEAD, getBranches() already marks the right branch isHead:true so
+    // the current branch entry is a duplicate — skip it. In detached HEAD on a tag,
+    // getBranches() has no isHead:true entry, so we append the HEAD entry so the
+    // sidebar knows which tag is active.
+    for (const r of currentBranches) {
+      if (r.status !== 'fulfilled') continue;
+      const cur = r.value;
+      if (!cur.detachedTag) continue; // normal branch — already handled by getBranches()
+      // Remove any existing entry for this repoId that might have isHead:true (safety)
+      const idx = branches.findIndex(b => b.repoId === cur.repoId && b.isHead);
+      if (idx >= 0) branches.splice(idx, 1);
+      branches.push(cur);
+    }
+
+    return branches;
   }
 
   async getInterleavedLog(repoIds: string[], limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }): Promise<CommitNode[]> {

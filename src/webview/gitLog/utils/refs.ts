@@ -1,14 +1,16 @@
 export interface RefGroup {
   key: string;
   label: string;
-  isHead: boolean;   // this is the HEAD branch
-  isLocal: boolean;  // has a local branch
-  isRemote: boolean; // has a remote counterpart
+  isHead: boolean;    // this is the HEAD branch
+  isLocal: boolean;   // has a local branch
+  isRemote: boolean;  // has a remote counterpart
   isTag: boolean;
+  isDetached: boolean; // HEAD is detached (on this tag or commit)
 }
 
 export function groupRefs(refs: string[]): RefGroup[] {
   const headBranch = refs.find(r => r.startsWith('HEAD -> '))?.slice('HEAD -> '.length) ?? null;
+  const isDetached = refs.includes('HEAD') && headBranch === null;
   const locals = new Set<string>();
   const remotes = new Set<string>();
   const tags: string[] = [];
@@ -17,7 +19,7 @@ export function groupRefs(refs: string[]): RefGroup[] {
     if (ref.startsWith('HEAD -> ')) {
       locals.add(ref.slice('HEAD -> '.length));
     } else if (ref === 'HEAD') {
-      // detached HEAD — skip
+      // handled via isDetached above
     } else if (ref.startsWith('tag: ')) {
       tags.push(ref.slice('tag: '.length));
     } else if (ref.includes('/')) {
@@ -27,6 +29,12 @@ export function groupRefs(refs: string[]): RefGroup[] {
       locals.add(ref);
     }
   }
+
+  // When a tag and a branch share the same name, git %D emits both "tag: v1.0.0"
+  // and a bare "v1.0.0" (the branch). The bare form lands in `locals`, creating a
+  // phantom branch badge. Remove any local name that is already covered by a tag.
+  const tagSet = new Set(tags);
+  for (const t of tagSet) locals.delete(t);
 
   const groups: RefGroup[] = [];
 
@@ -39,6 +47,7 @@ export function groupRefs(refs: string[]): RefGroup[] {
       isLocal: true,
       isRemote: false,
       isTag: false,
+      isDetached: false,
     });
     if (synced) {
       groups.push({
@@ -48,6 +57,7 @@ export function groupRefs(refs: string[]): RefGroup[] {
         isLocal: false,
         isRemote: true,
         isTag: false,
+        isDetached: false,
       });
       remotes.delete(local);
     }
@@ -61,6 +71,7 @@ export function groupRefs(refs: string[]): RefGroup[] {
       isLocal: false,
       isRemote: true,
       isTag: false,
+      isDetached: false,
     });
   }
 
@@ -72,6 +83,7 @@ export function groupRefs(refs: string[]): RefGroup[] {
       isLocal: false,
       isRemote: false,
       isTag: true,
+      isDetached: isDetached,
     });
   }
 

@@ -87,6 +87,9 @@ function App() {
         case 'LOG_REFS_UPDATE':
           store.updateBranches(msg.repoId, msg.branches);
           break;
+        case 'LOG_TAGS_UPDATE':
+          store.updateTags(msg.repoId, msg.tags);
+          break;
         case 'LOG_REFRESH':
           reloadRef.current();
           break;
@@ -182,6 +185,12 @@ function App() {
 
   const laidOutCommits = useMemo(() => assignLanes(store.commits), [store.commits]);
 
+  const currentBranchByRepo = useMemo(() => {
+    const map: Record<string, string> = {};
+    store.branches.forEach(b => { if (b.isHead && !b.isRemote) map[b.repoId] = b.name; });
+    return map;
+  }, [store.branches]);
+
   const selectedRepoColor = store.selectedCommit
     ? repoColors[store.selectedCommit.repoId]
     : undefined;
@@ -233,15 +242,17 @@ function App() {
           ref={sidebarRef}
           repos={store.repos}
           branches={store.branches}
+          tags={store.tags}
           filter={store.branchFilter}
           selectedBranchFilter={store.commitFilters.branch}
           onFilterChange={store.setBranchFilter}
           onBranchFilterSelect={useCallback((branchName: string) => {
             handleFilterChange('branch', branchName);
           }, [handleFilterChange])}
-          onCheckout={(repoId, branch) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: reqId, repoId, branchName: branch } satisfies LogToHostMsg);
+          onCheckout={(repoIds, branch) => {
+            repoIds.forEach(repoId => {
+              getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: branch } satisfies LogToHostMsg);
+            });
           }}
           onMerge={(repoId, from) => {
             const reqId = generateId();
@@ -251,9 +262,8 @@ function App() {
             const reqId = generateId();
             getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: reqId, repoId, onto } satisfies LogToHostMsg);
           }}
-          onDelete={(repoId, branchName, force) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH', requestId: reqId, repoId, branchName, force } satisfies LogToHostMsg);
+          onDelete={(repoIds, branchName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds, branchName } satisfies LogToHostMsg);
           }}
           onFetchRepo={(repoId) => {
             const reqId = generateId();
@@ -263,20 +273,23 @@ function App() {
             const reqId = generateId();
             getVsCodeApi().postMessage({ type: 'LOG_PULL', requestId: reqId, repoId } satisfies LogToHostMsg);
           }}
-          onPush={(repoId, remote) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_PUSH', requestId: reqId, repoId, remote } satisfies LogToHostMsg);
+          onPush={(repoId) => {
+            getVsCodeApi().postMessage({ type: 'LOG_PUSH_PICK', repoId } satisfies LogToHostMsg);
           }}
-          onGetRemotes={useCallback((repoId: string): Promise<string[]> => {
-            return new Promise((resolve) => {
-              const reqId = generateId();
-              pendingRef.current.set(reqId, (msg) => {
-                if (msg.type === 'LOG_REMOTES_RESULT') resolve(msg.remotes);
-                else resolve([]);
-              });
-              getVsCodeApi().postMessage({ type: 'LOG_GET_REMOTES', requestId: reqId, repoId } satisfies LogToHostMsg);
+          onCheckoutTag={(repoIds, tagName) => {
+            repoIds.forEach(repoId => {
+              getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT_TAG', requestId: generateId(), repoId, tagName } satisfies LogToHostMsg);
             });
-          }, [])}
+          }}
+          onMergeTag={(repoIds, tagName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_MERGE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg);
+          }}
+          onPushTag={(repoId, tagName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_PUSH_TAG_PICK', repoId, tagName } satisfies LogToHostMsg);
+          }}
+          onDeleteTag={(repoIds, tagName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_DELETE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg);
+          }}
         />
         <ResizeHandle onMouseDown={onSidebarResize} />
 
@@ -286,6 +299,7 @@ function App() {
           selectedHash={store.selectedCommit?.hash ?? null}
           repoColors={repoColors}
           repos={store.repos}
+          currentBranchByRepo={currentBranchByRepo}
           onSelect={(commit) => store.selectCommit(commit)}
           onLoadMore={handleLoadMore}
           hasMore={store.hasMore && !store.loadingCommits}
