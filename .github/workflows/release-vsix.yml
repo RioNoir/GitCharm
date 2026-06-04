@@ -120,10 +120,71 @@ jobs:
           path: dist/*.vsix
           if-no-files-found: error
 
+      - name: Generate changelog
+        id: changelog
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Find the previous tag (exclude the current one if it already exists)
+          PREV_TAG="$(git tag --sort=-version:refname | grep -v "^${RELEASE_TAG}$" | head -1)"
+
+          if [ -z "${PREV_TAG}" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          # Collect commits: hash (short) + subject, exclude merge commits and version bumps
+          COMMITS="$(git log "${RANGE}" --no-merges --pretty=format:"%s" \
+            | grep -v '^chore: bump version' || true)"
+
+          if [ -z "${COMMITS}" ]; then
+            echo "notes=No changes." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Group by conventional commit prefix
+          build_section() {
+            local title="$1"; local prefix="$2"
+            local lines
+            lines="$(echo "${COMMITS}" | grep -E "^${prefix}" | sed "s/^${prefix}[^:]*: /- /" || true)"
+            if [ -n "${lines}" ]; then
+              printf "### %s\n%s\n\n" "${title}" "${lines}"
+            fi
+          }
+
+          NOTES=""
+          NOTES+="$(build_section "Features" "feat")"
+          NOTES+="$(build_section "Bug Fixes" "fix")"
+          NOTES+="$(build_section "Performance" "perf")"
+          NOTES+="$(build_section "Refactoring" "refactor")"
+          NOTES+="$(build_section "Documentation" "docs")"
+          NOTES+="$(build_section "Chores" "chore")"
+
+          # Any commits that don't match a conventional prefix go into "Other"
+          OTHER="$(echo "${COMMITS}" | grep -Ev "^(feat|fix|perf|refactor|docs|chore|test|style|ci|build)[(:!]" \
+            | sed 's/^/- /' || true)"
+          if [ -n "${OTHER}" ]; then
+            NOTES+="$(printf "### Other\n%s\n\n" "${OTHER}")"
+          fi
+
+          if [ -n "${PREV_TAG}" ]; then
+            REPO="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+            NOTES+="**Full diff**: ${REPO}/compare/${PREV_TAG}...${RELEASE_TAG}"
+          fi
+
+          # Write to a file to safely pass multiline content to the next step
+          echo "${NOTES}" > /tmp/release-notes.md
+          echo "notes_file=/tmp/release-notes.md" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+          NOTES_FILE: ${{ steps.changelog.outputs.notes_file }}
         shell: bash
         run: |
           set -euo pipefail
@@ -133,5 +194,5 @@ jobs:
           else
             gh release create "${RELEASE_TAG}" dist/*.vsix \
               --title "GitCharm ${RELEASE_TAG}" \
-              --generate-notes
+              --notes-file "${NOTES_FILE}"
           fi
