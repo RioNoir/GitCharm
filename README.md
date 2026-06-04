@@ -23,9 +23,9 @@ It activates automatically when the opened workspace contains a Git repository.
 
 <img src="media/screenshots/full.png" alt="GitCharm">
 
-## Features
+## ✨ Features
 
-### Commit Panel
+### 📝 Commit Panel
 
 - Staged/unstaged file list with tree and flat views.
 - Per-file diff preview directly in the panel.
@@ -35,7 +35,7 @@ It activates automatically when the opened workspace contains a Git repository.
 - Optional AI commit-message generation via the VS Code Language Model API (GitHub Copilot).
 - Commit message pre-filled automatically with `Merge branch 'X' into 'Y'` when merge conflicts are detected.
 
-### Push Tab
+### 🚀 Push Tab
 
 - Lists unpushed commits for every repository, including branches without an upstream tracking branch.
 - Commit count badge on the tab label, auto-updated after each commit, undo, or push.
@@ -44,13 +44,15 @@ It activates automatically when the opened workspace contains a Git repository.
 - **Publish** button for branches that have never been pushed.
 - Silent refresh: existing commits stay visible while reloading (no flicker).
 
-### Shelve & Stash
+### 🗄️ Shelve & Stash
 
 - **Shelve** with patch-based shelves: create, apply (full or partial), delete, and inspect per-file diffs.
 - Binary-file handling and conflict detection on unshelve.
 - **Native stash** support: list, apply, pop, drop, and file diff preview.
 
-### Git Log Panel
+<img src="media/screenshots/shelf_stash_push.png" alt="GitCharm commit panel">
+
+### 📜 Git Log Panel
 
 - Commit graph with branch visualization.
 - Branch sidebar: local branches, remote branches, tags; single-repo workspaces hide the repository list.
@@ -59,16 +61,29 @@ It activates automatically when the opened workspace contains a Git repository.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
 - Author avatars in commit rows and commit detail: resolves GitHub noreply emails to GitHub avatars, other emails to Gravatar, with a colored-initials fallback.
 - Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, and create new branch.
+- **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
+- Tag context menu: checkout, merge into current, push to remote, and delete (local, remote, or both).
+- Commit context menu: **New Tag…** when the commit has no tags; **Manage Tags…** (QuickPick with merge/delete actions) when it does.
+- **Checkout…** in the commit context menu: QuickPick lets you choose between checking out the branch or the revision (detached HEAD); works for remote-only branches too.
+- **Branch options…** in the commit context menu: opens the Git Menu focused on that branch.
+- Log Panel auto-refreshes in the background after a commit or push, with a loading skeleton during the fetch.
 - Hides `origin/HEAD` from the remote branches list.
 
-### Branch Status Bar
+<br>
+<img src="media/screenshots/log_options.png" alt="GitCharm log panel">
 
-- Shows the current branch name (truncated with ellipsis if long) with dirty, ahead, behind, and diverged states.
+### 🌿 Branch Status Bar
+
+- Shows the current branch name (truncated with ellipsis if long) with dirty, ahead, behind, and diverged states; shows the short commit hash when in detached HEAD state without a tag, or the tag name when checked out on a tag.
 - **Branch menu** with quick access to: update project, push, commit, branch operations, and log.
+- **Tags section** in the per-repository menu: checkout, merge, push to remote, and delete tags; delete dialog offers three options (local, remote, or both).
 - **Per-repository sub-menu** with full remote management: add, rename, change URL, and remove remotes.
 - Tracks the active editor to reflect the correct repository in multi-repo workspaces.
 
-### Git Profiles
+<br>
+<img src="media/screenshots/branches_menu.png" alt="GitCharm branches menu">
+
+### 👤 Git Profiles
 
 - Named identity profiles (display name, `git user.name`, `git user.email`) stored in workspace settings.
 - Status bar item showing the active profile; click to switch, create, edit, delete, or set a default.
@@ -78,7 +93,10 @@ It activates automatically when the opened workspace contains a Git repository.
 - Active profile applied automatically to the local repo config before every commit.
 - Each workspace/repository can use a different identity.
 
-### Git Annotations (Blame)
+<br>
+<img src="media/screenshots/git_profiles.png" alt="GitCharm git profiles">
+
+### 🔍 Git Annotations (Blame)
 
 - Inline blame columns in the editor showing commit author, relative date, and summary.
 - Ghost text with the same information rendered at the end of the current line.
@@ -86,20 +104,23 @@ It activates automatically when the opened workspace contains a Git repository.
 - Accessible via editor context menu and Command Palette; toggled with dedicated commands.
 - Layout adapts around edits, tabs, CodeLens, and editor alignment.
 
-### Multi-Repository Workspaces
+<br>
+<img src="media/screenshots/git_annotations.png" alt="GitCharm annotations">
+
+### 🗂️ Multi-Repository Workspaces
 
 - Per-project colors in the commit graph and commit panel.
 - Grouped changes and a shared commit flow across repositories.
 - Common branch actions applied across all repositories in one step.
 - Activity bar badge showing the total number of changed files across all repositories.
 
-### Merge Editor
+### ⚔️ Merge Editor
 
 - 3-way conflict editor for files containing Git conflict markers.
 - Side-by-side conflict panes with editable result.
 - Conflict navigation, save, and automatic staging on completion.
 
-## Requirements
+## 📋 Requirements
 
 - Visual Studio Code `1.85.0` or newer.
 - Git installed and available in the workspace.
@@ -107,7 +128,7 @@ It activates automatically when the opened workspace contains a Git repository.
 
 GitCharm uses VS Code's built-in Git extension when available and falls back to direct Git operations through `simple-git`.
 
-## Installation
+## 📦 Installation
 
 ### From a VSIX
 
@@ -142,7 +163,7 @@ For iterative development:
 npm run watch
 ```
 
-## Usage
+## 🛠️ Usage
 
 Open a workspace that contains one or more Git repositories. GitCharm adds:
 
@@ -157,7 +178,7 @@ Use the Log panel to browse history, filter commits, inspect changed files, open
 
 Use the Status Bar branch menu for fast project-wide actions such as updating all repositories, pushing, creating branches, switching branches, managing remotes, or handling merge/rebase states.
 
-## Commands
+## ⌨️ Commands
 
 | Command | Description |
 |:--|:--|
@@ -174,14 +195,14 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `Close Git Annotations` | Hides inline blame annotations in the active editor. |
 | `GitCharm: Navigate to Commit` | Navigates to the commit linked from a blame annotation. |
 
-## Keybindings
+## ⌨️ Keybindings
 
 | Keybinding | macOS | Command |
 |:--|:--|:--|
 | `Ctrl+Alt+L` | `Cmd+Alt+L` | `GitCharm: Focus Git Log` |
 | `Ctrl+Alt+K` | `Cmd+Alt+K` | `GitCharm: Commit` |
 
-## Settings
+## ⚙️ Settings
 
 | Setting | Default | Description |
 |:--|:--|:--|
@@ -208,7 +229,7 @@ Example:
 }
 ```
 
-## Project Structure
+## 🏗️ Project Structure
 
 ```text
 src/host/                 VS Code extension host code
@@ -223,7 +244,7 @@ media/                    Extension icons, codicons, and assets
 out/                      Built extension and webview bundles
 ```
 
-## Development Scripts
+## 🔧 Development Scripts
 
 | Script | Description |
 |:--|:--|
@@ -237,7 +258,7 @@ out/                      Built extension and webview bundles
 | `npm run package` | Creates a VSIX package with `vsce`. |
 | `npm run publish` | Publishes the extension with `vsce publish`. |
 
-## Notes
+## 📌 Notes
 
 - GitCharm is designed for Git workspaces and multi-root workspaces where each folder may be its own repository.
 - Destructive operations (rollback, delete, branch delete, reset, stash drop, shelve drop, commit undo) ask for confirmation.
@@ -245,6 +266,32 @@ out/                      Built extension and webview bundles
 - The merge editor works on files that contain Git conflict markers.
 - Git Annotations require the file to be tracked in a Git repository with at least one commit.
 
-## License
+## 🤝 Contributing
+
+Contributions are welcome! To contribute:
+
+1. **Fork** the repository
+2. **Create** a branch for changes (`git checkout -b feature/your-feature`)
+3. **Commit** the changes (`git commit -m 'Added your-feature'`)
+4. **Push** to the branch (`git push origin feature/your-feature`)
+5. **Open** a Pull Request
+
+### 🐛 Bug Reporting
+
+To report bugs, open an issue including:
+- Extension version
+- VSCode version
+- Operating system
+- What is the problem
+- Full error log
+
+### 💡 Feature Requests
+
+For new features, open an issue describing:
+- Desired functionality
+- Specific use case
+- Priority (low/medium/high)
+
+## 📄 License
 
 This project is distributed under the MIT license.
