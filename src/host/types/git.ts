@@ -116,6 +116,24 @@ export interface WorkspaceStatus {
   repos: RepoStatus[];
 }
 
+// ─── Changelists ─────────────────────────────────────────────────────────────
+
+export interface ChangelistFileAssignment {
+  repoId: string;
+  path: string;
+}
+
+export interface ChangelistData {
+  id: string;
+  name: string;
+  color?: string;
+  // repoId → file paths belonging to this changelist
+  fileAssignments: Record<string, string[]>;
+}
+
+export const CHANGELIST_DEFAULT_ID = 'default';
+export const CHANGELIST_UNVERSIONED_ID = 'unversioned';
+
 export interface RepoStatus {
   repoId: string;
   branch: BranchInfo;

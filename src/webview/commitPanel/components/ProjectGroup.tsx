@@ -58,6 +58,8 @@ interface Props {
   onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
   onOpenAllChanges: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
+  activeFolderPath?: string | null;
+  ctxFile?: { repoId: string; path: string } | null;
 }
 
 export function ProjectGroup({
@@ -65,7 +67,7 @@ export function ProjectGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
-  onBranchClick, onRepoContextMenu, onOpenAllChanges, iconTheme,
+  onBranchClick, onRepoContextMenu, onOpenAllChanges, iconTheme, activeFolderPath, ctxFile,
 }: Props) {
   const repoId = repoStatus.repoId;
   const collapsed = isCollapsed(repoId);
@@ -155,6 +157,8 @@ export function ProjectGroup({
               onRollback={onRollback}
               onResolveMerge={onResolveMerge}
               viewMode={viewMode}
+              activeFolderPath={activeFolderPath}
+              ctxFile={ctxFile}
             />
           ) : (
             <div style={styles.noChanges}>No changes</div>

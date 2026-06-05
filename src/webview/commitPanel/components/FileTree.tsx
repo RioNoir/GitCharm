@@ -22,6 +22,9 @@ interface Props {
   onRollback: (files: FileStatus[]) => void;
   onResolveMerge: (file: FileStatus) => void;
   viewMode: ViewMode;
+  basePad?: number;
+  activeFolderPath?: string | null;
+  ctxFile?: { repoId: string; path: string } | null;
 }
 
 const STATUS_COLORS: Record<GitFileStatus, string> = {
@@ -119,21 +122,22 @@ function Checkbox({ checked, indeterminate, onChange, onClick }: {
 // Centre of folder icon = BASE_PAD + depth*LEVEL_PAD + 14(checkbox) + 2(padding) + 12(chevron) + 4(gap) + 8(half icon) = BASE_PAD + depth*LEVEL_PAD + 40
 // We encode this as GUIDE_OFFSET so children's guide div can be placed correctly.
 
-const BASE_PAD  = 20;  // left padding at depth-0
+const DEFAULT_BASE_PAD = 20;  // left padding at depth-0
 const LEVEL_PAD = 20;  // indent per depth level
 
 // ── Shared sub-props type ──────────────────────────────────────────────────
 
 type SharedProps = Pick<Props,
-  'repoId' | 'selectedFile' | 'onSelect' | 'onToggleFile' | 'onSetFiles' |
+  'repoId' | 'selectedFile' | 'ctxFile' | 'onSelect' | 'onToggleFile' | 'onSetFiles' |
   'isFileSelected' | 'isCollapsed' | 'toggleCollapsed' | 'onContextMenu' |
-  'onFolderContextMenu' | 'onOpenFile' | 'onRollback' | 'onResolveMerge' | 'iconTheme'
->;
+  'onFolderContextMenu' | 'onOpenFile' | 'onRollback' | 'onResolveMerge' | 'iconTheme' |
+  'activeFolderPath'
+> & { basePad: number };
 
 // ── Directory node ─────────────────────────────────────────────────────────
 
 function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number } & SharedProps) {
-  const { repoId, isCollapsed, toggleCollapsed, isFileSelected, onSetFiles, onRollback, onFolderContextMenu, iconTheme } = shared;
+  const { repoId, isCollapsed, toggleCollapsed, isFileSelected, onSetFiles, onRollback, onFolderContextMenu, iconTheme, basePad, activeFolderPath } = shared;
   const collapseKey = `${repoId}:${node.path}`;
   const open = !isCollapsed(collapseKey);
   const allFiles = collectFiles(node);
@@ -141,11 +145,12 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
   const allSelected = selectedCount === allFiles.length;
   const someSelected = selectedCount > 0 && !allSelected;
   const [hovered, setHovered] = useState(false);
+  const ctxActive = activeFolderPath === node.path;
 
   return (
     <div>
       <div
-        style={{ ...styles.treeDir, paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px` }}
+        style={{ ...styles.treeDir, paddingLeft: `${basePad + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : undefined, borderRadius: '2px' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={(e) => { e.preventDefault(); onFolderContextMenu(e, repoId, node.path, allFiles); }}
@@ -186,8 +191,9 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
 // ── Single file row ────────────────────────────────────────────────────────
 
 function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: number } & SharedProps) {
-  const { repoId, selectedFile, onSelect, onToggleFile, isFileSelected, onContextMenu, onOpenFile, onRollback, onResolveMerge, iconTheme } = shared;
+  const { repoId, selectedFile, ctxFile, onSelect, onToggleFile, isFileSelected, onContextMenu, onOpenFile, onRollback, onResolveMerge, iconTheme, basePad } = shared;
   const isSelected = selectedFile?.repoId === file.repoId && selectedFile.path === file.path;
+  const isCtxActive = !isSelected && ctxFile?.repoId === file.repoId && ctxFile.path === file.path;
   const checked = isFileSelected(repoId, file.path);
   const color = STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)';
   const letter = STATUS_LETTERS[file.status] ?? 'M';
@@ -197,7 +203,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
   return (
     <div
-      style={{ ...styles.row(isSelected), paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px` }}
+      style={{ ...styles.row(isSelected, isCtxActive), paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
       onClick={() => onSelect(file)}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
       onMouseEnter={() => setHovered(true)}
@@ -241,7 +247,6 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
       ) : (
         <>
           <span style={styles.statusLetter(color)}>{letter}</span>
-          {file.staged && <span style={styles.stagedDot} title="Already staged" />}
         </>
       )}
     </div>
@@ -250,10 +255,10 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
 // ── Public component ───────────────────────────────────────────────────────
 
-export function FileTree({ repoId, files, iconTheme, selectedFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, viewMode }: Props) {
+export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, viewMode, basePad = DEFAULT_BASE_PAD, activeFolderPath }: Props) {
   if (files.length === 0) return null;
 
-  const shared: SharedProps = { repoId, iconTheme, selectedFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge };
+  const shared: SharedProps = { repoId, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, basePad, activeFolderPath };
 
   if (viewMode === 'tree') {
     const nodes = buildTree(files);
@@ -282,12 +287,16 @@ export function FileTree({ repoId, files, iconTheme, selectedFile, onSelect, onT
 const styles = {
   container: { display: 'flex', flexDirection: 'column' as const },
   checkbox: { flexShrink: 0, margin: '0 3px 0 0', accentColor: 'var(--vscode-button-background)' } as React.CSSProperties,
-  row: (selected: boolean): React.CSSProperties => ({
+  row: (selected: boolean, ctxActive = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     paddingRight: '8px',
     cursor: 'pointer',
-    background: selected ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
+    background: selected
+      ? 'var(--vscode-list-activeSelectionBackground)'
+      : ctxActive
+        ? 'var(--vscode-list-inactiveSelectionBackground)'
+        : 'transparent',
     color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     borderRadius: '2px',
     minHeight: '22px',

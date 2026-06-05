@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { FileDiff, FileStatus, RepoMeta, RepoStatus, WorkspaceStatus } from '../../shared/types';
+import type { ChangelistData, FileDiff, FileStatus, RepoMeta, RepoStatus, WorkspaceStatus } from '../../shared/types';
 import type { IconThemeData } from '../../../host/types/messages';
 
 export type ViewMode = 'flat' | 'tree';
@@ -26,6 +26,8 @@ export interface CommitState {
   shelveCollapsedKeys: Set<string>;
   loading: boolean;
   error: string | null;
+  changelists: ChangelistData[];
+  changesViewMode: 'simplified' | 'changelists';
 
   setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
@@ -46,6 +48,7 @@ export interface CommitState {
   shelveCollapseAll: (shelveIds: string[], allDirPaths: string[]) => void;
   setLoading: (v: boolean) => void;
   setError: (err: string | null) => void;
+  setChangelists: (changelists: ChangelistData[], viewMode: 'simplified' | 'changelists') => void;
   getRepoStatus: (repoId: string) => RepoStatus | undefined;
   getSelectedRepos: () => string[];
   isCollapsed: (key: string) => boolean;
@@ -79,28 +82,49 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   shelveCollapsedKeys: new Set(),
   loading: false,
   error: null,
+  changelists: [],
+  changesViewMode: 'simplified',
 
   setStatus: (repoMetas, status, iconTheme) => {
     const prev = get().repoSelections;
     const prevFiles = get().fileSelections;
     const prevSeen = get().seenFiles;
     const prevCollapsed = get().collapsedKeys;
+    const { changelists, changesViewMode } = get();
     const repoSelections: Record<string, boolean> = {};
     const fileSelections: FileSelections = {};
     const seenFiles: Record<string, Set<string>> = {};
     const collapsedKeys = new Set(prevCollapsed);
 
+    // Build a lookup of which changelist each file belongs to (only in changelists mode)
+    const fileChangelistId = new Map<string, string>(); // `${repoId}::${path}` → changelistId
+    if (changesViewMode === 'changelists') {
+      for (const cl of changelists) {
+        for (const [repoId, paths] of Object.entries(cl.fileAssignments)) {
+          for (const p of paths) fileChangelistId.set(`${repoId}::${p}`, cl.id);
+        }
+      }
+    }
+
     for (const r of status.repos) {
       repoSelections[r.repoId] = prev[r.repoId] ?? true;
       const currentPaths = allFilePaths(r);
+      const untrackedPaths = new Set(r.unstagedFiles.filter(f => f.status === 'untracked').map(f => f.path));
       const prevSelectedSet = prevFiles[r.repoId];
       const prevSeenSet = prevSeen[r.repoId];
       const next = new Set<string>();
       for (const p of currentPaths) {
-        // File never seen before → auto-select.
-        // File was seen before → preserve user's explicit selection state.
-        if (!prevSeenSet || !prevSeenSet.has(p)) {
-          next.add(p);
+        const isNew = !prevSeenSet || !prevSeenSet.has(p);
+        if (isNew) {
+          // New file: auto-select only if it belongs to "Changes" (or not in changelists mode)
+          if (changesViewMode === 'changelists') {
+            // Untracked files go to "Unversioned Files" — never auto-select
+            if (untrackedPaths.has(p)) continue;
+            const clId = fileChangelistId.get(`${r.repoId}::${p}`) ?? 'default';
+            if (clId === 'default') next.add(p);
+          } else {
+            next.add(p);
+          }
         } else if (prevSelectedSet?.has(p)) {
           next.add(p);
         }
@@ -179,6 +203,37 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   },
   setLoading: (v) => set({ loading: v }),
   setError: (err) => set({ error: err }),
+  setChangelists: (changelists, viewMode) => {
+    set({ changelists, changesViewMode: viewMode });
+    if (viewMode !== 'changelists') return;
+
+    // Build lookup: repoId::path → changelistId
+    const fileClId = new Map<string, string>();
+    for (const cl of changelists) {
+      for (const [repoId, paths] of Object.entries(cl.fileAssignments)) {
+        for (const p of paths) fileClId.set(`${repoId}::${p}`, cl.id);
+      }
+    }
+
+    const { fileSelections, status } = get();
+    const nextSelections: FileSelections = {};
+    let changed = false;
+    for (const r of status?.repos ?? []) {
+      const cur = fileSelections[r.repoId];
+      if (!cur) continue;
+      const next = new Set(cur);
+      for (const p of cur) {
+        const isUntracked = r.unstagedFiles.some(f => f.path === p && f.status === 'untracked');
+        const clId = fileClId.get(`${r.repoId}::${p}`) ?? 'default';
+        if (isUntracked || clId !== 'default') {
+          next.delete(p);
+          changed = true;
+        }
+      }
+      nextSelections[r.repoId] = next;
+    }
+    if (changed) set({ fileSelections: { ...fileSelections, ...nextSelections } });
+  },
 
   getRepoStatus: (repoId) => get().status?.repos.find(r => r.repoId === repoId),
 

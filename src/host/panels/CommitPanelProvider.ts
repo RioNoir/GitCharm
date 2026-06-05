@@ -2,8 +2,11 @@ import * as vscode from 'vscode';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
+import { ChangelistService } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
 import type { CommitToHostMsg, HostToCommitMsg } from '../types/messages';
+import type { WorkspaceStatus } from '../types/git';
+import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { parseConflictFile } from '../git/ConflictParser';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { MergeEditorProvider } from './MergeEditorProvider';
@@ -15,6 +18,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
   private view?: vscode.WebviewView;
   private logProvider?: GitLogPanelProvider;
+  private changelistService?: ChangelistService;
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -47,6 +51,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private readonly profileService?: GitProfileService
   ) {
     this.manager.onStatusChange((status) => {
+      this.postChangelistsUpdate(status);
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
     });
 
@@ -108,13 +113,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
         this.manager.getAllStatuses().then(status => {
+          this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         });
       }
     });
 
-    // Sync current state — send status immediately, then icon theme when ready
+    // Sync current state — send changelists first so setStatus can read the correct viewMode
     this.manager.getAllStatuses().then(status => {
+      this.postChangelistsUpdate(status);
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
       loadIconTheme(webviewView.webview).then(iconTheme => {
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme });
@@ -132,6 +139,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }).catch(() => { /* icon theme optional */ });
         }
       }
+      if (e.affectsConfiguration('gitcharm.changesViewMode')) {
+        this.manager.getAllStatuses().then(status => {
+          this.postChangelistsUpdate(status);
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+        });
+      }
     });
 
     webviewView.onDidDispose(() => configWatcher.dispose());
@@ -139,6 +152,95 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private post(msg: HostToCommitMsg): void {
     this.view?.webview.postMessage(msg);
+  }
+
+  private getChangesViewMode(): 'simplified' | 'changelists' {
+    return vscode.workspace.getConfiguration('gitcharm').get<'simplified' | 'changelists'>('changesViewMode', 'simplified');
+  }
+
+  private getOrCreateChangelistService(): ChangelistService | undefined {
+    if (this.changelistService) return this.changelistService;
+    const folderPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!folderPath) return undefined;
+    const workspaceFilePath = vscode.workspace.workspaceFile?.scheme === 'file'
+      ? vscode.workspace.workspaceFile.fsPath
+      : undefined;
+    this.changelistService = new ChangelistService(folderPath, workspaceFilePath);
+    return this.changelistService;
+  }
+
+  private postChangelistsUpdate(status?: WorkspaceStatus): void {
+    const svc = this.getOrCreateChangelistService();
+    if (!svc) return;
+    if (status) svc.reconcile(status.repos);
+    this.post({
+      type: 'CHANGELISTS_UPDATE',
+      changelists: svc.getAll(),
+      viewMode: this.getChangesViewMode(),
+    });
+  }
+
+  private buildChangelistAssignments(
+    svc: ChangelistService,
+    repoId: string,
+    paths?: string[],
+  ): Array<{ path: string; changelistId: string; changelistName: string }> | undefined {
+    const result: Array<{ path: string; changelistId: string; changelistName: string }> = [];
+    for (const cl of svc.getAll()) {
+      const clPaths = cl.fileAssignments[repoId] ?? [];
+      for (const p of clPaths) {
+        if (!paths || paths.includes(p)) {
+          result.push({ path: p, changelistId: cl.id, changelistName: cl.name });
+        }
+      }
+    }
+    return result.length > 0 ? result : undefined;
+  }
+
+  private async restoreChangelistAssignments(
+    repoId: string,
+    assignments: Array<{ path: string; changelistId: string; changelistName: string }>,
+  ): Promise<void> {
+    const svc = this.getOrCreateChangelistService();
+    if (!svc) return;
+    // Ensure all target changelists exist (recreate if deleted)
+    const existing = svc.getAll();
+    const neededIds = [...new Set(assignments.map(a => a.changelistId))];
+    for (const id of neededIds) {
+      const { CHANGELIST_DEFAULT_ID: DEF, CHANGELIST_UNVERSIONED_ID: UNV } = await import('../types/git');
+      if (id === DEF || id === UNV) continue;
+      if (!existing.find(c => c.id === id)) {
+        const name = assignments.find(a => a.changelistId === id)?.changelistName ?? id;
+        const newCl = svc.create(name);
+        // Override the auto-generated id to match the original (so assignments work)
+        // We can't do that easily, so instead remap to the new id
+        const newId = newCl.id;
+        for (const a of assignments) {
+          if (a.changelistId === id) a.changelistId = newId;
+        }
+      }
+    }
+    svc.moveFiles(assignments.map(a => ({ repoId, path: a.path, changelistId: a.changelistId })));
+  }
+
+  private async stageUnversionedFiles(
+    svc: ChangelistService,
+    assignments: Array<{ repoId: string; path: string; changelistId: string }>,
+  ): Promise<void> {
+    const unversionedCl = svc.getAll().find(c => c.id === CHANGELIST_UNVERSIONED_ID);
+    if (!unversionedCl) return;
+    const byRepo = new Map<string, string[]>();
+    for (const { repoId, path: filePath, changelistId } of assignments) {
+      if (changelistId === CHANGELIST_UNVERSIONED_ID) continue;
+      const unvPaths = unversionedCl.fileAssignments[repoId] ?? [];
+      if (!unvPaths.includes(filePath)) continue;
+      if (!byRepo.has(repoId)) byRepo.set(repoId, []);
+      byRepo.get(repoId)!.push(filePath);
+    }
+    for (const [repoId, paths] of byRepo) {
+      const repo = this.manager.getRepo(repoId);
+      if (repo) await repo.stageFiles(paths).catch(() => {});
+    }
   }
 
   private async handleMessage(msg: CommitToHostMsg, webview: vscode.Webview): Promise<void> {
@@ -150,6 +252,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos, status, iconTheme });
+        this.postChangelistsUpdate(status);
         break;
       }
 
@@ -301,6 +404,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             }
             const status = await this.manager.getAllStatusesFresh();
             this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+            this.postChangelistsUpdate(status);
           }
         );
         break;
@@ -645,9 +749,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const svc = this.getShelveService(msg.repoId);
         if (!svc) { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: 'Repo not found' }); return; }
         try {
-          await svc.push(msg.name, msg.paths);
+          // Capture changelist assignments for the shelved files, if in changelists mode
+          const clSvc = this.getOrCreateChangelistService();
+          const clAssignments = clSvc ? this.buildChangelistAssignments(clSvc, msg.repoId, msg.paths) : undefined;
+          await svc.push(msg.name, msg.paths, clAssignments);
           const status = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+          this.postChangelistsUpdate(status);
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: true });
         } catch (e: unknown) {
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: String(e) });
@@ -660,15 +768,21 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!svc || !repo) { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: 'Repo not found' }); return; }
         try {
-          await svc.apply(msg.shelveId, msg.paths);
+          const clAssignments = await svc.apply(msg.shelveId, msg.paths);
           const status = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+          // Restore changelist assignments if present
+          if (clAssignments?.length) {
+            await this.restoreChangelistAssignments(msg.repoId, clAssignments);
+          }
+          this.postChangelistsUpdate(status);
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: true });
         } catch (e: unknown) {
           const err = e as { code?: string; conflictFiles?: string[] };
           if (err.code === 'SHELVE_CONFLICT' && err.conflictFiles?.length) {
             const status = await this.manager.getAllStatusesFresh();
             this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+            this.postChangelistsUpdate(status);
             this.post({
               type: 'SHELVE_OP_RESULT',
               requestId: msg.requestId,
@@ -946,6 +1060,162 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'CHANGELISTS_CREATE': {
+        const svc = this.getOrCreateChangelistService();
+        if (svc) {
+          svc.create(msg.name);
+          this.postChangelistsUpdate();
+        }
+        break;
+      }
+
+      case 'CHANGELISTS_CREATE_PROMPT': {
+        const name = await vscode.window.showInputBox({
+          title: 'New Changelist',
+          prompt: 'Enter a name for the new changelist',
+          placeHolder: 'Changelist name…',
+          validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
+        });
+        if (!name) break;
+        const svcCreate = this.getOrCreateChangelistService();
+        if (svcCreate) {
+          svcCreate.create(name.trim());
+          this.postChangelistsUpdate();
+        }
+        break;
+      }
+
+      case 'CHANGELISTS_RENAME': {
+        const svc = this.getOrCreateChangelistService();
+        if (svc) {
+          svc.rename(msg.id, msg.name);
+          this.postChangelistsUpdate();
+        }
+        break;
+      }
+
+      case 'CHANGELISTS_RENAME_PROMPT': {
+        const newName = await vscode.window.showInputBox({
+          title: 'Rename Changelist',
+          prompt: `Rename "${msg.currentName}"`,
+          value: msg.currentName,
+          validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
+        });
+        if (!newName) break;
+        const svcRename = this.getOrCreateChangelistService();
+        if (svcRename) {
+          svcRename.rename(msg.id, newName.trim());
+          this.postChangelistsUpdate();
+        }
+        break;
+      }
+
+      case 'CHANGELISTS_DELETE': {
+        const svcDel = this.getOrCreateChangelistService();
+        if (!svcDel) break;
+        const clToDelete = svcDel.getAll().find(c => c.id === msg.id);
+        const clName = clToDelete?.name ?? 'this changelist';
+        const confirmed = await vscode.window.showWarningMessage(
+          `Delete "${clName}"? Its files will be moved to Changes.`,
+          { modal: true }, 'Delete'
+        );
+        if (confirmed !== 'Delete') break;
+        svcDel.delete(msg.id);
+        this.postChangelistsUpdate();
+        break;
+      }
+
+      case 'CHANGELISTS_MOVE_FILES': {
+        const svc = this.getOrCreateChangelistService();
+        if (svc) {
+          await this.stageUnversionedFiles(svc, msg.assignments);
+          svc.moveFiles(msg.assignments);
+          this.postChangelistsUpdate();
+        }
+        break;
+      }
+
+      case 'CHANGELISTS_MOVE_FILES_PROMPT': {
+        const svcMove = this.getOrCreateChangelistService();
+        if (!svcMove) break;
+        const allCls = svcMove.getAll().filter(cl => cl.id !== CHANGELIST_UNVERSIONED_ID);
+        const picks = allCls.map(cl => ({ label: cl.name, description: cl.id }));
+        const picked = await vscode.window.showQuickPick(picks, {
+          title: 'Move to Changelist',
+          placeHolder: 'Select a changelist…',
+        });
+        if (!picked) break;
+        const assignments = msg.files.map(f => ({ ...f, changelistId: picked.description! }));
+        await this.stageUnversionedFiles(svcMove, assignments);
+        svcMove.moveFiles(assignments);
+        this.postChangelistsUpdate();
+        break;
+      }
+
+      case 'CHANGELISTS_SHELVE': {
+        const clSvc = this.getOrCreateChangelistService();
+        if (!clSvc) break;
+        const clForShelve = clSvc.getAll().find(c => c.id === msg.changelistId);
+        if (!clForShelve) break;
+        // Gather files per repo for this changelist
+        const filesByRepo = new Map<string, string[]>();
+        for (const [repoId, paths] of Object.entries(clForShelve.fileAssignments)) {
+          if (paths.length > 0) filesByRepo.set(repoId, paths);
+        }
+        if (filesByRepo.size === 0) { vscode.window.showInformationMessage('No files in this changelist to shelve.'); break; }
+        const shelveName = await vscode.window.showInputBox({
+          title: `Shelve "${clForShelve.name}"`,
+          value: clForShelve.name,
+          placeHolder: 'Shelve name…',
+          validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
+        });
+        if (!shelveName) break;
+        for (const [repoId, paths] of filesByRepo) {
+          const shelveSvc = this.getShelveService(repoId);
+          if (!shelveSvc) continue;
+          const clAssignments = this.buildChangelistAssignments(clSvc, repoId, paths);
+          try {
+            await shelveSvc.push(shelveName.trim(), paths, clAssignments);
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(`Shelve failed for repo ${repoId}: ${String(e)}`);
+          }
+        }
+        const shelveStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: shelveStatus });
+        this.postChangelistsUpdate(shelveStatus);
+        this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: [...filesByRepo.keys()][0], op: 'push', ok: true });
+        break;
+      }
+
+      case 'CHANGELISTS_STASH': {
+        const clSvcStash = this.getOrCreateChangelistService();
+        if (!clSvcStash) break;
+        const clForStash = clSvcStash.getAll().find(c => c.id === msg.changelistId);
+        if (!clForStash) break;
+        const stashName = await vscode.window.showInputBox({
+          title: `Stash "${clForStash.name}"`,
+          value: clForStash.name,
+          placeHolder: 'Stash message…',
+          validateInput: v => v.trim() ? undefined : 'Message cannot be empty',
+        });
+        if (!stashName) break;
+        for (const [repoId, paths] of Object.entries(clForStash.fileAssignments)) {
+          if (paths.length === 0) continue;
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          try {
+            const git = require('simple-git').default(repo.rootPath);
+            await git.stash(['push', '--message', stashName.trim(), '--', ...paths]);
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(`Stash failed for repo ${repoId}: ${String(e)}`);
+          }
+        }
+        const stashStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: stashStatus });
+        this.postChangelistsUpdate(stashStatus);
+        break;
+      }
+
       case 'COMMIT_OPEN_ALL_CHANGES': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
@@ -982,6 +1252,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   refresh(): void {
     this.manager.getAllStatuses().then(status => {
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+      this.postChangelistsUpdate(status);
     });
   }
 }

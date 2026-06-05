@@ -138,3 +138,15 @@ export interface RepoStatus {
   isDetachedHead: boolean;
   conflictCount: number;
 }
+
+// ─── Changelists ─────────────────────────────────────────────────────────────
+
+export interface ChangelistData {
+  id: string;
+  name: string;
+  color?: string;
+  fileAssignments: Record<string, string[]>;
+}
+
+export const CHANGELIST_DEFAULT_ID = 'default';
+export const CHANGELIST_UNVERSIONED_ID = 'unversioned';

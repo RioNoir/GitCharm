@@ -1,5 +1,6 @@
 import type {
   BranchInfo,
+  ChangelistData,
   CommitNode,
   FileDiff,
   MergeConflictFile,
@@ -25,6 +26,7 @@ export interface ShelveEntry {
   date: string;         // ISO date string
   files: Array<{ path: string; status: string }>;
   patchFile: string;    // relative path inside .gitcharm/shelf/
+  changelistAssignments?: Array<{ path: string; changelistId: string; changelistName: string }>;
 }
 
 // ─── Stash (native git stash) ────────────────────────────────────────────────
@@ -64,7 +66,8 @@ export type HostToCommitMsg =
   | { type: 'STASH_SHOW_RESULT'; requestId: string; diff: string; error?: string }
   | { type: 'STASH_OP_RESULT'; requestId: string; repoId: string; op: 'apply' | 'pop' | 'drop' | 'push'; ok: boolean; error?: string }
   | { type: 'PUSH_UNPUSHED_RESULT'; requestId: string; repoId: string; commits: UnpushedCommit[]; error?: string }
-  | { type: 'COMMIT_SET_MESSAGE'; message: string };
+  | { type: 'COMMIT_SET_MESSAGE'; message: string }
+  | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -110,7 +113,16 @@ export type CommitToHostMsg =
   | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string }
   | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string }
   | { type: 'COMMIT_OPEN_LOG'; hash: string; repoId: string }
-  | { type: 'COMMIT_UNDO_COMMIT'; requestId: string; repoId: string };
+  | { type: 'COMMIT_UNDO_COMMIT'; requestId: string; repoId: string }
+  | { type: 'CHANGELISTS_CREATE'; name: string }
+  | { type: 'CHANGELISTS_CREATE_PROMPT' }
+  | { type: 'CHANGELISTS_RENAME'; id: string; name: string }
+  | { type: 'CHANGELISTS_RENAME_PROMPT'; id: string; currentName: string }
+  | { type: 'CHANGELISTS_DELETE'; id: string }
+  | { type: 'CHANGELISTS_MOVE_FILES'; assignments: Array<{ repoId: string; path: string; changelistId: string }> }
+  | { type: 'CHANGELISTS_MOVE_FILES_PROMPT'; files: Array<{ repoId: string; path: string }> }
+  | { type: 'CHANGELISTS_SHELVE'; changelistId: string; requestId: string }
+  | { type: 'CHANGELISTS_STASH'; changelistId: string; requestId: string };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 

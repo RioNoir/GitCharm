@@ -20,8 +20,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private branchListeners: BranchListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
-  private prevHeads = new Map<string, string>();   // repoId → branch name
-  private prevCommits = new Map<string, string>(); // repoId → commit hash
+  private prevHeads = new Map<string, string>();      // repoId → branch name
+  private prevCommits = new Map<string, string>();    // repoId → commit hash
+  private prevUntracked = new Map<string, Set<string>>(); // repoId → known untracked paths
+  private initialStatusDone = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.globalListeners.push(
@@ -77,6 +79,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.repoMetas.clear();
     this.prevHeads.clear();
     this.prevCommits.clear();
+    this.prevUntracked.clear();
+    this.initialStatusDone = false;
 
     const folders = vscode.workspace.workspaceFolders ?? [];
     const customColors = vscode.workspace.getConfiguration('gitcharm').get<Record<string, string>>('projectColors', {});
@@ -159,8 +163,55 @@ export class WorkspaceGitManager implements vscode.Disposable {
     if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
     this.refreshDebounce = setTimeout(async () => {
       const status = await this.getAllStatusesFresh();
+      this.detectNewUntrackedFiles(status);
       this.statusListeners.forEach(l => l(status));
     }, 300);
+  }
+
+  private detectNewUntrackedFiles(status: WorkspaceStatus): void {
+    const newlyUntracked: Array<{ repo: GitService; relPath: string }> = [];
+
+    for (const repoStatus of status.repos) {
+      const repoId = repoStatus.repoId;
+      const repo = this.repos.get(repoId);
+      if (!repo) continue;
+
+      const currentUntracked = new Set(
+        repoStatus.unstagedFiles.filter(f => f.status === 'untracked').map(f => f.path)
+      );
+      const prev = this.prevUntracked.get(repoId);
+
+      if (prev && this.initialStatusDone) {
+        for (const p of currentUntracked) {
+          if (!prev.has(p)) newlyUntracked.push({ repo, relPath: p });
+        }
+      }
+
+      this.prevUntracked.set(repoId, currentUntracked);
+    }
+
+    this.initialStatusDone = true;
+
+    if (newlyUntracked.length > 0) {
+      void this.promptAddToGit(newlyUntracked);
+    }
+  }
+
+  private async promptAddToGit(
+    files: Array<{ repo: GitService; relPath: string }>,
+  ): Promise<void> {
+    const names = files.map(f => f.relPath);
+    const label = names.length === 1
+      ? `Do you want to add "${names[0]}" to Git?`
+      : `Do you want to add ${names.length} new files to Git?`;
+
+    const answer = await vscode.window.showInformationMessage(label, 'Add', 'Cancel');
+    if (answer !== 'Add') return;
+
+    for (const { repo, relPath } of files) {
+      await repo.stageFiles([relPath]).catch(() => {});
+    }
+    this.scheduleRefresh();
   }
 
   private scheduleBranchRefresh(): void {

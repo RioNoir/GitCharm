@@ -310,6 +310,16 @@
           "type": "boolean",
           "default": true,
           "description": "Enable inline Git ghost text in the editor."
+        },
+        "gitcharm.changesViewMode": {
+          "type": "string",
+          "enum": ["simplified", "changelists"],
+          "enumDescriptions": [
+            "Show Staged and Unstaged sections per repository (default behavior)",
+            "Show files grouped by Changelists, similar to PhpStorm"
+          ],
+          "default": "simplified",
+          "description": "How to display changed files in the Changes tab."
         }
       }
     }

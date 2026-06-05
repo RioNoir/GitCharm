@@ -4,6 +4,8 @@ import * as crypto from 'crypto';
 import simpleGit, { SimpleGit } from 'simple-git';
 import type { ShelveEntry } from '../types/messages';
 
+type ChangelistAssignment = NonNullable<ShelveEntry['changelistAssignments']>[number];
+
 const META_FILE = 'shelves.json';
 
 interface BinaryFile {
@@ -18,6 +20,7 @@ interface ShelfMeta {
 // Extended entry stored only internally (not in messages.ts)
 interface ShelveEntryInternal extends ShelveEntry {
   binaryFiles?: BinaryFile[];
+  // changelistAssignments is inherited from ShelveEntry and persisted
 }
 
 interface ShelfMetaInternal {
@@ -77,7 +80,7 @@ export class ShelveService {
     }
   }
 
-  async push(name: string, paths?: string[]): Promise<ShelveEntry> {
+  async push(name: string, paths?: string[], changelistAssignments?: ChangelistAssignment[]): Promise<ShelveEntry> {
     this.ensureShelfDir();
 
     const statusOutput = await this.git.status();
@@ -157,6 +160,7 @@ export class ShelveService {
       files: fileList,
       patchFile: patchFileName,
       binaryFiles: binaryFiles.length > 0 ? binaryFiles : undefined,
+      changelistAssignments: changelistAssignments && changelistAssignments.length > 0 ? changelistAssignments : undefined,
     };
 
     const meta = this.readMeta();
@@ -182,7 +186,7 @@ export class ShelveService {
     return entry;
   }
 
-  async apply(shelveId: string, paths?: string[]): Promise<void> {
+  async apply(shelveId: string, paths?: string[]): Promise<ChangelistAssignment[] | undefined> {
     const meta = this.readMeta();
     const entry = meta.shelves.find(s => s.id === shelveId);
     if (!entry) throw new Error(`Shelve "${shelveId}" not found`);
@@ -243,6 +247,15 @@ export class ShelveService {
     } finally {
       if (tmpPath) try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
     }
+
+    // Return changelist assignments so caller can restore them
+    if (!paths && entry.changelistAssignments?.length) return entry.changelistAssignments;
+    if (paths && entry.changelistAssignments?.length) {
+      const pathSet = new Set(paths);
+      const filtered = entry.changelistAssignments.filter(a => pathSet.has(a.path));
+      return filtered.length > 0 ? filtered : undefined;
+    }
+    return undefined;
   }
 
   drop(shelveId: string): void {
