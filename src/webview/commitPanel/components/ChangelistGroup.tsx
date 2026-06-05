@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ChangelistData, FileStatus, RepoStatus } from '../../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../../shared/types';
 import type { ViewMode } from '../store/commitStore';
@@ -66,6 +66,7 @@ interface Props {
   onResolveMerge: (file: FileStatus) => void;
   onHeaderContextMenu: (e: React.MouseEvent, changelistId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
+  onOpenChanges: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   ctxFile?: { repoId: string; path: string } | null;
@@ -76,7 +77,7 @@ export function ChangelistGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, iconTheme, activeFolderPath, ctxFile,
+  onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, iconTheme, activeFolderPath, ctxFile,
 }: Props) {
   const collapseKey = `cl:${changelist.id}`;
   const collapsed = isCollapsed(collapseKey);
@@ -137,9 +138,10 @@ export function ChangelistGroup({
           {repoGroups.length === 0 ? (
             <div style={styles.empty}>No files</div>
           ) : (
-            repoGroups.map(group => (
+            repoGroups.map((group, idx) => (
               <RepoSubGroup
                 key={group.repoId}
+                isFirst={idx === 0}
                 repoId={group.repoId}
                 repoName={group.repoName}
                 repoColor={group.repoColor}
@@ -160,6 +162,7 @@ export function ChangelistGroup({
                 onRollback={onRollback}
                 onResolveMerge={onResolveMerge}
                 onRepoContextMenu={onRepoContextMenu}
+                onOpenChanges={onOpenChanges}
                 iconTheme={iconTheme}
                 activeFolderPath={activeFolderPath}
                 changelistId={changelist.id}
@@ -196,10 +199,12 @@ interface RepoSubGroupProps {
   onRollback: (files: FileStatus[]) => void;
   onResolveMerge: (file: FileStatus) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
+  onOpenChanges: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   changelistId?: string;
   ctxFile?: { repoId: string; path: string } | null;
+  isFirst?: boolean;
 }
 
 function RepoSubGroup({
@@ -207,7 +212,7 @@ function RepoSubGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, iconTheme, activeFolderPath, changelistId, ctxFile,
+  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false,
 }: RepoSubGroupProps) {
   const collapseKey = `cl-repo:${repoId}`;
   const collapsed = isCollapsed(collapseKey);
@@ -217,6 +222,7 @@ function RepoSubGroup({
   const someSelected = selectedCount > 0 && !allSelected;
 
   const branchClr = repoStatus ? branchColor(repoStatus.branch.name) : branchColor('main');
+  const [hovered, setHovered] = useState(false);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -229,11 +235,13 @@ function RepoSubGroup({
   };
 
   return (
-    <div style={styles.repoSubGroup}>
+    <div style={styles.repoSubGroup(isFirst)}>
       {multiRepo && (
         <div
           style={styles.repoHeader(repoColor)}
           onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId, changelistId); }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
         >
           <input
             ref={checkboxRef}
@@ -260,6 +268,14 @@ function RepoSubGroup({
               </span>
             )}
             <div style={styles.repoRightGroup}>
+              <button
+                data-action-btn=""
+                style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+                title="Open all changes"
+                onClick={e => { e.stopPropagation(); onOpenChanges(repoId); }}
+              >
+                <Codicon name="diff-multiple" />
+              </button>
               {totalFiles > 0 && (
                 <span style={styles.repoCountBadge(selectedCount > 0)}>
                   {selectedCount}/{totalFiles}
@@ -311,6 +327,8 @@ const styles = {
     borderLeft: '3px solid var(--vscode-focusBorder, var(--vscode-button-background, #007acc))',
     borderBottom: '1px solid var(--vscode-panel-border)',
     cursor: 'default',
+    height: '26px',
+    boxSizing: 'border-box',
   } as React.CSSProperties,
 
   // Changelist-level checkbox (leftmost) — margin compensates for 3px accent border
@@ -324,7 +342,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
-    padding: '5px 8px 5px 4px',
+    padding: '3px 8px 3px 4px',
     cursor: 'pointer',
     flex: 1,
     fontSize: '11px',
@@ -363,7 +381,7 @@ const styles = {
     background: hasSelected ? 'var(--vscode-badge-background)' : 'transparent',
     color: hasSelected ? 'var(--vscode-badge-foreground)' : 'var(--vscode-foreground)',
     borderRadius: '8px',
-    padding: '0 5px',
+    padding: hasSelected ? '1px 5px' : '0',
     fontSize: '10px',
     fontWeight: 'bold',
     flexShrink: 0,
@@ -380,12 +398,15 @@ const styles = {
     opacity: 0.4,
   },
 
-  repoSubGroup: {} as React.CSSProperties,
-  repoHeader: (_color: string): React.CSSProperties => ({
+  repoSubGroup: (_isFirst: boolean): React.CSSProperties => ({
+  }),
+  repoHeader: (color: string): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
-    background: 'transparent',
+    background: color + '14',
     borderBottom: '1px solid var(--vscode-panel-border)',
+    height: '26px',
+    boxSizing: 'border-box',
   }),
 
   // Repo checkbox indented one level from changelist checkbox
@@ -399,7 +420,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
-    padding: '5px 8px 5px 4px',
+    padding: '3px 8px 3px 4px',
     cursor: 'pointer',
     flex: 1,
     fontSize: '11px',
@@ -462,11 +483,23 @@ const styles = {
     marginLeft: 'auto',
     flexShrink: 0,
   } as React.CSSProperties,
+  openChangesBtn: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.7,
+    padding: '2px 2px',
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    borderRadius: '3px',
+  } as React.CSSProperties,
   repoCountBadge: (hasSelected: boolean): React.CSSProperties => ({
     background: 'transparent',
     color: 'var(--vscode-foreground)',
     borderRadius: '8px',
-    padding: '0 5px',
+    padding: '0',
     fontSize: '10px',
     fontWeight: 'bold',
     flexShrink: 0,

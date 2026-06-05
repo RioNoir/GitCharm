@@ -27,13 +27,38 @@ It activates automatically when the opened workspace contains a Git repository.
 
 ### 📝 Commit Panel
 
-- Staged/unstaged file list with tree and flat views.
+- Staged/unstaged file list with tree and flat views (persisted across reloads).
 - Per-file diff preview directly in the panel.
 - Per-file actions: open, rollback, delete, add to `.gitignore`.
 - Commit selected files only, or all staged changes.
-- **Commit**, **Commit & Push**, and **Amend** actions.
+- **Commit** and **Commit & Push** unified dropdown button; **Amend** and **Amend & Push** via the dropdown.
 - Optional AI commit-message generation via the VS Code Language Model API (GitHub Copilot).
 - Commit message pre-filled automatically with `Merge branch 'X' into 'Y'` when merge conflicts are detected.
+- New and modified files are **not** automatically selected — only files that were already selected before the change are preserved.
+
+#### View Modes
+
+On first install, a QuickPick lets you choose your preferred view mode. You can change it at any time via `gitcharm.changesViewMode` in Settings.
+
+| Mode | Description |
+|:--|:--|
+| **Simplified** | Staged and Unstaged sections grouped per repository (default) |
+| **Changelists** | PhpStorm-style named changelists; files can be moved between lists |
+| **VS Code** | Native-style Staged Changes / Changes sections with inline stage/unstage buttons |
+
+<img src="media/screenshots/view_mode.png" alt="GitCharm view modes">
+
+#### Changelists
+
+- Create, rename, and delete named changelists from the context menu.
+- Drag files between changelists or use the context menu to reassign them.
+- Default changelist and Unversioned Files list are always present.
+
+#### Repository pills & commit targeting
+
+- The commit message area shows a pill for each repository with staged/selected files.
+- Click the **×** on a pill to quickly deselect that repository from the commit.
+- In VS Code mode, a per-repository checkbox in the Staged Changes section controls which repositories are included.
 
 ### 🚀 Push Tab
 
@@ -210,6 +235,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.fetchOnStartup` | `false` | Fetches all remotes when GitCharm activates. |
 | `gitcharm.projectColors` | `{}` | Maps workspace folder names to hex colors for multi-repo views. |
 | `gitcharm.autoRefreshInterval` | `0` | Auto-refresh interval in seconds. `0` disables interval refresh and uses file watchers only. |
+| `gitcharm.changesViewMode` | `"simplified"` | How to display changed files: `simplified`, `changelists`, or `vscode`. Chosen via QuickPick on first install. |
 | `gitcharm.gitAnnotations.enabled` | `true` | Enable inline Git blame annotations in the editor. |
 | `gitcharm.gitGhostText.enabled` | `true` | Enable inline Git ghost text in the editor. |
 | `gitcharm.gitProfiles` | `[]` | Named Git identity profiles (name, email) managed by GitCharm. |

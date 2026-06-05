@@ -150,7 +150,7 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
   return (
     <div>
       <div
-        style={{ ...styles.treeDir, paddingLeft: `${basePad + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : undefined, borderRadius: '2px' }}
+        style={{ ...styles.treeDir, paddingLeft: `${basePad + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : undefined, borderRadius: '2px' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={(e) => { e.preventDefault(); onFolderContextMenu(e, repoId, node.path, allFiles); }}
@@ -165,19 +165,20 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
           <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={styles.folderChevron} />
           <FileIcon name={node.name} isFolder isOpen={open} theme={iconTheme} size={ICON_SIZE} />
           <span style={styles.folderName}>{node.name}</span>
-          <span style={styles.dirCount}>{allFiles.length}</span>
         </div>
-        {hovered && (
-          <div style={styles.rowActions}>
+        <div style={styles.rowActions}>
+          {hovered && (
             <button
+              data-action-btn=""
               style={styles.actionBtn}
               title="Rollback all files in folder"
               onClick={(e) => { e.stopPropagation(); onRollback(allFiles); }}
             >
               <Codicon name="discard" />
             </button>
-          </div>
-        )}
+          )}
+          <span style={styles.dirCount}>{allFiles.length}</span>
+        </div>
       </div>
       {open && node.children.map((child, i) =>
         child.kind === 'dir'
@@ -203,7 +204,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
   return (
     <div
-      style={{ ...styles.row(isSelected, isCtxActive), paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
+      style={{ ...styles.row(isSelected, isCtxActive, hovered), paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
       onClick={() => onSelect(file)}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
       onMouseEnter={() => setHovered(true)}
@@ -216,12 +217,15 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
         onClick={(e) => e.stopPropagation()}
       />
       <FileIcon name={fileName} theme={iconTheme} size={ICON_SIZE} />
-      <span style={styles.fileName(color)}>{fileName}</span>
-      {depth === 0 && dir && <span style={styles.dirPath}>{dir}</span>}
-      {hovered ? (
-        <div style={styles.rowActions}>
+      <div style={styles.fileNameGroup}>
+        <span style={styles.fileName(color)}>{fileName}</span>
+        {depth === 0 && dir && <span style={styles.dirPath} title={dir}>{dir}</span>}
+      </div>
+      <div style={styles.rowActions}>
+        {hovered && <>
           {file.status === 'conflicted' && (
             <button
+              data-action-btn=""
               style={{ ...styles.actionBtn, color: 'var(--vscode-gitDecoration-conflictingResourceForeground)' }}
               title="Resolve Conflicts"
               onClick={(e) => { e.stopPropagation(); onResolveMerge(file); }}
@@ -230,6 +234,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
             </button>
           )}
           <button
+            data-action-btn=""
             style={styles.actionBtn}
             title="Open file"
             onClick={(e) => { e.stopPropagation(); onOpenFile(file); }}
@@ -237,18 +242,16 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
             <Codicon name="go-to-file" />
           </button>
           <button
+            data-action-btn=""
             style={styles.actionBtn}
             title="Rollback"
             onClick={(e) => { e.stopPropagation(); onRollback([file]); }}
           >
             <Codicon name="discard" />
           </button>
-        </div>
-      ) : (
-        <>
-          <span style={styles.statusLetter(color)}>{letter}</span>
-        </>
-      )}
+        </>}
+        <span style={styles.statusLetter(color)}>{letter}</span>
+      </div>
     </div>
   );
 }
@@ -287,7 +290,7 @@ export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSe
 const styles = {
   container: { display: 'flex', flexDirection: 'column' as const },
   checkbox: { flexShrink: 0, margin: '0 3px 0 0', accentColor: 'var(--vscode-button-background)' } as React.CSSProperties,
-  row: (selected: boolean, ctxActive = false): React.CSSProperties => ({
+  row: (selected: boolean, ctxActive = false, hovered = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     paddingRight: '8px',
@@ -296,20 +299,30 @@ const styles = {
       ? 'var(--vscode-list-activeSelectionBackground)'
       : ctxActive
         ? 'var(--vscode-list-inactiveSelectionBackground)'
-        : 'transparent',
+        : hovered
+          ? 'var(--vscode-list-hoverBackground)'
+          : 'transparent',
     color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     borderRadius: '2px',
     minHeight: '22px',
     fontSize: '12px',
     gap: '3px',
   }),
+  fileNameGroup: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '4px',
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+  } as React.CSSProperties,
   fileName: (color: string): React.CSSProperties => ({
     color,
-    flex: 1,
+    flexShrink: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    minWidth: 0,
+    maxWidth: '100%',
   }),
   dirPath: {
     fontSize: '11px',
@@ -318,16 +331,17 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
     flexShrink: 1,
-    maxWidth: '80px',
+    minWidth: 0,
   },
   statusLetter: (color: string): React.CSSProperties => ({
-    fontSize: '10px',
+    fontSize: '11px',
     fontWeight: 'bold',
     color,
     flexShrink: 0,
-    width: '12px',
+    width: '14px',
     textAlign: 'center',
     opacity: 0.9,
+    marginLeft: '6px',
   }),
   stagedDot: {
     width: '5px',
@@ -362,12 +376,13 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
-  dirCount: { fontSize: '10px', opacity: 0.45, flexShrink: 0 },
+  dirCount: { fontSize: '11px', opacity: 0.45, flexShrink: 0, minWidth: '14px', textAlign: 'center' as const, marginLeft: '6px' },
   rowActions: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1px',
+    gap: '0',
     marginLeft: 'auto',
+    marginRight: '0',
     flexShrink: 0,
   } as React.CSSProperties,
   actionBtn: {
@@ -375,7 +390,7 @@ const styles = {
     border: 'none',
     color: 'var(--vscode-foreground)',
     cursor: 'pointer',
-    padding: '2px 4px',
+    padding: '2px 2px',
     borderRadius: '3px',
     fontSize: '12px',
     display: 'flex',

@@ -4,6 +4,7 @@ import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../../shared/t
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { ChangelistGroup } from './ChangelistGroup';
+import { SingleRepoHeader } from './ProjectGroup';
 
 interface Props {
   changelists: ChangelistData[];
@@ -24,6 +25,8 @@ interface Props {
   onResolveMerge: (file: FileStatus) => void;
   onHeaderContextMenu: (e: React.MouseEvent, changelistId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
+  onOpenChanges: (repoId: string) => void;
+  onBranchClick: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   ctxFile?: { repoId: string; path: string } | null;
@@ -34,7 +37,7 @@ export function ChangelistView({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, iconTheme, activeFolderPath, ctxFile,
+  onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, ctxFile,
 }: Props) {
   // Build a lookup: repoId+path → changelist id
   const fileToChangelist = new Map<string, string>();
@@ -87,11 +90,24 @@ export function ChangelistView({
     onHeaderContextMenu(e, 'empty');
   };
 
+  const singleRepo = !multiRepo && repos.length === 1 ? repos[0] : null;
+  const singleMeta = singleRepo ? metaMap.get(singleRepo.repoId) : null;
+
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}
       onContextMenu={handleEmptyContextMenu}
     >
+      {singleRepo && (
+        <SingleRepoHeader
+          repoStatus={singleRepo}
+          repoName={singleMeta?.name ?? singleRepo.repoId.split('/').pop() ?? singleRepo.repoId}
+          repoColor={singleMeta?.color ?? '#4ec9b0'}
+          onBranchClick={onBranchClick}
+          onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid)}
+          onOpenAllChanges={onOpenChanges}
+        />
+      )}
       {changelists.map(cl => {
         const clMap = changelistFiles.get(cl.id) ?? new Map<string, FileStatus[]>();
         const repoGroups = Array.from(clMap.entries())
@@ -135,6 +151,7 @@ export function ChangelistView({
             onResolveMerge={onResolveMerge}
             onHeaderContextMenu={onHeaderContextMenu}
             onRepoContextMenu={onRepoContextMenu}
+            onOpenChanges={onOpenChanges}
             iconTheme={iconTheme}
             activeFolderPath={activeFolderPath}
             ctxFile={ctxFile}

@@ -27,9 +27,9 @@ export interface CommitState {
   loading: boolean;
   error: string | null;
   changelists: ChangelistData[];
-  changesViewMode: 'simplified' | 'changelists';
+  changesViewMode: 'simplified' | 'changelists' | 'vscode';
 
-  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null) => void;
+  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, fileViewMode?: 'flat' | 'tree') => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
   toggleFileSelection: (repoId: string, path: string) => void;
   setFileSelections: (repoId: string, paths: string[], selected: boolean) => void;
@@ -48,7 +48,7 @@ export interface CommitState {
   shelveCollapseAll: (shelveIds: string[], allDirPaths: string[]) => void;
   setLoading: (v: boolean) => void;
   setError: (err: string | null) => void;
-  setChangelists: (changelists: ChangelistData[], viewMode: 'simplified' | 'changelists') => void;
+  setChangelists: (changelists: ChangelistData[], viewMode: 'simplified' | 'changelists' | 'vscode') => void;
   getRepoStatus: (repoId: string) => RepoStatus | undefined;
   getSelectedRepos: () => string[];
   isCollapsed: (key: string) => boolean;
@@ -85,7 +85,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   changelists: [],
   changesViewMode: 'simplified',
 
-  setStatus: (repoMetas, status, iconTheme) => {
+  setStatus: (repoMetas, status, iconTheme, fileViewMode) => {
     const prev = get().repoSelections;
     const prevFiles = get().fileSelections;
     const prevSeen = get().seenFiles;
@@ -114,17 +114,14 @@ export const useCommitStore = create<CommitState>((set, get) => ({
       const prevSeenSet = prevSeen[r.repoId];
       const next = new Set<string>();
       for (const p of currentPaths) {
-        const isNew = !prevSeenSet || !prevSeenSet.has(p);
-        if (isNew) {
-          // New file: auto-select only if it belongs to "Changes" (or not in changelists mode)
-          if (changesViewMode === 'changelists') {
-            // Untracked files go to "Unversioned Files" — never auto-select
-            if (untrackedPaths.has(p)) continue;
-            const clId = fileChangelistId.get(`${r.repoId}::${p}`) ?? 'default';
-            if (clId === 'default') next.add(p);
-          } else {
-            next.add(p);
-          }
+        const isFirstLoad = !prevSeenSet;
+        const isNew = !isFirstLoad && !prevSeenSet.has(p);
+        if (isFirstLoad) {
+          // Initial load: select everything except untracked in changelists mode
+          if (changesViewMode === 'changelists' && untrackedPaths.has(p)) continue;
+          next.add(p);
+        } else if (isNew) {
+          // File appeared after initial load — never auto-select
         } else if (prevSelectedSet?.has(p)) {
           next.add(p);
         }
@@ -143,7 +140,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
         }
       }
     }
-    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}) });
+    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(fileViewMode !== undefined ? { viewMode: fileViewMode } : {}) });
   },
 
   setRepoSelection: (repoId, selected) =>
@@ -205,6 +202,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   setError: (err) => set({ error: err }),
   setChangelists: (changelists, viewMode) => {
     set({ changelists, changesViewMode: viewMode });
+    if (viewMode !== 'changelists' && viewMode !== 'vscode') return;
     if (viewMode !== 'changelists') return;
 
     // Build lookup: repoId::path → changelistId

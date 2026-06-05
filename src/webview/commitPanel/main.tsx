@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { useCommitStore } from './store/commitStore';
 import { ProjectGroup } from './components/ProjectGroup';
 import { ChangelistView } from './components/ChangelistView';
+import { VscodeView } from './components/VscodeView';
 import { UnifiedCommitForm } from './components/UnifiedCommitForm';
 import { ContextMenu, type ContextMenuEntry } from './components/ContextMenu';
 import { ShelvePanel } from './components/ShelvePanel';
@@ -71,6 +72,65 @@ const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
   { id: 'refresh',     label: 'Refresh',               icon: 'refresh' },
 ];
 
+const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'unstage',  label: 'Unstage',              icon: 'remove' },
+  { separator: true },
+  { id: 'diff',     label: 'Show Diff',            icon: 'diff' },
+  { id: 'jump',     label: 'Jump to Source',       icon: 'go-to-file' },
+  { separator: true },
+  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+];
+
+const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'stage',    label: 'Stage',                icon: 'add' },
+  { id: 'rollback', label: 'Rollback',             icon: 'discard' },
+  { id: 'shelve',   label: 'Shelve',               icon: 'archive' },
+  { id: 'stash',    label: 'Stash',                icon: 'save' },
+  { separator: true },
+  { id: 'diff',     label: 'Show Diff',            icon: 'diff' },
+  { id: 'jump',     label: 'Jump to Source',       icon: 'go-to-file' },
+  { separator: true },
+  { id: 'gitignore',label: 'Add to .gitignore',    icon: 'exclude' },
+  { separator: true },
+  { id: 'delete',   label: 'Delete',               icon: 'trash', danger: true },
+  { separator: true },
+  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+];
+
+const VSCODE_FOLDER_STAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'unstage',  label: 'Unstage Folder',       icon: 'remove' },
+  { separator: true },
+  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+];
+
+const VSCODE_FOLDER_UNSTAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'stage',    label: 'Stage Folder',         icon: 'add' },
+  { id: 'rollback', label: 'Rollback',             icon: 'discard' },
+  { id: 'shelve',   label: 'Shelve Changes',        icon: 'archive' },
+  { id: 'stash',    label: 'Stash Changes',         icon: 'save' },
+  { separator: true },
+  { id: 'gitignore',label: 'Add to .gitignore',    icon: 'exclude' },
+  { separator: true },
+  { id: 'delete',   label: 'Delete',               icon: 'trash', danger: true },
+  { separator: true },
+  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+];
+
+const VSCODE_REPO_STAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'unstage-all', label: 'Unstage All',       icon: 'remove' },
+  { separator: true },
+  { id: 'refresh',     label: 'Refresh',            icon: 'refresh' },
+];
+
+const VSCODE_REPO_UNSTAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'stage-all', label: 'Stage All',            icon: 'add' },
+  { id: 'rollback',  label: 'Rollback',             icon: 'discard' },
+  { id: 'shelve',    label: 'Shelve Changes',        icon: 'archive' },
+  { id: 'stash',     label: 'Stash Changes',         icon: 'save' },
+  { separator: true },
+  { id: 'refresh',   label: 'Refresh',              icon: 'refresh' },
+];
+
 const CHANGELIST_EMPTY_AREA_ITEMS: ContextMenuEntry[] = [
   { id: 'cl-new',   label: 'New Changelist…', icon: 'add' },
   { separator: true },
@@ -132,6 +192,28 @@ function App() {
   const [stashError, setStashError]   = useState<Record<string, string | null>>({});
   const [stashExpandAll, setStashExpandAll] = useState(false);
 
+  // ── Vscode mode: repo selection for commit ───────────────────────────────
+  const [vscodeSelectedRepos, setVscodeSelectedRepos] = useState<Set<string>>(new Set());
+
+  // Sync: when repos change, add any new repo as selected by default
+  useEffect(() => {
+    const currentRepoIds = (store.status?.repos ?? []).map(r => r.repoId);
+    setVscodeSelectedRepos(prev => {
+      const next = new Set(prev);
+      for (const id of currentRepoIds) if (!next.has(id)) next.add(id);
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
+
+  const toggleVscodeRepoSelection = (repoId: string) => {
+    setVscodeSelectedRepos(prev => {
+      const next = new Set(prev);
+      if (next.has(repoId)) next.delete(repoId); else next.add(repoId);
+      return next;
+    });
+  };
+
   // ── Push / unpushed state ─────────────────────────────────────────────────
   const [unpushedMap, setUnpushedMap] = useState<Record<string, { loading: boolean; commits: UnpushedCommit[]; error?: string }>>({});
 
@@ -166,6 +248,15 @@ function App() {
     document.head.appendChild(s);
   }, []);
 
+  useEffect(() => {
+    const id = 'gitcharm-action-btn-hover';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `[data-action-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; }`;
+    document.head.appendChild(s);
+  }, []);
+
   // ── Autopilot ─────────────────────────────────────────────────────────────
   const [generatingMessage, setGeneratingMessage]   = useState(false);
 
@@ -185,7 +276,10 @@ function App() {
   const [folderCtxMenu, setFolderCtxMenu] = useState<{
     x: number; y: number; repoId: string; folderPath: string; files: FileStatus[];
   } | null>(null);
-  const [repoCtxMenu, setRepoCtxMenu] = useState<{ x: number; y: number; repoId: string; changelistId?: string } | null>(null);
+  const [repoCtxMenu, setRepoCtxMenu] = useState<{ x: number; y: number; repoId: string; changelistId?: string; stagedSection?: boolean } | null>(null);
+  // vscode-mode: staged flag attached to file/folder ctx menus
+  const [ctxMenuStaged, setCtxMenuStaged] = useState<boolean>(false);
+  const [folderCtxMenuStaged, setFolderCtxMenuStaged] = useState<boolean>(false);
   const [clHeaderCtxMenu, setClHeaderCtxMenu] = useState<{ x: number; y: number; changelistId: string } | null>(null);
 
   const send = useCallback((msg: CommitToHostMsg) => {
@@ -223,7 +317,7 @@ function App() {
 
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode);
           break;
         case 'CHANGELISTS_UPDATE':
           store.setChangelists(msg.changelists, msg.viewMode);
@@ -396,6 +490,12 @@ function App() {
     const file = ctxMenu?.file;
     if (!file) return;
     switch (id) {
+      case 'stage':
+        send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: file.repoId, paths: [file.path] });
+        break;
+      case 'unstage':
+        send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: file.repoId, paths: [file.path] });
+        break;
       case 'resolve':
         send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: file.repoId, filePath: file.path });
         break;
@@ -430,6 +530,12 @@ function App() {
     const ctx = folderCtxMenu;
     if (!ctx) return;
     switch (id) {
+      case 'stage':
+        send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: ctx.repoId, paths: ctx.files.map(f => f.path) });
+        break;
+      case 'unstage':
+        send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: ctx.repoId, paths: ctx.files.map(f => f.path) });
+        break;
       case 'rollback':
         send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: ctx.files.map(f => ({ repoId: f.repoId, path: f.path })) });
         break;
@@ -456,6 +562,12 @@ function App() {
     if (!ctx) return;
     const repoStatus = repos.find(r => r.repoId === ctx.repoId);
     switch (id) {
+      case 'stage-all':
+        send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: ctx.repoId });
+        break;
+      case 'unstage-all':
+        send({ type: 'COMMIT_UNSTAGE_ALL', requestId: generateId(), repoId: ctx.repoId });
+        break;
       case 'rollback': {
         const fileMap = new Map<string, FileStatus>();
         for (const f of repoStatus?.unstagedFiles ?? []) fileMap.set(f.path, f);
@@ -586,6 +698,21 @@ function App() {
     // Read fresh state at commit time to avoid stale closure values
     const freshState = useCommitStore.getState();
     const currentRepos = freshState.status?.repos ?? [];
+
+    // In vscode mode, commit only what's already staged — no stage/unstage manipulation
+    if (freshState.changesViewMode === 'vscode') {
+      const selectedSet = vscodeSelectedRepos;
+      const targets = currentRepos
+        .filter(r => r.stagedFiles.length > 0 && selectedSet.has(r.repoId))
+        .map(r => ({ repoId: r.repoId, message: freshState.commitMessage, amend: freshState.amendFlags[r.repoId] ?? false, filesToStage: [], filesToUnstage: [] }));
+      if (targets.length === 0) return;
+      store.setLoading(true);
+      store.setError(null);
+      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
+      store.setCommitMessage('');
+      return;
+    }
+
     const targets = currentRepos
       .filter(r => freshState.repoSelections[r.repoId] !== false)
       .map(r => {
@@ -624,18 +751,6 @@ function App() {
             <Codicon name="refresh" />
           </button>
           {activeTab === 'changes' && (<>
-            <button style={css.iconBtn} title="Rollback" onClick={() => {
-              const allFiles: Array<{ repoId: string; path: string }> = [];
-              for (const r of repos) {
-                const seen = new Set<string>();
-                for (const f of [...r.unstagedFiles, ...r.stagedFiles]) {
-                  if (!seen.has(f.path)) { seen.add(f.path); allFiles.push({ repoId: f.repoId, path: f.path }); }
-                }
-              }
-              if (allFiles.length > 0) send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: allFiles });
-            }}>
-              <Codicon name="discard" />
-            </button>
             <button style={css.iconBtn} title="Expand all" onClick={() => store.expandAll()}>
               <Codicon name="expand-all" />
             </button>
@@ -653,7 +768,7 @@ function App() {
                     <div
                       key={mode}
                       style={{ ...css.dropdownItem, fontWeight: store.viewMode === mode ? 'bold' : 'normal' }}
-                      onClick={() => { store.setViewMode(mode); setViewMenuOpen(false); }}
+                      onClick={() => { store.setViewMode(mode); send({ type: 'COMMIT_SET_FILE_VIEW_MODE', mode }); setViewMenuOpen(false); }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
@@ -730,7 +845,7 @@ function App() {
         return (
           <div style={css.tabBar}>
             {(['changes', 'shelf', 'stash', 'push'] as TabId[]).map(tab => {
-              const changesLabel = store.changesViewMode === 'changelists' ? 'Commit' : 'Changes';
+              const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
               const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : 'Push';
               return (
                 <button
@@ -781,7 +896,50 @@ function App() {
 
           {/* File list */}
           <div style={css.repoList}>
-            {store.changesViewMode === 'changelists' ? (
+            {store.changesViewMode === 'vscode' ? (
+              <VscodeView
+                repos={repos}
+                repoMetas={store.repoMetas}
+                selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
+                ctxFile={ctxFile}
+                viewMode={store.viewMode}
+                isCollapsed={store.isCollapsed}
+                toggleCollapsed={store.toggleCollapsed}
+                onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
+                onContextMenu={(e, file, staged) => {
+                  setCtxFile({ repoId: file.repoId, path: file.path });
+                  setCtxMenuStaged(staged);
+                  setCtxMenu({ x: e.clientX, y: e.clientY, file });
+                }}
+                onFolderContextMenu={(e, rid, folderPath, files, staged) => {
+                  setActiveFolderPath(folderPath);
+                  setFolderCtxMenuStaged(staged);
+                  setFolderCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, folderPath, files });
+                }}
+                onOpenFile={f => send({ type: 'COMMIT_OPEN_FILE', repoId: f.repoId, filePath: f.path })}
+                onRollback={files => {
+                  if (files.length === 1) {
+                    send({ type: 'COMMIT_DISCARD_FILE', requestId: generateId(), repoId: files[0].repoId, path: files[0].path });
+                  } else {
+                    send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
+                  }
+                }}
+                onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                onStageFiles={(rid, paths) => send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths })}
+                onUnstageFiles={(rid, paths) => send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths })}
+                onStageAll={rid => send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid })}
+                onUnstageAll={rid => send({ type: 'COMMIT_UNSTAGE_ALL', requestId: generateId(), repoId: rid })}
+                onRepoContextMenu={(e, rid, staged) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, stagedSection: staged })}
+                onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
+                onOpenStagedChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid, section: 'staged' })}
+                onOpenUnstagedChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid, section: 'unstaged' })}
+                iconTheme={store.iconTheme}
+                activeFolderPath={activeFolderPath}
+                selectedRepos={vscodeSelectedRepos}
+                onToggleRepoSelection={toggleVscodeRepoSelection}
+                onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
+              />
+            ) : store.changesViewMode === 'changelists' ? (
               <ChangelistView
                 changelists={store.changelists}
                 repos={repos}
@@ -807,12 +965,14 @@ function App() {
                 onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                 onHeaderContextMenu={(e, clId) => setClHeaderCtxMenu({ x: e.clientX, y: e.clientY, changelistId: clId })}
                 onRepoContextMenu={(e, rid, clId) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, changelistId: clId })}
+                onOpenChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
+                onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
                 iconTheme={store.iconTheme}
                 activeFolderPath={activeFolderPath}
                 ctxFile={ctxFile}
               />
             ) : (
-              repos.map(repoStatus => {
+              repos.map((repoStatus, idx) => {
                 const repoId = repoStatus.repoId;
                 const meta = metaMap.get(repoId);
                 const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
@@ -820,6 +980,7 @@ function App() {
                 return (
                   <ProjectGroup
                     key={repoId}
+                    isFirst={idx === 0}
                     repoStatus={repoStatus}
                     repoName={repoName}
                     repoColor={repoColor}
@@ -891,7 +1052,19 @@ function App() {
             repoMetas={store.repoMetas}
             amendFlags={store.amendFlags}
             loading={store.loading}
+            changesViewMode={store.changesViewMode}
+            vscodeSelectedRepos={store.changesViewMode === 'vscode' ? vscodeSelectedRepos : undefined}
             getSelectedFilesForRepo={store.getSelectedFilesForRepo}
+            onDeselectRepo={repoId => {
+              if (store.changesViewMode === 'vscode') {
+                toggleVscodeRepoSelection(repoId);
+              } else {
+                const r = repos.find(r => r.repoId === repoId);
+                if (!r) return;
+                const allPaths = [...r.stagedFiles, ...r.unstagedFiles].map(f => f.path);
+                store.setFileSelections(repoId, allPaths, false);
+              }
+            }}
             onMessageChange={msg => store.setCommitMessage(msg)}
             onAmendToggle={repoId => store.setAmend(repoId, !(store.amendFlags[repoId] ?? false))}
             onCommit={() => doCommit(false)}
@@ -1007,16 +1180,23 @@ function App() {
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
         const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT : FILE_CONTEXT_ITEMS;
         let items: ContextMenuEntry[] = baseItems;
-        if (store.changesViewMode === 'changelists') {
+        if (store.changesViewMode === 'vscode') {
+          items = ctxMenuStaged ? VSCODE_FILE_STAGED_ITEMS : VSCODE_FILE_UNSTAGED_ITEMS;
+        } else if (store.changesViewMode === 'changelists') {
           if (isUntracked) {
             items = [
-              { id: 'add-to-git', label: 'Add to Git', icon: 'add' },
+              { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
+              { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
+              { id: 'shelve',     label: 'Shelve',             icon: 'archive' },
+              { id: 'stash',      label: 'Stash',              icon: 'save' },
+              { id: 'diff',       label: 'Show Diff',          icon: 'diff' },
+              { id: 'jump',       label: 'Jump to Source',     icon: 'go-to-file' },
               { separator: true },
-              { id: 'gitignore', label: 'Add to .gitignore', icon: 'exclude' },
+              { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
               { separator: true },
-              { id: 'delete', label: 'Delete', icon: 'trash', danger: true },
+              { id: 'delete',     label: 'Delete',             icon: 'trash', danger: true },
               { separator: true },
-              { id: 'refresh', label: 'Refresh', icon: 'refresh' },
+              { id: 'refresh',    label: 'Refresh',            icon: 'refresh' },
             ];
           } else {
             items = hasCustomCls
@@ -1050,16 +1230,21 @@ function App() {
         const allUntracked = files.length > 0 && files.every(f => f.status === 'untracked');
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
         let items: ContextMenuEntry[] = FOLDER_CONTEXT_ITEMS;
-        if (store.changesViewMode === 'changelists') {
+        if (store.changesViewMode === 'vscode') {
+          items = folderCtxMenuStaged ? VSCODE_FOLDER_STAGED_ITEMS : VSCODE_FOLDER_UNSTAGED_ITEMS;
+        } else if (store.changesViewMode === 'changelists') {
           if (allUntracked) {
             items = [
-              { id: 'add-to-git', label: 'Add to Git', icon: 'add' },
+              { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
+              { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
+              { id: 'shelve',     label: 'Shelve Changes',     icon: 'archive' },
+              { id: 'stash',      label: 'Stash Changes',      icon: 'save' },
               { separator: true },
-              { id: 'gitignore', label: 'Add to .gitignore', icon: 'exclude' },
+              { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
               { separator: true },
-              { id: 'delete', label: 'Delete', icon: 'trash', danger: true },
+              { id: 'delete',     label: 'Delete',             icon: 'trash', danger: true },
               { separator: true },
-              { id: 'refresh', label: 'Refresh', icon: 'refresh' },
+              { id: 'refresh',    label: 'Refresh',            icon: 'refresh' },
             ];
           } else {
             items = hasCustomCls
@@ -1091,7 +1276,9 @@ function App() {
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
         const isInDefaultCl = !repoCtxMenu.changelistId || repoCtxMenu.changelistId === CHANGELIST_DEFAULT_ID;
         let repoItems = REPO_CONTEXT_ITEMS;
-        if (store.changesViewMode === 'changelists') {
+        if (store.changesViewMode === 'vscode') {
+          repoItems = repoCtxMenu.stagedSection ? VSCODE_REPO_STAGED_ITEMS : VSCODE_REPO_UNSTAGED_ITEMS;
+        } else if (store.changesViewMode === 'changelists') {
           const baseItems: ContextMenuEntry[] = [
             { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
             { id: 'shelve',     label: 'Shelve Changes',      icon: 'archive' },

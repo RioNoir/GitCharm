@@ -8,7 +8,10 @@ interface Props {
   repoMetas: RepoMeta[];
   amendFlags: Record<string, boolean>;
   loading: boolean;
+  changesViewMode?: 'simplified' | 'changelists' | 'vscode';
+  vscodeSelectedRepos?: Set<string>;
   getSelectedFilesForRepo: (repoId: string) => string[];
+  onDeselectRepo: (repoId: string) => void;
   onMessageChange: (msg: string) => void;
   onAmendToggle: (repoId: string) => void;
   onCommit: () => void;
@@ -21,8 +24,24 @@ interface Props {
   generatingMessage: boolean;
 }
 
-function SaveDropdown({ enabled, onShelve, onStash }: { enabled: boolean; onShelve: () => void; onStash: () => void }) {
+interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; }
+interface DropdownButtonProps {
+  enabled: boolean;
+  icon: string;
+  label: string;
+  title?: string;
+  disabledTitle?: string;
+  variant: 'primary' | 'secondary';
+  fullWidth?: boolean;
+  dropdownAlign?: 'left' | 'right';
+  items: DropdownButtonItem[];
+  onMainClick: () => void;
+}
+
+function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, fullWidth, dropdownAlign = 'left', items, onMainClick }: DropdownButtonProps) {
   const [open, setOpen] = useState(false);
+  const [hoverMain, setHoverMain] = useState(false);
+  const [hoverChevron, setHoverChevron] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,32 +53,31 @@ function SaveDropdown({ enabled, onShelve, onStash }: { enabled: boolean; onShel
     return () => document.removeEventListener('mousedown', h, true);
   }, [open]);
 
-  const btnStyle: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: '4px',
-    padding: '4px 12px',
-    background: enabled
-      ? 'var(--vscode-button-secondaryBackground, rgba(100,100,100,0.2))'
-      : 'var(--vscode-button-secondaryBackground, rgba(100,100,100,0.1))',
-    color: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
-    border: '1px solid var(--vscode-button-border, rgba(128,128,128,0.35))',
-    borderRadius: '3px',
-    cursor: enabled ? 'pointer' : 'default',
-    fontSize: '12px',
+  const bg = variant === 'primary'
+    ? 'var(--vscode-button-background)'
+    : 'var(--vscode-button-secondaryBackground, rgba(100,100,100,0.2))';
+  const bgHover = variant === 'primary'
+    ? 'var(--vscode-button-hoverBackground)'
+    : 'var(--vscode-button-secondaryHoverBackground, rgba(100,100,100,0.35))';
+  const fg = variant === 'primary'
+    ? 'var(--vscode-button-foreground)'
+    : 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))';
+
+  const childStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: bg,
+    color: fg,
+    border: 'none',
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    fontSize: '13px',
     fontFamily: 'var(--vscode-font-family)',
-    fontWeight: 'bold',
-    opacity: enabled ? 1 : 0.4,
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+    padding: 0,
+    outline: 'none',
   };
 
-  const dropStyle: React.CSSProperties = {
-    position: 'absolute', bottom: 'calc(100% + 4px)', left: 0,
-    background: 'var(--vscode-menu-background, var(--vscode-editor-background))',
-    border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-    borderRadius: '4px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-    zIndex: 9999, minWidth: '150px', padding: '3px 0',
-  };
-
-  const itemStyle: React.CSSProperties = {
+  const dropItemStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: '8px',
     padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
     color: 'var(--vscode-menu-foreground)',
@@ -67,21 +85,51 @@ function SaveDropdown({ enabled, onShelve, onStash }: { enabled: boolean; onShel
   };
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        style={btnStyle}
-        disabled={!enabled}
-        title={enabled ? 'Shelve or stash changes' : 'Enter a commit message first'}
-        onClick={() => enabled && setOpen(o => !o)}
-      >
-        <Codicon name="archive" style={{ fontSize: '12px' }} />
-        Save
-        <Codicon name="chevron-down" style={{ fontSize: '10px', opacity: 0.7 }} />
-      </button>
+    <div ref={ref} style={{ position: 'relative', display: 'flex', ...(fullWidth ? { width: '100%' } : {}), opacity: enabled ? 1 : 0.4 }}>
+      <div style={{
+        display: 'flex', flex: fullWidth ? 1 : undefined,
+        border: '1px solid var(--vscode-button-border)',
+        borderRadius: '4px',
+        overflow: 'hidden',
+        backgroundColor: bg,
+      }}>
+        <button
+          style={{ ...childStyle, flex: fullWidth ? 1 : undefined, gap: '6px', padding: '5px 12px', backgroundColor: hoverMain && enabled ? bgHover : bg }}
+          disabled={!enabled}
+          title={enabled ? (title ?? label) : (disabledTitle ?? '')}
+          onClick={() => { if (enabled) onMainClick(); }}
+          onMouseEnter={() => setHoverMain(true)}
+          onMouseLeave={() => setHoverMain(false)}
+        >
+          <Codicon name={icon} style={{ fontSize: '14px', flexShrink: 0 }} />
+          <span>{label}</span>
+        </button>
+        <div style={{ width: '1px', alignSelf: 'stretch', padding: '4px 0', flexShrink: 0, display: 'flex', backgroundColor: 'inherit' }}>
+          <div style={{ flex: 1, backgroundColor: variant === 'primary' ? 'var(--vscode-button-foreground)' : 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))', opacity: 0.3 }} />
+        </div>
+        <button
+          style={{ ...childStyle, padding: '5px 7px', backgroundColor: hoverChevron && enabled ? bgHover : bg }}
+          disabled={!enabled}
+          title="More Actions..."
+          onClick={() => { if (enabled) setOpen(o => !o); }}
+          onMouseEnter={() => setHoverChevron(true)}
+          onMouseLeave={() => setHoverChevron(false)}
+        >
+          <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
+        </button>
+      </div>
       {open && (
-        <div style={dropStyle}>
-          <DropItem icon="archive" label="Shelve Changes" itemStyle={itemStyle} onSelect={() => { onShelve(); setOpen(false); }} />
-          <DropItem icon="save" label="Stash Changes" itemStyle={itemStyle} onSelect={() => { onStash(); setOpen(false); }} />
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 4px)', ...(dropdownAlign === 'right' ? { right: 0 } : { left: 0 }),
+          background: 'var(--vscode-menu-background, var(--vscode-editor-background))',
+          border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+          borderRadius: '4px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+          zIndex: 9999, minWidth: '150px', padding: '3px 0',
+        }}>
+          {items.map(item => (
+            <DropItem key={item.label} icon={item.icon} label={item.label} itemStyle={dropItemStyle} onSelect={() => { item.onSelect(); setOpen(false); }} />
+          ))}
         </div>
       )}
     </div>
@@ -92,7 +140,7 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
   const [hovered, setHovered] = useState(false);
   return (
     <div
-      style={{ ...itemStyle, background: hovered ? 'var(--vscode-menu-selectionBackground)' : 'transparent', color: hovered ? 'var(--vscode-menu-selectionForeground)' : 'var(--vscode-menu-foreground)' }}
+      style={{ ...itemStyle, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onSelect}
@@ -105,22 +153,21 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
 
 export function UnifiedCommitForm({
   message, repoStatuses, repoMetas, amendFlags,
-  loading, getSelectedFilesForRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
+  loading, changesViewMode, vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   onAutopilot, generatingMessage,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
 
-  // Repos that have at least one file selected (= will commit something)
+  // In vscode mode count staged files; otherwise count selected files
   const commitTargets = repoStatuses.map(r => ({
     ...r,
-    selectedCount: getSelectedFilesForRepo(r.repoId).length,
+    selectedCount: changesViewMode === 'vscode'
+      ? (vscodeSelectedRepos === undefined || vscodeSelectedRepos.has(r.repoId) ? r.stagedFiles.length : 0)
+      : getSelectedFilesForRepo(r.repoId).length,
   })).filter(r => r.selectedCount > 0);
 
   const canCommit = message.trim().length > 0 && commitTargets.length > 0 && !loading;
   const multiRepo = repoStatuses.length > 1;
-
-  const commitLabel = 'Commit';
-  const pushLabel = 'Commit & Push';
 
   const amendTarget = commitTargets.length === 1 ? commitTargets[0] : null;
   const showAmend = amendTarget !== null && (amendTarget.branch.aheadBehind?.ahead ?? 0) > 0;
@@ -178,8 +225,16 @@ export function UnifiedCommitForm({
           ) : (
             commitTargets.map(r => {
               const meta = metaMap.get(r.repoId);
+              const color = meta?.color ?? '#4ec9b0';
               return (
-                <span key={r.repoId} style={styles.targetPill(meta?.color ?? '#4ec9b0')}>
+                <span key={r.repoId} style={styles.targetPill(color)}>
+                  <button
+                    style={styles.pillRemove(color)}
+                    title={`Remove ${meta?.name ?? r.repoId} from commit`}
+                    onClick={() => onDeselectRepo(r.repoId)}
+                  >
+                    <Codicon name="close" style={{ fontSize: '10px' }} />
+                  </button>
                   {meta?.name ?? r.repoId.split('/').pop()}
                   <span style={styles.pillCount}>{r.selectedCount}</span>
                 </span>
@@ -237,32 +292,37 @@ export function UnifiedCommitForm({
       {/* Amend + actions row */}
       <div style={styles.actionsRow}>
         <div style={styles.leftActions}>
-          <SaveDropdown
+          <DropdownButton
+            variant="secondary"
             enabled={!!message.trim() && commitTargets.length > 0}
-            onShelve={onShelve}
-            onStash={onStash}
+            icon="archive"
+            label="Save"
+            title="Shelve or stash changes"
+            disabledTitle="Enter a commit message first"
+            items={[
+              { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
+              { icon: 'save',    label: 'Stash Changes',  onSelect: onStash  },
+            ]}
+            onMainClick={onShelve}
           />
         </div>
 
         <div style={styles.rightActions}>
-          <button
-            style={styles.commitBtn(canCommit)}
-            onClick={onCommit}
-            disabled={!canCommit}
-            title={canCommit ? commitLabel : 'Stage files and write a message first'}
-          >
-            <Codicon name="check" style={{ marginRight: '5px', fontSize: '13px' }} />
-            {commitLabel}
-          </button>
-          <button
-            style={styles.commitAndPushBtn(canCommit)}
-            onClick={onCommitAndPush}
-            disabled={!canCommit}
-            title="Commit and push"
-          >
-            <Codicon name="cloud-upload" style={{ marginRight: '5px', fontSize: '13px' }} />
-            {pushLabel}
-          </button>
+          <DropdownButton
+            variant="primary"
+            fullWidth
+            dropdownAlign="right"
+            enabled={canCommit}
+            icon="check"
+            label="Commit"
+            title="Commit (Cmd+Enter)"
+            disabledTitle="Stage files and write a message first"
+            items={[
+              { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
+              { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
+            ]}
+            onMainClick={onCommit}
+          />
         </div>
       </div>
 
@@ -293,20 +353,41 @@ const styles = {
   targetPill: (color: string): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
-    padding: '1px 7px',
+    gap: '3px',
+    padding: '1px 7px 1px 4px',
     borderRadius: '10px',
     fontSize: '11px',
+    lineHeight: '16px',
     background: color + '28',
     color,
     border: `1px solid ${color}60`,
   }),
   pillCount: {
     background: 'rgba(255,255,255,0.15)',
-    borderRadius: '8px',
-    padding: '0 4px',
+    borderRadius: '7px',
+    padding: '0 3px',
     fontSize: '10px',
-  },
+    minWidth: '14px',
+    height: '14px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+  } as React.CSSProperties,
+  pillRemove: (color: string): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'transparent',
+    border: 'none',
+    color,
+    cursor: 'pointer',
+    padding: '0',
+    margin: '0',
+    opacity: 0.7,
+    flexShrink: 0,
+    lineHeight: 1,
+    width: '12px',
+    height: '12px',
+  }),
   textareaWrap: {
     position: 'relative' as const,
   },
@@ -348,20 +429,17 @@ const styles = {
   actionsRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap' as const,
     gap: '6px',
   },
   leftActions: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    flexShrink: 0,
   },
   rightActions: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '4px',
-  },
+    flex: 1,
+    minWidth: 0,
+  } as React.CSSProperties,
   stashBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -384,28 +462,4 @@ const styles = {
     opacity: 0.75,
     userSelect: 'none' as const,
   } as React.CSSProperties,
-  commitBtn: (enabled: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center',
-    padding: '4px 12px',
-    background: 'var(--vscode-button-background)',
-    color: 'var(--vscode-button-foreground)',
-    border: 'none',
-    borderRadius: '3px',
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    fontSize: '12px',
-    opacity: enabled ? 1 : 0.5,
-    fontWeight: 'bold',
-  }),
-  commitAndPushBtn: (enabled: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center',
-    padding: '4px 12px',
-    background: 'var(--vscode-button-secondaryBackground, #5a5a5a)',
-    color: 'var(--vscode-button-secondaryForeground, #ffffff)',
-    border: '1px solid var(--vscode-button-border, rgba(255,255,255,0.15))',
-    borderRadius: '3px',
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    fontSize: '12px',
-    opacity: enabled ? 1 : 0.5,
-    fontWeight: 'bold',
-  }),
 };

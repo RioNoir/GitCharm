@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "publisher": "RioNoir",
   "license": "MIT",
   "repository": {
@@ -313,10 +313,11 @@
         },
         "gitcharm.changesViewMode": {
           "type": "string",
-          "enum": ["simplified", "changelists"],
+          "enum": ["simplified", "changelists", "vscode"],
           "enumDescriptions": [
             "Show Staged and Unstaged sections per repository (default behavior)",
-            "Show files grouped by Changelists, similar to PhpStorm"
+            "Show files grouped by Changelists, similar to PhpStorm",
+            "Show Staged Changes / Changes sections like native VS Code, with inline stage/unstage buttons"
           ],
           "default": "simplified",
           "description": "How to display changed files in the Changes tab."

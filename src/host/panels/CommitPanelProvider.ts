@@ -48,7 +48,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private readonly globalStoragePath: string,
     private readonly shelveDocProvider: ShelveDocumentProvider,
     private mergeEditorProvider?: MergeEditorProvider,
-    private readonly profileService?: GitProfileService
+    private readonly profileService?: GitProfileService,
+    private readonly globalState?: vscode.Memento
   ) {
     this.manager.onStatusChange((status) => {
       this.postChangelistsUpdate(status);
@@ -122,9 +123,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     // Sync current state — send changelists first so setStatus can read the correct viewMode
     this.manager.getAllStatuses().then(status => {
       this.postChangelistsUpdate(status);
-      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, fileViewMode: this.getFileViewMode() });
       loadIconTheme(webviewView.webview).then(iconTheme => {
-        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme });
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme, fileViewMode: this.getFileViewMode() });
       }).catch(() => { /* icon theme optional */ });
     });
 
@@ -151,11 +152,23 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private post(msg: HostToCommitMsg): void {
+    if (msg.type === 'COMMIT_STATUS_UPDATE' && msg.fileViewMode === undefined) {
+      (msg as typeof msg & { fileViewMode?: 'flat' | 'tree' }).fileViewMode = this.getFileViewMode();
+    }
     this.view?.webview.postMessage(msg);
   }
 
-  private getChangesViewMode(): 'simplified' | 'changelists' {
-    return vscode.workspace.getConfiguration('gitcharm').get<'simplified' | 'changelists'>('changesViewMode', 'simplified');
+  /** Reads fresh status after a stage/unstage op. simple-git reads directly from the git index so it's always accurate once the op completes. */
+  private async refreshStatusAfterOp(): Promise<WorkspaceStatus> {
+    return this.manager.getAllStatusesFresh();
+  }
+
+  private getChangesViewMode(): 'simplified' | 'changelists' | 'vscode' {
+    return vscode.workspace.getConfiguration('gitcharm').get<'simplified' | 'changelists' | 'vscode'>('changesViewMode', 'simplified');
+  }
+
+  private getFileViewMode(): 'flat' | 'tree' {
+    return this.globalState?.get<'flat' | 'tree'>('fileViewMode', 'tree') ?? 'tree';
   }
 
   private getOrCreateChangelistService(): ChangelistService | undefined {
@@ -279,6 +292,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           await repo.stageFiles(msg.paths);
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          const status = await this.refreshStatusAfterOp();
+          this.postChangelistsUpdate(status);
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -291,6 +307,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           await repo.unstageFiles(msg.paths);
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          const status = await this.refreshStatusAfterOp();
+          this.postChangelistsUpdate(status);
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -303,6 +322,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           await repo.stageAll();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          const status = await this.refreshStatusAfterOp();
+          this.postChangelistsUpdate(status);
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -315,6 +337,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           await repo.unstageAll();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          const status = await this.refreshStatusAfterOp();
+          this.postChangelistsUpdate(status);
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -1221,16 +1246,24 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!repo) return;
         try {
           const repoUri = vscode.Uri.file(repo.rootPath);
-          const status = await repo.getStatus();
 
-          const hasUnstaged  = status.unstagedFiles.filter((f: { status: string }) => f.status !== 'untracked').length > 0;
-          const hasUntracked = status.unstagedFiles.filter((f: { status: string }) => f.status === 'untracked').length > 0;
-          const hasStaged    = status.stagedFiles.length > 0;
+          // Direct section shortcut (vscode view mode buttons)
+          if (msg.section === 'staged') {
+            await vscode.commands.executeCommand('git.viewStagedChanges', repoUri);
+            return;
+          }
+          if (msg.section === 'unstaged') {
+            await vscode.commands.executeCommand('git.viewChanges', repoUri);
+            return;
+          }
+
+          const status = await repo.getStatus();
+          const hasUnstaged = status.unstagedFiles.length > 0;
+          const hasStaged   = status.stagedFiles.length > 0;
 
           const options: vscode.QuickPickItem[] = [];
-          if (hasUnstaged)  options.push({ label: '$(diff) Unstaged Changes',  description: 'git.viewChanges' });
-          if (hasUntracked) options.push({ label: '$(new-file) Untracked Files', description: 'git.viewUntrackedChanges' });
-          if (hasStaged)    options.push({ label: '$(diff-added) Staged Changes', description: 'git.viewStagedChanges' });
+          if (hasUnstaged) options.push({ label: '$(diff) Changes',        description: 'git.viewChanges' });
+          if (hasStaged)   options.push({ label: '$(diff-added) Staged Changes', description: 'git.viewStagedChanges' });
 
           if (options.length === 0) return;
 
@@ -1244,6 +1277,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(picked.description!, repoUri);
           }
         } catch { /* command unavailable */ }
+        break;
+      }
+
+      case 'COMMIT_SET_FILE_VIEW_MODE': {
+        await this.globalState?.update('fileViewMode', msg.mode);
         break;
       }
     }

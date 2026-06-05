@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { FileStatus, RepoStatus } from '../../shared/types';
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
@@ -22,7 +22,7 @@ function branchHue(name: string): number {
   return h % 360;
 }
 
-function branchColor(name: string): { bg: string; fg: string; border: string } {
+export function branchColor(name: string): { bg: string; fg: string; border: string } {
   const hue = branchHue(name);
   const isDark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
   return isDark ? {
@@ -41,6 +41,7 @@ interface Props {
   repoName: string;
   repoColor: string;
   multiRepo: boolean;
+  isFirst?: boolean;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -63,7 +64,7 @@ interface Props {
 }
 
 export function ProjectGroup({
-  repoStatus, repoName, repoColor, multiRepo,
+  repoStatus, repoName, repoColor, multiRepo, isFirst = false,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
@@ -87,16 +88,20 @@ export function ProjectGroup({
     onSetFiles(repoId, allFiles.map(f => f.path), !allSelected);
   };
 
+  const [hovered, setHovered] = useState(false);
+
   const checkboxRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (checkboxRef.current) checkboxRef.current.indeterminate = someSelected;
   }, [someSelected]);
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container(isFirst)}>
       <div
         style={styles.header(repoColor)}
         onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId); }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
         <input
           ref={checkboxRef}
@@ -123,11 +128,12 @@ export function ProjectGroup({
           {totalFiles > 0 && (
             <div style={styles.rightGroup}>
               <button
-                style={styles.openChangesBtn}
+                data-action-btn=""
+                style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
                 onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
                 title="Open all changes"
               >
-                <Codicon name="diff-multiple" style={{ fontSize: '12px' }} />
+                <Codicon name="diff-multiple" />
               </button>
               <span style={styles.countBadge(selectedCount > 0)}>
                 {selectedCount}/{totalFiles}
@@ -169,15 +175,63 @@ export function ProjectGroup({
   );
 }
 
+interface SingleRepoHeaderProps {
+  repoStatus: RepoStatus;
+  repoName: string;
+  repoColor: string;
+  onBranchClick: (repoId: string) => void;
+  onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
+  onOpenAllChanges: (repoId: string) => void;
+}
+
+export function SingleRepoHeader({ repoStatus, repoName, repoColor, onBranchClick, onRepoContextMenu, onOpenAllChanges }: SingleRepoHeaderProps) {
+  const repoId = repoStatus.repoId;
+  const branchClr = branchColor(repoStatus.branch.name);
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      style={styles.header(repoColor)}
+      onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={styles.headerMain} onClick={() => onBranchClick(repoId)}>
+        <span style={styles.dot(repoColor)} />
+        <span style={styles.name}>{repoName}</span>
+        <span
+          style={styles.branchBadge(branchClr)}
+          onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
+          title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
+        >
+          <Codicon name={repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+          <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
+        </span>
+        <div style={styles.rightGroup}>
+          <button
+            data-action-btn=""
+            style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+            onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
+            title="Open all changes"
+          >
+            <Codicon name="diff-multiple" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const styles = {
-  container: {
-    borderBottom: '1px solid var(--vscode-panel-border)',
-  } as React.CSSProperties,
+  container: (_isFirst: boolean): React.CSSProperties => ({
+  }),
   header: (color: string): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     background: color + '14',
     borderBottom: '1px solid var(--vscode-panel-border)',
+    height: '26px',
+    boxSizing: 'border-box',
   }),
   repoCheckbox: {
     margin: '0 0 0 6px',
@@ -188,7 +242,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
-    padding: '5px 8px 5px 4px',
+    padding: '3px 8px 3px 4px',
     cursor: 'pointer',
     flex: 1,
     fontSize: '11px',
@@ -198,7 +252,6 @@ const styles = {
     color: 'var(--vscode-sideBarSectionHeader-foreground)',
     userSelect: 'none' as const,
     minWidth: 0,
-    overflow: 'hidden',
   },
   chevron: {
     fontSize: '12px',
@@ -256,11 +309,13 @@ const styles = {
     background: hasSelected ? 'var(--vscode-badge-background)' : 'transparent',
     color: hasSelected ? 'var(--vscode-badge-foreground)' : 'var(--vscode-foreground)',
     borderRadius: '8px',
-    padding: '0 5px',
+    padding: hasSelected ? '1px 5px' : '0',
     fontSize: '10px',
     fontWeight: 'bold',
     flexShrink: 0,
     opacity: hasSelected ? 1 : 0.4,
+    minWidth: '18px',
+    textAlign: 'center',
   }),
   openChangesBtn: {
     background: 'transparent',

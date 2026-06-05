@@ -53,7 +53,7 @@ export interface UnpushedCommit {
 // ─── Commit Panel: Host → WebView ────────────────────────────────────────────
 
 export type HostToCommitMsg =
-  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData }
+  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; fileViewMode?: 'flat' | 'tree' }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
   | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'COMMIT_BRANCHES_UPDATE'; repoId: string; branches: BranchInfo[] }
@@ -67,7 +67,7 @@ export type HostToCommitMsg =
   | { type: 'STASH_OP_RESULT'; requestId: string; repoId: string; op: 'apply' | 'pop' | 'drop' | 'push'; ok: boolean; error?: string }
   | { type: 'PUSH_UNPUSHED_RESULT'; requestId: string; repoId: string; commits: UnpushedCommit[]; error?: string }
   | { type: 'COMMIT_SET_MESSAGE'; message: string }
-  | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' };
+  | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' | 'vscode' };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ export type CommitToHostMsg =
   | { type: 'STASH_DROP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_OPEN_FILE_DIFF'; repoId: string; stashRef: string; filePath: string }
   | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string }
-  | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string }
+  | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string; section?: 'staged' | 'unstaged' }
   | { type: 'COMMIT_OPEN_LOG'; hash: string; repoId: string }
   | { type: 'COMMIT_UNDO_COMMIT'; requestId: string; repoId: string }
   | { type: 'CHANGELISTS_CREATE'; name: string }
@@ -122,7 +122,8 @@ export type CommitToHostMsg =
   | { type: 'CHANGELISTS_MOVE_FILES'; assignments: Array<{ repoId: string; path: string; changelistId: string }> }
   | { type: 'CHANGELISTS_MOVE_FILES_PROMPT'; files: Array<{ repoId: string; path: string }> }
   | { type: 'CHANGELISTS_SHELVE'; changelistId: string; requestId: string }
-  | { type: 'CHANGELISTS_STASH'; changelistId: string; requestId: string };
+  | { type: 'CHANGELISTS_STASH'; changelistId: string; requestId: string }
+  | { type: 'COMMIT_SET_FILE_VIEW_MODE'; mode: 'flat' | 'tree' };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 
