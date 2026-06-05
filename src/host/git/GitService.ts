@@ -144,8 +144,18 @@ export class GitService {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       const head = vsRepo.state.HEAD;
-      const isDetached = !head?.name || head.type === RefType.Tag;
-      const branchName = isDetached ? 'HEAD' : (head.name ?? 'HEAD');
+      // VS Code API may transiently report head.name as undefined during a branch
+      // checkout before it has finished updating its internal state. When head.name
+      // is absent but the type is NOT a Tag, fall back to rev-parse.
+      let resolvedBranchName: string | undefined = head?.name;
+      if (!resolvedBranchName && head?.type !== RefType.Tag) {
+        try {
+          const raw = (await this.git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+          if (raw && raw !== 'HEAD') resolvedBranchName = raw;
+        } catch { /* ignore, treat as genuinely detached */ }
+      }
+      const isDetached = !resolvedBranchName || head?.type === RefType.Tag;
+      const branchName = isDetached ? 'HEAD' : resolvedBranchName!;
       // When type === Tag, head.name is the exact tag checked out
       const detachedTag = isDetached ? await this.getDetachedTag(head?.type === RefType.Tag ? head.name : undefined) : undefined;
       const detachedHash = (isDetached && !detachedTag)
@@ -219,7 +229,7 @@ export class GitService {
         branch: branchInfo,
         stagedFiles,
         unstagedFiles,
-        isDetachedHead: !head?.name || head.type === RefType.Tag,
+        isDetachedHead: isDetached,
         conflictCount,
       };
     }
@@ -261,9 +271,20 @@ export class GitService {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       const head = vsRepo.state.HEAD;
-      const isDetached = !head?.name || head.type === RefType.Tag;
-      const branchName = isDetached ? 'HEAD' : (head.name ?? 'HEAD');
       const vsTagName = head?.type === RefType.Tag ? head.name : undefined;
+      // VS Code API may transiently report head.name as undefined during a branch
+      // checkout before it has finished updating its internal state. When head.name
+      // is absent but the type is NOT a Tag, fall back to rev-parse to check whether
+      // we are actually on a named branch.
+      let resolvedBranchName: string | undefined = head?.name;
+      if (!resolvedBranchName && head?.type !== RefType.Tag) {
+        try {
+          const raw = (await this.git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+          if (raw && raw !== 'HEAD') resolvedBranchName = raw;
+        } catch { /* ignore, treat as genuinely detached */ }
+      }
+      const isDetached = !resolvedBranchName || head?.type === RefType.Tag;
+      const branchName = isDetached ? 'HEAD' : resolvedBranchName!;
       // If VS Code API now reports the same tag as pending, the update has arrived — clear it.
       if (this._pendingDetachedTag && vsTagName === this._pendingDetachedTag) {
         this._pendingDetachedTag = undefined;

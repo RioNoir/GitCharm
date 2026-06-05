@@ -152,6 +152,7 @@ export function ChangelistView({
             onHeaderContextMenu={onHeaderContextMenu}
             onRepoContextMenu={onRepoContextMenu}
             onOpenChanges={onOpenChanges}
+            onBranchClick={onBranchClick}
             iconTheme={iconTheme}
             activeFolderPath={activeFolderPath}
             ctxFile={ctxFile}

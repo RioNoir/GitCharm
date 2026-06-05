@@ -67,6 +67,7 @@ interface Props {
   onHeaderContextMenu: (e: React.MouseEvent, changelistId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
   onOpenChanges: (repoId: string) => void;
+  onBranchClick: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   ctxFile?: { repoId: string; path: string } | null;
@@ -77,7 +78,7 @@ export function ChangelistGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, iconTheme, activeFolderPath, ctxFile,
+  onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, ctxFile,
 }: Props) {
   const collapseKey = `cl:${changelist.id}`;
   const collapsed = isCollapsed(collapseKey);
@@ -163,6 +164,7 @@ export function ChangelistGroup({
                 onResolveMerge={onResolveMerge}
                 onRepoContextMenu={onRepoContextMenu}
                 onOpenChanges={onOpenChanges}
+                onBranchClick={onBranchClick}
                 iconTheme={iconTheme}
                 activeFolderPath={activeFolderPath}
                 changelistId={changelist.id}
@@ -200,6 +202,7 @@ interface RepoSubGroupProps {
   onResolveMerge: (file: FileStatus) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
   onOpenChanges: (repoId: string) => void;
+  onBranchClick: (repoId: string) => void;
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   changelistId?: string;
@@ -212,7 +215,7 @@ function RepoSubGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false,
+  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false,
 }: RepoSubGroupProps) {
   const collapseKey = `cl-repo:${repoId}`;
   const collapsed = isCollapsed(collapseKey);
@@ -257,7 +260,11 @@ function RepoSubGroup({
             <span style={styles.repoDot(repoColor)} />
             <span style={styles.repoName}>{repoName}</span>
             {repoStatus && (
-              <span style={styles.branchBadge(branchClr)}>
+              <span
+                style={styles.branchBadge(branchClr)}
+                onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
+                title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
+              >
                 <Codicon
                   name={repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'}
                   style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }}

@@ -6,6 +6,7 @@ import { isPrimaryBranch } from '../utils/branchUtils';
 export class BranchStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
   private statusDisposable?: vscode.Disposable;
+  private branchDisposable?: vscode.Disposable;
   private hasBehind = false;
   private hasUnpushed = false;
   private branchesDiverged = false;
@@ -24,6 +25,10 @@ export class BranchStatusBar implements vscode.Disposable {
     this.statusBarItem.show();
 
     this.statusDisposable = this.manager.onStatusChange(() => this.refresh());
+    // Also refresh on branch change: the status change fires at 300ms and may catch
+    // a transient HEAD state during checkout. The branch change fires at 400ms when
+    // the VS Code Git API state is stable, ensuring the status bar corrects itself.
+    this.branchDisposable = this.manager.onBranchChange(() => this.refresh());
     this.refresh();
   }
 
@@ -1810,5 +1815,6 @@ export class BranchStatusBar implements vscode.Disposable {
   dispose(): void {
     this.statusBarItem.dispose();
     this.statusDisposable?.dispose();
+    this.branchDisposable?.dispose();
   }
 }

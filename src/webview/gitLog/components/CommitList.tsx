@@ -101,6 +101,19 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
+  const [containerWidth, setContainerWidth] = useState<number>(9999);
+  const containerRoRef = useRef<ResizeObserver | null>(null);
+
+  const containerRefCb = useCallback((el: HTMLDivElement | null) => {
+    if (containerRoRef.current) { containerRoRef.current.disconnect(); containerRoRef.current = null; }
+    if (!el) return;
+    setContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver(entries => {
+      setContainerWidth(entries[0]?.contentRect.width ?? el.clientWidth);
+    });
+    ro.observe(el);
+    containerRoRef.current = ro;
+  }, []);
 
   const repoMeta = useMemo(() => {
     const map: Record<string, RepoMeta> = {};
@@ -203,7 +216,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   }
 
   return (
-    <div ref={parentRef} style={styles.container} onClick={() => setContextMenu(null)}>
+    <div ref={(el) => { (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el; containerRefCb(el); }} style={styles.container} onClick={() => setContextMenu(null)}>
       <style>{BG_ANIM_STYLE}</style>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
@@ -277,33 +290,64 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                 totalCommits={commits.length}
               />
 
-              {commit.refs.length > 0 && (
-                <div style={styles.refs}>
-                  {mergeLocalRemote(groupRefs(commit.refs)).slice(0, 4).map(group => {
-                    const color = branchColor(group.label);
-                    return (
-                      <span key={group.key} style={styles.refBadge(color, group.isTag)} title={badgeTitle(group)}>
-                        <RefBadgeIcon group={group} />
-                        <span style={styles.refBadgeLabel}>
-                          {group.isLocal && group.isRemote ? `origin & ${group.label}` : group.isRemote ? `origin/${group.label}` : group.label}
+              {commit.refs.length > 0 && (() => {
+                const allGroups = mergeLocalRemote(groupRefs(commit.refs));
+                const refsSpace = containerWidth - labelColWidth - 340;
+                const MAX = refsSpace < 80 ? 0 : refsSpace < 170 ? 1 : 2;
+                const visible = allGroups.slice(0, MAX);
+                const overflow = allGroups.slice(MAX);
+                return (
+                  <div style={styles.refs}>
+                    {visible.map(group => {
+                      const color = branchColor(group.label);
+                      return (
+                        <span key={group.key} style={styles.refBadge(color, group.isTag)} title={badgeTitle(group)}>
+                          <RefBadgeIcon group={group} />
+                          <span style={styles.refBadgeLabel}>
+                            {group.isLocal && group.isRemote ? `origin & ${group.label}` : group.isRemote ? `origin/${group.label}` : group.label}
+                          </span>
                         </span>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                    {overflow.length > 0 && (() => {
+                      const STEP = 4;
+                      const layers = overflow.slice(0, 3).reverse();
+                      const totalShift = layers.length * STEP;
+                      const frontColor = branchColor(overflow[0].label);
+                      return (
+                        <span
+                          style={{ ...styles.overflowWrapper, marginRight: totalShift }}
+                          title={overflow.map(g => badgeTitle(g)).join('\n')}
+                        >
+                          {layers.map((g, i) => {
+                            const c = branchColor(g.label);
+                            const shift = (layers.length - i) * STEP;
+                            return (
+                              <span
+                                key={g.key}
+                                style={styles.overflowStackLayer(c, shift)}
+                              />
+                            );
+                          })}
+                          <span style={styles.overflowLabel(frontColor)}>{visible.length === 0 ? `${overflow.length}` : `+${overflow.length}`}</span>
+                        </span>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
               <div style={styles.info}>
                 <span style={styles.message}>{commit.message}</span>
               </div>
 
+              {commit.unpushed && (
+                <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
+              )}
               <div style={styles.meta}>
-                {commit.unpushed && (
-                  <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
-                )}
                 <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={20} />
-                <span style={styles.author}>{commit.authorName}</span>
-                <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
+                <span style={styles.author}>{formatAuthorName(commit.authorName)}</span>
               </div>
+              <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
             </div>
           );
         })}
@@ -630,7 +674,20 @@ function mergeLocalRemote(groups: RefGroup[]): RefGroup[] {
       merged.push(g);
     }
   }
+  // HEAD first, then branches with remote (synced), then local-only, then remote-only, then tags
+  merged.sort((a, b) => {
+    if (a.isHead !== b.isHead) return a.isHead ? -1 : 1;
+    if (a.isTag !== b.isTag) return a.isTag ? 1 : -1;
+    if (a.isRemote !== b.isRemote) return a.isRemote ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
   return merged;
+}
+
+function formatAuthorName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
 function badgeTitle(group: RefGroup): string {
@@ -782,8 +839,28 @@ const styles = {
     fontSize: '12px',
     zIndex: 2,
   }),
+  refsMeasureRow: (labelColWidth: number): React.CSSProperties => ({
+    position: 'absolute',
+    visibility: 'hidden',
+    pointerEvents: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    paddingRight: '8px',
+    left: labelColWidth,
+    right: 0,
+    height: 0,
+    overflow: 'hidden',
+  }),
+  refsMeasureFixed: {
+    // Represents graph SVG + meta columns — fixed placeholder so refs gets compressed realistically.
+    // 60px graph estimate + 180px meta estimate + some gap.
+    flex: '1 3 0',
+    minWidth: '300px',
+    maxWidth: '500px',
+  } as React.CSSProperties,
   info: {
-    flex: '1 2 0',
+    flex: '1 1 auto',
     display: 'flex',
     alignItems: 'center',
     overflow: 'hidden',
@@ -792,7 +869,7 @@ const styles = {
   refs: {
     display: 'flex',
     gap: '3px',
-    flexShrink: 0,
+    flex: '0 0 auto',
     alignItems: 'center',
   },
   refBadge: (color: string, isTag: boolean): React.CSSProperties => ({
@@ -821,6 +898,38 @@ const styles = {
     whiteSpace: 'nowrap',
     minWidth: 0,
   } as React.CSSProperties,
+  overflowWrapper: {
+    position: 'relative',
+    display: 'inline-flex',
+    alignItems: 'center',
+    height: '16px',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  overflowStackLayer: (color: string, shift: number): React.CSSProperties => ({
+    position: 'absolute',
+    inset: 0,
+    borderRadius: '3px',
+    boxSizing: 'border-box',
+    background: `${color}33`,
+    border: `1px solid ${color}88`,
+    transform: `translateX(${shift}px)`,
+  }),
+  overflowLabel: (color: string): React.CSSProperties => ({
+    position: 'relative',
+    fontSize: '10px',
+    fontWeight: 600,
+    height: '16px',
+    lineHeight: '14px',
+    borderRadius: '3px',
+    border: `1px solid ${color}88`,
+    background: `color-mix(in srgb, var(--vscode-editor-background) 75%, ${color})`,
+    color,
+    padding: '0 5px',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box',
+    display: 'inline-flex',
+    alignItems: 'center',
+  }),
   message: {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -832,9 +941,9 @@ const styles = {
     display: 'flex',
     gap: '6px',
     alignItems: 'center',
-    flexShrink: 1,
+    flex: '0 4 auto',
     maxWidth: '300px',
-    minWidth: 0,
+    minWidth: '20px',
     fontSize: '11px',
     opacity: 0.65,
     overflow: 'hidden',
@@ -850,14 +959,13 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
     flexShrink: 1,
-    minWidth: '40px',
+    minWidth: 0,
   },
   date: {
     whiteSpace: 'nowrap' as const,
     flexShrink: 0,
-    textAlign: 'right' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+    fontSize: '11px',
+    opacity: 0.65,
   },
   bgLoadingBar: {
     position: 'sticky' as const,
