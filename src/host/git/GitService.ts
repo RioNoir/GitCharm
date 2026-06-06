@@ -854,9 +854,28 @@ export class GitService {
   }
 
   async merge(from: string): Promise<void> {
-    // Use simple-git directly: VS Code API rejects with DirtyWorkTree before
-    // attempting the merge, which prevents git from producing conflict markers.
-    await this.git.merge([from]);
+    try {
+      await this.git.merge([from]);
+    } catch (e: unknown) {
+      const isDirty = (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree'
+        || String(e).includes('overwritten by merge')
+        || String(e).includes('Your local changes');
+      if (!isDirty) throw e;
+      // Stash uncommitted changes, retry merge, then restore stash.
+      // If the merge produces conflicts the stash pop will also conflict —
+      // the user resolves both sets in the normal conflict flow.
+      const stashRef = `WIP before merge of ${from}`;
+      await this.git.stash(['push', '-m', stashRef]);
+      try {
+        await this.git.merge([from]);
+      } catch (mergeErr: unknown) {
+        // Merge failed (e.g. conflicts) — pop stash on top so the user
+        // ends up with both the merge conflicts and their original changes.
+        await this.git.stash(['pop']).catch(() => {});
+        throw mergeErr;
+      }
+      await this.git.stash(['pop']);
+    }
   }
 
   async rebase(onto: string): Promise<void> {
