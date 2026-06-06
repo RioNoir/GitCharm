@@ -8,6 +8,7 @@ import type {
   FileDiff,
   GitFileStatus,
   RepoStatus,
+  SubmoduleEntry,
 } from '../types/git';
 import type { StashEntry, UnpushedCommit } from '../types/messages';
 import { parseDiff, buildMonacoContents, detectLanguage } from './DiffParser';
@@ -194,16 +195,47 @@ export class GitService {
         };
       };
 
+      // VS Code API does not reliably track gitlink (submodule pointer) entries —
+      // it may report them only in workingTreeChanges regardless of index state,
+      // or in both simultaneously. Query their real staged/unstaged state via
+      // simple-git porcelain and handle them separately.
+      const submoduleRelPaths = await this.getSubmoduleRelativePaths();
+      let submodulePorcelainFiles: FileStatus[] = [];
+      if (submoduleRelPaths.size > 0) {
+        const porcelain = await this.git.status();
+        for (const file of porcelain.files) {
+          if (!submoduleRelPaths.has(file.path)) continue;
+          const absPath = path.join(this.rootPath, file.path);
+          const index = file.index.trim();
+          const workingDir = file.working_dir.trim();
+          if (index && index !== ' ' && index !== '?') {
+            submodulePorcelainFiles.push({ repoId: this.repoId, path: file.path, absolutePath: absPath, status: 'submodule', staged: true, unstaged: false });
+          } else if (workingDir && workingDir !== ' ') {
+            submodulePorcelainFiles.push({ repoId: this.repoId, path: file.path, absolutePath: absPath, status: 'submodule', staged: false, unstaged: true });
+          }
+        }
+      }
+
       for (const c of vsRepo.state.indexChanges) {
         const f = makeFile(c, true);
         if (!f) continue;
+        // Submodule paths are handled via porcelain above
+        if (submoduleRelPaths.has(f.path)) continue;
         if (f.status === 'conflicted') conflictCount++;
         else stagedFiles.push(f);
       }
       for (const c of vsRepo.state.workingTreeChanges) {
         const f = makeFile(c, false);
         if (!f) continue;
+        // Submodule paths are handled via porcelain above
+        if (submoduleRelPaths.has(f.path)) continue;
         if (f.status === 'conflicted') conflictCount++;
+        else unstagedFiles.push(f);
+      }
+
+      // Merge porcelain-resolved submodule entries
+      for (const f of submodulePorcelainFiles) {
+        if (f.staged) stagedFiles.push(f);
         else unstagedFiles.push(f);
       }
       for (const c of vsRepo.state.untrackedChanges) {
@@ -595,20 +627,85 @@ export class GitService {
 
   async stageFiles(paths: string[]): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.add(paths.map(p => path.resolve(this.rootPath, p))); return; }
-    const rootPrefix = this.rootPath + path.sep;
-    const safePaths = paths.filter(p => path.join(this.rootPath, p).startsWith(rootPrefix));
-    if (safePaths.length > 0) await this.git.add(safePaths);
+    // Always use simple-git for gitlink (submodule pointer) entries —
+    // vsRepo.add() silently ignores mode-160000 entries.
+    const submodulePaths = await this.getSubmoduleRelativePaths();
+    const [gitlinkPaths, regularPaths] = paths.reduce<[string[], string[]]>(
+      ([gl, reg], p) => submodulePaths.has(p) ? [[...gl, p], reg] : [gl, [...reg, p]],
+      [[], []]
+    );
+    if (gitlinkPaths.length > 0) {
+      // Distinguish two cases that both show ' M' in the parent's porcelain:
+      //   1. Submodule has a new commit (HEAD differs from parent's recorded pointer) → stageable (+prefix in submodule status)
+      //   2. Submodule only has uncommitted working-tree changes, no new commit → NOT stageable (no prefix, or - for uninit)
+      const submoduleStatusRaw = await this.git.raw(['submodule', 'status', '--', ...gitlinkPaths]).catch(() => '');
+      // Each line: <prefix><sha> <path> (<describe>)
+      // prefix: ' ' = matches parent index, '+' = different commit, '-' = uninitialised, 'U' = merge conflict
+      const submoduleHasNewCommit = new Set<string>();
+      for (const line of submoduleStatusRaw.split('\n')) {
+        const m = line.match(/^([+\- U])([0-9a-f]+)\s+(\S+)/);
+        if (!m) continue;
+        const prefix = m[1];
+        const relPath = m[3];
+        if (prefix === '+') submoduleHasNewCommit.add(relPath);
+      }
+      const notStageable = gitlinkPaths.filter(p => {
+        const porcelain = submoduleHasNewCommit.has(p);
+        return !porcelain; // not stageable if no new commit
+      });
+      if (notStageable.length > 0) {
+        const names = notStageable.map(p => path.basename(p)).join(', ');
+        throw new Error(
+          `Cannot stage ${names}: the submodule has uncommitted changes but no new commit. ` +
+          `Commit inside the submodule first, then stage the pointer here.`
+        );
+      }
+      await this.git.raw(['add', '--', ...gitlinkPaths]);
+    }
+    if (regularPaths.length > 0) {
+      if (vsRepo) {
+        await vsRepo.add(regularPaths.map(p => path.resolve(this.rootPath, p)));
+      } else {
+        const rootPrefix = this.rootPath + path.sep;
+        const safePaths = regularPaths.filter(p => path.join(this.rootPath, p).startsWith(rootPrefix));
+        if (safePaths.length > 0) await this.git.add(safePaths);
+      }
+    }
   }
 
   async stageAll(): Promise<void> {
     const vsRepo = this.vsRepo();
+    const submodulePaths = await this.getSubmoduleRelativePaths();
+
+    if (submodulePaths.size > 0) {
+      const subPaths = [...submodulePaths];
+      const submoduleStatusRaw = await this.git.raw(['submodule', 'status', '--', ...subPaths]).catch(() => '');
+      const submoduleHasNewCommit = new Set<string>();
+      for (const line of submoduleStatusRaw.split('\n')) {
+        const m = line.match(/^([+\- U])([0-9a-f]+)\s+(\S+)/);
+        if (m && m[1] === '+') submoduleHasNewCommit.add(m[3]);
+      }
+      const stageable = subPaths.filter(p => submoduleHasNewCommit.has(p));
+      const notStageable = subPaths.filter(p => !submoduleHasNewCommit.has(p) && submoduleStatusRaw.includes(p));
+      if (stageable.length > 0) await this.git.raw(['add', '--', ...stageable]);
+      if (notStageable.length > 0) {
+        const names = notStageable.map(p => path.basename(p)).join(', ');
+        throw new Error(
+          `Cannot stage ${names}: the submodule has uncommitted changes but no new commit. ` +
+          `Commit inside the submodule first, then stage the pointer here.`
+        );
+      }
+    }
+
     if (vsRepo) {
       const all = [
         ...vsRepo.state.workingTreeChanges,
         ...vsRepo.state.untrackedChanges,
         ...vsRepo.state.mergeChanges,
-      ].map(c => c.uri.fsPath);
+      ].map(c => c.uri.fsPath).filter(p => {
+        const rel = path.relative(this.rootPath, p).split(path.sep).join('/');
+        return !submodulePaths.has(rel);
+      });
       if (all.length) await vsRepo.add(all);
       return;
     }
@@ -617,8 +714,22 @@ export class GitService {
 
   async unstageFiles(paths: string[]): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.revert(paths.map(p => path.resolve(this.rootPath, p))); return; }
-    await this.git.reset(['HEAD', '--', ...paths]);
+    // Always use simple-git for gitlink (submodule pointer) entries.
+    const submodulePaths = await this.getSubmoduleRelativePaths();
+    const [gitlinkPaths, regularPaths] = paths.reduce<[string[], string[]]>(
+      ([gl, reg], p) => submodulePaths.has(p) ? [[...gl, p], reg] : [gl, [...reg, p]],
+      [[], []]
+    );
+    if (gitlinkPaths.length > 0) {
+      await this.git.reset(['HEAD', '--', ...gitlinkPaths]);
+    }
+    if (regularPaths.length > 0) {
+      if (vsRepo) {
+        await vsRepo.revert(regularPaths.map(p => path.resolve(this.rootPath, p)));
+      } else {
+        await this.git.reset(['HEAD', '--', ...regularPaths]);
+      }
+    }
   }
 
   async unstageAll(): Promise<void> {
@@ -704,7 +815,12 @@ export class GitService {
 
   async getRemotes(): Promise<string[]> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) return vsRepo.state.remotes.map(r => r.name);
+    if (vsRepo) {
+      const fromApi = vsRepo.state.remotes.map(r => r.name);
+      // VS Code API may return empty remotes for repos it considers a submodule kind —
+      // fall back to simple-git to get the real list.
+      if (fromApi.length > 0) return fromApi;
+    }
     const result = await this.git.getRemotes(false);
     return result.map(r => r.name);
   }
@@ -712,11 +828,14 @@ export class GitService {
   async getRemotesWithUrls(): Promise<{ name: string; fetchUrl: string; pushUrl: string }[]> {
     const vsRepo = this.vsRepo();
     if (vsRepo) {
-      return vsRepo.state.remotes.map(r => ({
-        name: r.name,
-        fetchUrl: r.fetchUrl ?? '',
-        pushUrl: r.pushUrl ?? r.fetchUrl ?? '',
-      }));
+      const fromApi = vsRepo.state.remotes;
+      if (fromApi.length > 0) {
+        return fromApi.map(r => ({
+          name: r.name,
+          fetchUrl: r.fetchUrl ?? '',
+          pushUrl: r.pushUrl ?? r.fetchUrl ?? '',
+        }));
+      }
     }
     const result = await this.git.getRemotes(true);
     return result.map(r => ({
@@ -745,7 +864,11 @@ export class GitService {
 
   async push(force = false, remote?: string): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) {
+    // Only use VS Code API when it actually knows the remotes for this repo.
+    // If remotes are empty VS Code would push to an unknown remote (exit 128).
+    // Repos where VS Code lists no remotes are typically SSH-keyed or use a
+    // system credential helper, so falling back to simple-git is safe there.
+    if (vsRepo && vsRepo.state.remotes.length > 0) {
       const branchName = vsRepo.state.HEAD?.name;
       const hasUpstream = !!vsRepo.state.HEAD?.upstream;
       const targetRemote = remote ?? 'origin';
@@ -766,7 +889,7 @@ export class GitService {
 
   async pull(): Promise<string> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) {
+    if (vsRepo && vsRepo.state.remotes.length > 0) {
       if (!vsRepo.state.HEAD?.upstream) return 'No remote tracking branch — skipped';
       try {
         await vsRepo.pull();
@@ -784,7 +907,7 @@ export class GitService {
 
   async pullRebase(): Promise<string> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) {
+    if (vsRepo && vsRepo.state.remotes.length > 0) {
       if (!vsRepo.state.HEAD?.upstream) return 'No remote tracking branch — skipped';
       const upstream = vsRepo.state.HEAD.upstream;
       try {
@@ -804,7 +927,7 @@ export class GitService {
 
   async fetchAll(): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.fetch({ prune: true }); return; }
+    if (vsRepo && vsRepo.state.remotes.length > 0) { await vsRepo.fetch({ prune: true }); return; }
     await this.git.fetch(['--all', '--prune']);
   }
 
@@ -1164,6 +1287,121 @@ export class GitService {
   }
 
   // ── Unpushed commits ──────────────────────────────────────────────────────
+
+  // ── Submodule push/pull helpers ───────────────────────────────────────────
+
+  async pushSubmodule(): Promise<void> {
+    const status = await this.git.status();
+    if (status.detached) {
+      throw new Error('Submodule is in detached HEAD — checkout a branch before pushing.');
+    }
+    await this.push();
+  }
+
+  async pullSubmodule(rebase = false): Promise<string> {
+    const status = await this.git.status();
+    if (status.detached) {
+      // In detached HEAD: fetch then checkout the latest commit on the tracked ref.
+      await this.git.fetch();
+      return 'fetched (detached HEAD — use Update Submodule to advance to a new commit)';
+    }
+    return rebase ? this.pullRebase() : this.pull();
+  }
+
+  // ── Submodule operations ──────────────────────────────────────────────────
+
+  /** Returns the set of relative paths that are gitlink entries (submodule pointers) in this repo. */
+  private async getSubmoduleRelativePaths(): Promise<Set<string>> {
+    const gitmodulesPath = path.join(this.rootPath, '.gitmodules');
+    if (!fs.existsSync(gitmodulesPath)) return new Set();
+    try {
+      const raw = fs.readFileSync(gitmodulesPath, 'utf8');
+      const paths = new Set<string>();
+      for (const line of raw.split('\n')) {
+        const m = line.match(/^\s+path\s*=\s*(.+)/);
+        if (m) paths.add(m[1].trim());
+      }
+      return paths;
+    } catch {
+      return new Set();
+    }
+  }
+
+  async getSubmoduleList(): Promise<SubmoduleEntry[]> {
+    const gitmodulesPath = path.join(this.rootPath, '.gitmodules');
+    if (!fs.existsSync(gitmodulesPath)) return [];
+
+    // Parse .gitmodules to get names/paths/urls
+    const raw = fs.readFileSync(gitmodulesPath, 'utf8');
+    const moduleMap = new Map<string, { name: string; path: string; url: string }>();
+    let currentName = '';
+    for (const line of raw.split('\n')) {
+      const sectionMatch = line.match(/^\[submodule "(.+)"\]/);
+      if (sectionMatch) { currentName = sectionMatch[1]; continue; }
+      if (!currentName) continue;
+      const kvMatch = line.match(/^\s+(\w+)\s*=\s*(.+)/);
+      if (!kvMatch) continue;
+      const [, key, value] = kvMatch;
+      if (!moduleMap.has(currentName)) moduleMap.set(currentName, { name: currentName, path: '', url: '' });
+      const entry = moduleMap.get(currentName)!;
+      if (key === 'path') entry.path = value.trim();
+      if (key === 'url') entry.url = value.trim();
+    }
+
+    // Run `git submodule status` to get init state, HEAD commit, dirty flag
+    const statusRaw = await this.git.raw(['submodule', 'status']).catch(() => '');
+    // Each line: " <hash> <path> (<description>)" or "-<hash> <path>" or "+<hash> <path>"
+    // Leading char: ' ' = initialized clean, '-' = not initialized, '+' = different commit, 'U' = conflict
+    const statusMap = new Map<string, { initialized: boolean; headCommit: string; isDirty: boolean }>();
+    for (const line of statusRaw.trim().split('\n')) {
+      if (!line.trim()) continue;
+      const match = line.match(/^([ \-+U])([0-9a-f]{40})\s+(\S+)/);
+      if (!match) continue;
+      const [, flag, hash, subPath] = match;
+      statusMap.set(subPath, {
+        initialized: flag !== '-',
+        headCommit: hash.slice(0, 8),
+        isDirty: flag === '+',
+      });
+    }
+
+    const entries: SubmoduleEntry[] = [];
+    for (const mod of moduleMap.values()) {
+      if (!mod.path) continue;
+      const subFullPath = path.join(this.rootPath, mod.path);
+      const st = statusMap.get(mod.path);
+      entries.push({
+        name: mod.name,
+        path: mod.path,
+        url: mod.url,
+        repoId: subFullPath,
+        initialized: st?.initialized ?? false,
+        headCommit: st?.headCommit,
+        isDirty: st?.isDirty ?? false,
+      });
+    }
+    return entries;
+  }
+
+  async initSubmodule(submodulePath: string): Promise<void> {
+    await this.git.raw(['submodule', 'init', '--', submodulePath]);
+    await this.git.raw(['submodule', 'update', '--', submodulePath]);
+  }
+
+  async deinitSubmodule(submodulePath: string, force = false): Promise<void> {
+    const args = ['submodule', 'deinit'];
+    if (force) args.push('--force');
+    args.push('--', submodulePath);
+    await this.git.raw(args);
+  }
+
+  async updateSubmodule(submodulePath: string, init = true, recursive = false): Promise<void> {
+    const args = ['submodule', 'update'];
+    if (init) args.push('--init');
+    if (recursive) args.push('--recursive');
+    args.push('--', submodulePath);
+    await this.git.raw(args);
+  }
 
   async getUnpushedCommits(): Promise<UnpushedCommit[]> {
     const parseLines = (raw: string): UnpushedCommit[] => {

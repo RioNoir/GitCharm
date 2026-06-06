@@ -21,18 +21,22 @@ function generateId() {
 
 // ── Context menu items ────────────────────────────────────────────────────────
 
+const REVEAL_OS_LABEL = 'Reveal in File Manager';
+
 const FILE_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',  label: 'Rollback',            icon: 'discard' },
-  { id: 'shelve',    label: 'Shelve',              icon: 'archive' },
-  { id: 'stash',     label: 'Stash',               icon: 'save' },
-  { id: 'diff',      label: 'Show Diff',           icon: 'diff' },
-  { id: 'jump',      label: 'Jump to Source',      icon: 'go-to-file' },
+  { id: 'rollback',        label: 'Rollback',            icon: 'discard' },
+  { id: 'shelve',          label: 'Shelve',              icon: 'archive' },
+  { id: 'stash',           label: 'Stash',               icon: 'save' },
+  { id: 'diff',            label: 'Show Diff',           icon: 'diff' },
+  { id: 'jump',            label: 'Jump to Source',      icon: 'go-to-file' },
+  { id: 'reveal-explorer', label: 'Reveal in Explorer',  icon: 'list-tree' },
+  { id: 'reveal-os',       label: REVEAL_OS_LABEL,       icon: 'folder-opened' },
   { separator: true },
-  { id: 'gitignore', label: 'Add to .gitignore',  icon: 'exclude' },
+  { id: 'gitignore',       label: 'Add to .gitignore',   icon: 'exclude' },
   { separator: true },
-  { id: 'delete',    label: 'Delete',              icon: 'trash', danger: true },
+  { id: 'delete',          label: 'Delete',              icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',   label: 'Refresh',             icon: 'refresh' },
+  { id: 'refresh',         label: 'Refresh',             icon: 'refresh' },
 ];
 
 const FILE_CONTEXT_ITEMS_CONFLICT: ContextMenuEntry[] = [
@@ -73,28 +77,32 @@ const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
 ];
 
 const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage',  label: 'Unstage',              icon: 'remove' },
+  { id: 'unstage',         label: 'Unstage',              icon: 'remove' },
   { separator: true },
-  { id: 'diff',     label: 'Show Diff',            icon: 'diff' },
-  { id: 'jump',     label: 'Jump to Source',       icon: 'go-to-file' },
+  { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
+  { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
+  { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
+  { id: 'reveal-os',       label: REVEAL_OS_LABEL,        icon: 'folder-opened' },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+  { id: 'refresh',         label: 'Refresh',              icon: 'refresh' },
 ];
 
 const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage',    label: 'Stage',                icon: 'add' },
-  { id: 'rollback', label: 'Rollback',             icon: 'discard' },
-  { id: 'shelve',   label: 'Shelve',               icon: 'archive' },
-  { id: 'stash',    label: 'Stash',                icon: 'save' },
+  { id: 'stage',           label: 'Stage',                icon: 'add' },
+  { id: 'rollback',        label: 'Rollback',             icon: 'discard' },
+  { id: 'shelve',          label: 'Shelve',               icon: 'archive' },
+  { id: 'stash',           label: 'Stash',                icon: 'save' },
   { separator: true },
-  { id: 'diff',     label: 'Show Diff',            icon: 'diff' },
-  { id: 'jump',     label: 'Jump to Source',       icon: 'go-to-file' },
+  { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
+  { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
+  { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
+  { id: 'reveal-os',       label: REVEAL_OS_LABEL,        icon: 'folder-opened' },
   { separator: true },
-  { id: 'gitignore',label: 'Add to .gitignore',    icon: 'exclude' },
+  { id: 'gitignore',       label: 'Add to .gitignore',    icon: 'exclude' },
   { separator: true },
-  { id: 'delete',   label: 'Delete',               icon: 'trash', danger: true },
+  { id: 'delete',          label: 'Delete',               icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+  { id: 'refresh',         label: 'Refresh',              icon: 'refresh' },
 ];
 
 const VSCODE_FOLDER_STAGED_ITEMS: ContextMenuEntry[] = [
@@ -129,6 +137,18 @@ const VSCODE_REPO_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'stash',     label: 'Stash Changes',         icon: 'save' },
   { separator: true },
   { id: 'refresh',   label: 'Refresh',              icon: 'refresh' },
+];
+
+const SUBMODULE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'unstage',  label: 'Unstage',   icon: 'remove' },
+  { separator: true },
+  { id: 'refresh',  label: 'Refresh',   icon: 'refresh' },
+];
+
+const SUBMODULE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
+  { id: 'stage',    label: 'Stage',     icon: 'add' },
+  { separator: true },
+  { id: 'refresh',  label: 'Refresh',   icon: 'refresh' },
 ];
 
 const CHANGELIST_EMPTY_AREA_ITEMS: ContextMenuEntry[] = [
@@ -191,6 +211,10 @@ function App() {
   const [stashLoading, setStashLoading] = useState<Record<string, boolean>>({});
   const [stashError, setStashError]   = useState<Record<string, string | null>>({});
   const [stashExpandAll, setStashExpandAll] = useState(false);
+
+  // ── Submodule detached HEAD warnings ─────────────────────────────────────
+  // repoId → headCommit — shown as dismissable banner above the file tree
+  const [detachedWarnings, setDetachedWarnings] = useState<Record<string, string>>({});
 
   // ── Vscode mode: repo selection for commit ───────────────────────────────
   const [vscodeSelectedRepos, setVscodeSelectedRepos] = useState<Set<string>>(new Set());
@@ -296,12 +320,13 @@ function App() {
     return () => document.removeEventListener('mousedown', h, true);
   }, []);
 
-  // Auto-dismiss error after 6 seconds
-  useEffect(() => {
-    if (!store.error) return;
-    const t = setTimeout(() => store.setError(null), 6000);
-    return () => clearTimeout(t);
-  }, [store.error]);
+  const notifyError = useCallback((message: string) => {
+    send({ type: 'NOTIFY_ERROR', message } satisfies CommitToHostMsg);
+  }, []);
+
+  const notifyInfo = useCallback((message: string) => {
+    send({ type: 'NOTIFY_INFO', message } satisfies CommitToHostMsg);
+  }, []);
 
   // ── Message handler ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -329,13 +354,13 @@ function App() {
             const currentRepos = useCommitStore.getState().status?.repos ?? [];
             currentRepos.forEach(r => requestUnpushedCommits(r.repoId));
           } else if (msg.error && msg.error !== 'Cancelled') {
-            store.setError(msg.error);
+            notifyError(msg.error);
           }
           break;
         case 'COMMIT_GENERATE_MESSAGE_RESULT':
           setGeneratingMessage(false);
           if (msg.message) store.setCommitMessage(msg.message);
-          else if (msg.error && msg.error !== 'Cancelled') store.setError(msg.error);
+          else if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
         case 'COMMIT_SET_MESSAGE':
           store.setCommitMessage(msg.message);
@@ -351,10 +376,10 @@ function App() {
           break;
         case 'SHELVE_OP_RESULT':
           if (!msg.ok) {
-            if (msg.error && msg.error !== 'Cancelled') store.setError(msg.error);
+            if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           } else {
             if (msg.hasConflicts && msg.conflictFiles?.length) {
-              store.setError(`Conflicts in ${msg.conflictFiles.length} file(s) — merge editor opened`);
+              notifyInfo(`Conflicts in ${msg.conflictFiles.length} file(s) — merge editor opened`);
             }
             // Refresh the shelf list for the affected repo after any successful op
             setShelveLoading(prev => ({ ...prev, [msg.repoId]: true }));
@@ -374,7 +399,7 @@ function App() {
 
         case 'STASH_OP_RESULT':
           if (!msg.ok) {
-            if (msg.error && msg.error !== 'Cancelled') store.setError(msg.error);
+            if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           } else {
             // Refresh stash list for affected repo
             setStashLoading(prev => ({ ...prev, [msg.repoId]: true }));
@@ -387,6 +412,19 @@ function App() {
             ...prev,
             [msg.repoId]: { loading: false, commits: msg.commits, error: msg.error },
           }));
+          break;
+
+        case 'SUBMODULE_OP_RESULT':
+          if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
+          break;
+
+        case 'SUBMODULE_DETACHED_HEAD_WARNING':
+          setDetachedWarnings(prev => ({ ...prev, [msg.repoId]: msg.headCommit }));
+          break;
+
+        case 'SUBMODULE_PUSH_RESULT':
+        case 'SUBMODULE_PULL_RESULT':
+          if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
       }
     };
@@ -513,6 +551,12 @@ function App() {
         break;
       case 'jump':
         send({ type: 'COMMIT_OPEN_FILE', repoId: file.repoId, filePath: file.path });
+        break;
+      case 'reveal-explorer':
+        send({ type: 'COMMIT_REVEAL_IN_EXPLORER', repoId: file.repoId, filePath: file.path });
+        break;
+      case 'reveal-os':
+        send({ type: 'COMMIT_REVEAL_IN_OS', repoId: file.repoId, filePath: file.path });
         break;
       case 'gitignore':
         send({ type: 'COMMIT_ADD_TO_GITIGNORE', repoId: file.repoId, entryPath: file.path });
@@ -707,7 +751,7 @@ function App() {
         .map(r => ({ repoId: r.repoId, message: freshState.commitMessage, amend: freshState.amendFlags[r.repoId] ?? false, filesToStage: [], filesToUnstage: [] }));
       if (targets.length === 0) return;
       store.setLoading(true);
-      store.setError(null);
+
       getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
       store.setCommitMessage('');
       return;
@@ -878,17 +922,6 @@ function App() {
         );
       })()}
 
-      {/* ── Error / info notification bar ── */}
-      {store.error && (
-        <div style={css.notificationBar}>
-          <Codicon name="warning" style={{ flexShrink: 0, fontSize: '13px' }} />
-          <span style={css.notificationText}>{store.error}</span>
-          <button style={css.notificationClose} onClick={() => store.setError(null)} title="Dismiss">
-            <Codicon name="close" />
-          </button>
-        </div>
-      )}
-
       {/* ── Tab content ── */}
       <div style={css.main}>
 
@@ -977,40 +1010,66 @@ function App() {
                 const meta = metaMap.get(repoId);
                 const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
                 const repoColor = meta?.color ?? '#4ec9b0';
+                const detachedCommit = meta?.isSubmodule ? detachedWarnings[repoId] : undefined;
                 return (
-                  <ProjectGroup
-                    key={repoId}
-                    isFirst={idx === 0}
-                    repoStatus={repoStatus}
-                    repoName={repoName}
-                    repoColor={repoColor}
-                    multiRepo={multiRepo}
-                    selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
-                    viewMode={store.viewMode}
-                    isFileSelected={store.isFileSelected}
-                    isCollapsed={store.isCollapsed}
-                    toggleCollapsed={store.toggleCollapsed}
-                    onToggleFile={store.toggleFileSelection}
-                    onSetFiles={store.setFileSelections}
-                    onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
-                    onContextMenu={(e, file) => { setCtxFile({ repoId: file.repoId, path: file.path }); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
-                    onFolderContextMenu={(e, rid, folderPath, files) => { setActiveFolderPath(folderPath); setFolderCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, folderPath, files }); }}
-                    onOpenFile={f => send({ type: 'COMMIT_OPEN_FILE', repoId: f.repoId, filePath: f.path })}
-                    onRollback={files => {
-                      if (files.length === 1) {
-                        send({ type: 'COMMIT_DISCARD_FILE', requestId: generateId(), repoId: files[0].repoId, path: files[0].path });
-                      } else {
-                        send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
-                      }
-                    }}
-                    onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
-                    onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
-                    onRepoContextMenu={(e, rid) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid })}
-                    onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
-                    iconTheme={store.iconTheme}
-                    activeFolderPath={activeFolderPath}
-                    ctxFile={ctxFile}
-                  />
+                  <React.Fragment key={repoId}>
+                    {detachedCommit && (
+                      <div style={css.detachedBanner}>
+                        <Codicon name="git-commit" style={{ flexShrink: 0, opacity: 0.8 }} />
+                        <span style={{ flex: 1 }}>
+                          <strong>{repoName}</strong> is in detached HEAD ({detachedCommit}). Checkout a branch to commit.
+                        </span>
+                        <button
+                          style={css.detachedBannerBtn}
+                          onClick={() => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId })}
+                          title="Checkout or create a branch"
+                        >
+                          Checkout branch
+                        </button>
+                        <button
+                          style={{ ...css.detachedBannerBtn, background: 'transparent', opacity: 0.5 }}
+                          onClick={() => setDetachedWarnings(prev => { const n = { ...prev }; delete n[repoId]; return n; })}
+                          title="Dismiss"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                    <ProjectGroup
+                      isFirst={idx === 0}
+                      repoStatus={repoStatus}
+                      repoName={repoName}
+                      repoColor={repoColor}
+                      multiRepo={multiRepo}
+                      isSubmodule={meta?.isSubmodule}
+                      submodulePath={meta?.submodulePath}
+                      selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
+                      viewMode={store.viewMode}
+                      isFileSelected={store.isFileSelected}
+                      isCollapsed={store.isCollapsed}
+                      toggleCollapsed={store.toggleCollapsed}
+                      onToggleFile={store.toggleFileSelection}
+                      onSetFiles={store.setFileSelections}
+                      onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
+                      onContextMenu={(e, file) => { setCtxFile({ repoId: file.repoId, path: file.path }); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
+                      onFolderContextMenu={(e, rid, folderPath, files) => { setActiveFolderPath(folderPath); setFolderCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, folderPath, files }); }}
+                      onOpenFile={f => send({ type: 'COMMIT_OPEN_FILE', repoId: f.repoId, filePath: f.path })}
+                      onRollback={files => {
+                        if (files.length === 1) {
+                          send({ type: 'COMMIT_DISCARD_FILE', requestId: generateId(), repoId: files[0].repoId, path: files[0].path });
+                        } else {
+                          send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
+                        }
+                      }}
+                      onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                      onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
+                      onRepoContextMenu={(e, rid) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid })}
+                      onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
+                      iconTheme={store.iconTheme}
+                      activeFolderPath={activeFolderPath}
+                      ctxFile={ctxFile}
+                    />
+                  </React.Fragment>
                 );
               })
             )}
@@ -1177,10 +1236,13 @@ function App() {
       {ctxMenu && (() => {
         const file = ctxMenu.file;
         const isUntracked = file.status === 'untracked';
+        const isSubmodule = file.status === 'submodule';
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
         const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT : FILE_CONTEXT_ITEMS;
         let items: ContextMenuEntry[] = baseItems;
-        if (store.changesViewMode === 'vscode') {
+        if (isSubmodule) {
+          items = ctxMenuStaged ? SUBMODULE_FILE_STAGED_ITEMS : SUBMODULE_FILE_UNSTAGED_ITEMS;
+        } else if (store.changesViewMode === 'vscode') {
           items = ctxMenuStaged ? VSCODE_FILE_STAGED_ITEMS : VSCODE_FILE_UNSTAGED_ITEMS;
         } else if (store.changesViewMode === 'changelists') {
           if (isUntracked) {
@@ -1431,6 +1493,18 @@ const css = {
   main: { display: 'flex', flexDirection: 'column' as const, flex: 1, overflow: 'hidden' },
   repoList: { flex: 1, overflowY: 'auto' as const },
   // Shelve name prompt bar (above commit form)
+  detachedBanner: {
+    display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px',
+    background: 'color-mix(in srgb, var(--vscode-statusBarItem-warningBackground, #c6a300) 15%, transparent)',
+    borderBottom: '1px solid color-mix(in srgb, var(--vscode-statusBarItem-warningBackground, #c6a300) 35%, transparent)',
+    fontSize: '11px', color: 'var(--vscode-foreground)', flexShrink: 0,
+  } as React.CSSProperties,
+  detachedBannerBtn: {
+    background: 'var(--vscode-button-secondaryBackground, rgba(255,255,255,0.1))',
+    color: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
+    border: 'none', borderRadius: '3px', padding: '2px 7px', cursor: 'pointer',
+    fontSize: '11px', flexShrink: 0,
+  } as React.CSSProperties,
   shelvePromptBar: {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px',
     borderTop: '1px solid var(--vscode-panel-border)',

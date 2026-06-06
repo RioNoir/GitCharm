@@ -44,6 +44,8 @@ export interface RepoFileGroup {
   repoColor: string;
   repoStatus?: RepoStatus;
   files: FileStatus[];
+  isSubmodule?: boolean;
+  submodulePath?: string;
 }
 
 interface Props {
@@ -149,6 +151,8 @@ export function ChangelistGroup({
                 repoStatus={group.repoStatus}
                 files={group.files}
                 multiRepo={multiRepo}
+                isSubmodule={group.isSubmodule}
+                submodulePath={group.submodulePath}
                 selectedFile={selectedFile}
                 viewMode={viewMode}
                 isFileSelected={isFileSelected}
@@ -187,6 +191,8 @@ interface RepoSubGroupProps {
   repoStatus?: RepoStatus;
   files: FileStatus[];
   multiRepo: boolean;
+  isSubmodule?: boolean;
+  submodulePath?: string;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -211,7 +217,7 @@ interface RepoSubGroupProps {
 }
 
 function RepoSubGroup({
-  repoId, repoName, repoColor, repoStatus, files, multiRepo,
+  repoId, repoName, repoColor, repoStatus, files, multiRepo, isSubmodule, submodulePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
@@ -259,6 +265,9 @@ function RepoSubGroup({
             <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.repoChevron} />
             <span style={styles.repoDot(repoColor)} />
             <span style={styles.repoName}>{repoName}</span>
+            {isSubmodule && (
+              <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
+            )}
             {repoStatus && (
               <span
                 style={styles.branchBadge(branchClr)}
@@ -512,4 +521,16 @@ const styles = {
     flexShrink: 0,
     opacity: hasSelected ? 0.8 : 0.35,
   }),
+  submoduleBadge: {
+    fontSize: '9px',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--vscode-badge-foreground)',
+    background: 'var(--vscode-badge-background)',
+    borderRadius: '3px',
+    padding: '1px 4px',
+    flexShrink: 0,
+    opacity: 0.75,
+  } as React.CSSProperties,
 };

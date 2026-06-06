@@ -42,6 +42,8 @@ interface Props {
   repoColor: string;
   multiRepo: boolean;
   isFirst?: boolean;
+  isSubmodule?: boolean;
+  submodulePath?: string;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -65,6 +67,7 @@ interface Props {
 
 export function ProjectGroup({
   repoStatus, repoName, repoColor, multiRepo, isFirst = false,
+  isSubmodule, submodulePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
@@ -117,6 +120,11 @@ export function ProjectGroup({
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
           <span style={styles.dot(repoColor)} />
           <span style={styles.name}>{repoName}</span>
+          {isSubmodule && (
+            <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>
+              SUB
+            </span>
+          )}
           <span
             style={styles.branchBadge(branchClr)}
             onClick={(e) => { e.stopPropagation(); onBranchClick(repoId); }}
@@ -179,12 +187,14 @@ interface SingleRepoHeaderProps {
   repoStatus: RepoStatus;
   repoName: string;
   repoColor: string;
+  isSubmodule?: boolean;
+  submodulePath?: string;
   onBranchClick: (repoId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
   onOpenAllChanges: (repoId: string) => void;
 }
 
-export function SingleRepoHeader({ repoStatus, repoName, repoColor, onBranchClick, onRepoContextMenu, onOpenAllChanges }: SingleRepoHeaderProps) {
+export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, onBranchClick, onRepoContextMenu, onOpenAllChanges }: SingleRepoHeaderProps) {
   const repoId = repoStatus.repoId;
   const branchClr = branchColor(repoStatus.branch.name);
   const [hovered, setHovered] = useState(false);
@@ -199,6 +209,11 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, onBranchClic
       <div style={styles.headerMain} onClick={() => onBranchClick(repoId)}>
         <span style={styles.dot(repoColor)} />
         <span style={styles.name}>{repoName}</span>
+        {isSubmodule && (
+          <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>
+            SUB
+          </span>
+        )}
         <span
           style={styles.branchBadge(branchClr)}
           onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
@@ -271,6 +286,18 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     flexShrink: 10,
     minWidth: '20px',
+  } as React.CSSProperties,
+  submoduleBadge: {
+    fontSize: '9px',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--vscode-badge-foreground)',
+    background: 'var(--vscode-badge-background)',
+    borderRadius: '3px',
+    padding: '1px 4px',
+    flexShrink: 0,
+    opacity: 0.75,
   } as React.CSSProperties,
   branchBadge: (clr: { bg: string; fg: string; border: string }): React.CSSProperties => ({
     display: 'inline-flex',

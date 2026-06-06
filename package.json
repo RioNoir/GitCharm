@@ -148,6 +148,30 @@
         "command": "gitcharm.switchProfile",
         "title": "GitCharm: Switch Git Profile",
         "icon": "$(account)"
+      },
+      {
+        "command": "gitcharm.submodule.init",
+        "title": "GitCharm: Initialize Submodule"
+      },
+      {
+        "command": "gitcharm.submodule.update",
+        "title": "GitCharm: Update Submodule"
+      },
+      {
+        "command": "gitcharm.submodule.updateRecursive",
+        "title": "GitCharm: Update Submodule (Recursive)"
+      },
+      {
+        "command": "gitcharm.submodule.deinit",
+        "title": "GitCharm: Deinit Submodule"
+      },
+      {
+        "command": "gitcharm.submodule.deinitForce",
+        "title": "GitCharm: Force Deinit Submodule"
+      },
+      {
+        "command": "gitcharm.submodule.openInNewWindow",
+        "title": "GitCharm: Open Submodule in New Window"
       }
     ],
     "menus": {

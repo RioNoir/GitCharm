@@ -144,6 +144,11 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               <div key={repo.id} style={styles.repoRow}>
                 <span style={styles.repoDot(repo.color)} />
                 <span style={styles.repoName}>{repo.name}</span>
+                {repo.isSubmodule && (
+                  <span style={styles.submoduleBadge} title={repo.submodulePath ? `Submodule: ${repo.submodulePath}` : 'Submodule'}>
+                    SUB
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -498,6 +503,19 @@ const styles = {
     background: color,
     flexShrink: 0,
   }),
+  submoduleBadge: {
+    fontSize: '9px',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--vscode-badge-foreground)',
+    background: 'var(--vscode-badge-background)',
+    borderRadius: '3px',
+    padding: '1px 4px',
+    flexShrink: 0,
+    opacity: 0.75,
+    marginLeft: '4px',
+  } as React.CSSProperties,
   iconBtn: {
     background: 'transparent',
     border: 'none',

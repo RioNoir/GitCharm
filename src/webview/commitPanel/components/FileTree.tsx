@@ -35,11 +35,12 @@ const STATUS_COLORS: Record<GitFileStatus, string> = {
   copied:     'var(--vscode-gitDecoration-addedResourceForeground)',
   untracked:  'var(--vscode-gitDecoration-untrackedResourceForeground)',
   conflicted: 'var(--vscode-gitDecoration-conflictingResourceForeground)',
+  submodule:  'var(--vscode-gitDecoration-submoduleResourceForeground)',
 };
 
 const STATUS_LETTERS: Record<GitFileStatus, string> = {
   modified: 'M', added: 'A', deleted: 'D',
-  renamed: 'R', copied: 'C', untracked: 'U', conflicted: 'C',
+  renamed: 'R', copied: 'C', untracked: 'U', conflicted: 'C', submodule: 'S',
 };
 
 const ICON_SIZE = 16;
@@ -202,10 +203,12 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
   const dir = (() => { const p = file.path.split('/'); return p.length > 1 ? p.slice(0, -1).join('/') : ''; })();
   const [hovered, setHovered] = useState(false);
 
+  const isSubmodule = file.status === 'submodule';
+
   return (
     <div
       style={{ ...styles.row(isSelected, isCtxActive, hovered), paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
-      onClick={() => onSelect(file)}
+      onClick={isSubmodule ? undefined : () => onSelect(file)}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -222,7 +225,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
         {depth === 0 && dir && <span style={styles.dirPath} title={dir}>{dir}</span>}
       </div>
       <div style={styles.rowActions}>
-        {hovered && <>
+        {hovered && !isSubmodule && <>
           {file.status === 'conflicted' && (
             <button
               data-action-btn=""

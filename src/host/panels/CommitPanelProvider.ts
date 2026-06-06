@@ -74,7 +74,16 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
    */
   private async getCommitCredentials(repoPath: string): Promise<{ gitName: string; gitEmail: string } | undefined> {
     if (!this.profileService) return undefined;
-    const result = await this.profileService.getEffectiveProfile(repoPath);
+
+    // For submodules, resolve the profile using the parent repo path so they
+    // inherit the same identity as the parent — the submodule's own .git/config
+    // is a separate file and typically has no local credentials set.
+    const meta = this.manager.getRepoMetas().find(m => m.rootPath === repoPath);
+    const resolvedPath = (meta?.isSubmodule && meta.parentRepoId)
+      ? meta.parentRepoId
+      : repoPath;
+
+    const result = await this.profileService.getEffectiveProfile(resolvedPath);
     if (!result) {
       vscode.window.showWarningMessage('GitCharm: No Git identity configured. Set a profile before committing.');
       return undefined;
@@ -82,7 +91,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     if (result.source === 'local' || result.source === 'global') return undefined;
     const { gitName, gitEmail } = result.profile;
     if (!gitName && !gitEmail) return undefined;
-    // Persist into .git/config so the identity is visible to all Git tools
+    // Persist into the submodule's own .git/config so the identity is visible to all git tools
     await this.profileService.writeLocalCreds(repoPath, gitName, gitEmail).catch(() => {});
     return { gitName, gitEmail };
   }
@@ -355,6 +364,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const output = await repo.commit(msg.message, msg.amend, creds, s => this.profileService?.trace(s));
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
           this.logProvider?.refresh();
+          const status = await this.refreshStatusAfterOp();
+          this.postChangelistsUpdate(status);
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -407,7 +419,17 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           { location: vscode.ProgressLocation.Notification, title: `GitCharm: Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
           async () => {
             const errors: string[] = [];
-            for (const r of msg.repos) {
+            // Commit submodules before parent repos so the parent's pointer update
+            // always refers to an already-committed submodule state.
+            const repoMetas = this.manager.getRepoMetas();
+            const ordered = [...msg.repos].sort((a, b) => {
+              const aMeta = repoMetas.find(m => m.id === a.repoId);
+              const bMeta = repoMetas.find(m => m.id === b.repoId);
+              const aDepth = aMeta?.depth ?? 0;
+              const bDepth = bMeta?.depth ?? 0;
+              return bDepth - aDepth; // deeper (submodules) first
+            });
+            for (const r of ordered) {
               const repo = this.manager.getRepo(r.repoId);
               if (!repo) { errors.push(`${r.repoId}: not found`); continue; }
               try {
@@ -1284,7 +1306,144 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         await this.globalState?.update('fileViewMode', msg.mode);
         break;
       }
+
+      case 'SUBMODULE_PUSH': {
+        const subRepoPush = this.manager.getRepo(msg.repoId);
+        if (!subRepoPush) {
+          this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: 'Repo not found' });
+          return;
+        }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing submodule ${subRepoPush.rootPath.split('/').pop()}`, cancellable: false },
+          async () => {
+            try {
+              await subRepoPush.pushSubmodule();
+              this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: true });
+              this.logProvider?.refresh();
+            } catch (e: unknown) {
+              this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: String(e) });
+            }
+          }
+        );
+        break;
+      }
+
+      case 'SUBMODULE_PULL': {
+        const subRepoPull = this.manager.getRepo(msg.repoId);
+        if (!subRepoPull) {
+          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          const output = await subRepoPull.pullSubmodule(msg.rebase);
+          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: true, output });
+          const status = await this.manager.getAllStatusesFresh();
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+        } catch (e: unknown) {
+          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'SUBMODULE_INIT': {
+        const parentRepo = this.manager.getRepo(msg.parentRepoId);
+        if (!parentRepo) {
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await parentRepo.initSubmodule(msg.submodulePath);
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: true });
+          // Re-discover so the newly-initialized submodule gets its own GitService
+          // scheduleRefresh will re-send status to the webview
+        } catch (e: unknown) {
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'SUBMODULE_DEINIT': {
+        const parentRepoD = this.manager.getRepo(msg.parentRepoId);
+        if (!parentRepoD) {
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: 'Repo not found' });
+          return;
+        }
+        const confirmDeinit = await vscode.window.showWarningMessage(
+          `Deinit submodule "${msg.submodulePath}"? The working directory will be cleared.`,
+          { modal: true }, 'Deinit'
+        );
+        if (confirmDeinit !== 'Deinit') {
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: 'Cancelled' });
+          return;
+        }
+        try {
+          await parentRepoD.deinitSubmodule(msg.submodulePath, msg.force);
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: true });
+        } catch (e: unknown) {
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'SUBMODULE_UPDATE': {
+        const parentRepoU = this.manager.getRepo(msg.parentRepoId);
+        if (!parentRepoU) {
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: false, error: 'Repo not found' });
+          return;
+        }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Updating submodule ${msg.submodulePath}`, cancellable: false },
+          async () => {
+            try {
+              await parentRepoU.updateSubmodule(msg.submodulePath, true, msg.recursive);
+              this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: true });
+              // Check if the submodule is now in detached HEAD (almost always true after update)
+              const subRepoId = require('path').join(parentRepoU.rootPath, msg.submodulePath);
+              const subRepo = this.manager.getRepo(subRepoId);
+              if (subRepo) {
+                const subStatus = await subRepo.getStatus().catch(() => null);
+                if (subStatus?.isDetachedHead) {
+                  this.post({ type: 'SUBMODULE_DETACHED_HEAD_WARNING', repoId: subRepoId, headCommit: subStatus.branch.detachedHash ?? subStatus.branch.detachedTag ?? 'HEAD' });
+                }
+              }
+            } catch (e: unknown) {
+              this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: false, error: String(e) });
+            }
+          }
+        );
+        break;
+      }
+
+      case 'NOTIFY_ERROR': {
+        vscode.window.showErrorMessage(`GitCharm: ${msg.message}`);
+        break;
+      }
+
+      case 'NOTIFY_INFO': {
+        vscode.window.showInformationMessage(`GitCharm: ${msg.message}`);
+        break;
+      }
+
+      case 'COMMIT_REVEAL_IN_EXPLORER': {
+        const repoRE = this.manager.getRepo(msg.repoId);
+        if (!repoRE) return;
+        const absPathRE = require('path').join(repoRE.rootPath, msg.filePath);
+        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(absPathRE));
+        break;
+      }
+
+      case 'COMMIT_REVEAL_IN_OS': {
+        const repoOS = this.manager.getRepo(msg.repoId);
+        if (!repoOS) return;
+        const absPathOS = require('path').join(repoOS.rootPath, msg.filePath);
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(absPathOS));
+        break;
+      }
     }
+  }
+
+  handleSubmoduleCommand(msg: import('../types/messages').CommitToHostMsg): void {
+    void this.handleMessage(msg, this.view!.webview);
   }
 
   refresh(): void {

@@ -93,6 +93,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
         this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
+      }),
+      this.manager.onReposChange(async () => {
+        const repos = this.manager.getRepoMetas();
+        const branches = await this.manager.getAllBranches();
+        this.post({ type: 'LOG_INIT_DATA', repos, branches });
+        if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
+        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
       })
     );
   }
@@ -284,6 +291,22 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } catch (e: unknown) {
           vscode.window.showErrorMessage(`GitCharm: Cannot open file: ${String(e)}`);
         }
+        break;
+      }
+
+      case 'LOG_REVEAL_IN_EXPLORER': {
+        const repoRE = this.manager.getRepo(msg.repoId);
+        if (!repoRE) return;
+        const pathRE = await import('path');
+        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(pathRE.join(repoRE.rootPath, msg.filePath)));
+        break;
+      }
+
+      case 'LOG_REVEAL_IN_OS': {
+        const repoOS = this.manager.getRepo(msg.repoId);
+        if (!repoOS) return;
+        const pathOS = await import('path');
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(pathOS.join(repoOS.rootPath, msg.filePath)));
         break;
       }
 

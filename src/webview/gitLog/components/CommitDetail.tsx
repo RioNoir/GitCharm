@@ -12,6 +12,10 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+const IS_MAC = navigator.userAgent.includes('Mac');
+const IS_WIN = navigator.userAgent.includes('Windows');
+const REVEAL_OS_LABEL = IS_MAC ? 'Reveal in Finder' : IS_WIN ? 'Show in Explorer' : 'Show in File Manager';
+
 interface FileContextMenuProps {
   x: number;
   y: number;
@@ -19,10 +23,12 @@ interface FileContextMenuProps {
   onShowDiff: () => void;
   onEditSource: () => void;
   onRevertFile: () => void;
+  onRevealExplorer: () => void;
+  onRevealOS: () => void;
   onClose: () => void;
 }
 
-function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onClose }: FileContextMenuProps) {
+function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onRevealExplorer, onRevealOS, onClose }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -93,6 +99,8 @@ function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onClose
       <Item icon="diff" label="Show Diff" onClick={onShowDiff} />
       <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
       <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
+      <Item icon="list-tree" label="Reveal in Explorer" onClick={onRevealExplorer} />
+      <Item icon="folder-opened" label="Reveal in File Manager" onClick={onRevealOS} />
     </div>
   );
 }
@@ -391,6 +399,18 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     setCtxMenu(null);
   }, [ctxMenu, commit]);
 
+  const handleCtxRevealExplorer = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    getVsCodeApi().postMessage({ type: 'LOG_REVEAL_IN_EXPLORER', repoId: commit.repoId, filePath: ctxMenu.file.path } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
+
+  const handleCtxRevealOS = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    getVsCodeApi().postMessage({ type: 'LOG_REVEAL_IN_OS', repoId: commit.repoId, filePath: ctxMenu.file.path } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
+
   function selectMergeCommit(c: MergeParentCommit) {
     if (selectedMergeHash === c.hash) {
       setSelectedMergeHash(null);
@@ -608,6 +628,8 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           onShowDiff={handleCtxShowDiff}
           onEditSource={handleCtxEditSource}
           onRevertFile={handleCtxRevertFile}
+          onRevealExplorer={handleCtxRevealExplorer}
+          onRevealOS={handleCtxRevealOS}
           onClose={() => setCtxMenu(null)}
         />
       )}

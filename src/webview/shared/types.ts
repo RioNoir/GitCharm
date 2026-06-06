@@ -21,6 +21,10 @@ export interface RepoMeta {
   name: string;
   rootPath: string;
   color: string;
+  isSubmodule?: boolean;
+  parentRepoId?: string;
+  submodulePath?: string;
+  depth?: number;
 }
 
 export interface BranchInfo {
@@ -65,7 +69,7 @@ export interface GraphLine {
 
 export type GitFileStatus =
   | 'modified' | 'added' | 'deleted' | 'renamed'
-  | 'copied' | 'untracked' | 'conflicted';
+  | 'copied' | 'untracked' | 'conflicted' | 'submodule';
 
 export interface FileStatus {
   repoId: string;

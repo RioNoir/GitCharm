@@ -95,10 +95,11 @@ const STATUS_COLORS: Record<string, string> = {
   untracked:  'var(--vscode-gitDecoration-untrackedResourceForeground)',
   conflicted: 'var(--vscode-gitDecoration-conflictingResourceForeground)',
   ignored:    'var(--vscode-gitDecoration-ignoredResourceForeground)',
+  submodule:  'var(--vscode-gitDecoration-submoduleResourceForeground)',
 };
 const STATUS_LETTERS: Record<string, string> = {
   modified: 'M', added: 'A', deleted: 'D', renamed: 'R',
-  untracked: 'U', conflicted: 'C', ignored: 'I',
+  untracked: 'U', conflicted: 'C', ignored: 'I', submodule: 'S',
 };
 
 // ── File row (no checkbox) ────────────────────────────────────────────────
@@ -127,11 +128,12 @@ function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, 
   const fileName = file.path.split('/').pop() ?? file.path;
   const dir = (() => { const p = file.path.split('/'); return p.length > 1 ? p.slice(0, -1).join('/') : ''; })();
   const [hovered, setHovered] = useState(false);
+  const isSubmodule = file.status === 'submodule';
 
   return (
     <div
       style={{ ...rowStyle(isSelected, isCtxActive, hovered), paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px` }}
-      onClick={() => onSelect(file)}
+      onClick={isSubmodule ? undefined : () => onSelect(file)}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, file); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -144,17 +146,19 @@ function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, 
       </div>
       <div style={rowActionsStyle}>
         {hovered && <>
-          {file.status === 'conflicted' && (
+          {!isSubmodule && file.status === 'conflicted' && (
             <button data-action-btn="" style={actionBtnStyle} title="Resolve Conflicts"
               onClick={e => { e.stopPropagation(); onResolveMerge(file); }}>
               <Codicon name="git-merge" />
             </button>
           )}
-          <button style={actionBtnStyle} title="Open file"
-            onClick={e => { e.stopPropagation(); onOpenFile(file); }}>
-            <Codicon name="go-to-file" />
-          </button>
-          {!staged && (
+          {!isSubmodule && (
+            <button style={actionBtnStyle} title="Open file"
+              onClick={e => { e.stopPropagation(); onOpenFile(file); }}>
+              <Codicon name="go-to-file" />
+            </button>
+          )}
+          {!isSubmodule && !staged && (
             <button data-action-btn="" style={actionBtnStyle} title="Rollback"
               onClick={e => { e.stopPropagation(); onRollback([file]); }}>
               <Codicon name="discard" />
@@ -287,9 +291,11 @@ interface RepoSubGroupProps {
   repoSelected?: boolean;
   onToggleRepoSelection?: () => void;
   singleRepo?: boolean;
+  isSubmodule?: boolean;
+  submodulePath?: string;
 }
 
-function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo }: RepoSubGroupProps) {
+function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
   const collapsed = isCollapsed(collapseKey);
@@ -340,6 +346,9 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
             <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />
             <span style={repoDotStyle(repoColor)} />
             <span style={repoNameStyle}>{repoName}</span>
+            {isSubmodule && (
+              <span style={submoduleBadgeStyle} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
+            )}
             <span
               style={branchBadgeStyle(branchClr)}
               onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
@@ -456,6 +465,8 @@ export function VscodeView({
           repoStatus={singleRepoStatus}
           repoName={singleMeta?.name ?? singleRepoStatus.repoId.split('/').pop() ?? singleRepoStatus.repoId}
           repoColor={singleMeta?.color ?? '#4ec9b0'}
+          isSubmodule={singleMeta?.isSubmodule}
+          submodulePath={singleMeta?.submodulePath}
           onBranchClick={onBranchClick}
           onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid, true)}
           onOpenAllChanges={onOpenAllChanges ?? (() => {})}
@@ -506,6 +517,8 @@ export function VscodeView({
             repoSelected={selectedRepos.has(r.repoId)}
             onToggleRepoSelection={() => onToggleRepoSelection(r.repoId)}
             singleRepo={isSingleRepo}
+            isSubmodule={meta?.isSubmodule}
+            submodulePath={meta?.submodulePath}
           />
         );
       })}
@@ -552,6 +565,8 @@ export function VscodeView({
             onBranchClick={onBranchClick}
             onOpenChanges={() => onOpenUnstagedChanges(r.repoId)}
             singleRepo={isSingleRepo}
+            isSubmodule={meta?.isSubmodule}
+            submodulePath={meta?.submodulePath}
           />
         );
       })}
@@ -725,4 +740,10 @@ const folderNameStyle: React.CSSProperties = {
 
 const dirCountStyle: React.CSSProperties = {
   fontSize: '11px', opacity: 0.5, marginLeft: '6px', flexShrink: 0, minWidth: '14px', textAlign: 'center',
+};
+
+const submoduleBadgeStyle: React.CSSProperties = {
+  fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.04em',
+  color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)',
+  borderRadius: '3px', padding: '1px 4px', flexShrink: 0, opacity: 0.75,
 };

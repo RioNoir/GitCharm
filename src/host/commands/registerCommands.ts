@@ -5,6 +5,7 @@ import { MergeEditorProvider } from '../panels/MergeEditorProvider';
 import { BranchStatusBar } from '../ui/BranchStatusBar';
 import { FileAnnotationController } from '../ui/FileAnnotationController';
 import { ProfileStatusBar } from '../ui/ProfileStatusBar';
+import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -14,6 +15,7 @@ export function registerCommands(
   branchStatusBar: BranchStatusBar,
   annotationController: FileAnnotationController,
   profileStatusBar: ProfileStatusBar,
+  manager?: WorkspaceGitManager,
 ): void {
   context.subscriptions.push(
     // Focus the Git Log panel in the bottom bar
@@ -73,7 +75,63 @@ export function registerCommands(
     vscode.commands.registerCommand('gitcharm.switchProfile', () => {
       profileStatusBar.switchProfile();
     }),
+
+    // ── Submodule commands ────────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.submodule.init', async (repoId?: string) => {
+      const sub = await pickSubmodule(manager, repoId, false);
+      if (!sub) return;
+      const reqId = Math.random().toString(36).slice(2);
+      commitPanel.handleSubmoduleCommand({ type: 'SUBMODULE_INIT', requestId: reqId, parentRepoId: sub.parentRepoId, submodulePath: sub.submodulePath });
+    }),
+
+    vscode.commands.registerCommand('gitcharm.submodule.update', async (repoId?: string) => {
+      const sub = await pickSubmodule(manager, repoId, true);
+      if (!sub) return;
+      const reqId = Math.random().toString(36).slice(2);
+      commitPanel.handleSubmoduleCommand({ type: 'SUBMODULE_UPDATE', requestId: reqId, parentRepoId: sub.parentRepoId, submodulePath: sub.submodulePath, recursive: false });
+    }),
+
+    vscode.commands.registerCommand('gitcharm.submodule.updateRecursive', async (repoId?: string) => {
+      const sub = await pickSubmodule(manager, repoId, true);
+      if (!sub) return;
+      const reqId = Math.random().toString(36).slice(2);
+      commitPanel.handleSubmoduleCommand({ type: 'SUBMODULE_UPDATE', requestId: reqId, parentRepoId: sub.parentRepoId, submodulePath: sub.submodulePath, recursive: true });
+    }),
+
+    vscode.commands.registerCommand('gitcharm.submodule.deinit', async (repoId?: string) => {
+      const sub = await pickSubmodule(manager, repoId, true);
+      if (!sub) return;
+      const reqId = Math.random().toString(36).slice(2);
+      commitPanel.handleSubmoduleCommand({ type: 'SUBMODULE_DEINIT', requestId: reqId, parentRepoId: sub.parentRepoId, submodulePath: sub.submodulePath, force: false });
+    }),
+
+    vscode.commands.registerCommand('gitcharm.submodule.deinitForce', async (repoId?: string) => {
+      const sub = await pickSubmodule(manager, repoId, true);
+      if (!sub) return;
+      const reqId = Math.random().toString(36).slice(2);
+      commitPanel.handleSubmoduleCommand({ type: 'SUBMODULE_DEINIT', requestId: reqId, parentRepoId: sub.parentRepoId, submodulePath: sub.submodulePath, force: true });
+    }),
+
+    vscode.commands.registerCommand('gitcharm.submodule.openInNewWindow', async (repoId?: string) => {
+      const metas = manager?.getRepoMetas().filter(m => m.isSubmodule) ?? [];
+      let target = repoId ? metas.find(m => m.id === repoId) : undefined;
+      if (!target && metas.length === 1) target = metas[0];
+      if (!target) {
+        const picked = await vscode.window.showQuickPick(
+          metas.map(m => ({ label: m.name, description: m.submodulePath, id: m.id })),
+          { title: 'Open Submodule in New Window', placeHolder: 'Select a submodule…' }
+        );
+        if (!picked) return;
+        target = metas.find(m => m.id === picked.id);
+      }
+      if (target) {
+        await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target.rootPath), { forceNewWindow: true });
+      }
+    }),
   );
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Track files with conflict markers so we know when they've been resolved
   const conflictedFiles = new Set<string>();
@@ -105,4 +163,29 @@ export function registerCommands(
       }
     }),
   );
+}
+
+async function pickSubmodule(
+  manager: WorkspaceGitManager | undefined,
+  repoId: string | undefined,
+  requireInitialized: boolean,
+): Promise<{ parentRepoId: string; submodulePath: string } | undefined> {
+  const metas = manager?.getRepoMetas().filter(m => m.isSubmodule) ?? [];
+  if (metas.length === 0) {
+    vscode.window.showInformationMessage('No submodules found in this workspace.');
+    return undefined;
+  }
+
+  let meta = repoId ? metas.find(m => m.id === repoId) : undefined;
+  if (!meta && metas.length === 1) meta = metas[0];
+  if (!meta) {
+    const picked = await vscode.window.showQuickPick(
+      metas.map(m => ({ label: m.name, description: m.submodulePath ?? '', id: m.id })),
+      { title: 'Select Submodule', placeHolder: 'Select a submodule…' }
+    );
+    if (!picked) return undefined;
+    meta = metas.find(m => m.id === picked.id);
+  }
+  if (!meta?.parentRepoId || !meta.submodulePath) return undefined;
+  return { parentRepoId: meta.parentRepoId, submodulePath: meta.submodulePath };
 }

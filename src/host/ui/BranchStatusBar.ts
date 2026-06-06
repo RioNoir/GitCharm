@@ -226,8 +226,9 @@ export class BranchStatusBar implements vscode.Disposable {
           } catch { /* */ }
         }
         const refIcon = isDetachedOnTag ? '$(tag)' : '$(git-branch)';
+        const repoIcon = meta.isSubmodule ? '$(package)' : '$(root-folder)';
         items.push({
-          label: `$(root-folder) ${meta.name}`,
+          label: `${repoIcon} ${meta.name}`,
           description: `${refIcon} ${branchName}${repoHasUnpushed ? '  $(arrow-up)' : ''}`,
           action: () => this.showRepoBranchMenu(meta),
         });
@@ -880,6 +881,35 @@ export class BranchStatusBar implements vscode.Disposable {
           action: () => this.showSingleTagActionMenu(tag.name, meta, effectiveBranchName, isDetached),
         });
       }
+    }
+
+    if (meta.isSubmodule) {
+      items.push({ label: 'SUBMODULE', kind: vscode.QuickPickItemKind.Separator, action: async () => {} });
+      items.push({
+        label: '$(repo-sync) Update',
+        description: `git submodule update ${meta.submodulePath ?? ''}`,
+        action: () => vscode.commands.executeCommand('gitcharm.submodule.update', meta.id),
+      });
+      items.push({
+        label: '$(repo-sync) Update (recursive)',
+        description: 'git submodule update --init --recursive',
+        action: () => vscode.commands.executeCommand('gitcharm.submodule.updateRecursive', meta.id),
+      });
+      items.push({
+        label: '$(add) Init',
+        description: 'Initialize this submodule',
+        action: () => vscode.commands.executeCommand('gitcharm.submodule.init', meta.id),
+      });
+      items.push({
+        label: '$(trash) Deinit',
+        description: 'Deinitialize this submodule',
+        action: () => vscode.commands.executeCommand('gitcharm.submodule.deinit', meta.id),
+      });
+      items.push({
+        label: '$(link-external) Open in New Window',
+        description: 'Open submodule folder in a separate VS Code window',
+        action: () => vscode.commands.executeCommand('gitcharm.submodule.openInNewWindow', meta.id),
+      });
     }
 
     const pick = await vscode.window.showQuickPick(items, {

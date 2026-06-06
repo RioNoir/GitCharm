@@ -67,7 +67,11 @@ export type HostToCommitMsg =
   | { type: 'STASH_OP_RESULT'; requestId: string; repoId: string; op: 'apply' | 'pop' | 'drop' | 'push'; ok: boolean; error?: string }
   | { type: 'PUSH_UNPUSHED_RESULT'; requestId: string; repoId: string; commits: UnpushedCommit[]; error?: string }
   | { type: 'COMMIT_SET_MESSAGE'; message: string }
-  | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' | 'vscode' };
+  | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' | 'vscode' }
+  | { type: 'SUBMODULE_OP_RESULT'; requestId: string; parentRepoId: string; submodulePath: string; op: 'init' | 'deinit' | 'update'; ok: boolean; error?: string }
+  | { type: 'SUBMODULE_PUSH_RESULT'; requestId: string; repoId: string; ok: boolean; error?: string }
+  | { type: 'SUBMODULE_PULL_RESULT'; requestId: string; repoId: string; ok: boolean; output?: string; error?: string }
+  | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -123,7 +127,16 @@ export type CommitToHostMsg =
   | { type: 'CHANGELISTS_MOVE_FILES_PROMPT'; files: Array<{ repoId: string; path: string }> }
   | { type: 'CHANGELISTS_SHELVE'; changelistId: string; requestId: string }
   | { type: 'CHANGELISTS_STASH'; changelistId: string; requestId: string }
-  | { type: 'COMMIT_SET_FILE_VIEW_MODE'; mode: 'flat' | 'tree' };
+  | { type: 'COMMIT_SET_FILE_VIEW_MODE'; mode: 'flat' | 'tree' }
+  | { type: 'SUBMODULE_INIT'; requestId: string; parentRepoId: string; submodulePath: string }
+  | { type: 'SUBMODULE_DEINIT'; requestId: string; parentRepoId: string; submodulePath: string; force?: boolean }
+  | { type: 'SUBMODULE_UPDATE'; requestId: string; parentRepoId: string; submodulePath: string; recursive?: boolean }
+  | { type: 'SUBMODULE_PUSH'; requestId: string; repoId: string }
+  | { type: 'SUBMODULE_PULL'; requestId: string; repoId: string; rebase?: boolean }
+  | { type: 'NOTIFY_ERROR'; message: string }
+  | { type: 'NOTIFY_INFO'; message: string }
+  | { type: 'COMMIT_REVEAL_IN_EXPLORER'; repoId: string; filePath: string }
+  | { type: 'COMMIT_REVEAL_IN_OS'; repoId: string; filePath: string };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 
@@ -203,7 +216,9 @@ export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMIT_BRANCHES'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_OPEN_COMMIT_BODY'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_SHOW_BRANCH_OPTIONS'; repoId: string; branchName: string }
-  | { type: 'LOG_CHECKOUT_COMMIT'; requestId: string; repoId: string; hash: string; branchName?: string };
+  | { type: 'LOG_CHECKOUT_COMMIT'; requestId: string; repoId: string; hash: string; branchName?: string }
+  | { type: 'LOG_REVEAL_IN_EXPLORER'; repoId: string; filePath: string }
+  | { type: 'LOG_REVEAL_IN_OS'; repoId: string; filePath: string };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 

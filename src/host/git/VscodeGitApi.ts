@@ -20,5 +20,13 @@ export function getVscodeGitApi(): API | undefined {
 export function getVscodeRepository(rootPath: string): Repository | undefined {
   const api = getApi();
   if (!api) return undefined;
-  return api.getRepository(vscode.Uri.file(rootPath)) ?? undefined;
+  const repo = api.getRepository(vscode.Uri.file(rootPath));
+  if (!repo) return undefined;
+  // Only use this repository if its root exactly matches the requested path.
+  // api.getRepository() returns the nearest ancestor repo, which may be the
+  // parent repo when querying a submodule path — causing operations to run
+  // against the wrong repository.
+  const repoRoot = repo.rootUri.fsPath.replace(/[/\\]+$/, '');
+  const requested = rootPath.replace(/[/\\]+$/, '');
+  return repoRoot === requested ? repo : undefined;
 }

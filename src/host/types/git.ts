@@ -3,6 +3,20 @@ export interface RepoMeta {
   name: string;
   rootPath: string;
   color: string;
+  isSubmodule?: boolean;
+  parentRepoId?: string;
+  submodulePath?: string;  // path relativo al repo padre
+  depth?: number;          // 0 = repo normale, 1 = submodule diretto, 2 = nested
+}
+
+export interface SubmoduleEntry {
+  name: string;
+  path: string;       // relativo al repo padre
+  url: string;
+  repoId: string;     // rootPath del submodule = suo repoId
+  initialized: boolean;
+  headCommit?: string;
+  isDirty: boolean;
 }
 
 export interface BranchInfo {
@@ -51,7 +65,8 @@ export type GitFileStatus =
   | 'renamed'
   | 'copied'
   | 'untracked'
-  | 'conflicted';
+  | 'conflicted'
+  | 'submodule';
 
 export interface FileStatus {
   repoId: string;

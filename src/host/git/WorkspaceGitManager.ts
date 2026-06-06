@@ -6,6 +6,8 @@ import { getVscodeGitApi } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
 import { PROJECT_COLORS } from '../types/workspace';
 
+const MAX_SUBMODULE_DEPTH = 5;
+
 type StatusListener = (status: WorkspaceStatus) => void;
 type BranchListener = () => void;
 
@@ -18,6 +20,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private globalListeners: vscode.Disposable[] = [];
   private statusListeners: StatusListener[] = [];
   private branchListeners: BranchListener[] = [];
+  private reposListeners: BranchListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
   private prevHeads = new Map<string, string>();      // repoId → branch name
@@ -85,21 +88,105 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const folders = vscode.workspace.workspaceFolders ?? [];
     const customColors = vscode.workspace.getConfiguration('gitcharm').get<Record<string, string>>('projectColors', {});
 
-    folders.forEach((folder, index) => {
+    // Shared counter so every repo (workspace folder OR submodule) gets its own
+    // palette slot — submodules are visually distinct, just like multi-repo.
+    const colorIdx = { value: 0 };
+    folders.forEach((folder) => {
       const gitDir = path.join(folder.uri.fsPath, '.git');
       if (fs.existsSync(gitDir)) {
         const repoId = folder.uri.fsPath;
-        const color = customColors[folder.name] ?? PROJECT_COLORS[index % PROJECT_COLORS.length];
-        const meta: RepoMeta = { id: repoId, name: folder.name, rootPath: folder.uri.fsPath, color };
+        const color = customColors[folder.name] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+        const meta: RepoMeta = { id: repoId, name: folder.name, rootPath: folder.uri.fsPath, color, depth: 0 };
         this.repoMetas.set(repoId, meta);
         this.repos.set(repoId, new GitService(repoId, folder.uri.fsPath));
         this.setupWatcher(folder.uri.fsPath, repoId);
+        this.discoverSubmodules(folder.uri.fsPath, repoId, 1, colorIdx, customColors);
+
+        // Always watch .gitmodules regardless of whether VS Code Git API is available —
+        // setupWatcher() returns early when vsRepo is found and skips the FileSystemWatcher fallback.
+        const gitmodulesWatcher = vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(folder.uri.fsPath, '.gitmodules')
+        );
+        const onGitmodulesChanged = () => { this.reinitialize(); this.scheduleRefresh(); };
+        gitmodulesWatcher.onDidChange(onGitmodulesChanged);
+        gitmodulesWatcher.onDidCreate(onGitmodulesChanged);
+        gitmodulesWatcher.onDidDelete(onGitmodulesChanged);
+        this.watchers.push(gitmodulesWatcher);
       }
     });
 
     const fetchOnStartup = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchOnStartup', false);
     if (fetchOnStartup) {
       this.fetchAll().catch(console.error);
+    }
+
+    // Notify listeners that the set of known repos has changed (e.g. submodule added/removed)
+    this.reposListeners.forEach(l => l());
+  }
+
+  private discoverSubmodules(
+    parentPath: string,
+    parentRepoId: string,
+    depth: number,
+    colorIdx: { value: number },
+    customColors: Record<string, string>,
+  ): void {
+    if (depth > MAX_SUBMODULE_DEPTH) return;
+
+    const gitmodulesPath = path.join(parentPath, '.gitmodules');
+    if (!fs.existsSync(gitmodulesPath)) return;
+
+    let raw: string;
+    try { raw = fs.readFileSync(gitmodulesPath, 'utf8'); } catch { return; }
+
+    // Parse submodule paths from .gitmodules
+    const subPaths: string[] = [];
+    let pendingPath = '';
+    for (const line of raw.split('\n')) {
+      if (line.match(/^\[submodule/)) { pendingPath = ''; continue; }
+      const kvMatch = line.match(/^\s+path\s*=\s*(.+)/);
+      if (kvMatch) pendingPath = kvMatch[1].trim();
+      const urlMatch = line.match(/^\s+url\s*=\s*(.+)/);
+      if (urlMatch && pendingPath) { subPaths.push(pendingPath); pendingPath = ''; }
+    }
+
+    for (const subRelPath of subPaths) {
+      const subAbsPath = path.join(parentPath, subRelPath);
+      const subGitDir = path.join(subAbsPath, '.git');
+
+      // Submodule may be uninitialized — .git may not exist yet
+      if (!fs.existsSync(subAbsPath)) continue;
+
+      // Avoid double-registering a path that's already a workspace folder
+      if (this.repos.has(subAbsPath)) continue;
+
+      // Guard against circular references
+      if (subAbsPath === parentPath || parentPath.startsWith(subAbsPath + path.sep)) continue;
+
+      const subName = path.basename(subRelPath);
+      // Each submodule gets its own color slot — same as a regular workspace folder.
+      const color = customColors[subName] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+
+      const meta: RepoMeta = {
+        id: subAbsPath,
+        name: subName,
+        rootPath: subAbsPath,
+        color,
+        isSubmodule: true,
+        parentRepoId,
+        submodulePath: subRelPath,
+        depth,
+      };
+      this.repoMetas.set(subAbsPath, meta);
+      this.repos.set(subAbsPath, new GitService(subAbsPath, subAbsPath));
+
+      // Only set up watcher if the submodule is initialized (has .git)
+      if (fs.existsSync(subGitDir)) {
+        this.setupWatcher(subAbsPath, subAbsPath);
+      }
+
+      // Recurse into nested submodules
+      this.discoverSubmodules(subAbsPath, subAbsPath, depth + 1, colorIdx, customColors);
     }
   }
 
@@ -150,6 +237,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const w3 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/refs/**'));
     // Working-tree: all three events (create, change, delete) — excludes .git itself
     const w4 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '**/*'));
+    // .gitmodules watcher is already created in reinitialize() for all workspace folders
 
     w1.onDidChange(onChanged); w1.onDidCreate(onChanged); w1.onDidDelete(onChanged);
     w2.onDidChange(onBranchChanged); w2.onDidCreate(onBranchChanged);
@@ -228,6 +316,13 @@ export class WorkspaceGitManager implements vscode.Disposable {
     });
   }
 
+  onReposChange(listener: BranchListener): vscode.Disposable {
+    this.reposListeners.push(listener);
+    return new vscode.Disposable(() => {
+      this.reposListeners = this.reposListeners.filter(l => l !== listener);
+    });
+  }
+
   private disposeWatchers(): void {
     this.watchers.forEach(d => d.dispose());
     this.watchers = [];
@@ -263,14 +358,46 @@ export class WorkspaceGitManager implements vscode.Disposable {
     return best;
   }
 
+  /**
+   * Build a map of repoId → Set of submodule relative paths registered under it.
+   * Used to reclassify those entries in the parent's file list as 'submodule'
+   * instead of 'modified', so the UI can display them with the correct letter.
+   */
+  private buildSubmodulePaths(): Map<string, Set<string>> {
+    const map = new Map<string, Set<string>>();
+    for (const meta of this.repoMetas.values()) {
+      if (!meta.isSubmodule || !meta.parentRepoId || !meta.submodulePath) continue;
+      if (!map.has(meta.parentRepoId)) map.set(meta.parentRepoId, new Set());
+      map.get(meta.parentRepoId)!.add(meta.submodulePath);
+    }
+    return map;
+  }
+
+  private applySubmoduleStatus(repos: import('../types/git').RepoStatus[]): import('../types/git').RepoStatus[] {
+    const submodulePaths = this.buildSubmodulePaths();
+    return repos.map(r => {
+      const paths = submodulePaths.get(r.repoId);
+      if (!paths || paths.size === 0) return r;
+      const reclassify = (f: import('../types/git').FileStatus) =>
+        paths.has(f.path) ? { ...f, status: 'submodule' as const } : f;
+      return {
+        ...r,
+        stagedFiles: r.stagedFiles.map(reclassify),
+        unstagedFiles: r.unstagedFiles.map(reclassify),
+      };
+    });
+  }
+
   async getAllStatuses(): Promise<WorkspaceStatus> {
     const results = await Promise.allSettled(
       Array.from(this.repos.values()).map(r => r.getStatus())
     );
     return {
-      repos: results
-        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<GitService['getStatus']>>> => r.status === 'fulfilled')
-        .map(r => r.value),
+      repos: this.applySubmoduleStatus(
+        results
+          .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<GitService['getStatus']>>> => r.status === 'fulfilled')
+          .map(r => r.value)
+      ),
     };
   }
 
@@ -280,9 +407,11 @@ export class WorkspaceGitManager implements vscode.Disposable {
       Array.from(this.repos.values()).map(r => r.getStatusFresh())
     );
     return {
-      repos: results
-        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<GitService['getStatus']>>> => r.status === 'fulfilled')
-        .map(r => r.value),
+      repos: this.applySubmoduleStatus(
+        results
+          .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<GitService['getStatus']>>> => r.status === 'fulfilled')
+          .map(r => r.value)
+      ),
     };
   }
 
