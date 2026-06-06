@@ -379,6 +379,33 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
         } catch (e: unknown) {
           const errMsg = String(e);
+          const isDirty = errMsg.includes('Your local changes') || errMsg.includes('overwritten by merge') || (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree';
+          if (isDirty) {
+            this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
+            const repoMeta = this.manager.getRepoMetas().find(m => m.id === msg.repoId);
+            const repoName = repoMeta?.name ?? msg.repoId;
+            const pick = await vscode.window.showQuickPick(
+              [
+                { label: '$(archive) Stash and merge', detail: 'Save local changes to stash, then merge', value: 'stash' },
+                { label: '$(close) Cancel', detail: '', value: 'cancel' },
+              ],
+              {
+                title: `GitCharm [${repoName}]: Uncommitted changes`,
+                placeHolder: `Local changes would be overwritten by merging "${msg.from}"`,
+                ignoreFocusOut: true,
+              }
+            );
+            if (pick?.value === 'stash') {
+              try {
+                await repo.stashPush(`WIP before merge of ${msg.from}`);
+                await repo.merge(msg.from);
+                this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+              } catch (e2: unknown) {
+                this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e2) });
+              }
+            }
+            break;
+          }
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT')) {
             repo.getCurrentBranch().then(current => {

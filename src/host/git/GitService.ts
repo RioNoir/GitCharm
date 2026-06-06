@@ -854,8 +854,8 @@ export class GitService {
   }
 
   async merge(from: string): Promise<void> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.merge(from); return; }
+    // Use simple-git directly: VS Code API rejects with DirtyWorkTree before
+    // attempting the merge, which prevents git from producing conflict markers.
     await this.git.merge([from]);
   }
 

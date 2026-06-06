@@ -1564,7 +1564,31 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             await repo.merge(from);
           } catch (e: unknown) {
-            errors.push(`${meta.name}: ${String(e)}`);
+            const errMsg = String(e);
+            const isDirty = errMsg.includes('Your local changes') || errMsg.includes('overwritten by merge') || (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree';
+            if (isDirty) {
+              const pick = await vscode.window.showQuickPick(
+                [
+                  { label: '$(archive) Stash and merge', detail: 'Save local changes to stash, then merge', value: 'stash' },
+                  { label: '$(close) Cancel', detail: '', value: 'cancel' },
+                ],
+                {
+                  title: `GitCharm [${meta.name}]: Uncommitted changes`,
+                  placeHolder: `Local changes would be overwritten by merging "${from}"`,
+                  ignoreFocusOut: true,
+                }
+              );
+              if (pick?.value === 'stash') {
+                try {
+                  await repo.stashPush(`WIP before merge of ${from}`);
+                  await repo.merge(from);
+                } catch (e2: unknown) {
+                  errors.push(`${meta.name}: ${String(e2)}`);
+                }
+              }
+            } else {
+              errors.push(`${meta.name}: ${errMsg}`);
+            }
           }
         }
         if (errors.length > 0) {
