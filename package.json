@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "RioNoir",
   "license": "MIT",
   "repository": {
