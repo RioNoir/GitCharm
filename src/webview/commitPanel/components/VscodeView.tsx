@@ -407,9 +407,12 @@ interface SectionHeaderProps {
   actionIcon: string;
   actionTitle: string;
   onAction: () => void;
+  openChangesIcon?: string;
+  openChangesTitle?: string;
+  onOpenChanges?: () => void;
 }
 
-function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction }: SectionHeaderProps) {
+function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, openChangesIcon, openChangesTitle, onOpenChanges }: SectionHeaderProps) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -425,6 +428,16 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
       </div>
       {/* Right side always rendered to avoid layout shift */}
       <div style={repoActionsStyle}>
+        {onOpenChanges && openChangesIcon && (
+          <button
+            data-action-btn=""
+            style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+            title={openChangesTitle}
+            onClick={e => { e.stopPropagation(); onOpenChanges(); }}
+          >
+            <Codicon name={openChangesIcon} />
+          </button>
+        )}
         <button
           data-action-btn=""
           style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
@@ -464,6 +477,7 @@ export function VscodeView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+      {/* ── Single-repo top header ── */}
       {singleRepoStatus && (
         <SingleRepoHeader
           repoStatus={singleRepoStatus}
@@ -476,6 +490,7 @@ export function VscodeView({
           onBranchClick={onBranchClick}
           onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid, true)}
           onOpenAllChanges={onOpenAllChanges ?? (() => {})}
+          hideOpenChanges
         />
       )}
 
@@ -490,6 +505,9 @@ export function VscodeView({
         actionIcon="remove"
         actionTitle="Unstage All"
         onAction={() => repos.forEach(r => onUnstageAll(r.repoId))}
+        openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
+        openChangesTitle={isSingleRepo ? 'Open Staged Changes' : undefined}
+        onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenStagedChanges(singleRepoStatus.repoId) : undefined}
       />
       {!stagedCollapsed && repos.map((r, idx) => {
         const meta = metaMap.get(r.repoId);
@@ -542,6 +560,9 @@ export function VscodeView({
         actionIcon="add"
         actionTitle="Stage All"
         onAction={() => repos.forEach(r => onStageAll(r.repoId))}
+        openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
+        openChangesTitle={isSingleRepo ? 'Open Changes' : undefined}
+        onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenUnstagedChanges(singleRepoStatus.repoId) : undefined}
       />
       {!unstagedCollapsed && repos.map((r, idx) => {
         const meta = metaMap.get(r.repoId);

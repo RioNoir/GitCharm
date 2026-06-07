@@ -198,9 +198,10 @@ interface SingleRepoHeaderProps {
   onBranchClick: (repoId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
   onOpenAllChanges: (repoId: string) => void;
+  hideOpenChanges?: boolean;
 }
 
-export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onBranchClick, onRepoContextMenu, onOpenAllChanges }: SingleRepoHeaderProps) {
+export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onBranchClick, onRepoContextMenu, onOpenAllChanges, hideOpenChanges }: SingleRepoHeaderProps) {
   const repoId = repoStatus.repoId;
   const branchClr = branchColor(repoStatus.branch.name);
   const [hovered, setHovered] = useState(false);
@@ -230,16 +231,18 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
           <Codicon name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
           <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
         </span>
-        <div style={styles.rightGroup}>
-          <button
-            data-action-btn=""
-            style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-            onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
-            title="Open all changes"
-          >
-            <Codicon name="diff-multiple" />
-          </button>
-        </div>
+        {!hideOpenChanges && (
+          <div style={styles.rightGroup}>
+            <button
+              data-action-btn=""
+              style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+              onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
+              title="Open all changes"
+            >
+              <Codicon name="diff-multiple" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

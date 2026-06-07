@@ -393,9 +393,9 @@ const row = {
   info: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
   name: { fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, display: 'flex', alignItems: 'center', gap: '6px' } as React.CSSProperties,
   branchBadge: {
-    fontSize: '10px', opacity: 0.6, flexShrink: 0,
+    fontSize: '9px', padding: '1px 5px', borderRadius: '3px', flexShrink: 0,
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
-    padding: '0 4px', borderRadius: '3px',
+    fontWeight: 'normal', letterSpacing: '0.03em',
   } as React.CSSProperties,
   meta: { display: 'flex', gap: '8px', marginTop: '2px' } as React.CSSProperties,
   fileCount: { fontSize: '10px', opacity: 0.5 },

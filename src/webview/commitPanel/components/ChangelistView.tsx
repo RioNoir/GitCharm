@@ -4,7 +4,6 @@ import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../../shared/t
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { ChangelistGroup } from './ChangelistGroup';
-import { SingleRepoHeader } from './ProjectGroup';
 
 interface Props {
   changelists: ChangelistData[];
@@ -48,7 +47,7 @@ export function ChangelistView({
   }
 
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
-  const multiRepo = repos.length > 1;
+  const multiRepo = repos.length >= 1;
 
   // For each changelist, compute which files (from the live git status) belong to it
   const changelistFiles = new Map<string, Map<string, FileStatus[]>>(); // clId → repoId → files
@@ -90,28 +89,11 @@ export function ChangelistView({
     onHeaderContextMenu(e, 'empty');
   };
 
-  const singleRepo = !multiRepo && repos.length === 1 ? repos[0] : null;
-  const singleMeta = singleRepo ? metaMap.get(singleRepo.repoId) : null;
-
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}
       onContextMenu={handleEmptyContextMenu}
     >
-      {singleRepo && (
-        <SingleRepoHeader
-          repoStatus={singleRepo}
-          repoName={singleMeta?.name ?? singleRepo.repoId.split('/').pop() ?? singleRepo.repoId}
-          repoColor={singleMeta?.color ?? '#4ec9b0'}
-          isSubmodule={singleMeta?.isSubmodule}
-          submodulePath={singleMeta?.submodulePath}
-          isWorktree={singleMeta?.isWorktree}
-          mainWorktreePath={singleMeta?.mainWorktreePath}
-          onBranchClick={onBranchClick}
-          onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid)}
-          onOpenAllChanges={onOpenChanges}
-        />
-      )}
       {changelists.map(cl => {
         const clMap = changelistFiles.get(cl.id) ?? new Map<string, FileStatus[]>();
         const repoGroups = Array.from(clMap.entries())

@@ -76,6 +76,23 @@ export class GitService {
       this.getCurrentBranch(),
     ]);
 
+    // Override aheadBehind with a direct git count — the VS Code API's HEAD.ahead/behind
+    // can lag behind after local operations (e.g. git reset) until it refreshes its state.
+    let freshBranchInfo = branchInfo;
+    if (branchInfo.upstream) {
+      try {
+        const [aheadRaw, behindRaw] = await Promise.all([
+          this.git.raw(['rev-list', '--count', '@{u}..HEAD']),
+          this.git.raw(['rev-list', '--count', 'HEAD..@{u}']),
+        ]);
+        const ahead = parseInt(aheadRaw.trim(), 10);
+        const behind = parseInt(behindRaw.trim(), 10);
+        if (!isNaN(ahead) && !isNaN(behind)) {
+          freshBranchInfo = { ...branchInfo, aheadBehind: { ahead, behind } };
+        }
+      } catch { /* upstream may be gone; keep branchInfo as-is */ }
+    }
+
     const stagedFiles: FileStatus[] = [];
     const unstagedFiles: FileStatus[] = [];
     let conflictCount = 0;
@@ -100,7 +117,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
   }
 
   private async getShortHash(): Promise<string | undefined> {

@@ -71,7 +71,7 @@ function CommitRow({ commit, repoId, isHead, onOpenInLog, onUndoCommit }: {
 
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, singleRepo }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -80,6 +80,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onToggle: (repoId: string) => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
+  singleRepo?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const rawName = repoMeta?.name ?? repoStatus.repoId.split('/').pop() ?? repoStatus.repoId;
@@ -98,15 +99,17 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
     <div style={styles.repoRoot}>
       {/* Repo header */}
       <div style={styles.repoHeader(repoColor)}>
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={!canCheck}
-          onChange={() => onToggle(repoStatus.repoId)}
-          onClick={e => e.stopPropagation()}
-          style={{ ...styles.checkbox, opacity: canCheck ? 1 : 0.35, cursor: canCheck ? 'pointer' : 'default' }}
-          title={!canCheck ? 'Nothing to push' : checked ? 'Exclude from push' : 'Include in push'}
-        />
+        {!singleRepo && (
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={!canCheck}
+            onChange={() => onToggle(repoStatus.repoId)}
+            onClick={e => e.stopPropagation()}
+            style={{ ...styles.checkbox, opacity: canCheck ? 1 : 0.35, cursor: canCheck ? 'pointer' : 'default' }}
+            title={!canCheck ? 'Nothing to push' : checked ? 'Exclude from push' : 'Include in push'}
+          />
+        )}
         <div style={styles.headerMain} onClick={() => setExpanded(e => !e)}>
           <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />
           <span style={styles.dot(repoColor)} />
@@ -160,6 +163,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
+  const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
 
   const canPushRepo = (r: RepoStatus) => {
@@ -186,6 +190,37 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
       return next;
     });
   };
+
+  // Single repo: push directly, no checkbox needed
+  if (isSingleRepo) {
+    const solo = repos[0];
+    const canPush = canPushRepo(solo);
+    const hasUpstream = !!solo.branch.upstream;
+    return (
+      <div style={css.root}>
+        <div style={css.list}>
+          <RepoSection
+            key={solo.repoId}
+            repoStatus={solo}
+            repoMeta={metaMap.get(solo.repoId)}
+            unpushed={unpushedMap[solo.repoId]}
+            checked={false}
+            canCheck={false}
+            onToggle={() => {}}
+            onOpenInLog={onOpenInLog}
+            onUndoCommit={onUndoCommit}
+            singleRepo
+          />
+        </div>
+        <div style={css.footer}>
+          <button style={css.pushBtn(canPush)} disabled={!canPush} onClick={() => onPush(solo.repoId)}>
+            <Codicon name="cloud-upload" style={{ marginRight: '6px' }} />
+            {!hasUpstream ? 'Publish Branch' : 'Push'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const checkedRepos = repos.filter(r => checked.has(r.repoId));
   const pushableChecked = checkedRepos.filter(canPushRepo);
