@@ -681,6 +681,21 @@ export class BranchStatusBar implements vscode.Disposable {
     await this.refresh();
   }
 
+  async fetchAll(): Promise<void> {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'GitCharm: Fetching all remotes…',
+        cancellable: false,
+      },
+      async () => {
+        await this.manager.fetchAll();
+      }
+    );
+    await this.refresh();
+    vscode.window.showInformationMessage('GitCharm: Fetch complete.');
+  }
+
   async updateProject(): Promise<void> {
     const pick = await vscode.window.showQuickPick(
       [

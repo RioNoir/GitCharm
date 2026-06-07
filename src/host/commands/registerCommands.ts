@@ -29,11 +29,8 @@ export function registerCommands(
       mergeEditor.openCurrentEditorFile();
     }),
 
-    vscode.commands.registerCommand('gitcharm.fetchAll', async () => {
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Fetching all remotes', cancellable: false },
-        async () => { /* delegated to panel message handler */ }
-      );
+    vscode.commands.registerCommand('gitcharm.fetchAll', () => {
+      return branchStatusBar.fetchAll();
     }),
 
     vscode.commands.registerCommand('gitcharm.showBranchMenu', (repoId?: string) => {
