@@ -29,6 +29,18 @@ export function registerCommands(
       mergeEditor.openCurrentEditorFile();
     }),
 
+    vscode.commands.registerCommand('gitcharm.commit', () => {
+      vscode.commands.executeCommand('gitcharm.commitPanel.focus');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.pull', () => {
+      return branchStatusBar.updateProject();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.push', () => {
+      return branchStatusBar.push();
+    }),
+
     vscode.commands.registerCommand('gitcharm.fetchAll', async () => {
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Fetching all remotes', cancellable: false },
