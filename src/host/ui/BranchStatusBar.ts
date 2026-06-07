@@ -615,6 +615,10 @@ export class BranchStatusBar implements vscode.Disposable {
     if (pick) await pick.action();
   }
 
+  async push(): Promise<void> {
+    await this.pushMenu(this.manager.getRepoMetas());
+  }
+
   private async pushMenu(metas: RepoMeta[]): Promise<void> {
     type RepoRemoteItem = vscode.QuickPickItem & { repoId: string; remote: string };
 
