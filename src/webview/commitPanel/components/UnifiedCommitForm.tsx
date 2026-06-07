@@ -226,16 +226,24 @@ export function UnifiedCommitForm({
             commitTargets.map(r => {
               const meta = metaMap.get(r.repoId);
               const color = meta?.color ?? '#4ec9b0';
+              const rawName = meta?.name ?? r.repoId.split('/').pop() ?? r.repoId;
+              const repoStatus = repoStatuses.find(rs => rs.repoId === r.repoId);
+              const wtBranch = meta?.isWorktree && repoStatus
+                ? (repoStatus.branch?.detachedTag ?? repoStatus.branch?.detachedHash ?? repoStatus.branch?.name)
+                : undefined;
+              const displayName = wtBranch
+                ? `${meta?.mainWorktreePath?.split('/').pop() ?? rawName} (${wtBranch})`
+                : rawName;
               return (
                 <span key={r.repoId} style={styles.targetPill(color)}>
                   <button
                     style={styles.pillRemove(color)}
-                    title={`Remove ${meta?.name ?? r.repoId} from commit`}
+                    title={`Remove ${displayName} from commit`}
                     onClick={() => onDeselectRepo(r.repoId)}
                   >
                     <Codicon name="close" style={{ fontSize: '10px' }} />
                   </button>
-                  {meta?.name ?? r.repoId.split('/').pop()}
+                  {displayName}
                   <span style={styles.pillCount}>{r.selectedCount}</span>
                 </span>
               );

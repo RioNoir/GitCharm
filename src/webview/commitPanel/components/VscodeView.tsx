@@ -293,9 +293,11 @@ interface RepoSubGroupProps {
   singleRepo?: boolean;
   isSubmodule?: boolean;
   submodulePath?: string;
+  isWorktree?: boolean;
+  mainWorktreePath?: string;
 }
 
-function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath }: RepoSubGroupProps) {
+function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
   const collapsed = isCollapsed(collapseKey);
@@ -345,17 +347,19 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           <div style={repoHeaderMainStyle} onClick={() => toggleCollapsed(collapseKey)}>
             <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />
             <span style={repoDotStyle(repoColor)} />
-            <span style={repoNameStyle}>{repoName}</span>
+            <span style={repoNameStyle}>
+              {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
+            </span>
             {isSubmodule && (
               <span style={submoduleBadgeStyle} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
             )}
             <span
               style={branchBadgeStyle(branchClr)}
               onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
-              title={repoStatus.branch.name}
+              title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
             >
-              <Codicon name="git-branch" style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
-              <span style={branchNameStyle}>{repoStatus.branch.name}</span>
+              <Codicon name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+              <span style={branchNameStyle}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
             </span>
           </div>
           {/* Right side always rendered to avoid layout shift */}
@@ -467,6 +471,8 @@ export function VscodeView({
           repoColor={singleMeta?.color ?? '#4ec9b0'}
           isSubmodule={singleMeta?.isSubmodule}
           submodulePath={singleMeta?.submodulePath}
+          isWorktree={singleMeta?.isWorktree}
+          mainWorktreePath={singleMeta?.mainWorktreePath}
           onBranchClick={onBranchClick}
           onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid, true)}
           onOpenAllChanges={onOpenAllChanges ?? (() => {})}
@@ -519,6 +525,8 @@ export function VscodeView({
             singleRepo={isSingleRepo}
             isSubmodule={meta?.isSubmodule}
             submodulePath={meta?.submodulePath}
+            isWorktree={meta?.isWorktree}
+            mainWorktreePath={meta?.mainWorktreePath}
           />
         );
       })}
@@ -567,6 +575,8 @@ export function VscodeView({
             singleRepo={isSingleRepo}
             isSubmodule={meta?.isSubmodule}
             submodulePath={meta?.submodulePath}
+            isWorktree={meta?.isWorktree}
+            mainWorktreePath={meta?.mainWorktreePath}
           />
         );
       })}
@@ -602,7 +612,7 @@ const sectionHeaderMainStyle: React.CSSProperties = {
   fontWeight: 'bold',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  color: 'var(--vscode-sideBarSectionHeader-foreground)',
+  color: 'var(--vscode-foreground)',
   userSelect: 'none',
 };
 
@@ -646,7 +656,7 @@ const repoHeaderMainStyle: React.CSSProperties = {
   fontWeight: 'bold',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  color: 'var(--vscode-sideBarSectionHeader-foreground)',
+  color: 'var(--vscode-foreground)',
   userSelect: 'none',
   minWidth: 0,
   overflow: 'hidden',

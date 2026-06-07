@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GitService } from './GitService';
+import type { WorktreeEntry } from './GitService';
 import { getVscodeGitApi } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
 import { PROJECT_COLORS } from '../types/workspace';
@@ -10,6 +11,9 @@ const MAX_SUBMODULE_DEPTH = 5;
 
 type StatusListener = (status: WorkspaceStatus) => void;
 type BranchListener = () => void;
+type WorktreeListener = (repoId: string) => void;
+
+export type { WorktreeEntry };
 
 export class WorkspaceGitManager implements vscode.Disposable {
   private repos = new Map<string, GitService>();
@@ -21,6 +25,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private statusListeners: StatusListener[] = [];
   private branchListeners: BranchListener[] = [];
   private reposListeners: BranchListener[] = [];
+  private worktreeListeners: WorktreeListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
   private prevHeads = new Map<string, string>();      // repoId → branch name
@@ -96,7 +101,34 @@ export class WorkspaceGitManager implements vscode.Disposable {
       if (fs.existsSync(gitDir)) {
         const repoId = folder.uri.fsPath;
         const color = customColors[folder.name] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
-        const meta: RepoMeta = { id: repoId, name: folder.name, rootPath: folder.uri.fsPath, color, depth: 0 };
+
+        // Detect linked worktree: .git is a file (not a directory) containing
+        // "gitdir: /path/to/main/.git/worktrees/<name>"
+        let isWorktree = false;
+        let mainWorktreePath: string | undefined;
+        const gitStat = fs.statSync(gitDir);
+        if (gitStat.isFile()) {
+          try {
+            const content = fs.readFileSync(gitDir, 'utf8').trim();
+            const match = content.match(/^gitdir:\s*(.+)$/m);
+            if (match) {
+              // e.g. /abs/path/main/.git/worktrees/foo → strip /.git/worktrees/foo
+              const gitdirPath = match[1].trim();
+              const worktreesIdx = gitdirPath.indexOf(`${path.sep}.git${path.sep}worktrees${path.sep}`);
+              if (worktreesIdx !== -1) {
+                mainWorktreePath = gitdirPath.slice(0, worktreesIdx);
+              }
+            }
+          } catch { /* ignore */ }
+          // Only treat as worktree if the main repo is also open in this workspace.
+          // If opened standalone, behave as a normal repo.
+          const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+          if (mainWorktreePath && workspacePaths.includes(mainWorktreePath)) {
+            isWorktree = true;
+          }
+        }
+
+        const meta: RepoMeta = { id: repoId, name: folder.name, rootPath: folder.uri.fsPath, color, depth: 0, isWorktree, mainWorktreePath };
         this.repoMetas.set(repoId, meta);
         this.repos.set(repoId, new GitService(repoId, folder.uri.fsPath));
         this.setupWatcher(folder.uri.fsPath, repoId);
@@ -112,6 +144,18 @@ export class WorkspaceGitManager implements vscode.Disposable {
         gitmodulesWatcher.onDidCreate(onGitmodulesChanged);
         gitmodulesWatcher.onDidDelete(onGitmodulesChanged);
         this.watchers.push(gitmodulesWatcher);
+
+        // Watch .git/worktrees/ so the panel updates when worktrees are added/removed
+        const worktreesDir = path.join(folder.uri.fsPath, '.git', 'worktrees');
+        const worktreeWatcher = vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(worktreesDir, '**')
+        );
+        const repoIdForWorktree = repoId;
+        const onWorktreesChanged = () => { this.worktreeListeners.forEach(l => l(repoIdForWorktree)); };
+        worktreeWatcher.onDidChange(onWorktreesChanged);
+        worktreeWatcher.onDidCreate(onWorktreesChanged);
+        worktreeWatcher.onDidDelete(onWorktreesChanged);
+        this.watchers.push(worktreeWatcher);
       }
     });
 
@@ -321,6 +365,45 @@ export class WorkspaceGitManager implements vscode.Disposable {
     return new vscode.Disposable(() => {
       this.reposListeners = this.reposListeners.filter(l => l !== listener);
     });
+  }
+
+  onWorktreeChange(listener: WorktreeListener): vscode.Disposable {
+    this.worktreeListeners.push(listener);
+    return new vscode.Disposable(() => {
+      this.worktreeListeners = this.worktreeListeners.filter(l => l !== listener);
+    });
+  }
+
+  async getWorktrees(repoId: string): Promise<WorktreeEntry[]> {
+    const repo = this.repos.get(repoId);
+    if (!repo) return [];
+    try { return await repo.getWorktrees(); } catch { return []; }
+  }
+
+  async getAllWorktrees(): Promise<Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }>> {
+    const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+    const results: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> = [];
+    for (const [repoId, repo] of this.repos) {
+      const meta = this.repoMetas.get(repoId);
+      if (!meta) continue;
+      // Only include top-level non-worktree repos — linked worktrees appear under their main repo
+      if ((meta.depth ?? 0) > 0) continue;
+      if (meta.isWorktree) continue;
+      // Detect standalone linked worktree: .git is a file even though isWorktree is false
+      // (isWorktree is false when the main repo is not in the same workspace)
+      const gitDir = path.join(repoId, '.git');
+      const isLinkedWorktree = fs.existsSync(gitDir) && fs.statSync(gitDir).isFile();
+      try {
+        const worktrees = (await repo.getWorktrees()).map(w => ({
+          ...w,
+          isInWorkspace: workspacePaths.some(wp => w.path === wp || w.path.startsWith(wp + path.sep)),
+        }));
+        results.push({ repoId, repoName: meta.name, repoColor: meta.color, worktrees, isLinkedWorktree });
+      } catch {
+        results.push({ repoId, repoName: meta.name, repoColor: meta.color, worktrees: [], isLinkedWorktree });
+      }
+    }
+    return results;
   }
 
   private disposeWatchers(): void {

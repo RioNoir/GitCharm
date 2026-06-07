@@ -88,15 +88,15 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // because resolveWebviewView performs an explicit initial sync when the panel first opens.
     this.managerListeners.push(
       this.manager.onBranchChange(async () => {
-        const repos = this.manager.getRepoMetas();
-        const branches = await this.manager.getAllBranches();
+        const repos = this.getNonWorktreeRepos();
+        const branches = await this.getFilteredBranches();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
         this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
       }),
       this.manager.onReposChange(async () => {
-        const repos = this.manager.getRepoMetas();
-        const branches = await this.manager.getAllBranches();
+        const repos = this.getNonWorktreeRepos();
+        const branches = await this.getFilteredBranches();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
         this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
@@ -134,7 +134,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.colorTheme')) {
           if (this.view) {
             loadIconTheme(this.view.webview).then(iconTheme => {
-              this.post({ type: 'LOG_INIT_DATA', repos: this.manager.getRepoMetas(), branches: [], iconTheme });
+              this.post({ type: 'LOG_INIT_DATA', repos: this.getNonWorktreeRepos(), branches: [], iconTheme });
             });
           }
         }
@@ -168,15 +168,25 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.view?.webview.postMessage(msg);
   }
 
+  private getNonWorktreeRepos() {
+    return this.manager.getRepoMetas().filter(m => !m.isWorktree);
+  }
+
+  private async getFilteredBranches() {
+    const ids = new Set(this.getNonWorktreeRepos().map(r => r.id));
+    const all = await this.manager.getAllBranches();
+    return all.filter(b => ids.has(b.repoId));
+  }
+
   private async handleMessage(msg: LogToHostMsg): Promise<void> {
     switch (msg.type) {
       case 'LOG_REQUEST_COMMITS': {
         const maxCommits = vscode.workspace.getConfiguration('gitcharm').get<number>('graphMaxCommits', 1000);
         const limit = Math.min(msg.limit, maxCommits);
 
-        const repos = this.manager.getRepoMetas();
+        const repos = this.getNonWorktreeRepos();
         const [branches, iconTheme] = await Promise.all([
-          this.manager.getAllBranches(),
+          this.getFilteredBranches(),
           this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
@@ -190,7 +200,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }).catch(() => {});
         }
 
-        const commits = await this.manager.getInterleavedLog(msg.repoIds, limit, msg.skip, {
+        const logRepoIds = msg.repoIds.length > 0
+          ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree)
+          : this.getNonWorktreeRepos().map(r => r.id);
+        const commits = await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
           filterText: msg.filterText,
           filterAuthor: msg.filterAuthor,
           filterBranch: msg.filterBranch,
@@ -405,7 +418,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const isDirty = errMsg.includes('Your local changes') || errMsg.includes('overwritten by merge') || (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree';
           if (isDirty) {
             this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
-            const repoMeta = this.manager.getRepoMetas().find(m => m.id === msg.repoId);
+            const repoMeta = this.getNonWorktreeRepos().find(m => m.id === msg.repoId);
             const repoName = repoMeta?.name ?? msg.repoId;
             const pick = await vscode.window.showQuickPick(
               [
@@ -487,12 +500,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           if (!repo) continue;
           const current = await repo.getCurrentBranch().catch(() => null);
           if (current && (current.name === msg.branchName || current.detachedTag === msg.branchName)) {
-            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
             checkedOutIn.push(meta?.name ?? repoId);
           }
         }
         const eligibleRepoIds = msg.repoIds.filter(id => {
-          const meta = this.manager.getRepoMetas().find(m => m.id === id);
+          const meta = this.getNonWorktreeRepos().find(m => m.id === id);
           return !checkedOutIn.includes(meta?.name ?? id);
         });
         if (eligibleRepoIds.length === 0) {
@@ -522,7 +535,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             const branches = await repo.getBranches();
             this.post({ type: 'LOG_REFS_UPDATE', repoId, branches });
           } catch (e: unknown) {
-            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
             errors.push(`${meta?.name ?? repoId}: ${String(e)}`);
           }
         }
@@ -541,8 +554,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Fetching all', cancellable: false },
           async () => { await this.manager.fetchAll(); }
         );
-        const branches = await this.manager.getAllBranches();
-        const repos = this.manager.getRepoMetas();
+        const branches = await this.getFilteredBranches();
+        const repos = this.getNonWorktreeRepos();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         this.post({ type: 'LOG_REFRESH' });
         break;
@@ -1064,12 +1077,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           if (!repo) continue;
           const current = await repo.getCurrentBranch().catch(() => null);
           if (current?.detachedTag === msg.tagName) {
-            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
             checkedOutTagIn.push(meta?.name ?? repoId);
           }
         }
         const eligibleRepoIds = msg.repoIds.filter(id => {
-          const meta = this.manager.getRepoMetas().find(m => m.id === id);
+          const meta = this.getNonWorktreeRepos().find(m => m.id === id);
           return !checkedOutTagIn.includes(meta?.name ?? id);
         });
         if (eligibleRepoIds.length === 0) {
@@ -1104,7 +1117,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             const rawTags = await repo.getTags();
             this.post({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
           } catch (e: unknown) {
-            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
             errors.push(`${meta?.name ?? repoId}: ${String(e)}`);
           }
         }
@@ -1186,7 +1199,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           try {
             await repo.mergeTag(msg.tagName);
           } catch (e: unknown) {
-            const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+            const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
             errors.push(`${meta?.name ?? repoId}: ${String(e)}`);
           }
         }

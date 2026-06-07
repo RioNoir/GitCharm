@@ -11,6 +11,8 @@ interface Props {
   repoName: string;
   repoColor: string;
   multiRepo: boolean;
+  worktreeBranch?: string;
+  mainRepoName?: string;
   stashes: StashEntry[];
   loading: boolean;
   error: string | null;
@@ -308,6 +310,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onOpenFileD
 
 export function StashTab({
   repoId, repoName, repoColor, multiRepo,
+  worktreeBranch, mainRepoName,
   stashes, loading, error, viewMode,
   onApply, onPop, onDrop, onRequestList, onOpenFileDiff,
   expandAll = false,
@@ -317,7 +320,13 @@ export function StashTab({
       {multiRepo && (
         <div style={css.repoHeader(repoColor)}>
           <span style={css.dot(repoColor)} />
-          <span style={css.repoName}>{repoName}</span>
+          <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
+          {worktreeBranch && (
+            <span style={css.worktreeBadge}>
+              <Codicon name="repo-clone" style={{ fontSize: '11px', marginRight: '3px' }} />
+              {worktreeBranch}
+            </span>
+          )}
         </div>
       )}
       {error && (
@@ -356,11 +365,13 @@ export type { Props as StashTabProps };
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
   repoHeader: (color: string): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px',
+    display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
     background: color + '14', borderBottom: '1px solid var(--vscode-panel-border)',
+    boxSizing: 'border-box',
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
   repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
+  worktreeBadge: { display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em', color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)', borderRadius: '3px', padding: '1px 5px 1px 4px', flexShrink: 0, opacity: 0.75 } as React.CSSProperties,
   errorRow: {
     display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',

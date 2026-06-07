@@ -129,6 +129,44 @@ export function registerCommands(
         await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target.rootPath), { forceNewWindow: true });
       }
     }),
+
+    // ── Worktree commands ─────────────────────────────────────────────────────
+    vscode.commands.registerCommand('gitcharm.worktree.add', async () => {
+      if (!commitPanel) return;
+      // Determine which repo to use
+      const metas = manager?.getRepoMetas().filter(m => (m.depth ?? 0) === 0) ?? [];
+      let repoId: string | undefined;
+      if (metas.length === 1) {
+        repoId = metas[0].id;
+      } else if (metas.length > 1) {
+        const picked = await vscode.window.showQuickPick(
+          metas.map(m => ({ label: m.name, description: m.rootPath, id: m.id })),
+          { title: 'New Worktree — Select Repository', placeHolder: 'Select a repository…' }
+        );
+        if (!picked) return;
+        repoId = picked.id;
+      }
+      if (!repoId) return;
+      commitPanel.handleSubmoduleCommand({ type: 'WORKTREE_CREATE_PROMPT', repoId });
+    }),
+
+    vscode.commands.registerCommand('gitcharm.worktree.prune', async () => {
+      if (!commitPanel) return;
+      const metas = manager?.getRepoMetas().filter(m => (m.depth ?? 0) === 0) ?? [];
+      let repoId: string | undefined;
+      if (metas.length === 1) {
+        repoId = metas[0].id;
+      } else if (metas.length > 1) {
+        const picked = await vscode.window.showQuickPick(
+          metas.map(m => ({ label: m.name, description: m.rootPath, id: m.id })),
+          { title: 'Prune Worktrees — Select Repository', placeHolder: 'Select a repository…' }
+        );
+        if (!picked) return;
+        repoId = picked.id;
+      }
+      if (!repoId) return;
+      commitPanel.handleSubmoduleCommand({ type: 'WORKTREE_PRUNE', requestId: Math.random().toString(36).slice(2), repoId });
+    }),
   );
 
   // ─────────────────────────────────────────────────────────────────────────

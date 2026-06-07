@@ -1443,4 +1443,92 @@ export class GitService {
       }
     }
   }
+
+  // ─── Worktree operations ──────────────────────────────────────────────────
+
+  async getWorktrees(): Promise<WorktreeEntry[]> {
+    const raw = await this.git.raw(['worktree', 'list', '--porcelain']);
+    return parseWorktreePorcelain(raw, this.rootPath);
+  }
+
+  async createWorktree(worktreePath: string, opts: { branch?: string; newBranch?: string; commitish?: string; noTrack?: boolean }): Promise<void> {
+    const args = ['worktree', 'add'];
+    if (opts.newBranch) {
+      args.push('-b', opts.newBranch);
+    } else if (opts.branch) {
+      // checkout existing branch — no -b flag, just add path + branch
+    }
+    if (opts.noTrack) args.push('--no-track');
+    args.push(worktreePath);
+    if (opts.branch) args.push(opts.branch);
+    else if (opts.commitish) args.push(opts.commitish);
+    await this.git.raw(args);
+  }
+
+  async deleteWorktree(worktreePath: string, force = false): Promise<void> {
+    const args = ['worktree', 'remove'];
+    if (force) args.push('--force');
+    args.push(worktreePath);
+    await this.git.raw(args);
+  }
+
+  async pruneWorktrees(): Promise<void> {
+    await this.git.raw(['worktree', 'prune']);
+  }
+
+  async lockWorktree(worktreePath: string, reason?: string): Promise<void> {
+    const args = ['worktree', 'lock'];
+    if (reason) args.push('--reason', reason);
+    args.push(worktreePath);
+    await this.git.raw(args);
+  }
+
+  async unlockWorktree(worktreePath: string): Promise<void> {
+    await this.git.raw(['worktree', 'unlock', worktreePath]);
+  }
+}
+
+// ─── Worktree types & parser ──────────────────────────────────────────────────
+
+export interface WorktreeEntry {
+  path: string;
+  head: string;       // commit hash
+  branch: string;     // refs/heads/... or empty if detached
+  isMain: boolean;
+  isDetached: boolean;
+  isBare: boolean;
+  isLocked: boolean;
+  lockReason?: string;
+  isPrunable: boolean;
+  branchShort: string; // just the branch name without refs/heads/
+  isInWorkspace: boolean; // path is inside a VS Code workspace folder
+}
+
+function parseWorktreePorcelain(raw: string, mainPath: string): WorktreeEntry[] {
+  const entries: WorktreeEntry[] = [];
+  const blocks = raw.trim().split(/\n\n+/);
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+    const lines = block.split('\n');
+    const entry: Partial<WorktreeEntry> = { isLocked: false, isPrunable: false };
+    for (const line of lines) {
+      if (line.startsWith('worktree '))      entry.path = line.slice(9).trim();
+      else if (line.startsWith('HEAD '))     entry.head = line.slice(5).trim();
+      else if (line.startsWith('branch '))   entry.branch = line.slice(7).trim();
+      else if (line === 'bare')              entry.isBare = true;
+      else if (line === 'detached')          entry.isDetached = true;
+      else if (line.startsWith('locked'))    { entry.isLocked = true; entry.lockReason = line.slice(6).trim() || undefined; }
+      else if (line.startsWith('prunable'))  entry.isPrunable = true;
+    }
+    if (!entry.path) continue;
+    // The main worktree always has .git as a directory; linked worktrees have .git as a file.
+    const gitDir = path.join(entry.path, '.git');
+    entry.isMain = (() => { try { return fs.statSync(gitDir).isDirectory(); } catch { return false; } })();
+    entry.isBare = entry.isBare ?? false;
+    entry.isDetached = entry.isDetached ?? false;
+    entry.isInWorkspace = false;
+    entry.branchShort = entry.branch ? entry.branch.replace(/^refs\/heads\//, '') : '';
+    entries.push(entry as WorktreeEntry);
+  }
+  return entries;
 }

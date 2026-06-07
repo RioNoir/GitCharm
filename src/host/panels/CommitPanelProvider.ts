@@ -64,6 +64,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         this.post({ type: 'COMMIT_BRANCHES_UPDATE', repoId: meta.id, branches });
       }
     });
+
+    this.manager.onWorktreeChange(async () => {
+      const repos = await this.manager.getAllWorktrees();
+      this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+    });
   }
 
   /**
@@ -1411,6 +1416,187 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             }
           }
         );
+        break;
+      }
+
+      case 'WORKTREE_REQUEST_LIST': {
+        const repos = await this.manager.getAllWorktrees();
+        this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+        break;
+      }
+
+      case 'WORKTREE_CREATE_PROMPT': {
+        const repoCP = this.manager.getRepo(msg.repoId);
+        if (!repoCP) return;
+
+        const nodePath = require('path') as typeof import('path');
+
+        // Step 1: pick branch or "new branch"
+        const branches = await repoCP.getBranches();
+        const NEW_BRANCH_ID = '__new__';
+        const branchItems: Array<{ label: string; description?: string; branchName: string; isNew?: boolean }> = [
+          { label: '$(add) Create new branch…', branchName: NEW_BRANCH_ID, isNew: true },
+          ...branches.map(b => ({
+            label: b.isRemote ? `$(cloud) ${b.name}` : `$(git-branch) ${b.name}`,
+            description: b.isHead ? '(current)' : undefined,
+            branchName: b.name,
+          })),
+        ];
+        const picked = await vscode.window.showQuickPick(branchItems, {
+          placeHolder: 'Select branch for new worktree',
+          title: 'New Worktree — Branch',
+          matchOnDescription: true,
+        });
+        if (!picked) return;
+
+        // If "new branch" chosen, ask for the name
+        let newBranchName: string | undefined;
+        let baseBranchName = picked.branchName;
+        if (picked.isNew) {
+          const input = await vscode.window.showInputBox({
+            prompt: 'New branch name',
+            placeHolder: 'e.g. feature/my-feature',
+            title: 'New Worktree — New Branch Name',
+          });
+          if (!input?.trim()) return;
+          newBranchName = input.trim();
+          baseBranchName = newBranchName;
+        }
+
+        // Step 2: worktree path — format: <repo-folder-name>--<branch-name>
+        const repoParent = nodePath.dirname(repoCP.rootPath);
+        const repoFolderName = nodePath.basename(repoCP.rootPath);
+        const defaultPath = nodePath.join(repoParent, `${repoFolderName}--${baseBranchName.replace(/\//g, '-')}`);
+        const worktreePath = await vscode.window.showInputBox({
+          prompt: 'Path for the new worktree directory',
+          value: defaultPath,
+          title: 'New Worktree — Directory Path',
+        });
+        if (!worktreePath?.trim()) return;
+
+        try {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Creating worktree…', cancellable: false },
+            async () => {
+              await repoCP.createWorktree(worktreePath.trim(), {
+                branch: picked.isNew ? undefined : picked.branchName,
+                newBranch: newBranchName,
+              });
+            }
+          );
+          const repos = await this.manager.getAllWorktrees();
+          this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+          vscode.window.showInformationMessage(`GitCharm: Worktree created at ${worktreePath.trim()}`);
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`GitCharm: Failed to create worktree — ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'WORKTREE_CREATE': {
+        const repoWC = this.manager.getRepo(msg.repoId);
+        if (!repoWC) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await repoWC.createWorktree(msg.worktreePath, { branch: msg.branch, newBranch: msg.newBranch, commitish: msg.commitish, noTrack: msg.noTrack });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: true });
+          const repos = await this.manager.getAllWorktrees();
+          this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+        } catch (e: unknown) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'WORKTREE_DELETE': {
+        const repoWD = this.manager.getRepo(msg.repoId);
+        if (!repoWD) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await repoWD.deleteWorktree(msg.worktreePath, msg.force);
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: true });
+          const repos = await this.manager.getAllWorktrees();
+          this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+        } catch (e: unknown) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'WORKTREE_PRUNE': {
+        const repoWP = this.manager.getRepo(msg.repoId);
+        if (!repoWP) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await repoWP.pruneWorktrees();
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: true });
+          const repos = await this.manager.getAllWorktrees();
+          this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+        } catch (e: unknown) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'WORKTREE_LOCK': {
+        const repoWL = this.manager.getRepo(msg.repoId);
+        if (!repoWL) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await repoWL.lockWorktree(msg.worktreePath, msg.reason);
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: true });
+          const repos = await this.manager.getAllWorktrees();
+          this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+        } catch (e: unknown) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'WORKTREE_UNLOCK': {
+        const repoWU = this.manager.getRepo(msg.repoId);
+        if (!repoWU) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: false, error: 'Repo not found' });
+          return;
+        }
+        try {
+          await repoWU.unlockWorktree(msg.worktreePath);
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: true });
+          const repos = await this.manager.getAllWorktrees();
+          this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+        } catch (e: unknown) {
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'WORKTREE_OPEN_IN_EXPLORER': {
+        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(msg.worktreePath));
+        break;
+      }
+
+      case 'WORKTREE_OPEN_IN_NEW_WINDOW': {
+        await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(msg.worktreePath), { forceNewWindow: true });
+        break;
+      }
+
+      case 'WORKTREE_OPEN_IN_OS': {
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(msg.worktreePath));
+        break;
+      }
+
+      case 'WORKTREE_ADD_TO_WORKSPACE': {
+        const uri = vscode.Uri.file(msg.worktreePath);
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        vscode.workspace.updateWorkspaceFolders(folders.length, 0, { uri });
         break;
       }
 

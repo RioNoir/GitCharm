@@ -9,9 +9,10 @@ import { ContextMenu, type ContextMenuEntry } from './components/ContextMenu';
 import { ShelvePanel } from './components/ShelvePanel';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
+import { WorktreePanel } from './components/WorktreePanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
-import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit } from '../shared/msgTypes';
+import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 
@@ -192,7 +193,7 @@ const CHANGELIST_HEADER_ITEMS_CUSTOM: ContextMenuEntry[] = [
   { id: 'refresh',     label: 'Refresh',           icon: 'refresh' },
 ];
 
-type TabId = 'changes' | 'shelf' | 'stash' | 'push';
+type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree';
 
 function App() {
   const store = useCommitStore();
@@ -211,6 +212,11 @@ function App() {
   const [stashLoading, setStashLoading] = useState<Record<string, boolean>>({});
   const [stashError, setStashError]   = useState<Record<string, string | null>>({});
   const [stashExpandAll, setStashExpandAll] = useState(false);
+
+  // ── Worktree state ────────────────────────────────────────────────────────
+  const [worktreeRepos, setWorktreeRepos] = useState<Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }>>([]);
+  const [worktreeLoading, setWorktreeLoading] = useState(false);
+  const [worktreeError, setWorktreeError] = useState<string | null>(null);
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -426,6 +432,15 @@ function App() {
         case 'SUBMODULE_PULL_RESULT':
           if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
+
+        case 'WORKTREE_LIST_RESULT':
+          setWorktreeLoading(false);
+          setWorktreeRepos(msg.repos);
+          break;
+
+        case 'WORKTREE_OP_RESULT':
+          if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
+          break;
       }
     };
     window.addEventListener('message', handler);
@@ -483,6 +498,50 @@ function App() {
 
   const handleStashShowFileDiff = useCallback((repoId: string, stashRef: string, filePath: string) => {
     send({ type: 'STASH_OPEN_FILE_DIFF', repoId, stashRef, filePath });
+  }, [send]);
+
+  // ── Worktree callbacks ────────────────────────────────────────────────────
+
+  const requestWorktreeList = useCallback(() => {
+    setWorktreeLoading(true);
+    setWorktreeError(null);
+    send({ type: 'WORKTREE_REQUEST_LIST' });
+  }, [send]);
+
+  const handleWorktreeDelete = useCallback((repoId: string, worktreePath: string, force: boolean) => {
+    send({ type: 'WORKTREE_DELETE', requestId: generateId(), repoId, worktreePath, force });
+  }, [send]);
+
+  const handleWorktreeLock = useCallback((repoId: string, worktreePath: string) => {
+    send({ type: 'WORKTREE_LOCK', requestId: generateId(), repoId, worktreePath });
+  }, [send]);
+
+  const handleWorktreeUnlock = useCallback((repoId: string, worktreePath: string) => {
+    send({ type: 'WORKTREE_UNLOCK', requestId: generateId(), repoId, worktreePath });
+  }, [send]);
+
+  const handleWorktreePrune = useCallback((repoId: string) => {
+    send({ type: 'WORKTREE_PRUNE', requestId: generateId(), repoId });
+  }, [send]);
+
+  const handleWorktreeOpenInExplorer = useCallback((repoId: string, worktreePath: string) => {
+    send({ type: 'WORKTREE_OPEN_IN_EXPLORER', repoId, worktreePath });
+  }, [send]);
+
+  const handleWorktreeOpenInNewWindow = useCallback((worktreePath: string) => {
+    send({ type: 'WORKTREE_OPEN_IN_NEW_WINDOW', worktreePath });
+  }, [send]);
+
+  const handleWorktreeOpenInOS = useCallback((worktreePath: string) => {
+    send({ type: 'WORKTREE_OPEN_IN_OS', worktreePath });
+  }, [send]);
+
+  const handleWorktreeAddToWorkspace = useCallback((worktreePath: string) => {
+    send({ type: 'WORKTREE_ADD_TO_WORKSPACE', worktreePath });
+  }, [send]);
+
+  const handleWorktreeRequestCreate = useCallback((repoId: string) => {
+    send({ type: 'WORKTREE_CREATE_PROMPT', repoId } as CommitToHostMsg);
   }, [send]);
 
   // ── Push / unpushed callbacks ─────────────────────────────────────────────
@@ -888,9 +947,10 @@ function App() {
         }, 0);
         return (
           <div style={css.tabBar}>
-            {(['changes', 'shelf', 'stash', 'push'] as TabId[]).map(tab => {
+            {(['changes', 'shelf', 'stash', 'worktree', 'push'] as TabId[]).map(tab => {
               const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
-              const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : 'Push';
+              const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : 'Push';
+              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'save' : tab === 'worktree' ? 'repo-clone' : 'cloud-upload';
               return (
                 <button
                   key={tab}
@@ -901,10 +961,11 @@ function App() {
                     if (tab === 'shelf') repos.forEach(r => requestShelveList(r.repoId));
                     if (tab === 'stash') repos.forEach(r => requestStashList(r.repoId));
                     if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
+                    if (tab === 'worktree') requestWorktreeList();
                   }}
                 >
                   <Codicon
-                    name={tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'save' : 'cloud-upload'}
+                    name={iconName}
                     style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
                   />
                   {activeTab === tab && (
@@ -1043,6 +1104,8 @@ function App() {
                       multiRepo={multiRepo}
                       isSubmodule={meta?.isSubmodule}
                       submodulePath={meta?.submodulePath}
+                      isWorktree={meta?.isWorktree}
+                      mainWorktreePath={meta?.mainWorktreePath}
                       selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                       viewMode={store.viewMode}
                       isFileSelected={store.isFileSelected}
@@ -1162,12 +1225,18 @@ function App() {
               const meta = metaMap.get(repoId);
               const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
               const repoColor = meta?.color ?? '#4ec9b0';
+              const worktreeBranch = meta?.isWorktree
+                ? (repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name)
+                : undefined;
+              const mainRepoName = meta?.mainWorktreePath?.split('/').pop();
               return (
                 <ShelvePanel
                   key={repoId}
                   repoId={repoId}
                   repoName={repoName}
                   repoColor={repoColor}
+                  worktreeBranch={worktreeBranch}
+                  mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
                   shelves={shelveMap[repoId] ?? []}
                   loading={shelveLoading[repoId] ?? false}
@@ -1192,12 +1261,18 @@ function App() {
               const meta = metaMap.get(repoId);
               const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
               const repoColor = meta?.color ?? '#4ec9b0';
+              const worktreeBranch = meta?.isWorktree
+                ? (repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name)
+                : undefined;
+              const mainRepoName = meta?.mainWorktreePath?.split('/').pop();
               return (
                 <StashTab
                   key={repoId}
                   repoId={repoId}
                   repoName={repoName}
                   repoColor={repoColor}
+                  worktreeBranch={worktreeBranch}
+                  mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
                   stashes={stashMap[repoId] ?? []}
                   loading={stashLoading[repoId] ?? false}
@@ -1216,8 +1291,8 @@ function App() {
         )}
 
         {activeTab === 'push' && (
-          /* Push tab */
-          <div style={css.repoList}>
+          /* Push tab — manages its own scroll, footer anchored at bottom */
+          <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0 }}>
             <PushTab
               repos={repos}
               repoMetas={store.repoMetas}
@@ -1226,6 +1301,27 @@ function App() {
               onPushAll={doPushAll}
               onOpenInLog={doOpenInLog}
               onUndoCommit={doUndoCommit}
+            />
+          </div>
+        )}
+
+        {activeTab === 'worktree' && (
+          /* Worktree tab */
+          <div style={css.repoList}>
+            <WorktreePanel
+              repos={worktreeRepos}
+              loading={worktreeLoading}
+              error={worktreeError}
+              multiRepo={multiRepo}
+              onDelete={handleWorktreeDelete}
+              onLock={handleWorktreeLock}
+              onUnlock={handleWorktreeUnlock}
+              onPrune={handleWorktreePrune}
+              onOpenInExplorer={handleWorktreeOpenInExplorer}
+              onOpenInNewWindow={handleWorktreeOpenInNewWindow}
+              onOpenInOS={handleWorktreeOpenInOS}
+              onAddToWorkspace={handleWorktreeAddToWorkspace}
+              onRequestCreate={handleWorktreeRequestCreate}
             />
           </div>
         )}
@@ -1437,7 +1533,7 @@ const css = {
     position: 'absolute' as const, top: '100%', left: 0, zIndex: 1000,
     background: 'var(--vscode-menu-background, var(--vscode-editor-background))',
     border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-    borderRadius: '4px', boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+    borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     minWidth: '200px', maxWidth: '280px', padding: '4px 0', fontSize: '12px',
   },
   dropdownTitle: {

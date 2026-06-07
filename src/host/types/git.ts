@@ -7,6 +7,8 @@ export interface RepoMeta {
   parentRepoId?: string;
   submodulePath?: string;  // path relativo al repo padre
   depth?: number;          // 0 = repo normale, 1 = submodule diretto, 2 = nested
+  isWorktree?: boolean;    // true when this workspace folder is a linked git worktree
+  mainWorktreePath?: string; // rootPath of the main worktree repo
 }
 
 export interface SubmoduleEntry {

@@ -105,6 +105,8 @@ export function ChangelistView({
           repoColor={singleMeta?.color ?? '#4ec9b0'}
           isSubmodule={singleMeta?.isSubmodule}
           submodulePath={singleMeta?.submodulePath}
+          isWorktree={singleMeta?.isWorktree}
+          mainWorktreePath={singleMeta?.mainWorktreePath}
           onBranchClick={onBranchClick}
           onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid)}
           onOpenAllChanges={onOpenChanges}
@@ -125,6 +127,8 @@ export function ChangelistView({
               files,
               isSubmodule: meta?.isSubmodule,
               submodulePath: meta?.submodulePath,
+              isWorktree: meta?.isWorktree,
+              mainWorktreePath: meta?.mainWorktreePath,
             };
           });
 

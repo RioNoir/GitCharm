@@ -749,8 +749,7 @@ const styles = {
   hash: {
     fontFamily: 'monospace',
     fontSize: '11px',
-    color: 'var(--vscode-foreground)',
-    opacity: 0.65,
+    color: 'var(--vscode-badge-foreground)',
     padding: '1px 4px',
     background: 'var(--vscode-badge-background)',
     borderRadius: '3px',
@@ -880,7 +879,7 @@ const styles = {
   mergeHash: {
     fontFamily: 'monospace',
     fontSize: '10px',
-    opacity: 0.6,
+    color: 'var(--vscode-badge-foreground)',
     background: 'var(--vscode-badge-background)',
     padding: '0 3px',
     borderRadius: '2px',

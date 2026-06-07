@@ -243,7 +243,7 @@ function App() {
         {/* Branch sidebar */}
         <BranchSidebar
           ref={sidebarRef}
-          repos={store.repos}
+          repos={store.repos.filter(r => !r.isWorktree)}
           branches={store.branches}
           tags={store.tags}
           filter={store.branchFilter}

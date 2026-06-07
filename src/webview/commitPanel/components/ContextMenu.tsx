@@ -86,7 +86,7 @@ const styles = {
     background: 'var(--vscode-menu-background, var(--vscode-editor-background))',
     border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
     borderRadius: '4px',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     minWidth: '180px',
     padding: '4px 0',
     fontSize: '12px',

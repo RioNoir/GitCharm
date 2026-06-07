@@ -614,7 +614,7 @@ const ctxStyles = {
     background: 'var(--vscode-menu-background)',
     border: '1px solid var(--vscode-menu-border)',
     borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     minWidth: '220px',
     padding: '4px 0',
     fontSize: '12px',

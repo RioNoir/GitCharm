@@ -7,6 +7,7 @@ import type {
   RepoMeta,
   WorkspaceStatus,
 } from './git';
+import type { WorktreeEntry } from '../git/WorkspaceGitManager';
 import type { IconThemeData } from '../utils/IconThemeService';
 
 export interface MergeParentCommit {
@@ -71,7 +72,9 @@ export type HostToCommitMsg =
   | { type: 'SUBMODULE_OP_RESULT'; requestId: string; parentRepoId: string; submodulePath: string; op: 'init' | 'deinit' | 'update'; ok: boolean; error?: string }
   | { type: 'SUBMODULE_PUSH_RESULT'; requestId: string; repoId: string; ok: boolean; error?: string }
   | { type: 'SUBMODULE_PULL_RESULT'; requestId: string; repoId: string; ok: boolean; output?: string; error?: string }
-  | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string };
+  | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string }
+  | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
+  | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -136,7 +139,18 @@ export type CommitToHostMsg =
   | { type: 'NOTIFY_ERROR'; message: string }
   | { type: 'NOTIFY_INFO'; message: string }
   | { type: 'COMMIT_REVEAL_IN_EXPLORER'; repoId: string; filePath: string }
-  | { type: 'COMMIT_REVEAL_IN_OS'; repoId: string; filePath: string };
+  | { type: 'COMMIT_REVEAL_IN_OS'; repoId: string; filePath: string }
+  | { type: 'WORKTREE_REQUEST_LIST' }
+  | { type: 'WORKTREE_CREATE_PROMPT'; repoId: string }
+  | { type: 'WORKTREE_CREATE'; requestId: string; repoId: string; worktreePath: string; branch?: string; newBranch?: string; commitish?: string; noTrack?: boolean }
+  | { type: 'WORKTREE_DELETE'; requestId: string; repoId: string; worktreePath: string; force?: boolean }
+  | { type: 'WORKTREE_PRUNE'; requestId: string; repoId: string }
+  | { type: 'WORKTREE_LOCK'; requestId: string; repoId: string; worktreePath: string; reason?: string }
+  | { type: 'WORKTREE_UNLOCK'; requestId: string; repoId: string; worktreePath: string }
+  | { type: 'WORKTREE_OPEN_IN_EXPLORER'; repoId: string; worktreePath: string }
+  | { type: 'WORKTREE_OPEN_IN_NEW_WINDOW'; worktreePath: string }
+  | { type: 'WORKTREE_OPEN_IN_OS'; worktreePath: string }
+  | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 

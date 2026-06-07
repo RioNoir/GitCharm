@@ -172,6 +172,14 @@
       {
         "command": "gitcharm.submodule.openInNewWindow",
         "title": "GitCharm: Open Submodule in New Window"
+      },
+      {
+        "command": "gitcharm.worktree.add",
+        "title": "GitCharm: Add Worktree"
+      },
+      {
+        "command": "gitcharm.worktree.prune",
+        "title": "GitCharm: Prune Worktrees"
       }
     ],
     "menus": {

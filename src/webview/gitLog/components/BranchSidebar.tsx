@@ -140,17 +140,28 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
 
         {repos.length > 1 && (
           <div style={styles.repoList}>
-            {repos.map(repo => (
-              <div key={repo.id} style={styles.repoRow}>
-                <span style={styles.repoDot(repo.color)} />
-                <span style={styles.repoName}>{repo.name}</span>
-                {repo.isSubmodule && (
-                  <span style={styles.submoduleBadge} title={repo.submodulePath ? `Submodule: ${repo.submodulePath}` : 'Submodule'}>
-                    SUB
-                  </span>
-                )}
-              </div>
-            ))}
+            {repos.map(repo => {
+              const headBranch = repo.isWorktree
+                ? branches.find(b => b.repoId === repo.id && b.isHead)
+                : undefined;
+              const wtBranch = headBranch
+                ? (headBranch.detachedTag ?? headBranch.detachedHash ?? headBranch.name)
+                : undefined;
+              const displayName = wtBranch
+                ? `${repo.mainWorktreePath?.split('/').pop() ?? repo.name} (${wtBranch})`
+                : repo.name;
+              return (
+                <div key={repo.id} style={styles.repoRow}>
+                  <span style={styles.repoDot(repo.color)} />
+                  <span style={styles.repoName}>{displayName}</span>
+                  {repo.isSubmodule && (
+                    <span style={styles.submoduleBadge} title={repo.submodulePath ? `Submodule: ${repo.submodulePath}` : 'Submodule'}>
+                      SUB
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -484,7 +495,7 @@ const styles = {
     gap: '5px',
     padding: '2px 8px',
     fontSize: '11px',
-    color: 'var(--vscode-sideBarSectionHeader-foreground)',
+    color: 'var(--vscode-foreground)',
   },
   repoName: {
     flex: 1,
@@ -535,6 +546,7 @@ const styles = {
     userSelect: 'none' as const,
     background: 'var(--vscode-sideBarSectionHeader-background)',
     borderBottom: '1px solid var(--vscode-panel-border)',
+    color: 'var(--vscode-foreground)',
   },
   chevron: {
     fontSize: '9px',
@@ -553,7 +565,7 @@ const styles = {
     fontWeight: 'bold' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.06em',
-    color: 'var(--vscode-sideBarSectionHeader-foreground)',
+    color: 'var(--vscode-foreground)',
   },
   count: {
     background: 'var(--vscode-badge-background)',
@@ -626,7 +638,7 @@ const styles = {
     background: 'var(--vscode-menu-background)',
     border: '1px solid var(--vscode-menu-border)',
     borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     minWidth: '180px',
     padding: '4px 0',
     fontSize: '12px',

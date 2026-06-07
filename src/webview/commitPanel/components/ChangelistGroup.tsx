@@ -46,6 +46,8 @@ export interface RepoFileGroup {
   files: FileStatus[];
   isSubmodule?: boolean;
   submodulePath?: string;
+  isWorktree?: boolean;
+  mainWorktreePath?: string;
 }
 
 interface Props {
@@ -153,6 +155,8 @@ export function ChangelistGroup({
                 multiRepo={multiRepo}
                 isSubmodule={group.isSubmodule}
                 submodulePath={group.submodulePath}
+                isWorktree={group.isWorktree}
+                mainWorktreePath={group.mainWorktreePath}
                 selectedFile={selectedFile}
                 viewMode={viewMode}
                 isFileSelected={isFileSelected}
@@ -193,6 +197,8 @@ interface RepoSubGroupProps {
   multiRepo: boolean;
   isSubmodule?: boolean;
   submodulePath?: string;
+  isWorktree?: boolean;
+  mainWorktreePath?: string;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -217,7 +223,7 @@ interface RepoSubGroupProps {
 }
 
 function RepoSubGroup({
-  repoId, repoName, repoColor, repoStatus, files, multiRepo, isSubmodule, submodulePath,
+  repoId, repoName, repoColor, repoStatus, files, multiRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
@@ -264,7 +270,9 @@ function RepoSubGroup({
           <div style={styles.repoHeaderMain} onClick={() => toggleCollapsed(collapseKey)}>
             <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.repoChevron} />
             <span style={styles.repoDot(repoColor)} />
-            <span style={styles.repoName}>{repoName}</span>
+            <span style={styles.repoName}>
+              {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
+            </span>
             {isSubmodule && (
               <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
             )}
@@ -275,7 +283,7 @@ function RepoSubGroup({
                 title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
               >
                 <Codicon
-                  name={repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'}
+                  name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'}
                   style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }}
                 />
                 <span style={styles.branchName}>
@@ -365,7 +373,7 @@ const styles = {
     fontWeight: 'bold' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    color: 'var(--vscode-sideBarSectionHeader-foreground)',
+    color: 'var(--vscode-foreground)',
     userSelect: 'none' as const,
     minWidth: 0,
     overflow: 'hidden',
@@ -443,7 +451,7 @@ const styles = {
     fontWeight: 'bold' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    color: 'var(--vscode-sideBarSectionHeader-foreground)',
+    color: 'var(--vscode-foreground)',
     userSelect: 'none' as const,
     minWidth: 0,
     overflow: 'hidden',

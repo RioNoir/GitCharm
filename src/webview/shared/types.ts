@@ -25,6 +25,8 @@ export interface RepoMeta {
   parentRepoId?: string;
   submodulePath?: string;
   depth?: number;
+  isWorktree?: boolean;
+  mainWorktreePath?: string;
 }
 
 export interface BranchInfo {

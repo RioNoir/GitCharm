@@ -33,8 +33,10 @@ export class BranchStatusBar implements vscode.Disposable {
   }
 
   async refresh(): Promise<void> {
-    const metas = this.manager.getRepoMetas();
-    if (metas.length === 0) {
+    const allMetas = this.manager.getRepoMetas();
+    const nonWorktreeMetas = allMetas.filter(m => !m.isWorktree);
+    const metas = nonWorktreeMetas.length > 0 ? nonWorktreeMetas : allMetas;
+    if (allMetas.length === 0) {
       this.statusBarItem.text = '$(git-branch) No repo';
       this.statusBarItem.backgroundColor = undefined;
       this.hasBehind = false;
@@ -43,18 +45,30 @@ export class BranchStatusBar implements vscode.Disposable {
       return;
     }
 
-    const [branchResults, statusResult] = await Promise.all([
+    const worktreeMetas = nonWorktreeMetas.length > 0 ? allMetas.filter(m => m.isWorktree) : [];
+
+    const [branchResults, worktreeBranchResults, statusResult] = await Promise.all([
       Promise.allSettled(metas.map(async m => {
+        const repo = this.manager.getRepo(m.id);
+        return repo ? repo.getCurrentBranch() : null;
+      })),
+      Promise.allSettled(worktreeMetas.map(async m => {
         const repo = this.manager.getRepo(m.id);
         return repo ? repo.getCurrentBranch() : null;
       })),
       this.manager.getAllStatuses(),
     ]);
 
+    type BranchInfo = Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>>;
     const branches = branchResults
-      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>> | null> => r.status === 'fulfilled')
+      .filter((r): r is PromiseFulfilledResult<BranchInfo | null> => r.status === 'fulfilled')
       .map(r => r.value)
-      .filter(Boolean) as Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>>[];
+      .filter(Boolean) as BranchInfo[];
+
+    const worktreeBranches = worktreeBranchResults
+      .filter((r): r is PromiseFulfilledResult<BranchInfo | null> => r.status === 'fulfilled')
+      .map(r => r.value)
+      .filter(Boolean) as BranchInfo[];
 
     // Use effective name: detachedTag, detachedHash, or branch name
     const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
@@ -69,6 +83,12 @@ export class BranchStatusBar implements vscode.Disposable {
       ? effectiveNames[0]
       : `${effectiveNames[0]} +${effectiveNames.length - 1}`;
 
+    // Append worktree branch names after a separator
+    const worktreeEffectiveNames = [...new Set(worktreeBranches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
+    const worktreeSuffix = worktreeEffectiveNames.length > 0
+      ? '  |  ' + worktreeEffectiveNames.join('  |  ')
+      : '';
+
     // Icon: git-branch on a named branch, tag on detached tag, git-commit on detached hash
     const anyOnNamedBranch = branches.some(b => !b.detachedTag && !b.detachedHash && b.name !== 'HEAD');
     const anyOnTag = !anyOnNamedBranch && branches.some(b => !!b.detachedTag);
@@ -78,7 +98,7 @@ export class BranchStatusBar implements vscode.Disposable {
     const pullIcon = this.hasBehind ? ' $(arrow-down)' : '';
     const pushIcon = this.hasUnpushed ? ' $(arrow-up)' : '';
     const dirtyDot = this.hasUncommitted ? ' ●' : '';
-    this.statusBarItem.text = `${divergeIcon}${headIcon} ${headLabel}${dirtyDot}${pushIcon}${pullIcon}`;
+    this.statusBarItem.text = `${divergeIcon}${headIcon} ${headLabel}${worktreeSuffix}${dirtyDot}${pushIcon}${pullIcon}`;
 
     const tooltipParts: string[] = [];
     if (this.branchesDiverged) tooltipParts.push('Branches have diverged across repositories');

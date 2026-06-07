@@ -415,7 +415,7 @@ const styles = {
     background: 'var(--vscode-dropdown-background, var(--vscode-input-background))',
     border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border))',
     borderRadius: '4px',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     minWidth: '200px',
     maxWidth: '300px',
     overflow: 'hidden',

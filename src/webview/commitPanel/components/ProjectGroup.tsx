@@ -44,6 +44,8 @@ interface Props {
   isFirst?: boolean;
   isSubmodule?: boolean;
   submodulePath?: string;
+  isWorktree?: boolean;
+  mainWorktreePath?: string;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -67,7 +69,7 @@ interface Props {
 
 export function ProjectGroup({
   repoStatus, repoName, repoColor, multiRepo, isFirst = false,
-  isSubmodule, submodulePath,
+  isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
@@ -119,7 +121,9 @@ export function ProjectGroup({
         <div style={styles.headerMain} onClick={() => toggleCollapsed(repoId)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
           <span style={styles.dot(repoColor)} />
-          <span style={styles.name}>{repoName}</span>
+          <span style={styles.name}>
+            {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
+          </span>
           {isSubmodule && (
             <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>
               SUB
@@ -130,7 +134,7 @@ export function ProjectGroup({
             onClick={(e) => { e.stopPropagation(); onBranchClick(repoId); }}
             title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
           >
-            <Codicon name={repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+            <Codicon name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
             <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
           </span>
           {totalFiles > 0 && (
@@ -189,12 +193,14 @@ interface SingleRepoHeaderProps {
   repoColor: string;
   isSubmodule?: boolean;
   submodulePath?: string;
+  isWorktree?: boolean;
+  mainWorktreePath?: string;
   onBranchClick: (repoId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
   onOpenAllChanges: (repoId: string) => void;
 }
 
-export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, onBranchClick, onRepoContextMenu, onOpenAllChanges }: SingleRepoHeaderProps) {
+export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onBranchClick, onRepoContextMenu, onOpenAllChanges }: SingleRepoHeaderProps) {
   const repoId = repoStatus.repoId;
   const branchClr = branchColor(repoStatus.branch.name);
   const [hovered, setHovered] = useState(false);
@@ -208,7 +214,9 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
     >
       <div style={styles.headerMain} onClick={() => onBranchClick(repoId)}>
         <span style={styles.dot(repoColor)} />
-        <span style={styles.name}>{repoName}</span>
+        <span style={styles.name}>
+          {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
+        </span>
         {isSubmodule && (
           <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>
             SUB
@@ -219,7 +227,7 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
           onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
           title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
         >
-          <Codicon name={repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+          <Codicon name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
           <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
         </span>
         <div style={styles.rightGroup}>
@@ -264,7 +272,7 @@ const styles = {
     fontWeight: 'bold' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    color: 'var(--vscode-sideBarSectionHeader-foreground)',
+    color: 'var(--vscode-foreground)',
     userSelect: 'none' as const,
     minWidth: 0,
   },
