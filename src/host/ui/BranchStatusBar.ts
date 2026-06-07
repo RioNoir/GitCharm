@@ -636,6 +636,10 @@ export class BranchStatusBar implements vscode.Disposable {
     if (pick) await pick.action();
   }
 
+  async push(): Promise<void> {
+    await this.pushMenu(this.manager.getRepoMetas());
+  }
+
   private async pushMenu(metas: RepoMeta[]): Promise<void> {
     type RepoRemoteItem = vscode.QuickPickItem & { repoId: string; remote: string };
 
@@ -700,6 +704,21 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
+  }
+
+  async fetchAll(): Promise<void> {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'GitCharm: Fetching all remotes…',
+        cancellable: false,
+      },
+      async () => {
+        await this.manager.fetchAll();
+      }
+    );
+    await this.refresh();
+    vscode.window.showInformationMessage('GitCharm: Fetch complete.');
   }
 
   async updateProject(): Promise<void> {
