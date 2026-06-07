@@ -864,7 +864,7 @@ export class GitService {
 
   async addRemote(name: string, url: string): Promise<void> {
     await this.git.addRemote(name, url);
-    this.vsRepo()?.repository.fetch?.();
+    this.vsRepo()?.fetch?.();
   }
 
   async removeRemote(name: string): Promise<void> {
