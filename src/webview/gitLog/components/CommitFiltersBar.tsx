@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { CommitFilters } from '../store/logStore';
-import type { BranchInfo, RepoMeta } from '../../shared/types';
+import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 
 interface Props {
   filters: CommitFilters;
   branches: BranchInfo[];
+  tags: TagInfo[];
   repos: RepoMeta[];
   onFilterChange: (key: keyof CommitFilters, value: string) => void;
   onRepoChange: (repoId: string | null) => void;
@@ -13,9 +14,10 @@ interface Props {
   onFetchAll: () => void;
 }
 
-export function CommitFiltersBar({ filters, branches, repos, onFilterChange, onRepoChange, onClear, onFetchAll }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll }: Props) {
   const localBranches = branches.filter(b => !b.isRemote);
   const uniqueBranchNames = Array.from(new Set(localBranches.map(b => b.name))).sort();
+  const uniqueTagNames = Array.from(new Set(tags.map(t => t.name))).sort();
 
   const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo || filters.repoId);
 
@@ -50,10 +52,11 @@ export function CommitFiltersBar({ filters, branches, repos, onFilterChange, onR
         />
       )}
 
-      {/* Branch — custom dropdown */}
-      <BranchPicker
+      {/* Branch / Tag — custom dropdown */}
+      <BranchTagPicker
         value={filters.branch}
-        options={uniqueBranchNames}
+        branches={uniqueBranchNames}
+        tags={uniqueTagNames}
         onChange={v => onFilterChange('branch', v)}
         width={200}
       />
@@ -130,11 +133,12 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, debounceMs 
   );
 }
 
-/* ─── BranchPicker ────────────────────────────────────────────────────────── */
+/* ─── BranchTagPicker ─────────────────────────────────────────────────────── */
 
-function BranchPicker({ value, options, onChange, width }: {
+function BranchTagPicker({ value, branches, tags, onChange, width }: {
   value: string;
-  options: string[];
+  branches: string[];
+  tags: string[];
   onChange: (v: string) => void;
   width: number;
 }) {
@@ -142,9 +146,13 @@ function BranchPicker({ value, options, onChange, width }: {
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const displayed = query
-    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
-    : options;
+  const q = query.toLowerCase();
+  const displayedBranches = q ? branches.filter(o => o.toLowerCase().includes(q)) : branches;
+  const displayedTags = q ? tags.filter(o => o.toLowerCase().includes(q)) : tags;
+  const isEmpty = displayedBranches.length === 0 && displayedTags.length === 0;
+
+  const isTag = value ? tags.includes(value) : false;
+  const buttonIcon = isTag ? 'tag' : 'git-branch';
 
   useEffect(() => { if (!open) setQuery(''); }, [open]);
 
@@ -161,11 +169,11 @@ function BranchPicker({ value, options, onChange, width }: {
       <button
         style={{ ...styles.pickerBtn(!!value), width }}
         onClick={() => setOpen(o => !o)}
-        title={value || 'Filter by branch'}
+        title={value || 'Filter by branch or tag'}
       >
-        <Codicon name="git-branch" style={styles.fieldIcon} />
+        <Codicon name={buttonIcon} style={styles.fieldIcon} />
         <span style={value ? styles.pickerLabelActive : styles.pickerLabelPlaceholder}>
-          {value || 'Branch…'}
+          {value || 'Branch / Tag…'}
         </span>
         <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
       </button>
@@ -188,11 +196,14 @@ function BranchPicker({ value, options, onChange, width }: {
               style={styles.dropdownItem(!value)}
               onClick={() => { onChange(''); setOpen(false); }}
             >
-              <span style={{ opacity: 0.5, fontSize: '12px' }}>All branches</span>
+              <span style={{ opacity: 0.5, fontSize: '12px' }}>All branches & tags</span>
             </div>
-            {displayed.map(name => (
+            {displayedBranches.length > 0 && (
+              <div style={styles.dropdownGroupLabel}>Branches</div>
+            )}
+            {displayedBranches.map(name => (
               <div
-                key={name}
+                key={`b:${name}`}
                 style={styles.dropdownItem(value === name)}
                 onClick={() => { onChange(name); setOpen(false); }}
               >
@@ -201,8 +212,22 @@ function BranchPicker({ value, options, onChange, width }: {
                 {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, marginLeft: 'auto', flexShrink: 0 }} />}
               </div>
             ))}
-            {displayed.length === 0 && (
-              <div style={styles.dropdownEmpty}>No branches match</div>
+            {displayedTags.length > 0 && (
+              <div style={styles.dropdownGroupLabel}>Tags</div>
+            )}
+            {displayedTags.map(name => (
+              <div
+                key={`t:${name}`}
+                style={styles.dropdownItem(value === name)}
+                onClick={() => { onChange(name); setOpen(false); }}
+              >
+                <Codicon name="tag" style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
+                <span style={styles.dropdownItemLabel}>{name}</span>
+                {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, marginLeft: 'auto', flexShrink: 0 }} />}
+              </div>
+            ))}
+            {isEmpty && (
+              <div style={styles.dropdownEmpty}>No matches</div>
             )}
           </div>
         </div>
@@ -463,6 +488,15 @@ const styles = {
     opacity: 0.5,
     color: 'var(--vscode-foreground)',
     fontStyle: 'italic',
+  },
+  dropdownGroupLabel: {
+    padding: '4px 10px 2px',
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    opacity: 0.45,
+    color: 'var(--vscode-foreground)',
   },
   dateRange: {
     display: 'flex',

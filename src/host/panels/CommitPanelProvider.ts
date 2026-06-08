@@ -56,13 +56,22 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
     });
 
-    this.manager.onBranchChange(async () => {
+    const postAllBranches = async () => {
       for (const meta of this.manager.getRepoMetas()) {
         const repo = this.manager.getRepo(meta.id);
         if (!repo) continue;
         const branches = await repo.getBranches();
         this.post({ type: 'COMMIT_BRANCHES_UPDATE', repoId: meta.id, branches });
       }
+    };
+
+    this.manager.onBranchChange(postAllBranches);
+
+    this.manager.onReposChange(async () => {
+      const status = await this.manager.getAllStatusesFresh();
+      this.postChangelistsUpdate(status);
+      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+      await postAllBranches();
     });
 
     this.manager.onWorktreeChange(async () => {
@@ -155,6 +164,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         }
       }
       if (e.affectsConfiguration('gitcharm.changesViewMode') || e.affectsConfiguration('gitcharm.defaultCommitAction')) {
+        this.changelistService?.setChangelistMode(this.getChangesViewMode() === 'changelists');
         this.manager.getAllStatuses().then(status => {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
@@ -199,7 +209,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const workspaceFilePath = vscode.workspace.workspaceFile?.scheme === 'file'
       ? vscode.workspace.workspaceFile.fsPath
       : undefined;
-    this.changelistService = new ChangelistService(folderPath, workspaceFilePath);
+    this.changelistService = new ChangelistService(folderPath, workspaceFilePath, this.getChangesViewMode() === 'changelists');
     return this.changelistService;
   }
 

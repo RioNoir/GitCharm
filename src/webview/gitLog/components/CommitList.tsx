@@ -360,6 +360,9 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                 <span style={styles.message}>{commit.message}</span>
               </div>
 
+              {commit.incoming && (
+                <Codicon name="arrow-down" style={styles.incomingIcon} title="Not pulled" />
+              )}
               {commit.unpushed && (
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
               )}
@@ -977,6 +980,12 @@ const styles = {
     opacity: 0.65,
     overflow: 'hidden',
   },
+  incomingIcon: {
+    fontSize: '12px',
+    opacity: 0.75,
+    color: 'var(--vscode-gitDecoration-modifiedResourceForeground)',
+    flexShrink: 0,
+  } as React.CSSProperties,
   unpushedIcon: {
     fontSize: '12px',
     opacity: 0.75,

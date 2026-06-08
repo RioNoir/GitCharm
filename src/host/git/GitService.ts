@@ -76,22 +76,21 @@ export class GitService {
       this.getCurrentBranch(),
     ]);
 
-    // Override aheadBehind with a direct git count — the VS Code API's HEAD.ahead/behind
-    // can lag behind after local operations (e.g. git reset) until it refreshes its state.
+    // Override aheadBehind with a direct git count — always attempt rev-list since
+    // the VS Code API's HEAD.upstream can lag and arrive undefined even when a tracking
+    // branch is configured, causing ahead/behind to be silently skipped.
     let freshBranchInfo = branchInfo;
-    if (branchInfo.upstream) {
-      try {
-        const [aheadRaw, behindRaw] = await Promise.all([
-          this.git.raw(['rev-list', '--count', '@{u}..HEAD']),
-          this.git.raw(['rev-list', '--count', 'HEAD..@{u}']),
-        ]);
-        const ahead = parseInt(aheadRaw.trim(), 10);
-        const behind = parseInt(behindRaw.trim(), 10);
-        if (!isNaN(ahead) && !isNaN(behind)) {
-          freshBranchInfo = { ...branchInfo, aheadBehind: { ahead, behind } };
-        }
-      } catch { /* upstream may be gone; keep branchInfo as-is */ }
-    }
+    try {
+      const [aheadRaw, behindRaw] = await Promise.all([
+        this.git.raw(['rev-list', '--count', '@{u}..HEAD']),
+        this.git.raw(['rev-list', '--count', 'HEAD..@{u}']),
+      ]);
+      const ahead = parseInt(aheadRaw.trim(), 10);
+      const behind = parseInt(behindRaw.trim(), 10);
+      if (!isNaN(ahead) && !isNaN(behind)) {
+        freshBranchInfo = { ...branchInfo, aheadBehind: { ahead, behind } };
+      }
+    } catch { /* no upstream configured — leave aheadBehind as-is */ }
 
     const stagedFiles: FileStatus[] = [];
     const unstagedFiles: FileStatus[] = [];
@@ -482,13 +481,19 @@ export class GitService {
 
     // Mark unpushed commits: hashes ahead of the remote tracking branch.
     // 'all' means there is no upstream — every commit on this branch is local.
-    const unpushedHashes = await this.getUnpushedHashes();
+    const [unpushedHashes, incomingHashes] = await Promise.all([
+      this.getUnpushedHashes(),
+      this.getIncomingHashes(),
+    ]);
     if (unpushedHashes === 'all') {
       for (const c of commits) c.unpushed = true;
     } else if (unpushedHashes.size > 0) {
       for (const c of commits) {
         if (unpushedHashes.has(c.hash)) c.unpushed = true;
       }
+    }
+    for (const c of commits) {
+      if (incomingHashes.has(c.hash)) c.incoming = true;
     }
 
     return commits;
@@ -523,6 +528,28 @@ export class GitService {
       if (!remoteRefs) return 'all'; // no remote refs → repo is purely local
       // Remotes exist but no tracking → commits not reachable from any remote ref
       const raw = await this.git.raw(['log', '--format=%H', 'HEAD', '--not', '--remotes']);
+      return new Set(raw.trim().split('\n').filter(Boolean));
+    } catch {
+      return new Set();
+    }
+  }
+
+  private async getIncomingHashes(): Promise<Set<string>> {
+    try {
+      const vsRepo = this.vsRepo();
+      if (vsRepo) {
+        const upstream = vsRepo.state.HEAD?.upstream;
+        if (upstream) {
+          if ((vsRepo.state.HEAD?.behind ?? 0) === 0) return new Set();
+          const upstreamRef = `${upstream.remote}/${upstream.name}`;
+          const raw = await this.git.raw(['log', '--format=%H', `HEAD..${upstreamRef}`]);
+          return new Set(raw.trim().split('\n').filter(Boolean));
+        }
+        return new Set();
+      }
+      const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
+      if (!tracking) return new Set();
+      const raw = await this.git.raw(['log', '--format=%H', `HEAD..${tracking}`]);
       return new Set(raw.trim().split('\n').filter(Boolean));
     } catch {
       return new Set();

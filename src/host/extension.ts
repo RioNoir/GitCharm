@@ -50,6 +50,70 @@ async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void>
   }
 }
 
+async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalState: vscode.Memento): Promise<void> {
+  const DO_NOT_SHOW_KEY = 'doNotShowIncomingCommitsNotification';
+  if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
+  if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnIncomingCommits', true)) return;
+
+  const metas = manager.getRepoMetas().filter(m => !m.isWorktree);
+  const branchResults = await Promise.allSettled(
+    metas.map(async m => {
+      const repo = manager.getRepo(m.id);
+      return repo ? repo.getCurrentBranch() : null;
+    })
+  );
+
+  type BranchInfo = Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>>;
+  const branches = branchResults
+    .filter((r): r is PromiseFulfilledResult<BranchInfo | null> => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter((b): b is BranchInfo => b !== null);
+
+  const totalBehind = branches.reduce((sum, b) => sum + (b.aheadBehind?.behind ?? 0), 0);
+  if (totalBehind === 0) return;
+
+  const reposWithBehind = branches.filter(b => (b.aheadBehind?.behind ?? 0) > 0).length;
+
+  const commitWord = totalBehind === 1 ? 'commit' : 'commits';
+  const repoWord = reposWithBehind === 1 ? 'repository' : 'repositories';
+  const message = reposWithBehind === 1
+    ? `GitCharm: ${totalBehind} incoming ${commitWord} available to pull.`
+    : `GitCharm: ${totalBehind} incoming ${commitWord} across ${reposWithBehind} ${repoWord}.`;
+
+  const pull = 'Pull';
+  const dismiss = 'Dismiss';
+  const doNotShow = "Don't show again";
+
+  const picked = await vscode.window.showInformationMessage(message, pull, dismiss, doNotShow);
+
+  if (picked === doNotShow) {
+    await globalState.update(DO_NOT_SHOW_KEY, true);
+  } else if (picked === pull) {
+    const metaById = new Map(metas.map(m => [m.id, m]));
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pulling…', cancellable: false },
+      async () => {
+        const results = await manager.pullAll(false);
+        const failed = results.filter(r => !r.ok);
+        const ok = results.filter(r => r.ok);
+        if (failed.length === 0) {
+          vscode.window.showInformationMessage(
+            `GitCharm: ${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
+          );
+        } else {
+          const failedDesc = failed.map(r => {
+            const name = metaById.get(r.repoId)?.name ?? r.repoId;
+            return `${name}: ${r.message}`;
+          }).join('; ');
+          vscode.window.showWarningMessage(
+            `GitCharm: ${ok.length} updated, ${failed.length} failed: ${failedDesc}`
+          );
+        }
+      }
+    );
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const manager = new WorkspaceGitManager(context);
 
@@ -65,7 +129,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const badge = new BadgeController();
   badge.startLoading();
   manager.onStatusChange(status => badge.update(status));
-  manager.getAllStatusesFresh().then(status => badge.update(status));
+  manager.getAllStatusesFresh().then(async status => {
+    badge.update(status);
+    await maybeNotifyIncomingCommits(manager, context.globalState);
+  });
 
   const log = vscode.window.createOutputChannel('GitCharm Profiles');
   context.subscriptions.push(log);

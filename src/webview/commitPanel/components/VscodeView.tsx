@@ -407,12 +407,15 @@ interface SectionHeaderProps {
   actionIcon: string;
   actionTitle: string;
   onAction: () => void;
+  secondActionIcon?: string;
+  secondActionTitle?: string;
+  onSecondAction?: () => void;
   openChangesIcon?: string;
   openChangesTitle?: string;
   onOpenChanges?: () => void;
 }
 
-function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, openChangesIcon, openChangesTitle, onOpenChanges }: SectionHeaderProps) {
+function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, secondActionIcon, secondActionTitle, onSecondAction, openChangesIcon, openChangesTitle, onOpenChanges }: SectionHeaderProps) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -436,6 +439,16 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
             onClick={e => { e.stopPropagation(); onOpenChanges(); }}
           >
             <Codicon name={openChangesIcon} />
+          </button>
+        )}
+        {onSecondAction && secondActionIcon && (
+          <button
+            data-action-btn=""
+            style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+            title={secondActionTitle}
+            onClick={e => { e.stopPropagation(); onSecondAction(); }}
+          >
+            <Codicon name={secondActionIcon} />
           </button>
         )}
         <button
@@ -560,6 +573,9 @@ export function VscodeView({
         actionIcon="add"
         actionTitle="Stage All"
         onAction={() => repos.forEach(r => onStageAll(r.repoId))}
+        secondActionIcon="discard"
+        secondActionTitle="Rollback All"
+        onSecondAction={() => onRollback(repos.flatMap(r => r.unstagedFiles))}
         openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
         openChangesTitle={isSingleRepo ? 'Open Changes' : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenUnstagedChanges(singleRepoStatus.repoId) : undefined}

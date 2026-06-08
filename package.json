@@ -322,6 +322,11 @@
           "default": false,
           "description": "Automatically fetch all remotes when the extension activates"
         },
+        "gitcharm.notifyOnIncomingCommits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification on startup when there are incoming commits available to pull"
+        },
         "gitcharm.projectColors": {
           "type": "object",
           "default": {},

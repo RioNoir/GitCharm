@@ -9,8 +9,11 @@ export class BranchStatusBar implements vscode.Disposable {
   private branchDisposable?: vscode.Disposable;
   private hasBehind = false;
   private hasUnpushed = false;
+  private hasNoUpstream = false;
   private branchesDiverged = false;
   private hasUncommitted = false;
+  private totalAhead = 0;
+  private totalBehind = 0;
 
   constructor(
     private readonly manager: WorkspaceGitManager,
@@ -24,15 +27,15 @@ export class BranchStatusBar implements vscode.Disposable {
     this.statusBarItem.tooltip = 'GitCharm: Git Menu';
     this.statusBarItem.show();
 
-    this.statusDisposable = this.manager.onStatusChange(() => this.refresh());
+    this.statusDisposable = this.manager.onStatusChange(status => this.refresh(status));
     // Also refresh on branch change: the status change fires at 300ms and may catch
     // a transient HEAD state during checkout. The branch change fires at 400ms when
     // the VS Code Git API state is stable, ensuring the status bar corrects itself.
-    this.branchDisposable = this.manager.onBranchChange(() => this.refresh());
-    this.refresh();
+    this.branchDisposable = this.manager.onBranchChange(() => this.manager.getAllStatusesFresh().then(s => this.refresh(s)));
+    this.manager.getAllStatusesFresh().then(s => this.refresh(s));
   }
 
-  async refresh(): Promise<void> {
+  async refresh(preloadedStatus?: import('../types/git').WorkspaceStatus): Promise<void> {
     const allMetas = this.manager.getRepoMetas();
     const nonWorktreeMetas = allMetas.filter(m => !m.isWorktree);
     const metas = nonWorktreeMetas.length > 0 ? nonWorktreeMetas : allMetas;
@@ -47,23 +50,20 @@ export class BranchStatusBar implements vscode.Disposable {
 
     const worktreeMetas = nonWorktreeMetas.length > 0 ? allMetas.filter(m => m.isWorktree) : [];
 
-    const [branchResults, worktreeBranchResults, statusResult] = await Promise.all([
-      Promise.allSettled(metas.map(async m => {
-        const repo = this.manager.getRepo(m.id);
-        return repo ? repo.getCurrentBranch() : null;
-      })),
+    const [statusResult, worktreeBranchResults] = await Promise.all([
+      preloadedStatus ?? this.manager.getAllStatusesFresh(),
       Promise.allSettled(worktreeMetas.map(async m => {
         const repo = this.manager.getRepo(m.id);
         return repo ? repo.getCurrentBranch() : null;
       })),
-      this.manager.getAllStatuses(),
     ]);
 
     type BranchInfo = Awaited<ReturnType<NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>['getCurrentBranch']>>;
-    const branches = branchResults
-      .filter((r): r is PromiseFulfilledResult<BranchInfo | null> => r.status === 'fulfilled')
-      .map(r => r.value)
-      .filter(Boolean) as BranchInfo[];
+
+    const nonWorktreeIds = new Set(metas.map(m => m.id));
+    const branches = statusResult.repos
+      .filter(r => nonWorktreeIds.has(r.repoId))
+      .map(r => r.branch);
 
     const worktreeBranches = worktreeBranchResults
       .filter((r): r is PromiseFulfilledResult<BranchInfo | null> => r.status === 'fulfilled')
@@ -73,8 +73,11 @@ export class BranchStatusBar implements vscode.Disposable {
     // Use effective name: detachedTag, detachedHash, or branch name
     const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
     this.branchesDiverged = effectiveNames.length > 1;
-    this.hasBehind = branches.some(b => (b.aheadBehind?.behind ?? 0) > 0);
-    this.hasUnpushed = branches.some(b => !b.upstream || (b.aheadBehind?.ahead ?? 0) > 0);
+    this.totalBehind = branches.reduce((sum, b) => sum + (b.aheadBehind?.behind ?? 0), 0);
+    this.totalAhead = branches.reduce((sum, b) => sum + (b.aheadBehind?.ahead ?? 0), 0);
+    this.hasBehind = this.totalBehind > 0;
+    this.hasUnpushed = branches.some(b => (b.aheadBehind?.ahead ?? 0) > 0);
+    this.hasNoUpstream = branches.some(b => !b.upstream);
     this.hasUncommitted = statusResult.repos.some(
       r => r.stagedFiles.length > 0 || r.unstagedFiles.length > 0
     );
@@ -95,10 +98,10 @@ export class BranchStatusBar implements vscode.Disposable {
     const headIcon = anyOnNamedBranch ? '$(git-branch)' : anyOnTag ? '$(tag)' : '$(git-commit)';
 
     const divergeIcon = this.branchesDiverged ? '$(warning) ' : '';
-    const pullIcon = this.hasBehind ? ' $(arrow-down)' : '';
-    const pushIcon = this.hasUnpushed ? ' $(arrow-up)' : '';
     const dirtyDot = this.hasUncommitted ? ' ●' : '';
-    this.statusBarItem.text = `${divergeIcon}${headIcon} ${headLabel}${worktreeSuffix}${dirtyDot}${pushIcon}${pullIcon}`;
+    const pullPart = this.totalBehind > 0 ? ` $(arrow-down)${this.totalBehind}` : '';
+    const pushPart = this.totalAhead > 0 ? ` $(arrow-up)${this.totalAhead}` : '';
+    this.statusBarItem.text = `${divergeIcon}${headIcon} ${headLabel}${worktreeSuffix}${dirtyDot}${pullPart}${pushPart}`;
 
     const tooltipParts: string[] = [];
     if (this.branchesDiverged) tooltipParts.push('Branches have diverged across repositories');
@@ -198,12 +201,14 @@ export class BranchStatusBar implements vscode.Disposable {
     items.push(
       {
         label: `${this.hasBehind ? '$(arrow-down) ' : '$(cloud-download) '}Update Project…`,
-        description: this.hasBehind ? 'Pull all repositories (incoming commits available)' : 'Pull all repositories',
+        description: this.hasBehind ? `Pull all repositories (${this.totalBehind} incoming commit${this.totalBehind !== 1 ? 's' : ''})` : 'Pull all repositories',
         action: () => this.updateProject(),
       },
       {
         label: `${this.hasUnpushed ? '$(arrow-up) ' : '$(cloud-upload) '}Push…`,
-        description: this.hasUnpushed ? 'Push commits to remote (unpushed commits present)' : 'Push current branch to remote',
+        description: this.hasUnpushed
+          ? `Push commits to remote (${this.totalAhead} commit${this.totalAhead !== 1 ? 's' : ''} to push${this.hasNoUpstream ? ', some branches have no upstream' : ''})`
+          : this.hasNoUpstream ? 'Some branches have no upstream set' : 'Push current branch to remote',
         action: () => this.pushMenu(metas),
       },
       {
@@ -237,19 +242,25 @@ export class BranchStatusBar implements vscode.Disposable {
         let branchName = 'HEAD';
         let repoHasUnpushed = false;
         let isDetachedOnTag = false;
+        let repoAhead = 0;
+        let repoBehind = 0;
         if (repo) {
           try {
             const current = await repo.getCurrentBranch();
             isDetachedOnTag = !!current.detachedTag;
             branchName = current.detachedTag ?? current.detachedHash ?? current.name;
-            repoHasUnpushed = !current.upstream || (current.aheadBehind?.ahead ?? 0) > 0;
+            repoAhead = current.aheadBehind?.ahead ?? 0;
+            repoBehind = current.aheadBehind?.behind ?? 0;
+            repoHasUnpushed = repoAhead > 0;
           } catch { /* */ }
         }
         const refIcon = isDetachedOnTag ? '$(tag)' : '$(git-branch)';
         const repoIcon = meta.isSubmodule ? '$(package)' : '$(root-folder)';
+        const repoPushLabel = repoHasUnpushed ? `  $(arrow-up)${repoAhead > 0 ? repoAhead : ''}` : '';
+        const repoPullLabel = repoBehind > 0 ? `  $(arrow-down)${repoBehind}` : '';
         items.push({
           label: `${repoIcon} ${meta.name}`,
-          description: `${refIcon} ${branchName}${repoHasUnpushed ? '  $(arrow-up)' : ''}`,
+          description: `${refIcon} ${branchName}${repoPushLabel}${repoPullLabel}`,
           action: () => this.showRepoBranchMenu(meta),
         });
       }

@@ -1,5 +1,7 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import type { ChangelistData, RepoStatus } from '../types/git';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../types/git';
 
@@ -31,12 +33,18 @@ export class ChangelistService {
   /**
    * @param workspaceFolderPath  fsPath of the first workspace folder (always provided)
    * @param workspaceFilePath    fsPath of the .code-workspace file, if the user opened one
+   * @param isChangelistMode     whether the current view mode is 'changelists'
    */
   constructor(
     private readonly workspaceFolderPath: string,
     private readonly workspaceFilePath?: string,
+    private isChangelistMode: boolean = false,
   ) {
     this.changelists = this.load();
+  }
+
+  setChangelistMode(enabled: boolean): void {
+    this.isChangelistMode = enabled;
   }
 
   // ── Storage mode ─────────────────────────────────────────────────────────────
@@ -98,10 +106,11 @@ export class ChangelistService {
   }
 
   private saveToFolderFile(): void {
+    if (!this.isChangelistMode) return;
     const dir = path.dirname(this.folderFilePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(this.folderFilePath, JSON.stringify({ changelists: this.changelists }, null, 2), 'utf8');
-    this.ensureGitignore();
+    this.ensureGlobalGitignore();
   }
 
   private saveToWorkspaceFile(): void {
@@ -111,21 +120,30 @@ export class ChangelistService {
     fs.writeFileSync(this.workspaceFilePath!, JSON.stringify(parsed, null, '\t'), 'utf8');
   }
 
-  private ensureGitignore(): void {
+  private ensureGlobalGitignore(): void {
     try {
-      const gitignorePath = path.join(this.workspaceFolderPath, '.gitignore');
       const entry = '.vscode/gitcharm-changelists.json';
-      if (fs.existsSync(gitignorePath)) {
-        const content = fs.readFileSync(gitignorePath, 'utf8');
+      const globalIgnorePath = this.getGlobalGitignorePath();
+      if (fs.existsSync(globalIgnorePath)) {
+        const content = fs.readFileSync(globalIgnorePath, 'utf8');
         if (content.includes(entry)) return;
         const newContent = content.endsWith('\n') ? content + entry + '\n' : content + '\n' + entry + '\n';
-        fs.writeFileSync(gitignorePath, newContent, 'utf8');
+        fs.writeFileSync(globalIgnorePath, newContent, 'utf8');
       } else {
-        fs.writeFileSync(gitignorePath, entry + '\n', 'utf8');
+        fs.writeFileSync(globalIgnorePath, entry + '\n', 'utf8');
       }
     } catch {
       // Non-critical
     }
+  }
+
+  private getGlobalGitignorePath(): string {
+    try {
+      const result = execSync('git config --global core.excludesFile', { encoding: 'utf8' }).trim();
+      if (result) return result.startsWith('~') ? path.join(os.homedir(), result.slice(1)) : result;
+    } catch { /* fall through */ }
+    // Default path when core.excludesFile is not set
+    return path.join(os.homedir(), '.gitignore_global');
   }
 
   // ── Reconciliation ───────────────────────────────────────────────────────────

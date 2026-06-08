@@ -28,6 +28,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private worktreeListeners: WorktreeListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
+  /** Watchers for .git creation in non-repo workspace folders — rebuilt when folders change. */
+  private gitInitWatchers: vscode.Disposable[] = [];
   private prevHeads = new Map<string, string>();      // repoId → branch name
   private prevCommits = new Map<string, string>();    // repoId → commit hash
   private prevUntracked = new Map<string, Set<string>>(); // repoId → known untracked paths
@@ -49,9 +51,14 @@ export class WorkspaceGitManager implements vscode.Disposable {
       vscode.workspace.onDidCreateFiles(() => this.scheduleRefresh()),
       vscode.workspace.onDidDeleteFiles(() => this.scheduleRefresh()),
       vscode.workspace.onDidRenameFiles(() => this.scheduleRefresh()),
+
+      // A folder already in the workspace may become a git repo (via git init or clone).
+      // Watch for .git creation in any workspace folder root to trigger reinitialize.
+      vscode.workspace.onDidChangeWorkspaceFolders(() => this.setupGitInitWatchers()),
     );
 
     this.reinitialize();
+    this.setupGitInitWatchers();
 
     // If vscode.git is not yet initialized at startup, re-run setup once it is.
     // This ensures watchers use the VS Code git API rather than the filesystem fallback,
@@ -564,8 +571,26 @@ export class WorkspaceGitManager implements vscode.Disposable {
     return results;
   }
 
+  private setupGitInitWatchers(): void {
+    this.gitInitWatchers.forEach(d => d.dispose());
+    this.gitInitWatchers = [];
+
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      // Only watch folders that are not already known git repos
+      if (this.repos.has(folder.uri.fsPath)) continue;
+
+      const w = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(folder.uri, '.git')
+      );
+      const onGitCreated = () => { this.reinitialize(); this.scheduleRefresh(); };
+      w.onDidCreate(onGitCreated);
+      this.gitInitWatchers.push(w);
+    }
+  }
+
   dispose(): void {
     this.disposeWatchers();
+    this.gitInitWatchers.forEach(d => d.dispose());
     this.globalListeners.forEach(d => d.dispose());
     this.globalListeners = [];
   }

@@ -48,6 +48,7 @@ export interface CommitNode {
   parents: string[];
   refs: string[];
   unpushed?: boolean;
+  incoming?: boolean;
   lane?: number;
   totalLanes?: number;
   graphLines?: GraphLine[];

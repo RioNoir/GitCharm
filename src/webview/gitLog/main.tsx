@@ -257,6 +257,7 @@ function App() {
       <CommitFiltersBar
         filters={store.commitFilters}
         branches={store.branches}
+        tags={store.tags}
         repos={store.repos}
         onFilterChange={handleFilterChange}
         onRepoChange={handleRepoChange}
