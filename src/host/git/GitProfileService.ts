@@ -6,18 +6,17 @@ export interface GitProfile {
   name: string;
   gitName: string;
   gitEmail: string;
-  isDefault?: boolean;
   /** 'local' and 'global' are built-in dynamic profiles — credentials read live from git config */
   builtIn?: 'local' | 'global';
 }
 
 export interface EffectiveProfile {
   profile: GitProfile;
-  source: 'active' | 'default' | 'local' | 'global';
+  source: 'active' | 'local' | 'global';
 }
 
 const PROFILES_KEY = 'gitcharm.gitProfiles';
-const ACTIVE_KEY = 'gitcharm.activeGitProfileId';
+const ACTIVE_KEY = 'activeProfileId';
 
 export const LOCAL_PROFILE_ID = '__local__';
 export const GLOBAL_PROFILE_ID = '__global__';
@@ -63,18 +62,6 @@ export class GitProfileService implements vscode.Disposable {
     this._onProfileChange.fire();
   }
 
-  async setDefaultProfile(id: string): Promise<void> {
-    const profiles = this.getProfiles().map(p => ({ ...p, isDefault: p.id === id }));
-    await this.context.globalState.update(PROFILES_KEY, profiles);
-    this._onProfileChange.fire();
-  }
-
-  async clearDefault(): Promise<void> {
-    const profiles = this.getProfiles().map(p => ({ ...p, isDefault: false }));
-    await this.context.globalState.update(PROFILES_KEY, profiles);
-    this._onProfileChange.fire();
-  }
-
   // ── Active profile (per-workspace) ───────────────────────────────────────────
 
   getActiveProfileId(): string {
@@ -92,32 +79,17 @@ export class GitProfileService implements vscode.Disposable {
     return this.getProfiles().find(p => p.id === id);
   }
 
-  async setActiveProfile(id: string, repoPaths?: string[]): Promise<void> {
+  async setActiveProfile(id: string): Promise<void> {
     this.trace(`setActiveProfile → "${id}"`);
     await this.context.workspaceState.update(ACTIVE_KEY, id);
     const verify = this.context.workspaceState.get<string>(ACTIVE_KEY, '');
     this.trace(`setActiveProfile verify read-back → "${verify}"`);
-    if (repoPaths?.length) {
-      const profile = id === LOCAL_PROFILE_ID || id === GLOBAL_PROFILE_ID
-        ? undefined
-        : this.getProfiles().find(p => p.id === id);
-      if (profile?.gitName && profile?.gitEmail) {
-        await Promise.all(repoPaths.map(p => this.writeLocalCreds(p, profile.gitName, profile.gitEmail).catch(() => {})));
-      }
-    }
     this._onProfileChange.fire();
   }
 
   async clearActiveProfile(): Promise<void> {
     await this.context.workspaceState.update(ACTIVE_KEY, '');
     this._onProfileChange.fire();
-  }
-
-  // ── Default profile (global fallback) ────────────────────────────────────────
-
-  getDefaultProfile(): GitProfile | undefined {
-    const profiles = this.getProfiles();
-    return profiles.find(p => p.isDefault);
   }
 
   // ── Built-in Local / Global ───────────────────────────────────────────────────
@@ -158,20 +130,13 @@ export class GitProfileService implements vscode.Disposable {
     return undefined;
   }
 
-  async writeLocalCreds(repoPath: string, gitName: string, gitEmail: string): Promise<void> {
-    const git = simpleGit(repoPath);
-    await git.raw(['config', '--local', 'user.name', gitName]);
-    await git.raw(['config', '--local', 'user.email', gitEmail]);
-  }
-
   // ── Effective profile resolution ──────────────────────────────────────────────
   //
-  // Priority: active (per-workspace) → default → local .git/config → global ~/.gitconfig
+  // Priority: active (per-workspace) → local .git/config → global ~/.gitconfig
   // Returns undefined only when nothing is configured anywhere.
 
   async getEffectiveProfile(repoPath: string): Promise<EffectiveProfile | undefined> {
-    const allProfiles = this.getProfiles();
-    this.trace(`getEffectiveProfile — profiles: ${JSON.stringify(allProfiles.map(p => p.id + ':' + p.name))}`);
+    this.trace(`getEffectiveProfile — profiles: ${JSON.stringify(this.getProfiles().map(p => p.id + ':' + p.name))}`);
 
     // 1. Explicit active for this workspace
     const activeId = this.getActiveProfileId();
@@ -194,25 +159,11 @@ export class GitProfileService implements vscode.Disposable {
       this.trace(`getEffectiveProfile — active id "${activeId}" not resolved, falling through`);
     }
 
-    // 2. Global default profile
-    const def = this.getDefaultProfile();
-    if (def) {
-      if (def.id === LOCAL_PROFILE_ID) {
-        const creds = await this.readLocalCreds(repoPath);
-        if (creds) return { profile: { ...this.makeLocalPlaceholder(), ...creds }, source: 'default' };
-      } else if (def.id === GLOBAL_PROFILE_ID) {
-        const creds = await this.readGlobalCreds();
-        if (creds) return { profile: { ...this.makeGlobalPlaceholder(), ...creds }, source: 'default' };
-      } else {
-        return { profile: def, source: 'default' };
-      }
-    }
-
-    // 3. Local .git/config
+    // 2. Local .git/config
     const local = await this.readLocalCreds(repoPath);
     if (local) return { profile: { ...this.makeLocalPlaceholder(), ...local }, source: 'local' };
 
-    // 4. Global ~/.gitconfig
+    // 3. Global ~/.gitconfig
     const global = await this.readGlobalCreds();
     if (global) return { profile: { ...this.makeGlobalPlaceholder(), ...global }, source: 'global' };
 
@@ -222,36 +173,59 @@ export class GitProfileService implements vscode.Disposable {
   // ── Migration from old configuration API ─────────────────────────────────────
 
   async autoInitIfEmpty(): Promise<void> {
-    if (this.getProfiles().length > 0) return;
+    const hasProfiles = this.getProfiles().length > 0;
+    const hasActive = !!this.context.workspaceState.get<string>(ACTIVE_KEY, '');
 
-    const cfg = vscode.workspace.getConfiguration();
-    const fromNew = cfg.get<GitProfile[]>('gitcharm.gitProfiles');
-    const fromOld = cfg.get<GitProfile[]>('gitstorm.gitProfiles');
-    const profiles = (fromNew?.length ? fromNew : fromOld?.length ? fromOld : [])
-      .filter(p => p.id !== LOCAL_PROFILE_ID && p.id !== GLOBAL_PROFILE_ID);
+    // Migrate legacy profiles from vscode configuration into globalState (runs once)
+    if (!hasProfiles) {
+      const cfg = vscode.workspace.getConfiguration();
+      const fromNew = cfg.get<GitProfile[]>('gitcharm.gitProfiles');
+      const fromOld = cfg.get<GitProfile[]>('gitstorm.gitProfiles');
+      const profiles = (fromNew?.length ? fromNew : fromOld?.length ? fromOld : [])
+        .filter(p => p.id !== LOCAL_PROFILE_ID && p.id !== GLOBAL_PROFILE_ID);
 
-    if (profiles.length > 0) {
-      await this.context.globalState.update(PROFILES_KEY, profiles);
+      if (profiles.length > 0) {
+        await this.context.globalState.update(PROFILES_KEY, profiles);
+      }
+
+      if (!hasActive) {
+        const activeNew = cfg.get<string>('gitcharm.activeGitProfileId', '');
+        const activeOld = cfg.get<string>('gitstorm.activeGitProfileId', '');
+        const migratedId = activeNew || activeOld;
+        if (migratedId && profiles.find(p => p.id === migratedId)) {
+          await this.context.workspaceState.update(ACTIVE_KEY, migratedId);
+        }
+      }
+
+      if (profiles.length > 0) {
+        this._onProfileChange.fire();
+      }
     }
 
-    const activeNew = cfg.get<string>('gitcharm.activeGitProfileId', '');
-    const activeOld = cfg.get<string>('gitstorm.activeGitProfileId', '');
-    const migratedId = activeNew || activeOld;
-    if (migratedId && profiles.find(p => p.id === migratedId)) {
-      await this.context.workspaceState.update(ACTIVE_KEY, migratedId);
-    }
-
-    if (profiles.length > 0) {
-      this._onProfileChange.fire();
-    }
+    // Clean up legacy keys from vscode configuration so they no longer appear in
+    // settings.json or .code-workspace files
+    await this.cleanLegacyConfigKeys();
   }
 
-  // kept for backward compat — no longer writes to git config
-  async applyToRepo(_repoPath: string): Promise<void> {}
-
-  // legacy aliases used by ProfileStatusBar
-  detectFromRepo = this.readLocalCreds.bind(this);
-  detectGlobal = this.readGlobalCreds.bind(this);
+  private async cleanLegacyConfigKeys(): Promise<void> {
+    const cfg = vscode.workspace.getConfiguration();
+    const legacyKeys = [
+      'gitcharm.activeGitProfileId',
+      'gitstorm.activeGitProfileId',
+      'gitcharm.gitProfiles',
+      'gitstorm.gitProfiles',
+    ];
+    for (const key of legacyKeys) {
+      // Remove from workspace scope (writes to .code-workspace or .vscode/settings.json)
+      if (cfg.inspect(key)?.workspaceValue !== undefined) {
+        await cfg.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+      }
+      // Remove from workspace folder scope
+      if (cfg.inspect(key)?.workspaceFolderValue !== undefined) {
+        await cfg.update(key, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      }
+    }
+  }
 
   dispose(): void {
     this._onProfileChange.dispose();

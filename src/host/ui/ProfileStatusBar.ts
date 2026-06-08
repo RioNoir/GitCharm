@@ -23,10 +23,6 @@ export class ProfileStatusBar implements vscode.Disposable {
     this.refresh();
   }
 
-  private getAllRepoPaths(): string[] {
-    return this.manager?.getRepoMetas().map(m => m.rootPath) ?? [];
-  }
-
   private getActiveRepoPath(): string | undefined {
     if (!this.manager) return undefined;
     const editor = vscode.window.activeTextEditor;
@@ -54,7 +50,7 @@ export class ProfileStatusBar implements vscode.Disposable {
 
   private renderStatusBar(
     profile: GitProfile | undefined,
-    source: 'active' | 'default' | 'local' | 'global',
+    source: 'active' | 'local' | 'global',
   ): void {
     if (!profile) { this.renderNoProfile(); return; }
 
@@ -67,7 +63,7 @@ export class ProfileStatusBar implements vscode.Disposable {
       displayName = profile.name;
     }
 
-    const sourceBadge = source === 'default' ? ' (default)' : source === 'local' ? ' (local)' : source === 'global' ? ' (global)' : '';
+    const sourceBadge = source === 'local' ? ' (local)' : source === 'global' ? ' (global)' : '';
     this.statusBarItem.text = `$(account) ${displayName}`;
     this.statusBarItem.tooltip =
       `GitCharm Profile: ${profile.gitName} <${profile.gitEmail}>${sourceBadge}\nClick to manage profiles`;
@@ -94,10 +90,9 @@ export class ProfileStatusBar implements vscode.Disposable {
       items.push(sep('PROFILES'));
       for (const p of namedProfiles) {
         const isActive = p.id === activeId;
-        const badges = [isActive ? 'active' : '', p.isDefault ? 'default' : ''].filter(Boolean).join(' · ');
         items.push({
           label: `${isActive ? '$(check)' : '$(account)'} ${p.name}`,
-          description: `${p.gitName} <${p.gitEmail}>${badges ? `  ·  ${badges}` : ''}`,
+          description: `${p.gitName} <${p.gitEmail}>${isActive ? '  ·  active' : ''}`,
           action: () => this.showProfileActionMenu(p),
         });
       }
@@ -107,12 +102,10 @@ export class ProfileStatusBar implements vscode.Disposable {
     // ── Local entry ───────────────────────────────────────────────────────────
     const localCreds = repoPath ? await this.profileService.readLocalCreds(repoPath) : undefined;
     const localIsActive = activeId === LOCAL_PROFILE_ID;
-    const localIsDefault = profiles.find(p => p.id === LOCAL_PROFILE_ID)?.isDefault === true;
     {
-      const badges = [localIsActive ? 'active' : '', localIsDefault ? 'default' : ''].filter(Boolean).join(' · ');
       const icon = localIsActive ? '$(check)' : '$(home)';
       items.push({
-        label: `${icon} Local${badges ? `  ·  ${badges}` : ''}`,
+        label: `${icon} Local${localIsActive ? '  ·  active' : ''}`,
         description: localCreds
           ? `${localCreds.gitName} <${localCreds.gitEmail}>  ·  from .git/config`
           : repoPath ? 'No local git identity in this repo' : 'No repo open',
@@ -123,12 +116,10 @@ export class ProfileStatusBar implements vscode.Disposable {
     // ── Global entry ──────────────────────────────────────────────────────────
     const globalCreds = await this.profileService.readGlobalCreds();
     const globalIsActive = activeId === GLOBAL_PROFILE_ID;
-    const globalIsDefault = profiles.find(p => p.id === GLOBAL_PROFILE_ID)?.isDefault === true;
     {
-      const badges = [globalIsActive ? 'active' : '', globalIsDefault ? 'default' : ''].filter(Boolean).join(' · ');
       const icon = globalIsActive ? '$(check)' : '$(globe)';
       items.push({
-        label: `${icon} Global${badges ? `  ·  ${badges}` : ''}`,
+        label: `${icon} Global${globalIsActive ? '  ·  active' : ''}`,
         description: globalCreds
           ? `${globalCreds.gitName} <${globalCreds.gitEmail}>  ·  from ~/.gitconfig`
           : 'No global git identity configured',
@@ -159,7 +150,6 @@ export class ProfileStatusBar implements vscode.Disposable {
     const label = type === 'local' ? 'Local' : 'Global';
     const activeId = this.profileService.getActiveProfileId();
     const isActive = activeId === id;
-    const isDefault = this.profileService.getProfiles().find(p => p.id === id)?.isDefault === true;
 
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
     const items: ActionItem[] = [
@@ -181,35 +171,6 @@ export class ProfileStatusBar implements vscode.Disposable {
       items.push({
         label: '$(check) Active (in use)',
         description: `${label} is the active profile for this workspace`,
-        action: async () => { await this.showMenu(); },
-      });
-    }
-
-    if (!isDefault) {
-      items.push({
-        label: '$(star) Set as default',
-        description: `Use ${label} when no workspace active profile is set`,
-        action: async () => {
-          // Store Local/Global as a synthetic profile entry so isDefault can be persisted
-          const existing = this.profileService.getProfiles();
-          if (!existing.find(p => p.id === id)) {
-            await this.profileService.saveProfile({
-              id,
-              name: label,
-              gitName: creds?.gitName ?? '',
-              gitEmail: creds?.gitEmail ?? '',
-              builtIn: type,
-            });
-          }
-          await this.profileService.setDefaultProfile(id);
-          this.refresh();
-          vscode.window.showInformationMessage(`GitCharm: ${label} set as default profile.`);
-        },
-      });
-    } else {
-      items.push({
-        label: '$(star-full) Default (in use)',
-        description: `${label} is the global default`,
         action: async () => { await this.showMenu(); },
       });
     }
@@ -237,27 +198,13 @@ export class ProfileStatusBar implements vscode.Disposable {
     if (!isActive) {
       items.push({
         label: '$(check) Use for this project/workspace',
-        description: `Set "${profile.name}" as active — writes to .git/config of all repos`,
+        description: `Set "${profile.name}" as active profile for this workspace`,
         action: () => this.activateProfile(profile),
       });
     } else {
       items.push({
         label: '$(check) Active (in use)',
         description: 'This profile is active for this workspace',
-        action: async () => { await this.showMenu(); },
-      });
-    }
-
-    if (!profile.isDefault) {
-      items.push({
-        label: '$(star) Set as default',
-        description: 'Use this profile in projects where no active profile is set',
-        action: () => this.setDefault(profile),
-      });
-    } else {
-      items.push({
-        label: '$(star-full) Default (in use)',
-        description: 'This is the global default profile',
         action: async () => { await this.showMenu(); },
       });
     }
@@ -279,15 +226,9 @@ export class ProfileStatusBar implements vscode.Disposable {
   // ── CRUD ──────────────────────────────────────────────────────────────────────
 
   private async activateProfile(profile: GitProfile): Promise<void> {
-    await this.profileService.setActiveProfile(profile.id, this.getAllRepoPaths());
+    await this.profileService.setActiveProfile(profile.id);
     this.refresh();
     vscode.window.showInformationMessage(`GitCharm: "${profile.name}" is now active.`);
-  }
-
-  private async setDefault(profile: GitProfile): Promise<void> {
-    await this.profileService.setDefaultProfile(profile.id);
-    this.refresh();
-    vscode.window.showInformationMessage(`GitCharm: "${profile.name}" set as default.`);
   }
 
   async createProfile(): Promise<void> {
@@ -318,13 +259,11 @@ export class ProfileStatusBar implements vscode.Disposable {
     });
     if (!gitEmail) return;
 
-    const profiles = this.profileService.getProfiles().filter(p => !p.builtIn);
     const profile: GitProfile = {
       id: generateId(),
       name: displayName.trim(),
       gitName: gitName.trim(),
       gitEmail: gitEmail.trim(),
-      isDefault: profiles.length === 0,
     };
 
     await this.profileService.saveProfile(profile);
@@ -397,7 +336,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     type Item = vscode.QuickPickItem & { id: string };
     const items: Item[] = profiles.map(p => ({
       label: `${p.id === activeId ? '$(check) ' : '$(account) '}${p.name}`,
-      description: `${p.gitName} <${p.gitEmail}>${p.isDefault ? '  · default' : ''}`,
+      description: `${p.gitName} <${p.gitEmail}>`,
       id: p.id,
     }));
 
@@ -407,7 +346,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     }) as Item | undefined;
 
     if (!pick) return;
-    await this.profileService.setActiveProfile(pick.id, this.getAllRepoPaths());
+    await this.profileService.setActiveProfile(pick.id);
     const selected = profiles.find(p => p.id === pick.id);
     if (selected) {
       this.refresh();

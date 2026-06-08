@@ -1,22 +1,16 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import type { ChangelistData, RepoStatus } from '../types/git';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../types/git';
-
-const FOLDER_CHANGELISTS_FILE = '.vscode/gitcharm-changelists.json';
 
 interface ChangelistsJson {
   changelists: ChangelistData[];
 }
 
-// Shape of a .code-workspace file (only the keys we care about)
+// Shape of a .code-workspace file — used only for legacy migration cleanup
 interface WorkspaceFileJson {
-  folders?: unknown[];
-  settings?: Record<string, unknown>;
-  extensions?: unknown;
-  gitcharm?: { changelists?: ChangelistData[] };
+  gitcharm?: { changelists?: unknown };
   [key: string]: unknown;
 }
 
@@ -29,57 +23,40 @@ function makeDefaultChangelists(): ChangelistData[] {
 
 export class ChangelistService {
   private changelists: ChangelistData[];
+  private readonly globalFilePath: string;
 
   /**
    * @param workspaceFolderPath  fsPath of the first workspace folder (always provided)
-   * @param workspaceFilePath    fsPath of the .code-workspace file, if the user opened one
+   * @param globalStoragePath    VSCode globalStorageUri.fsPath for per-extension storage
+   * @param workspaceFilePath    fsPath of the .code-workspace file, used only for legacy migration cleanup
    * @param isChangelistMode     whether the current view mode is 'changelists'
    */
   constructor(
     private readonly workspaceFolderPath: string,
-    private readonly workspaceFilePath?: string,
+    globalStoragePath: string,
+    workspaceFilePath?: string,
     private isChangelistMode: boolean = false,
   ) {
+    const repoHash = crypto.createHash('sha1').update(workspaceFolderPath).digest('hex').slice(0, 16);
+    this.globalFilePath = path.join(globalStoragePath, 'changelists', repoHash, 'changelists.json');
     this.changelists = this.load();
+    this.cleanLegacyWorkspaceFile(workspaceFilePath);
   }
 
   setChangelistMode(enabled: boolean): void {
     this.isChangelistMode = enabled;
   }
 
-  // ── Storage mode ─────────────────────────────────────────────────────────────
-
-  private get isWorkspaceFile(): boolean {
-    return !!this.workspaceFilePath;
-  }
-
-  // ── Persistence ─────────────────────────────────────────────────────────────
-
-  private get folderFilePath(): string {
-    return path.join(this.workspaceFolderPath, FOLDER_CHANGELISTS_FILE);
-  }
+  // ── Persistence ──────────────────────────────────────────────────────────────
 
   private load(): ChangelistData[] {
     try {
-      if (this.isWorkspaceFile) {
-        return this.loadFromWorkspaceFile();
-      }
-      return this.loadFromFolderFile();
+      const raw = fs.readFileSync(this.globalFilePath, 'utf8');
+      const parsed = JSON.parse(raw) as ChangelistsJson;
+      return this.ensureFixedChangelists(parsed.changelists ?? []);
     } catch {
       return makeDefaultChangelists();
     }
-  }
-
-  private loadFromFolderFile(): ChangelistData[] {
-    const raw = fs.readFileSync(this.folderFilePath, 'utf8');
-    const parsed = JSON.parse(raw) as ChangelistsJson;
-    return this.ensureFixedChangelists(parsed.changelists ?? []);
-  }
-
-  private loadFromWorkspaceFile(): ChangelistData[] {
-    const raw = fs.readFileSync(this.workspaceFilePath!, 'utf8');
-    const parsed = JSON.parse(raw) as WorkspaceFileJson;
-    return this.ensureFixedChangelists(parsed.gitcharm?.changelists ?? []);
   }
 
   private ensureFixedChangelists(data: ChangelistData[]): ChangelistData[] {
@@ -95,55 +72,28 @@ export class ChangelistService {
 
   private save(): void {
     try {
-      if (this.isWorkspaceFile) {
-        this.saveToWorkspaceFile();
-      } else {
-        this.saveToFolderFile();
-      }
+      if (!this.isChangelistMode) return;
+      const dir = path.dirname(this.globalFilePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(this.globalFilePath, JSON.stringify({ changelists: this.changelists }, null, 2), 'utf8');
     } catch {
       // Non-critical — silently fail
     }
   }
 
-  private saveToFolderFile(): void {
-    if (!this.isChangelistMode) return;
-    const dir = path.dirname(this.folderFilePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(this.folderFilePath, JSON.stringify({ changelists: this.changelists }, null, 2), 'utf8');
-    this.ensureGlobalGitignore();
-  }
-
-  private saveToWorkspaceFile(): void {
-    const raw = fs.readFileSync(this.workspaceFilePath!, 'utf8');
-    const parsed = JSON.parse(raw) as WorkspaceFileJson;
-    parsed.gitcharm = { ...parsed.gitcharm, changelists: this.changelists };
-    fs.writeFileSync(this.workspaceFilePath!, JSON.stringify(parsed, null, '\t'), 'utf8');
-  }
-
-  private ensureGlobalGitignore(): void {
+  private cleanLegacyWorkspaceFile(workspaceFilePath?: string): void {
+    if (!workspaceFilePath) return;
     try {
-      const entry = '.vscode/gitcharm-changelists.json';
-      const globalIgnorePath = this.getGlobalGitignorePath();
-      if (fs.existsSync(globalIgnorePath)) {
-        const content = fs.readFileSync(globalIgnorePath, 'utf8');
-        if (content.includes(entry)) return;
-        const newContent = content.endsWith('\n') ? content + entry + '\n' : content + '\n' + entry + '\n';
-        fs.writeFileSync(globalIgnorePath, newContent, 'utf8');
-      } else {
-        fs.writeFileSync(globalIgnorePath, entry + '\n', 'utf8');
-      }
+      if (!fs.existsSync(workspaceFilePath)) return;
+      const raw = fs.readFileSync(workspaceFilePath, 'utf8');
+      const parsed = JSON.parse(raw) as WorkspaceFileJson;
+      if (!parsed.gitcharm?.changelists) return;
+      delete parsed.gitcharm.changelists;
+      if (Object.keys(parsed.gitcharm).length === 0) delete parsed.gitcharm;
+      fs.writeFileSync(workspaceFilePath, JSON.stringify(parsed, null, '\t'), 'utf8');
     } catch {
       // Non-critical
     }
-  }
-
-  private getGlobalGitignorePath(): string {
-    try {
-      const result = execSync('git config --global core.excludesFile', { encoding: 'utf8' }).trim();
-      if (result) return result.startsWith('~') ? path.join(os.homedir(), result.slice(1)) : result;
-    } catch { /* fall through */ }
-    // Default path when core.excludesFile is not set
-    return path.join(os.homedir(), '.gitignore_global');
   }
 
   // ── Reconciliation ───────────────────────────────────────────────────────────

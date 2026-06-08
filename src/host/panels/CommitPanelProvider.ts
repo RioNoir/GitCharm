@@ -81,17 +81,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Resolves the effective profile for the repo, writes its credentials into
-   * .git/config (so all Git tools see them), and returns them for -c injection.
-   * For implicit local/global fallback no injection is needed — git already
-   * has the right config natively.
+   * Resolves the effective profile for the repo and returns credentials for -c injection.
+   * For local/global fallback sources no injection is needed — git already has the right config natively.
+   * Never writes to .git/config — credentials are injected only for the duration of the commit command.
    */
   private async getCommitCredentials(repoPath: string): Promise<{ gitName: string; gitEmail: string } | undefined> {
     if (!this.profileService) return undefined;
 
     // For submodules, resolve the profile using the parent repo path so they
-    // inherit the same identity as the parent — the submodule's own .git/config
-    // is a separate file and typically has no local credentials set.
+    // inherit the same identity as the parent.
     const meta = this.manager.getRepoMetas().find(m => m.rootPath === repoPath);
     const resolvedPath = (meta?.isSubmodule && meta.parentRepoId)
       ? meta.parentRepoId
@@ -105,8 +103,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     if (result.source === 'local' || result.source === 'global') return undefined;
     const { gitName, gitEmail } = result.profile;
     if (!gitName && !gitEmail) return undefined;
-    // Persist into the submodule's own .git/config so the identity is visible to all git tools
-    await this.profileService.writeLocalCreds(repoPath, gitName, gitEmail).catch(() => {});
     return { gitName, gitEmail };
   }
 
@@ -209,7 +205,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const workspaceFilePath = vscode.workspace.workspaceFile?.scheme === 'file'
       ? vscode.workspace.workspaceFile.fsPath
       : undefined;
-    this.changelistService = new ChangelistService(folderPath, workspaceFilePath, this.getChangesViewMode() === 'changelists');
+    this.changelistService = new ChangelistService(folderPath, this.globalStoragePath, workspaceFilePath, this.getChangesViewMode() === 'changelists');
     return this.changelistService;
   }
 
