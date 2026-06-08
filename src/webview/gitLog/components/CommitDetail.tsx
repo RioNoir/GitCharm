@@ -49,7 +49,11 @@ function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onRevea
       onClose();
     };
     document.addEventListener('mousedown', h, true);
-    return () => document.removeEventListener('mousedown', h, true);
+    window.addEventListener('blur', onClose);
+    return () => {
+      document.removeEventListener('mousedown', h, true);
+      window.removeEventListener('blur', onClose);
+    };
   }, [onClose]);
 
   const menuStyle: React.CSSProperties = {
@@ -185,28 +189,67 @@ function collapseSingleChildDirs(node: TreeNode): TreeNode {
   return { ...node, children: newChildren };
 }
 
+/* ─── Flat file row ──────────────────────────────────────────────────────── */
+
+function FlatFileRow({ file, isSelected, isCtxActive, statusColor, fileName, dir, iconTheme, activeHash, onOpen, onContextMenu }: {
+  file: FileEntry; isSelected: boolean; isCtxActive: boolean;
+  statusColor: string; fileName: string; dir: string;
+  iconTheme?: IconThemeData | null; activeHash: string;
+  onOpen: (f: FileEntry, hash: string) => void;
+  onContextMenu: (v: { x: number; y: number; file: FileEntry }) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      style={styles.fileRow(isSelected, hovered, isCtxActive)}
+      onClick={() => onOpen(file, activeHash)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onContextMenu={e => { e.preventDefault(); onContextMenu({ x: e.clientX, y: e.clientY, file }); }}
+      title={`${file.path}\nClick to open diff`}
+    >
+      <div style={{ width: 4, flexShrink: 0 }} />
+      <FileIcon name={fileName} theme={iconTheme} size={14} style={styles.fileIconBase} />
+      <span style={styles.fileName(statusColor, isSelected)}>{fileName}</span>
+      {dir && <span style={styles.dirPath}>{dir}</span>}
+      {(file.added != null || file.removed != null) && (
+        <span style={styles.lineStats}>
+          {file.added != null && <span style={styles.added}>+{file.added}</span>}
+          {file.removed != null && <span style={styles.removed}>-{file.removed}</span>}
+        </span>
+      )}
+      <span style={styles.statusLetter(statusColor)}>{file.status}</span>
+    </div>
+  );
+}
+
 /* ─── Tree renderer ───────────────────────────────────────────────────────── */
 
-function TreeDir({ node, depth, selectedFile, onOpen, onContextMenu, allExpanded, iconTheme }: {
+function TreeDir({ node, depth, selectedFile, ctxFile, onOpen, onContextMenu, allExpanded, iconTheme }: {
   node: TreeNode;
   depth: number;
   selectedFile: FileEntry | null;
+  ctxFile: string | null;
   onOpen: (f: FileEntry) => void;
   onContextMenu: (e: React.MouseEvent, f: FileEntry) => void;
   allExpanded: boolean | null;
   iconTheme?: IconThemeData | null;
 }) {
   const [localOpen, setLocalOpen] = useState(true);
+  const [hovered, setHovered] = useState(false);
   const open = allExpanded !== null ? allExpanded : localOpen;
   const indent = depth * 14;
 
   if (node.file) {
     const isSelected = selectedFile?.path === node.file.path;
+    const isCtxActive = !isSelected && ctxFile === node.file.path;
     const statusColor = STATUS_COLORS[node.file.status] ?? 'var(--vscode-foreground)';
     return (
       <div
-        style={styles.fileRow(isSelected)}
+        style={styles.fileRow(isSelected, hovered, isCtxActive)}
         onClick={() => onOpen(node.file!)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         onContextMenu={e => { e.preventDefault(); onContextMenu(e, node.file!); }}
         title={`${node.file.path}\nClick to open diff`}
       >
@@ -243,7 +286,7 @@ function TreeDir({ node, depth, selectedFile, onOpen, onContextMenu, allExpanded
           return a.name.localeCompare(b.name);
         })
         .map(child => (
-          <TreeDir key={child.fullPath} node={child} depth={depth + 1} selectedFile={selectedFile} onOpen={onOpen} onContextMenu={onContextMenu} allExpanded={allExpanded} iconTheme={iconTheme} />
+          <TreeDir key={child.fullPath} node={child} depth={depth + 1} selectedFile={selectedFile} ctxFile={ctxFile} onOpen={onOpen} onContextMenu={onContextMenu} allExpanded={allExpanded} iconTheme={iconTheme} />
         ))
       }
     </>
@@ -655,6 +698,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
                 node={child}
                 depth={0}
                 selectedFile={selectedFile}
+                ctxFile={ctxMenu?.file.path ?? null}
                 onOpen={f => openVscodeDiff(f, activeHash)}
                 onContextMenu={(e, f) => setCtxMenu({ x: e.clientX, y: e.clientY, file: f })}
                 allExpanded={allExpanded}
@@ -665,30 +709,20 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
 
         {viewMode === 'flat' && activeFiles.map(file => {
           const isSelected = selectedFile?.path === file.path;
-          const statusColor = STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)';
-          const fileName = file.path.split('/').pop() ?? file.path;
-          const dir = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
-
           return (
-            <div
+            <FlatFileRow
               key={file.path}
-              style={styles.fileRow(isSelected)}
-              onClick={() => openVscodeDiff(file, activeHash)}
-              onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
-              title={`${file.path}\nClick to open diff`}
-            >
-              <div style={{ width: 4, flexShrink: 0 }} />
-              <FileIcon name={fileName} theme={iconTheme} size={14} style={styles.fileIconBase} />
-              <span style={styles.fileName(statusColor, isSelected)}>{fileName}</span>
-              {dir && <span style={styles.dirPath}>{dir}</span>}
-              {(file.added != null || file.removed != null) && (
-                <span style={styles.lineStats}>
-                  {file.added != null && <span style={styles.added}>+{file.added}</span>}
-                  {file.removed != null && <span style={styles.removed}>-{file.removed}</span>}
-                </span>
-              )}
-              <span style={styles.statusLetter(statusColor)}>{file.status}</span>
-            </div>
+              file={file}
+              isSelected={isSelected}
+              isCtxActive={!isSelected && ctxMenu?.file.path === file.path}
+              statusColor={STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)'}
+              fileName={file.path.split('/').pop() ?? file.path}
+              dir={file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''}
+              iconTheme={iconTheme}
+              activeHash={activeHash}
+              onOpen={openVscodeDiff}
+              onContextMenu={setCtxMenu}
+            />
           );
         })}
       </div>
@@ -941,7 +975,7 @@ const styles = {
     overflowY: 'auto' as const,
     fontSize: '12px',
   },
-  fileRow: (selected: boolean): React.CSSProperties => ({
+  fileRow: (selected: boolean, hovered = false, ctxActive = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -949,7 +983,13 @@ const styles = {
     paddingTop: '2px',
     paddingBottom: '2px',
     cursor: 'pointer',
-    background: selected ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
+    background: selected
+      ? 'var(--vscode-list-activeSelectionBackground)'
+      : ctxActive
+        ? 'var(--vscode-list-inactiveSelectionBackground)'
+        : hovered
+          ? 'var(--vscode-list-hoverBackground)'
+          : 'transparent',
     color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     minHeight: '22px',
     userSelect: 'none',

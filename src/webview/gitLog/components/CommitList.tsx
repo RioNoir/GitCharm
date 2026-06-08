@@ -106,6 +106,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   }, [commits.length, repos.length, storeHasMore]);
 
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [containerWidth, setContainerWidth] = useState<number>(9999);
@@ -268,7 +269,9 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           return (
             <div
               key={commit.hash}
-              style={styles.row(vrow.start, isSelected, isMultiSelected)}
+              style={styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash)}
+              onMouseEnter={() => setHoveredIndex(vrow.index)}
+              onMouseLeave={() => setHoveredIndex(null)}
               onClick={(e) => {
                 if (e.ctrlKey || e.metaKey) {
                   setMultiSelectHashes(prev => {
@@ -436,6 +439,11 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
     .map(r => r.slice(r.indexOf('/') + 1));
   const branchesFromRefs = localBranchesFromRefs.length > 0 ? localBranchesFromRefs : remoteBranchesFromRefs;
   const primaryBranch = branchesFromRefs[0] ?? null;
+
+  useEffect(() => {
+    window.addEventListener('blur', onClose);
+    return () => window.removeEventListener('blur', onClose);
+  }, [onClose]);
 
   // Clamp menu position so it stays within the viewport (useLayoutEffect avoids flash)
   const [menuPos, setMenuPos] = useState({ left: x, top: y });
@@ -836,7 +844,7 @@ const styles = {
     textOverflow: 'ellipsis' as const,
     lineHeight: `${ROW_HEIGHT}px`,
   } as React.CSSProperties,
-  row: (top: number, selected: boolean, multiSelected = false): React.CSSProperties => ({
+  row: (top: number, selected: boolean, multiSelected = false, hovered = false, ctxActive = false): React.CSSProperties => ({
     position: 'absolute' as const,
     top,
     left: 0,
@@ -851,6 +859,10 @@ const styles = {
       ? 'var(--vscode-list-activeSelectionBackground)'
       : multiSelected
       ? 'var(--vscode-list-inactiveSelectionBackground)'
+      : ctxActive
+      ? 'var(--vscode-list-inactiveSelectionBackground)'
+      : hovered
+      ? 'var(--vscode-list-hoverBackground)'
       : 'transparent',
     color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     fontSize: '12px',

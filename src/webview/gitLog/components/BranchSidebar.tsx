@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect, forwardRef } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, forwardRef } from 'react';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 import { Codicon } from '../../shared/Codicon';
@@ -180,6 +180,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
           repoColorMap={repoColorMap}
           multiRepo={multiRepo}
           isFilterSelected={selectedBranchFilter === m.baseName}
+          isCtxActive={contextMenu?.merged.baseName === m.baseName}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -205,6 +206,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               repoColorMap={repoColorMap}
               multiRepo={multiRepo}
               isFilterSelected={selectedBranchFilter === m.baseName}
+              isCtxActive={contextMenu?.merged.baseName === m.baseName}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -232,6 +234,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               repoColorMap={repoColorMap}
               multiRepo={multiRepo}
               isActive={activeDetachedTags.has(mt.name)}
+              isCtxActive={tagContextMenu?.mergedTag.name === mt.name}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -280,20 +283,24 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   );
 });
 
-function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, onContextMenu, onDoubleClick }: {
+function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onDoubleClick }: {
   merged: MergedBranch;
   repoColorMap: Record<string, string>;
   multiRepo: boolean;
   isFilterSelected: boolean;
+  isCtxActive: boolean;
   onContextMenu: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
 }) {
   const { baseName, isPrimary, isHead, repoIds } = merged;
   const isRemote = merged.instances[0].isRemote;
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
-      style={styles.branchRow(isHead, isFilterSelected)}
+      style={styles.branchRow(isHead, isFilterSelected, hovered, isCtxActive)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}
       title={`${baseName}\nDouble-click to filter by this branch · Right-click for git actions`}
@@ -323,16 +330,21 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, onContex
   );
 }
 
-function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, onContextMenu }: {
+function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onContextMenu }: {
   mergedTag: MergedTag;
   repoColorMap: Record<string, string>;
   multiRepo: boolean;
   isActive: boolean;
+  isCtxActive: boolean;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
     <div
-      style={styles.branchRow(isActive, false)}
+      style={styles.branchRow(isActive, false, hovered, isCtxActive)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onContextMenu={onContextMenu}
       title={`Tag: ${mergedTag.name}${isActive ? ' (current)' : ''}\nRight-click for actions`}
     >
@@ -396,6 +408,10 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   onDelete: () => void;
 }) {
   const { ref, pos } = useClampedPosition(x, y);
+  useEffect(() => {
+    window.addEventListener('blur', onClose);
+    return () => window.removeEventListener('blur', onClose);
+  }, [onClose]);
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: `Checkout "${mergedTag.name}"`, action: onCheckout },
     { sep: true },
@@ -427,6 +443,10 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
   onPush: () => void;
 }) {
   const { ref, pos } = useClampedPosition(x, y);
+  useEffect(() => {
+    window.addEventListener('blur', onClose);
+    return () => window.removeEventListener('blur', onClose);
+  }, [onClose]);
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: `Checkout "${merged.baseName}"`, action: onCheckout },
     { sep: true },
@@ -575,17 +595,21 @@ const styles = {
     fontSize: '10px',
     flexShrink: 0,
   },
-  branchRow: (isHead: boolean, isFilterSelected: boolean): React.CSSProperties => ({
+  branchRow: (isHead: boolean, isFilterSelected: boolean, hovered = false, ctxActive = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
     padding: '2px 8px 2px 14px',
     cursor: 'pointer',
-    background: isFilterSelected
-      ? 'var(--vscode-list-hoverBackground)'
-      : isHead
-        ? 'var(--vscode-list-activeSelectionBackground)'
-        : 'transparent',
+    background: isHead
+      ? 'var(--vscode-list-activeSelectionBackground)'
+      : isFilterSelected
+        ? 'var(--vscode-list-hoverBackground)'
+        : ctxActive
+          ? 'var(--vscode-list-inactiveSelectionBackground)'
+          : hovered
+            ? 'var(--vscode-list-hoverBackground)'
+            : 'transparent',
     color: isHead ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     fontSize: '12px',
     minHeight: '22px',
