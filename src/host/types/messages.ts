@@ -54,7 +54,7 @@ export interface UnpushedCommit {
 // ─── Commit Panel: Host → WebView ────────────────────────────────────────────
 
 export type HostToCommitMsg =
-  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; fileViewMode?: 'flat' | 'tree' }
+  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; hasWorkspaceFolder?: boolean }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
   | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'COMMIT_BRANCHES_UPDATE'; repoId: string; branches: BranchInfo[] }
@@ -150,7 +150,10 @@ export type CommitToHostMsg =
   | { type: 'WORKTREE_OPEN_IN_EXPLORER'; repoId: string; worktreePath: string }
   | { type: 'WORKTREE_OPEN_IN_NEW_WINDOW'; worktreePath: string }
   | { type: 'WORKTREE_OPEN_IN_OS'; worktreePath: string }
-  | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string };
+  | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string }
+  | { type: 'COMMIT_INIT_REPO' }
+  | { type: 'COMMIT_OPEN_FOLDER' }
+  | { type: 'COMMIT_CLONE_REPO' };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 
@@ -164,7 +167,7 @@ export interface TagInfo {
 }
 
 export type HostToLogMsg =
-  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData }
+  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean }
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number }>; error?: string }
@@ -232,7 +235,10 @@ export type LogToHostMsg =
   | { type: 'LOG_SHOW_BRANCH_OPTIONS'; repoId: string; branchName: string }
   | { type: 'LOG_CHECKOUT_COMMIT'; requestId: string; repoId: string; hash: string; branchName?: string }
   | { type: 'LOG_REVEAL_IN_EXPLORER'; repoId: string; filePath: string }
-  | { type: 'LOG_REVEAL_IN_OS'; repoId: string; filePath: string };
+  | { type: 'LOG_REVEAL_IN_OS'; repoId: string; filePath: string }
+  | { type: 'LOG_INIT_REPO' }
+  | { type: 'LOG_OPEN_FOLDER' }
+  | { type: 'LOG_CLONE_REPO' };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 

@@ -57,7 +57,7 @@ function App() {
 
       switch (msg.type) {
         case 'LOG_INIT_DATA':
-          store.setRepos(msg.repos);
+          store.setRepos(msg.repos, msg.hasWorkspaceFolder);
           store.setBranches(msg.branches);
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           break;
@@ -136,7 +136,6 @@ function App() {
 
     const f = { ...useLogStore.getState().commitFilters, ...overrides };
     useLogStore.getState().resetCommits();
-    useLogStore.getState().setLoadingCommits(true);
     send({
       type: 'LOG_REQUEST_COMMITS',
       repoIds: f.repoId ? [f.repoId] : [],
@@ -225,8 +224,35 @@ function App() {
 
   const hasSelectedCommit = !!store.selectedCommit;
 
+  const showNoRepo = store.repos.length === 0 && store.initialized;
+  const noRepoOverlay = showNoRepo ? (
+    <div style={noRepoOverlayStyle}>
+      {!store.hasWorkspaceFolder ? (
+        <>
+          <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
+            You have not yet opened a folder.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '200px' }}>
+            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_OPEN_FOLDER' })}>Open Folder</button>
+            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_CLONE_REPO' })}>Clone Repository</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
+            The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.
+          </div>
+          <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_INIT_REPO' })}>
+            Initialize Repository
+          </button>
+        </>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div style={appStyle} onContextMenu={e => e.preventDefault()}>
+    <div style={{ ...appStyle, position: 'relative' }} onContextMenu={e => e.preventDefault()}>
+      {noRepoOverlay}
       {/* Filters bar (contains Fetch All on the right) */}
       <CommitFiltersBar
         filters={store.commitFilters}
@@ -239,7 +265,7 @@ function App() {
       />
 
       {/* Main layout */}
-      <div style={mainLayout}>
+      <div style={{ ...mainLayout, visibility: showNoRepo ? 'hidden' : 'visible' }}>
         {/* Branch sidebar */}
         <BranchSidebar
           ref={sidebarRef}
@@ -306,6 +332,7 @@ function App() {
           onSelect={(commit) => store.selectCommit(commit)}
           onLoadMore={handleLoadMore}
           hasMore={store.hasMore && !store.loadingCommits && !store.backgroundLoading}
+          storeHasMore={store.hasMore}
           loading={store.loadingCommits}
           backgroundLoading={store.backgroundLoading}
           scrollToHash={store.pendingScrollHash}
@@ -333,6 +360,26 @@ function App() {
     </div>
   );
 }
+
+const noRepoOverlayStyle: React.CSSProperties = {
+  position: 'absolute', inset: 0, zIndex: 10,
+  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+  gap: '12px', padding: '24px',
+  background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-foreground)',
+  fontFamily: 'var(--vscode-font-family)',
+};
+
+const initRepoBtnStyle: React.CSSProperties = {
+  background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)',
+  border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
+  fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)',
+  border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
+  fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
+};
 
 const appStyle: React.CSSProperties = {
   display: 'flex',

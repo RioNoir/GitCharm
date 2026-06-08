@@ -348,7 +348,7 @@ function App() {
 
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.hasWorkspaceFolder);
           break;
         case 'CHANGELISTS_UPDATE':
           store.setChangelists(msg.changelists, msg.viewMode);
@@ -784,6 +784,34 @@ function App() {
   }
 
   if (repos.length === 0 && store.status) {
+    if (!store.hasWorkspaceFolder) {
+      return (
+        <div style={{ ...css.fullCenter, flexDirection: 'column', gap: '12px', padding: '24px' }}>
+          <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
+            You have not yet opened a folder.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '200px' }}>
+            <button style={css.initRepoBtn} onClick={() => send({ type: 'COMMIT_OPEN_FOLDER' } as CommitToHostMsg)}>Open Folder</button>
+            <button style={css.initRepoBtn} onClick={() => send({ type: 'COMMIT_CLONE_REPO' } as CommitToHostMsg)}>Clone Repository</button>
+          </div>
+        </div>
+      );
+    }
+    if (store.repoMetas.length === 0) {
+      return (
+        <div style={{ ...css.fullCenter, flexDirection: 'column', gap: '12px', padding: '24px' }}>
+          <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
+            The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.
+          </div>
+          <button
+            style={css.initRepoBtn}
+            onClick={() => send({ type: 'COMMIT_INIT_REPO' } as CommitToHostMsg)}
+          >
+            Initialize Repository
+          </button>
+        </div>
+      );
+    }
     return (
       <div style={css.fullCenter}>
         <div style={{ textAlign: 'center', opacity: 0.45 }}>
@@ -1175,6 +1203,7 @@ function App() {
             amendFlags={store.amendFlags}
             loading={store.loading}
             changesViewMode={store.changesViewMode}
+            defaultCommitAction={store.defaultCommitAction}
             vscodeSelectedRepos={store.changesViewMode === 'vscode' ? vscodeSelectedRepos : undefined}
             getSelectedFilesForRepo={store.getSelectedFilesForRepo}
             onDeselectRepo={repoId => {
@@ -1625,6 +1654,16 @@ const css = {
     height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-foreground)',
     fontFamily: 'var(--vscode-font-family)',
+  },
+  initRepoBtn: {
+    background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)',
+    border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
+    fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: '500' as const,
+  },
+  secondaryBtn: {
+    background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)',
+    border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
+    fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: '500' as const,
   },
 };
 

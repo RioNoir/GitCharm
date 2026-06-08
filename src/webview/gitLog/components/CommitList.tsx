@@ -23,6 +23,7 @@ interface Props {
   onSelect: (commit: LaidOutCommit) => void;
   onLoadMore: () => void;
   hasMore: boolean;
+  storeHasMore: boolean;
   loading: boolean;
   backgroundLoading?: boolean;
   scrollToHash?: string | null;
@@ -75,7 +76,7 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, onSelect, onLoadMore, hasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash }: Props) {
+export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   // Start as true — skeleton is always shown until commits arrive (handles first load correctly)
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -83,6 +84,12 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   const shownSinceRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (commits.length === 0 && (repos.length === 0 || !storeHasMore)) {
+      // No repos, or server confirmed no commits (isLast=true with empty batch) — exit skeleton immediately
+      if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
+      setShowSkeleton(false);
+      return;
+    }
     if (commits.length === 0) {
       // Reset: show skeleton again (e.g. on reload/refresh)
       if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
@@ -96,7 +103,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
       skeletonTimerRef.current = setTimeout(() => setShowSkeleton(false), remaining);
     }
     return () => { if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current); };
-  }, [commits.length]);
+  }, [commits.length, repos.length, storeHasMore]);
 
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
@@ -213,6 +220,16 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
 
   if (showSkeleton) {
     return <CommitSkeleton />;
+  }
+
+  if (commits.length === 0 && !storeHasMore) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', height: '100%', gap: '8px', fontFamily: 'var(--vscode-font-family)', userSelect: 'none' }}>
+        <Codicon name="git-commit" style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
+        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>No commits yet</span>
+        <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>Make your first commit to see the history here</span>
+      </div>
+    );
   }
 
   return (

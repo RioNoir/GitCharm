@@ -46,6 +46,7 @@ export function getWebviewHtml(
     * { box-sizing: border-box; }
     body { margin: 0; padding: 0; overflow: hidden; height: 100vh; }
     #root { height: 100vh; display: flex; flex-direction: column; }
+    body.cursor-host { max-width: calc(100vw - 1px); }
 
     /* ── Themed checkboxes ──────────────────────────────────────────────────── */
     input[type="checkbox"] {
@@ -109,6 +110,7 @@ export function getWebviewHtml(
 </head>
 <body>
   <div id="root"></div>
+  <script nonce="${nonce}">if (/Cursor/.test(navigator.userAgent)) document.body.classList.add('cursor-host');</script>
   <script nonce="${nonce}" type="module" src="${jsUri}"></script>
 </body>
 </html>`;

@@ -9,6 +9,7 @@ interface Props {
   amendFlags: Record<string, boolean>;
   loading: boolean;
   changesViewMode?: 'simplified' | 'changelists' | 'vscode';
+  defaultCommitAction?: 'commit' | 'commitAndPush';
   vscodeSelectedRepos?: Set<string>;
   getSelectedFilesForRepo: (repoId: string) => string[];
   onDeselectRepo: (repoId: string) => void;
@@ -153,7 +154,7 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
 
 export function UnifiedCommitForm({
   message, repoStatuses, repoMetas, amendFlags,
-  loading, changesViewMode, vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
+  loading, changesViewMode, defaultCommitAction = 'commit', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   onAutopilot, generatingMessage,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
@@ -283,7 +284,7 @@ export function UnifiedCommitForm({
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canCommit) {
               e.preventDefault();
-              onCommit();
+              if (defaultCommitAction === 'commitAndPush') onCommitAndPush(); else onCommit();
             }
           }}
         />
@@ -321,15 +322,21 @@ export function UnifiedCommitForm({
             fullWidth
             dropdownAlign="right"
             enabled={canCommit}
-            icon="check"
-            label="Commit"
-            title="Commit (Cmd+Enter)"
+            icon={defaultCommitAction === 'commitAndPush' ? 'cloud-upload' : 'check'}
+            label={defaultCommitAction === 'commitAndPush' ? 'Commit & Push' : 'Commit'}
+            title={defaultCommitAction === 'commitAndPush' ? 'Commit & Push (Cmd+Enter)' : 'Commit (Cmd+Enter)'}
             disabledTitle="Stage files and write a message first"
-            items={[
-              { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
-              { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
-            ]}
-            onMainClick={onCommit}
+            items={defaultCommitAction === 'commitAndPush'
+              ? [
+                  { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
+                  { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
+                ]
+              : [
+                  { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
+                  { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
+                ]
+            }
+            onMainClick={defaultCommitAction === 'commitAndPush' ? onCommitAndPush : onCommit}
           />
         </div>
       </div>

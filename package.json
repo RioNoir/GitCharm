@@ -345,7 +345,11 @@
         },
         "gitcharm.changesViewMode": {
           "type": "string",
-          "enum": ["simplified", "changelists", "vscode"],
+          "enum": [
+            "simplified",
+            "changelists",
+            "vscode"
+          ],
           "enumDescriptions": [
             "Show Staged and Unstaged sections per repository (default behavior)",
             "Show files grouped by Changelists, similar to PhpStorm",
@@ -353,6 +357,19 @@
           ],
           "default": "simplified",
           "description": "How to display changed files in the Changes tab."
+        },
+        "gitcharm.defaultCommitAction": {
+          "type": "string",
+          "enum": [
+            "commit",
+            "commitAndPush"
+          ],
+          "enumDescriptions": [
+            "The main button commits without pushing",
+            "The main button commits and pushes immediately"
+          ],
+          "default": "commit",
+          "description": "Default action for the commit button in the Commit Panel."
         }
       }
     }
@@ -387,14 +404,14 @@
     "@vscode/codicons": "^0.0.45",
     "@vscode/vsce": "^2.24.0",
     "concurrently": "^8.2.0",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.28.0",
     "eslint": "^8.56.0",
     "material-icon-theme": "^5.34.0",
     "monaco-editor": "^0.47.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "typescript": "^5.3.0",
-    "vite": "^5.1.0",
+    "vite": "^8.0.16",
     "zustand": "^4.5.0"
   },
   "optionalDependencies": {

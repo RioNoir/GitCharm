@@ -154,7 +154,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }).catch(() => { /* icon theme optional */ });
         }
       }
-      if (e.affectsConfiguration('gitcharm.changesViewMode')) {
+      if (e.affectsConfiguration('gitcharm.changesViewMode') || e.affectsConfiguration('gitcharm.defaultCommitAction')) {
         this.manager.getAllStatuses().then(status => {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
@@ -166,8 +166,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private post(msg: HostToCommitMsg): void {
-    if (msg.type === 'COMMIT_STATUS_UPDATE' && msg.fileViewMode === undefined) {
-      (msg as typeof msg & { fileViewMode?: 'flat' | 'tree' }).fileViewMode = this.getFileViewMode();
+    if (msg.type === 'COMMIT_STATUS_UPDATE') {
+      const m = msg as typeof msg & { fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; hasWorkspaceFolder?: boolean };
+      if (m.fileViewMode === undefined) m.fileViewMode = this.getFileViewMode();
+      if (m.defaultCommitAction === undefined) m.defaultCommitAction = this.getDefaultCommitAction();
+      if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
     }
     this.view?.webview.postMessage(msg);
   }
@@ -183,6 +186,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private getFileViewMode(): 'flat' | 'tree' {
     return this.globalState?.get<'flat' | 'tree'>('fileViewMode', 'tree') ?? 'tree';
+  }
+
+  private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
+    return vscode.workspace.getConfiguration('gitcharm').get<'commit' | 'commitAndPush'>('defaultCommitAction', 'commit');
   }
 
   private getOrCreateChangelistService(): ChangelistService | undefined {
@@ -1609,6 +1616,24 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         vscode.window.showInformationMessage(`GitCharm: ${msg.message}`);
         break;
       }
+
+      case 'COMMIT_INIT_REPO': {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) break;
+        await vscode.commands.executeCommand('git.init', folder.uri);
+        await new Promise(r => setTimeout(r, 500));
+        this.manager.reinitializeAndRefresh();
+        this.logProvider?.refresh();
+        break;
+      }
+
+      case 'COMMIT_OPEN_FOLDER':
+        await vscode.commands.executeCommand('workbench.action.files.openFolder');
+        break;
+
+      case 'COMMIT_CLONE_REPO':
+        await vscode.commands.executeCommand('git.clone');
+        break;
 
       case 'COMMIT_REVEAL_IN_EXPLORER': {
         const repoRE = this.manager.getRepo(msg.repoId);

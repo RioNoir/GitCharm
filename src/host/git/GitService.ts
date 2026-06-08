@@ -1115,7 +1115,14 @@ export class GitService {
   }
 
   async undoCommit(): Promise<void> {
-    await this.git.raw(['reset', '--soft', 'HEAD~1']);
+    const parentCount = await this.git.raw(['rev-list', '--count', 'HEAD']).then(s => parseInt(s.trim(), 10)).catch(() => 0);
+    if (parentCount <= 1) {
+      // First commit: unstage all files and delete HEAD so the branch goes back to unborn state
+      await this.git.raw(['rm', '-r', '--cached', '.']);
+      await this.git.raw(['update-ref', '-d', 'HEAD']);
+    } else {
+      await this.git.raw(['reset', '--soft', 'HEAD~1']);
+    }
   }
 
   async editCommitMessage(message: string): Promise<void> {

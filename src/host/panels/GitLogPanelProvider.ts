@@ -165,6 +165,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   private post(msg: HostToLogMsg): void {
+    if (msg.type === 'LOG_INIT_DATA') {
+      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean };
+      if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+    }
     this.view?.webview.postMessage(msg);
   }
 
@@ -322,6 +326,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(pathOS.join(repoOS.rootPath, msg.filePath)));
         break;
       }
+
+      case 'LOG_INIT_REPO': {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) break;
+        await vscode.commands.executeCommand('git.init', folder.uri);
+        await new Promise(r => setTimeout(r, 1000));
+        this.manager.reinitializeAndRefresh();
+        break;
+      }
+
+      case 'LOG_OPEN_FOLDER':
+        await vscode.commands.executeCommand('workbench.action.files.openFolder');
+        break;
+
+      case 'LOG_CLONE_REPO':
+        await vscode.commands.executeCommand('git.clone');
+        break;
 
       case 'LOG_REVERT_FILE': {
         const repo = this.manager.getRepo(msg.repoId);

@@ -300,6 +300,11 @@ export class WorkspaceGitManager implements vscode.Disposable {
     }, 300);
   }
 
+  reinitializeAndRefresh(): void {
+    this.reinitialize();
+    this.scheduleRefresh();
+  }
+
   private detectNewUntrackedFiles(status: WorkspaceStatus): void {
     const newlyUntracked: Array<{ repo: GitService; relPath: string }> = [];
 

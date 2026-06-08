@@ -13,6 +13,7 @@ export interface CommitFilters {
 
 interface LogState {
   repos: RepoMeta[];
+  initialized: boolean;
   branches: BranchInfo[];
   tags: TagInfo[];
   iconTheme: IconThemeData | null;
@@ -34,7 +35,8 @@ interface LogState {
   pendingScrollHash: string | null;
   fileLoadSeq: number;
 
-  setRepos: (repos: RepoMeta[]) => void;
+  hasWorkspaceFolder: boolean;
+  setRepos: (repos: RepoMeta[], hasWorkspaceFolder?: boolean) => void;
   setBranches: (branches: BranchInfo[]) => void;
   updateTags: (repoId: string, tags: TagInfo[]) => void;
   setIconTheme: (theme: IconThemeData | null) => void;
@@ -67,6 +69,8 @@ const defaultCommitFilters: CommitFilters = {
 
 export const useLogStore = create<LogState>((set, get) => ({
   repos: [],
+  initialized: false,
+  hasWorkspaceFolder: true,
   branches: [],
   tags: [],
   iconTheme: null,
@@ -88,7 +92,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   pendingScrollHash: null,
   fileLoadSeq: 0,
 
-  setRepos: (repos) => set({ repos }),
+  setRepos: (repos, hasWorkspaceFolder) => set({ repos, initialized: true, ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}) }),
   setBranches: (branches) => set({ branches }),
   updateTags: (repoId, tags) => set(s => ({
     tags: [...s.tags.filter(t => t.repoId !== repoId), ...tags],
@@ -100,7 +104,7 @@ export const useLogStore = create<LogState>((set, get) => ({
     backgroundLoading: !isLast,
     hasMore: !isLast,
   })),
-  resetCommits: () => set({ commits: [], hasMore: true, backgroundLoading: false, selectedCommit: null, commitFiles: [], currentDiff: null }),
+  resetCommits: () => set({ commits: [], hasMore: true, backgroundLoading: false, loadingCommits: true, selectedCommit: null, commitFiles: [], currentDiff: null }),
   selectCommit: (commit) => set(s => ({ selectedCommit: commit, commitFiles: [], currentDiff: null, selectedFile: null, fileLoadSeq: s.fileLoadSeq + 1 })),
   setCommitFiles: (files) => set({ commitFiles: files, loadingFiles: false }),
   selectFile: (file) => set({ selectedFile: file }),

@@ -28,8 +28,10 @@ export interface CommitState {
   error: string | null;
   changelists: ChangelistData[];
   changesViewMode: 'simplified' | 'changelists' | 'vscode';
+  defaultCommitAction: 'commit' | 'commitAndPush';
+  hasWorkspaceFolder: boolean;
 
-  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, fileViewMode?: 'flat' | 'tree') => void;
+  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, fileViewMode?: 'flat' | 'tree', defaultCommitAction?: 'commit' | 'commitAndPush', hasWorkspaceFolder?: boolean) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
   toggleFileSelection: (repoId: string, path: string) => void;
   setFileSelections: (repoId: string, paths: string[], selected: boolean) => void;
@@ -84,8 +86,10 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   error: null,
   changelists: [],
   changesViewMode: 'simplified',
+  defaultCommitAction: 'commit',
+  hasWorkspaceFolder: true,
 
-  setStatus: (repoMetas, status, iconTheme, fileViewMode) => {
+  setStatus: (repoMetas, status, iconTheme, fileViewMode, defaultCommitAction, hasWorkspaceFolder) => {
     const prev = get().repoSelections;
     const prevFiles = get().fileSelections;
     const prevSeen = get().seenFiles;
@@ -140,7 +144,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
         }
       }
     }
-    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(fileViewMode !== undefined ? { viewMode: fileViewMode } : {}) });
+    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(fileViewMode !== undefined ? { viewMode: fileViewMode } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}) });
   },
 
   setRepoSelection: (repoId, selected) =>
