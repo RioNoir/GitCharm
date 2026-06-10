@@ -112,7 +112,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
 
   // Group remote branches by remote name (e.g. "origin", "upstream"), sorted alphabetically
   const remoteBranches = filtered.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD');
-  const remoteGroupsMap = new Map<string, MergedBranch[]>();
+  const remoteGroupsMap = new Map<string, BranchInfo[]>();
   for (const b of remoteBranches) {
     const rName = b.remoteName ?? b.name.split('/')[0] ?? 'remote';
     if (!remoteGroupsMap.has(rName)) remoteGroupsMap.set(rName, []);

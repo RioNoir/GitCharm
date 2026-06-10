@@ -196,7 +196,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
             title="Undo this commit (keeps changes as unstaged)"
             onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }}
           >
-            <Codicon name="discard" style={{ fontSize: '16px' }} />
+            <Codicon name="arrow-left" style={{ fontSize: '16px' }} />
           </button>
         )}
         <button

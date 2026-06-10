@@ -196,3 +196,13 @@ jobs:
               --title "GitCharm ${RELEASE_TAG}" \
               --notes-file "${NOTES_FILE}"
           fi
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --packagePath dist/*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX Registry
+        run: npx ovsx publish dist/*.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

@@ -12,7 +12,7 @@
   <a href="https://buymeacoffee.com/rionoir" target="_blank"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20Me%20A-Coffee-FFDD00?logo=buymeacoffee&logoColor=#FFDD00"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.85%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-red">
+  <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-red">
   <img alt="GitHub forks" src="https://img.shields.io/github/forks/RioNoir/GitCharm?style=flat&logo=github&label=Forks&color=orange">
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/RioNoir/GitCharm?style=flat&logo=GitHub&label=Stars&color=yellow">
 </p>
@@ -322,4 +322,4 @@ For new features, open an issue describing:
 
 ## 📄 License
 
-This project is distributed under the MIT license.
+This project is distributed under the GNU General Public License v3.0.

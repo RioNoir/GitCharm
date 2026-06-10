@@ -375,10 +375,10 @@ function App() {
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
           store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.hasWorkspaceFolder);
-          if (Array.isArray(msg.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
+          if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
             let hasNewChanges = false;
-            for (const repo of msg.repos) {
+            for (const repo of msg.status.repos) {
               const prev = prevCounts.get(repo.repoId) ?? 0;
               const curr = (repo.unstagedFiles ?? []).length;
               if (prev === 0 && curr > 0) hasNewChanges = true;
@@ -387,9 +387,9 @@ function App() {
             if (hasNewChanges && useCommitStore.getState().isCollapsed('vscode-section:unstaged')) {
               useCommitStore.getState().toggleCollapsed('vscode-section:unstaged');
             }
-          } else if (Array.isArray(msg.repos)) {
+          } else if (Array.isArray(msg.status.repos)) {
             const prevCounts = prevUnstagedCountsRef.current;
-            for (const repo of msg.repos) {
+            for (const repo of msg.status.repos) {
               prevCounts.set(repo.repoId, (repo.unstagedFiles ?? []).length);
             }
           }
@@ -815,7 +815,8 @@ function App() {
   // ── Push actions ──────────────────────────────────────────────────────────
 
   const doPush = (repoId: string) => {
-    send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId });
+    const remote = useCommitStore.getState().getRepoStatus(repoId)?.branch.remoteName ?? 'origin';
+    send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId, remote });
   };
 
   const doSquash = (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => {
@@ -846,7 +847,8 @@ function App() {
     const allRepos = useCommitStore.getState().status?.repos ?? [];
     for (const r of allRepos) {
       if ((r.branch.aheadBehind?.ahead ?? 0) > 0) {
-        send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId: r.repoId });
+        const remote = r.branch.remoteName ?? 'origin';
+        send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId: r.repoId, remote });
       }
     }
   };
