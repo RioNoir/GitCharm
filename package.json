@@ -330,7 +330,24 @@
         "gitcharm.projectColors": {
           "type": "object",
           "default": {},
-          "description": "Map of workspace folder name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
+          "description": "Map of workspace folder/repository name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
+        },
+        "gitcharm.repositoryScanMaxDepth": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders)."
+        },
+        "gitcharm.repositoryScanIgnoredFolders": {
+          "type": "array",
+          "default": [
+            "node_modules"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
         },
         "gitcharm.autoRefreshInterval": {
           "type": "number",
