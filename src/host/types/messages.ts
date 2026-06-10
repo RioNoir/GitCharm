@@ -70,6 +70,10 @@ export type HostToCommitMsg =
   | { type: 'STASH_SHOW_RESULT'; requestId: string; diff: string; error?: string }
   | { type: 'STASH_OP_RESULT'; requestId: string; repoId: string; op: 'apply' | 'pop' | 'drop' | 'push'; ok: boolean; error?: string }
   | { type: 'PUSH_UNPUSHED_RESULT'; requestId: string; repoId: string; commits: UnpushedCommit[]; error?: string }
+  | { type: 'PUSH_SQUASH_RESULT'; requestId: string; ok: boolean; error?: string }
+  | { type: 'PUSH_DROP_RESULT'; requestId: string; ok: boolean; error?: string }
+  | { type: 'PUSH_REVERT_RESULT'; requestId: string; ok: boolean; error?: string }
+  | { type: 'PUSH_EDIT_MSG_RESULT'; requestId: string; ok: boolean; error?: string }
   | { type: 'COMMIT_SET_MESSAGE'; message: string }
   | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' | 'vscode' }
   | { type: 'SUBMODULE_OP_RESULT'; requestId: string; parentRepoId: string; submodulePath: string; op: 'init' | 'deinit' | 'update'; ok: boolean; error?: string }
@@ -78,7 +82,8 @@ export type HostToCommitMsg =
   | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string }
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
   | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
-  | { type: 'COMMIT_HIDDEN_REPOS_UPDATE'; hiddenRepoIds: string[] };
+  | { type: 'COMMIT_HIDDEN_REPOS_UPDATE'; hiddenRepoIds: string[] }
+  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -122,6 +127,10 @@ export type CommitToHostMsg =
   | { type: 'STASH_DROP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_OPEN_FILE_DIFF'; repoId: string; stashRef: string; filePath: string }
   | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string }
+  | { type: 'PUSH_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string; message: string; commits: { hash: string; shortHash: string; message: string }[] }
+  | { type: 'PUSH_DROP_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string }
+  | { type: 'PUSH_REVERT_COMMITS'; requestId: string; repoId: string; hashes: string[] }
+  | { type: 'PUSH_EDIT_COMMIT_MSG'; requestId: string; repoId: string; hash: string; currentMessage: string }
   | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string; section?: 'staged' | 'unstaged' }
   | { type: 'COMMIT_OPEN_LOG'; hash: string; repoId: string }
   | { type: 'COMMIT_UNDO_COMMIT'; requestId: string; repoId: string }
@@ -197,7 +206,7 @@ export type HostToLogMsg =
 
 export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
-  | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string }
+  | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string; parents?: string[] }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
   | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string }
   | { type: 'LOG_OPEN_FILE'; repoId: string; filePath: string }
@@ -219,7 +228,7 @@ export type LogToHostMsg =
   | { type: 'LOG_CREATE_PATCH'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_REQUEST_MERGE_COMMITS'; requestId: string; repoId: string; hash: string; parents: string[] }
   | { type: 'LOG_DROP_COMMIT'; requestId: string; repoId: string; hash: string }
-  | { type: 'LOG_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string; message: string }
+  | { type: 'LOG_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string; message: string; commits: { hash: string; shortHash: string; message: string }[] }
   | { type: 'LOG_CHERRY_PICK_MULTI'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_REVERT_COMMITS'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_DROP_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string }
@@ -248,7 +257,8 @@ export type LogToHostMsg =
   | { type: 'LOG_REVEAL_IN_OS'; repoId: string; filePath: string }
   | { type: 'LOG_INIT_REPO' }
   | { type: 'LOG_OPEN_FOLDER' }
-  | { type: 'LOG_CLONE_REPO' };
+  | { type: 'LOG_CLONE_REPO' }
+  | { type: 'LOG_OPEN_EXTENDED_DETAIL'; repoId: string; hash: string };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 

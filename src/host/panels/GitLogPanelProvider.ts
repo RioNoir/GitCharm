@@ -5,6 +5,8 @@ import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
 import type { BranchInfo } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
+import { openSquashEditor } from './SquashEditorPanel';
+import { openEditMessageEditor } from './EditMessageEditorPanel';
 
 function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
   if (!current.detachedTag && !current.detachedHash) return branches; // normal branch — already in list
@@ -259,7 +261,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_COMMIT_FILES', requestId: msg.requestId, files: [], error: 'Repo not found' }); return; }
         try {
-          const files = await repo.getCommitFiles(msg.hash);
+          const files = await repo.getCommitFiles(msg.hash, msg.parents);
           this.post({ type: 'LOG_COMMIT_FILES', requestId: msg.requestId, files });
         } catch (e: unknown) {
           this.post({ type: 'LOG_COMMIT_FILES', requestId: msg.requestId, files: [], error: String(e) });
@@ -877,60 +879,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_SQUASH_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
-        // Open untitled editor for multi-line commit message editing
-        const uri = vscode.Uri.parse('untitled:Squash Commit Message');
-        const doc = await vscode.workspace.openTextDocument(uri);
-        const wsEdit = new vscode.WorkspaceEdit();
-        wsEdit.insert(uri, new vscode.Position(0, 0), msg.message);
-        await vscode.workspace.applyEdit(wsEdit);
-        await vscode.window.showTextDocument(doc, { preview: false });
-        // Show persistent status bar buttons (unlike showInformationMessage which auto-dismisses)
-        const uid = Date.now().toString(36);
-        const confirmCmdId = `gitcharm._squashConfirm_${uid}`;
-        const cancelCmdId = `gitcharm._squashCancel_${uid}`;
-        const choice = await new Promise<'confirm' | 'cancel'>(resolve => {
-          const disposables: vscode.Disposable[] = [];
-          let settled = false;
-          const settle = (v: 'confirm' | 'cancel') => {
-            if (settled) return;
-            settled = true;
-            disposables.forEach(d => d.dispose());
-            resolve(v);
-          };
-          disposables.push(
-            vscode.commands.registerCommand(confirmCmdId, () => settle('confirm')),
-            vscode.commands.registerCommand(cancelCmdId, () => settle('cancel')),
-          );
-          const confirmItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
-          confirmItem.text = '$(check) Confirm Squash';
-          confirmItem.command = confirmCmdId;
-          confirmItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-          confirmItem.tooltip = `Confirm squash of ${msg.hashes.length} commits`;
-          confirmItem.show();
-          disposables.push(confirmItem);
-          const cancelItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9999);
-          cancelItem.text = '$(close) Cancel';
-          cancelItem.command = cancelCmdId;
-          cancelItem.tooltip = 'Cancel squash';
-          cancelItem.show();
-          disposables.push(cancelItem);
-          // Auto-cancel if the user closes the editor tab without using the buttons
-          disposables.push(
-            vscode.workspace.onDidCloseTextDocument(closed => {
-              if (closed.uri.toString() === uri.toString()) settle('cancel');
-            })
-          );
-        });
-        const finalMessage = doc.getText().trim();
-        // Close the editor (revert so VSCode doesn't ask to save the untitled file)
-        await vscode.window.showTextDocument(doc);
-        await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
-        if (choice !== 'confirm' || !finalMessage) {
+        const fullMessages = await Promise.all(msg.hashes.map(h => repo.getFullCommitMessage(h).then(m => m.trim())));
+        const fullCombined = fullMessages.join('\n\n');
+        const fullCommits = msg.commits.map((c, i) => ({ ...c, message: fullMessages[i] ?? c.message }));
+        const result = await openSquashEditor(this.extensionUri, msg.hashes.length, fullCombined, fullCommits);
+        if (!result.confirmed) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
         try {
-          await repo.squashCommits(msg.oldestHash, finalMessage);
+          await repo.squashCommits(msg.oldestHash, result.message);
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           this.post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
@@ -965,56 +923,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_EDIT_COMMIT_MESSAGE': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
-        const uri = vscode.Uri.parse('untitled:Edit Commit Message');
-        const doc = await vscode.workspace.openTextDocument(uri);
-        const wsEdit = new vscode.WorkspaceEdit();
-        wsEdit.insert(uri, new vscode.Position(0, 0), msg.currentMessage);
-        await vscode.workspace.applyEdit(wsEdit);
-        await vscode.window.showTextDocument(doc, { preview: false });
-        const uid = Date.now().toString(36);
-        const confirmCmdId = `gitcharm._editMsgConfirm_${uid}`;
-        const cancelCmdId = `gitcharm._editMsgCancel_${uid}`;
-        const choice = await new Promise<'confirm' | 'cancel'>(resolve => {
-          const disposables: vscode.Disposable[] = [];
-          let settled = false;
-          const settle = (v: 'confirm' | 'cancel') => {
-            if (settled) return;
-            settled = true;
-            disposables.forEach(d => d.dispose());
-            resolve(v);
-          };
-          disposables.push(
-            vscode.commands.registerCommand(confirmCmdId, () => settle('confirm')),
-            vscode.commands.registerCommand(cancelCmdId, () => settle('cancel')),
-          );
-          const confirmItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
-          confirmItem.text = '$(check) Confirm Edit';
-          confirmItem.command = confirmCmdId;
-          confirmItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-          confirmItem.tooltip = 'Confirm commit message edit';
-          confirmItem.show();
-          disposables.push(confirmItem);
-          const cancelItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9999);
-          cancelItem.text = '$(close) Cancel';
-          cancelItem.command = cancelCmdId;
-          cancelItem.tooltip = 'Cancel commit message edit';
-          cancelItem.show();
-          disposables.push(cancelItem);
-          disposables.push(
-            vscode.workspace.onDidCloseTextDocument(closed => {
-              if (closed.uri.toString() === uri.toString()) settle('cancel');
-            })
-          );
-        });
-        const finalMessage = doc.getText().trim();
-        await vscode.window.showTextDocument(doc);
-        await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
-        if (choice !== 'confirm' || !finalMessage) {
+        const fullMessage = (await repo.getFullCommitMessage(msg.hash)).trim();
+        const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 7), fullMessage);
+        if (!result.confirmed) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
         try {
-          await repo.editCommitMessage(finalMessage);
+          await repo.rewordCommit(result.message);
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           this.post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
@@ -1404,6 +1320,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } catch (e: unknown) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
+        break;
+      }
+
+      case 'LOG_OPEN_EXTENDED_DETAIL': {
+        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
+        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
         break;
       }
     }

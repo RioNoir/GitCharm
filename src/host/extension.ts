@@ -50,6 +50,40 @@ async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void>
   }
 }
 
+async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPanel: CommitPanelProvider): Promise<void> {
+  if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnUnpushedCommits', true)) return;
+
+  const metas = manager.getRepoMetas();
+  const countResults = await Promise.allSettled(
+    metas.map(async m => {
+      const repo = manager.getRepo(m.id);
+      return repo ? repo.getUnpushedCount() : 0;
+    })
+  );
+
+  const counts = countResults
+    .filter((r): r is PromiseFulfilledResult<number> => r.status === 'fulfilled')
+    .map(r => r.value);
+
+  const totalAhead = counts.reduce((sum, c) => sum + c, 0);
+  if (totalAhead === 0) return;
+
+  const reposWithAhead = counts.filter(c => c > 0).length;
+
+  const commitWord = totalAhead === 1 ? 'commit' : 'commits';
+  const repoWord = reposWithAhead === 1 ? 'repository' : 'repositories';
+  const message = reposWithAhead === 1
+    ? `GitCharm: ${totalAhead} unpushed ${commitWord} ready to push.`
+    : `GitCharm: ${totalAhead} unpushed ${commitWord} across ${reposWithAhead} ${repoWord}.`;
+
+  const picked = await vscode.window.showInformationMessage(message, 'Go to Push', 'Dismiss');
+
+  if (picked === 'Go to Push') {
+    await vscode.commands.executeCommand('gitcharm.commitPanel.focus');
+    commitPanel.switchToTab('push');
+  }
+}
+
 async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalState: vscode.Memento): Promise<void> {
   const DO_NOT_SHOW_KEY = 'doNotShowIncomingCommitsNotification';
   if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
@@ -128,11 +162,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const badge = new BadgeController();
   badge.startLoading();
-  manager.onStatusChange(status => badge.update(status));
-  manager.getAllStatusesFresh().then(async status => {
-    badge.update(status);
-    await maybeNotifyIncomingCommits(manager, context.globalState);
-  });
 
   const log = vscode.window.createOutputChannel('GitCharm Profiles');
   context.subscriptions.push(log);
@@ -141,6 +170,17 @@ export function activate(context: vscode.ExtensionContext): void {
   profileService.autoInitIfEmpty();
 
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState);
+
+  let startupNotificationsDone = false;
+  const startupDisposable = manager.onStatusChange(async status => {
+    badge.update(status);
+    if (!startupNotificationsDone) {
+      startupNotificationsDone = true;
+      startupDisposable.dispose();
+      await maybeNotifyIncomingCommits(manager, context.globalState);
+      await maybeNotifyUnpushedCommits(manager, commitPanel);
+    }
+  });
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager);
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   commitPanel.setMergeEditorProvider(mergeEditor);

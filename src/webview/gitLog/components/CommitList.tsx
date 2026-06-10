@@ -356,7 +356,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                     {visible.map(group => {
                       const color = badgeColor(group);
                       return (
-                        <span key={group.key} style={styles.refBadge(color, group.isTag, group.isDetached && !group.isRemoteHead, isSelected)} title={badgeTitle(group)}>
+                        <span key={group.key} style={styles.refBadge(color, group.isTag, (group.isHead || group.isDetached) && !group.isRemoteHead, isSelected)} title={badgeTitle(group)}>
                           <RefBadgeIcon group={group} />
                           <span style={styles.refBadgeLabel}>
                             {group.isRemoteHead ? `${group.remoteName}/HEAD` : group.isLocal && group.isRemote ? `${group.remoteName || 'remote'} & ${group.label}` : group.isRemote ? remoteLabel(group) : group.label}
@@ -462,6 +462,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
               hashes: selected.map(c => c.hash),
               oldestHash,
               message: selected.map(c => c.message).join('\n\n'),
+              commits: selected.map(c => ({ hash: c.hash, shortHash: c.hash.slice(0, 7), message: c.message })),
             } satisfies LogToHostMsg);
             setMultiSelectHashes(new Set());
           }}

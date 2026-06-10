@@ -14,7 +14,18 @@ interface Props {
   onFetchAll: () => void;
 }
 
+function useIsLightTheme() {
+  const [light, setLight] = useState(() => document.body.classList.contains('vscode-light'));
+  useEffect(() => {
+    const obs = new MutationObserver(() => setLight(document.body.classList.contains('vscode-light')));
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return light;
+}
+
 export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll }: Props) {
+  const isLight = useIsLightTheme();
   const localBranches = branches.filter(b => !b.isRemote);
   const uniqueBranchNames = Array.from(new Set(localBranches.map(b => b.name))).sort();
   const uniqueTagNames = Array.from(new Set(tags.map(t => t.name))).sort();
@@ -49,6 +60,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
           value={filters.repoId}
           repos={repos}
           onChange={onRepoChange}
+          isLight={isLight}
         />
       )}
 
@@ -59,6 +71,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         tags={uniqueTagNames}
         onChange={v => onFilterChange('branch', v)}
         width={200}
+        isLight={isLight}
       />
 
       {/* Date range */}
@@ -75,12 +88,47 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         </button>
       )}
 
-      {/* Fetch All — pushed to the right */}
+      {/* More menu — pushed to the right */}
       <div style={{ flex: 1 }} />
-      <button style={styles.fetchBtn} onClick={onFetchAll} title="Fetch all remotes and refresh log">
-        <Codicon name="sync" style={{ fontSize: '13px' }} />
-        <span>Refresh</span>
+      <MoreMenu onFetchAll={onFetchAll} />
+    </div>
+  );
+}
+
+/* ─── MoreMenu ────────────────────────────────────────────────────────────── */
+
+function MoreMenu({ onFetchAll }: { onFetchAll: () => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onOut(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', onOut);
+    return () => document.removeEventListener('mousedown', onOut);
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        style={styles.moreBtn}
+        onClick={() => setOpen(o => !o)}
+        title="More actions"
+      >
+        <Codicon name="three-bars" style={{ fontSize: '14px' }} />
       </button>
+      {open && (
+        <div style={styles.moreDropdown}>
+          <div
+            style={styles.moreItem}
+            onClick={() => { onFetchAll(); setOpen(false); }}
+          >
+            <Codicon name="sync" style={{ fontSize: '13px', opacity: 0.7 }} />
+            <span>Refresh</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -135,12 +183,13 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, debounceMs 
 
 /* ─── BranchTagPicker ─────────────────────────────────────────────────────── */
 
-function BranchTagPicker({ value, branches, tags, onChange, width }: {
+function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
   value: string;
   branches: string[];
   tags: string[];
   onChange: (v: string) => void;
   width: number;
+  isLight: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -172,7 +221,7 @@ function BranchTagPicker({ value, branches, tags, onChange, width }: {
         title={value || 'Filter by branch or tag'}
       >
         <Codicon name={buttonIcon} style={styles.fieldIcon} />
-        <span style={value ? styles.pickerLabelActive : styles.pickerLabelPlaceholder}>
+        <span style={value ? styles.pickerLabelActive : { ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>
           {value || 'Branch / Tag…'}
         </span>
         <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
@@ -238,10 +287,11 @@ function BranchTagPicker({ value, branches, tags, onChange, width }: {
 
 /* ─── RepoPicker ──────────────────────────────────────────────────────────── */
 
-function RepoPicker({ value, repos, onChange }: {
+function RepoPicker({ value, repos, onChange, isLight }: {
   value: string | null;
   repos: RepoMeta[];
   onChange: (repoId: string | null) => void;
+  isLight: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -267,7 +317,7 @@ function RepoPicker({ value, repos, onChange }: {
           ? <span style={{ ...styles.repoDot, background: active.color }} />
           : <Codicon name="repo" style={styles.fieldIcon} />
         }
-        <span style={value ? styles.pickerLabelActive : styles.pickerLabelPlaceholder}>
+        <span style={value ? styles.pickerLabelActive : { ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>
           {active?.name ?? 'Repository…'}
         </span>
         <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
@@ -413,6 +463,7 @@ const styles = {
     borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '12px',
+    fontWeight: 'normal',
     boxSizing: 'border-box',
   }),
   pickerLabelActive: {
@@ -429,7 +480,10 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
     fontSize: '12px',
-    color: 'var(--vscode-input-placeholderForeground, #6b7280)',
+    fontWeight: 100,
+    color: 'var(--vscode-input-foreground)',
+    opacity: 0.4,
+    textAlign: 'left' as const,
   },
   dropdown: {
     position: 'absolute' as const,
@@ -543,19 +597,41 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
   } as React.CSSProperties,
-  fetchBtn: {
+  moreBtn: {
     display: 'flex',
     alignItems: 'center',
-    gap: '5px',
+    justifyContent: 'center',
+    width: '26px',
     height: '26px',
-    padding: '0 10px',
-    background: 'transparent',
+    background: 'none',
     color: 'var(--vscode-foreground)',
-    border: '1px solid var(--vscode-panel-border)',
+    border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '12px',
-    whiteSpace: 'nowrap' as const,
     flexShrink: 0,
+    opacity: 0.7,
+  } as React.CSSProperties,
+  moreDropdown: {
+    position: 'absolute' as const,
+    top: '100%',
+    right: 0,
+    marginTop: '2px',
+    background: 'var(--vscode-menu-background)',
+    border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+    borderRadius: '4px',
+    padding: '3px 0',
+    minWidth: '140px',
+    zIndex: 1000,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+  } as React.CSSProperties,
+  moreItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '5px 12px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    color: 'var(--vscode-menu-foreground, var(--vscode-foreground))',
+    whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
 };

@@ -423,6 +423,15 @@ export class GitService {
     }
 
     // Fallback: simple-git
+    // Fetch full hashes for all branches separately (simple-git returns short hashes)
+    const fullHashMap = new Map<string, string>();
+    try {
+      const forEachRefRaw = await this.git.raw(['for-each-ref', '--format=%(objectname) %(refname:short)', 'refs/heads/', 'refs/remotes/']);
+      for (const line of forEachRefRaw.trim().split('\n')) {
+        const [hash, name] = line.trim().split(' ');
+        if (hash && name) fullHashMap.set(name, hash);
+      }
+    } catch { /* ignore, fall back to short hashes */ }
     const result = await this.git.branch(['-avv', '--sort=-committerdate']);
     const branches: BranchInfo[] = [];
     for (const [name, branch] of Object.entries(result.branches)) {
@@ -445,7 +454,7 @@ export class GitService {
         isHead: branch.current,
         isRemote,
         remoteName,
-        lastCommitHash: branch.commit,
+        lastCommitHash: fullHashMap.get(cleanName) ?? branch.commit,
         aheadBehind,
       });
     }
@@ -453,7 +462,7 @@ export class GitService {
   }
 
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
-  async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }): Promise<CommitNode[]> {
+  async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
     const args: string[] = [
       'log',
       '--topo-order',
@@ -482,15 +491,24 @@ export class GitService {
 
     // Mark unpushed commits: hashes ahead of the remote tracking branch.
     // 'all' means there is no upstream — every commit on this branch is local.
-    const [unpushedHashes, incomingHashes] = await Promise.all([
+    const worktreeServices = opts?.worktreeServices ?? [];
+    const [unpushedHashes, incomingHashes, ...worktreeUnpushedResults] = await Promise.all([
       this.getUnpushedHashes(),
       this.getIncomingHashes(),
+      ...worktreeServices.map(wt => wt.getUnpushedHashes()),
     ]);
+    const allUnpushedHashes = new Set<string>();
     if (unpushedHashes === 'all') {
       for (const c of commits) c.unpushed = true;
-    } else if (unpushedHashes.size > 0) {
+    } else {
+      unpushedHashes.forEach(h => allUnpushedHashes.add(h));
+    }
+    for (const wtResult of worktreeUnpushedResults) {
+      if (wtResult !== 'all') wtResult.forEach(h => allUnpushedHashes.add(h));
+    }
+    if (allUnpushedHashes.size > 0) {
       for (const c of commits) {
-        if (unpushedHashes.has(c.hash)) c.unpushed = true;
+        if (allUnpushedHashes.has(c.hash)) c.unpushed = true;
       }
     }
     for (const c of commits) {
@@ -502,36 +520,38 @@ export class GitService {
 
   private async getUnpushedHashes(): Promise<Set<string> | 'all'> {
     try {
-      const vsRepo = this.vsRepo();
-      if (vsRepo) {
-        const upstream = vsRepo.state.HEAD?.upstream;
-        if (upstream) {
-          // Known upstream → use it directly
-          if ((vsRepo.state.HEAD?.ahead ?? 0) === 0) return new Set();
-          const upstreamRef = `${upstream.remote}/${upstream.name}`;
-          const raw = await this.git.raw(['log', '--format=%H', `${upstreamRef}..HEAD`]);
-          return new Set(raw.trim().split('\n').filter(Boolean));
-        }
-        // No upstream tracking branch
-        if (vsRepo.state.remotes.length === 0) return 'all'; // no remotes at all → all commits are local
-        // Remotes exist but no tracking → commits not reachable from any remote ref
-        const raw = await this.git.raw(['log', '--format=%H', 'HEAD', '--not', '--remotes']);
+      const upstreamTracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
+      if (upstreamTracking) {
+        const raw = await this.git.raw(['log', '--format=%H', `${upstreamTracking}..HEAD`]);
         return new Set(raw.trim().split('\n').filter(Boolean));
       }
-
-      const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
-      if (tracking) {
-        const raw = await this.git.raw(['log', '--format=%H', `${tracking}..HEAD`]);
-        return new Set(raw.trim().split('\n').filter(Boolean));
-      }
-      // No tracking: check if any remote refs exist at all
+      // No tracking branch — check if any remote refs exist
       const remoteRefs = (await this.git.raw(['for-each-ref', '--format=%(refname)', 'refs/remotes/']).catch(() => '')).trim();
-      if (!remoteRefs) return 'all'; // no remote refs → repo is purely local
+      if (!remoteRefs) return 'all'; // no remotes at all → every commit is local
       // Remotes exist but no tracking → commits not reachable from any remote ref
       const raw = await this.git.raw(['log', '--format=%H', 'HEAD', '--not', '--remotes']);
       return new Set(raw.trim().split('\n').filter(Boolean));
     } catch {
       return new Set();
+    }
+  }
+
+  async getUnpushedCount(): Promise<number> {
+    try {
+      const upstreamTracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
+      if (upstreamTracking) {
+        const raw = await this.git.raw(['rev-list', '--count', `${upstreamTracking}..HEAD`]);
+        return parseInt(raw.trim(), 10) || 0;
+      }
+      const remoteRefs = (await this.git.raw(['for-each-ref', '--format=%(refname)', 'refs/remotes/']).catch(() => '')).trim();
+      if (!remoteRefs) {
+        const raw = await this.git.raw(['rev-list', '--count', 'HEAD']);
+        return parseInt(raw.trim(), 10) || 0;
+      }
+      const raw = await this.git.raw(['rev-list', '--count', 'HEAD', '--not', '--remotes']);
+      return parseInt(raw.trim(), 10) || 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -576,10 +596,26 @@ export class GitService {
     return result;
   }
 
-  async getCommitFiles(hash: string): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
+  async getCommitFiles(hash: string, knownParents?: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
+    // For merge commits, diff-tree uses combined diff and omits most files.
+    // Diff against first parent instead to get the full file list.
+    let parents = knownParents;
+    if (!parents) {
+      const raw = await this.git.raw(['log', '-1', '--format=%P', hash]).catch(() => '');
+      parents = raw.trim().split(' ').filter(Boolean);
+    }
+    const isMerge = parents.length >= 2;
+
+    const baseArgs = isMerge
+      ? ['diff', '--name-status', parents[0], hash]
+      : ['diff-tree', '--no-commit-id', '-r', '--name-status', hash];
+    const numArgs = isMerge
+      ? ['diff', '--numstat', parents[0], hash]
+      : ['diff-tree', '--no-commit-id', '-r', '--numstat', hash];
+
     const [nameStatus, numStat] = await Promise.all([
-      this.git.raw(['diff-tree', '--no-commit-id', '-r', '--name-status', hash]),
-      this.git.raw(['diff-tree', '--no-commit-id', '-r', '--numstat', hash]),
+      this.git.raw(baseArgs),
+      this.git.raw(numArgs),
     ]);
     const stats = new Map<string, { added: number; removed: number }>();
     for (const line of numStat.trim().split('\n')) {
@@ -598,7 +634,7 @@ export class GitService {
       if (parts.length < 2) continue;
       const path = parts[parts.length - 1];
       const s = stats.get(path);
-      files.push({ status: parts[0], path, added: s?.added, removed: s?.removed });
+      files.push({ status: parts[0][0], path, added: s?.added, removed: s?.removed });
     }
     return files;
   }
@@ -1160,6 +1196,10 @@ export class GitService {
     await this.git.raw(['commit', '--amend', '-m', message]);
   }
 
+  async rewordCommit(newMessage: string): Promise<void> {
+    await this.git.raw(['commit', '--amend', '-m', newMessage]);
+  }
+
   async createBranchFromCommit(name: string, hash: string): Promise<void> {
     await this.git.raw(['checkout', '-b', name, hash]);
   }
@@ -1231,6 +1271,22 @@ export class GitService {
 
   async getFullCommitMessage(hash: string): Promise<string> {
     return this.git.raw(['log', '-1', '--format=%B', hash]);
+  }
+
+  async getCommitMeta(hash: string): Promise<{ hash: string; shortHash: string; message: string; authorName: string; authorEmail: string; authorDate: string; committerDate: string; parents: string[] }> {
+    const GS = '\x1D';
+    const raw = await this.git.raw(['log', '-1', `--format=%H${GS}%h${GS}%s${GS}%aN${GS}%aE${GS}%aI${GS}%cI${GS}%P`, hash]);
+    const parts = raw.trim().split(GS);
+    return {
+      hash: parts[0] ?? hash,
+      shortHash: parts[1] ?? hash.slice(0, 7),
+      message: parts[2] ?? '',
+      authorName: parts[3] ?? '',
+      authorEmail: parts[4] ?? '',
+      authorDate: parts[5] ?? '',
+      committerDate: parts[6] ?? '',
+      parents: parts[7] ? parts[7].trim().split(' ').filter(Boolean) : [],
+    };
   }
 
   async getLastCommitMessage(): Promise<string> {
@@ -1475,9 +1531,11 @@ export class GitService {
   }
 
   async getUnpushedCommits(): Promise<UnpushedCommit[]> {
-    // GS before each header so splitting by GS gives: [empty, header+stat, header+stat, ...]
-    const FORMAT = '%x1D%H|%h|%s|%an|%ci';
-    const GS = '\x1D'; // ASCII group separator — never appears in git output
+    // Two-pass approach: first get structured fields (with %s for subject),
+    // then get full messages separately per hash.
+    // GS before each record; fields separated by NUL.
+    const GS = '\x1D';
+    const FORMAT = `%x1D%H%x00%h%x00%s%x00%an%x00%ci`;
 
     const parseRecords = (raw: string): UnpushedCommit[] => {
       const commits: UnpushedCommit[] = [];
@@ -1485,16 +1543,15 @@ export class GitService {
         const trimmed = record.trim();
         if (!trimmed) continue;
         const lines = trimmed.split('\n');
-        const parts = lines[0].split('|');
+        const parts = lines[0].split('\x00');
         if (parts.length < 5) continue;
         const commit: UnpushedCommit = {
           hash: parts[0].trim(),
           shortHash: parts[1].trim(),
           message: parts[2].trim(),
           author: parts[3].trim(),
-          date: parts.slice(4).join('|').trim(),
+          date: parts.slice(4).join('\x00').trim(),
         };
-        // shortstat line looks like: " 3 files changed, 22 insertions(+), 10 deletions(-)"
         const statLine = lines.find(l => l.includes('changed'));
         if (statLine) {
           const files = statLine.match(/(\d+) files? changed/);

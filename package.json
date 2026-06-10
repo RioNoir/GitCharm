@@ -368,6 +368,12 @@
           "default": true,
           "description": "Show a notification on startup when there are incoming commits available to pull"
         },
+        "gitcharm.notifyOnUnpushedCommits": {
+          "order": 55,
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification on startup when there are unpushed commits ready to push"
+        },
         "gitcharm.projectColors": {
           "order": 110,
           "type": "object",
@@ -428,6 +434,12 @@
           ],
           "default": "commit",
           "description": "Default action for the commit button in the Commit Panel."
+        },
+        "gitcharm.suppressDivergedBranchWarning": {
+          "order": 35,
+          "type": "boolean",
+          "default": false,
+          "description": "Suppress the 'Branches have diverged' warning in the Git Menu and status bar."
         }
       }
     }

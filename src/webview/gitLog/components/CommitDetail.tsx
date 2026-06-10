@@ -334,7 +334,6 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   const [containingBranches, setContainingBranches] = useState<{ local: string[]; remote: string[]; tags: string[] }>({ local: [], remote: [], tags: [] });
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [refsExpanded, setRefsExpanded] = useState(false);
-  const [messageExpanded, setMessageExpanded] = useState(false);
 
   const repoName = useMemo(() => {
     if (!commit) return null;
@@ -375,26 +374,6 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       hash: commit.hash,
     } satisfies LogToHostMsg);
   }, [commit?.hash]);
-
-  useEffect(() => {
-    setMessageExpanded(false);
-  }, [commit?.hash]);
-
-  const handleMessageClick = useCallback(() => {
-    if (!commit) return;
-    const reqId = generateId();
-    pendingRef.current.set(reqId, (msg) => {
-      if (msg.type === 'LOG_COMMIT_BODY_RESULT' && !msg.hasBody) {
-        setMessageExpanded(e => !e);
-      }
-    });
-    getVsCodeApi().postMessage({
-      type: 'LOG_OPEN_COMMIT_BODY',
-      requestId: reqId,
-      repoId: commit.repoId,
-      hash: commit.hash,
-    } satisfies LogToHostMsg);
-  }, [commit]);
 
   useEffect(() => {
     setSelectedMergeHash(null);
@@ -517,15 +496,18 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             <span style={styles.repoName(repoColor)}>{repoName}</span>
           </div>
         )}
-        <div style={{ ...styles.hashRow, alignItems: messageExpanded ? 'flex-start' : 'center' }}>
+        <div style={styles.hashRow}>
           <span style={styles.hash}>{commit.shortHash}</span>
-          <span
-            style={{ ...styles.message, ...(messageExpanded ? styles.messageExpanded : {}) }}
-            title={messageExpanded ? 'Click to collapse' : 'Click to expand'}
-            onClick={messageExpanded ? () => setMessageExpanded(false) : handleMessageClick}
-          >
+          <span style={styles.message}>
             {commit.message}
           </span>
+          <button
+            style={styles.expandBtn}
+            title="Open extended commit detail"
+            onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+          >
+            <Codicon name="open-preview" style={{ fontSize: '13px' }} />
+          </button>
         </div>
         <div style={styles.authorRow}>
           <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
@@ -883,6 +865,18 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
   },
+  expandBtn: {
+    flexShrink: 0,
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '2px 3px',
+    borderRadius: '3px',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.5,
+    display: 'flex',
+    alignItems: 'center',
+  } as React.CSSProperties,
   hash: {
     fontFamily: 'monospace',
     fontSize: '11px',
@@ -899,14 +893,7 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
-    cursor: 'pointer',
     minWidth: 0,
-  },
-  messageExpanded: {
-    whiteSpace: 'normal' as const,
-    overflow: 'visible',
-    textOverflow: 'clip',
-    wordBreak: 'break-word' as const,
   },
   authorRow: {
     display: 'flex',

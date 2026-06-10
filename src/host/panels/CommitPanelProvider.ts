@@ -11,6 +11,8 @@ import { parseConflictFile } from '../git/ConflictParser';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { MergeEditorProvider } from './MergeEditorProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
+import { openSquashEditor } from './SquashEditorPanel';
+import { openEditMessageEditor } from './EditMessageEditorPanel';
 import type { GitProfileService } from '../git/GitProfileService';
 import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 
@@ -186,6 +188,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
     }
     this.view?.webview.postMessage(msg);
+  }
+
+  switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push'): void {
+    this.post({ type: 'COMMIT_SWITCH_TAB', tab });
   }
 
   /** Reads fresh status after a stage/unstage op. simple-git reads directly from the git index so it's always accurate once the op completes. */
@@ -1148,6 +1154,106 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: true });
         } catch (e: unknown) {
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'PUSH_SQUASH_COMMITS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const fullMessages = await Promise.all(msg.hashes.map(h => repo.getFullCommitMessage(h).then(m => m.trim())));
+        const fullCombined = fullMessages.join('\n\n');
+        const fullCommits = msg.commits.map((c, i) => ({ ...c, message: fullMessages[i] ?? c.message }));
+        const result = await openSquashEditor(this.extensionUri, msg.hashes.length, fullCombined, fullCommits);
+        if (!result.confirmed) {
+          this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+          return;
+        }
+        try {
+          await repo.squashCommits(msg.oldestHash, result.message);
+          this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: true });
+          const commits = await repo.getUnpushedCommits();
+          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Squash failed: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'PUSH_DROP_COMMITS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const confirm = await vscode.window.showWarningMessage(
+          `Drop ${msg.hashes.length} commits? This rewrites history and cannot be undone.`,
+          { modal: true }, 'Drop'
+        );
+        if (confirm !== 'Drop') { this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        try {
+          await repo.dropCommits(msg.oldestHash);
+          this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: true });
+          const commits = await repo.getUnpushedCommits();
+          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Drop failed: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'PUSH_REVERT_COMMITS': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const confirm = await vscode.window.showWarningMessage(
+          `Revert ${msg.hashes.length} commits? This creates new commits that undo the changes.`,
+          { modal: true }, 'Revert'
+        );
+        if (confirm !== 'Revert') { this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        try {
+          await repo.revertCommits(msg.hashes);
+          this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: true });
+          const commits = await repo.getUnpushedCommits();
+          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
+          const status = await this.manager.getAllStatusesFresh();
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          const errMsg = String(e);
+          this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
+          if (errMsg.includes('CONFLICT') || errMsg.includes('could not revert')) {
+            const choice = await vscode.window.showWarningMessage(
+              'Revert has conflicts. Resolve them, then choose an action.',
+              'Continue', 'Abort'
+            );
+            if (choice === 'Continue') await repo.revertContinue();
+            else await repo.revertAbort();
+          } else {
+            vscode.window.showErrorMessage(`GitCharm: Revert failed: ${errMsg}`);
+          }
+        }
+        break;
+      }
+
+      case 'PUSH_EDIT_COMMIT_MSG': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const fullMessage = (await repo.getFullCommitMessage(msg.hash)).trim();
+        const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 7), fullMessage);
+        if (!result.confirmed) {
+          this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+          return;
+        }
+        try {
+          await repo.rewordCommit(result.message);
+          this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: true });
+          const commits = await repo.getUnpushedCommits();
+          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          vscode.window.showErrorMessage(`GitCharm: Edit commit message failed: ${String(e)}`);
         }
         break;
       }

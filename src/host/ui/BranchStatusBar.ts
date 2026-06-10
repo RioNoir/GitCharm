@@ -7,6 +7,7 @@ export class BranchStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
   private statusDisposable?: vscode.Disposable;
   private branchDisposable?: vscode.Disposable;
+  private configDisposable?: vscode.Disposable;
   private hasBehind = false;
   private hasUnpushed = false;
   private hasNoUpstream = false;
@@ -32,6 +33,11 @@ export class BranchStatusBar implements vscode.Disposable {
     // a transient HEAD state during checkout. The branch change fires at 400ms when
     // the VS Code Git API state is stable, ensuring the status bar corrects itself.
     this.branchDisposable = this.manager.onBranchChange(() => this.manager.getAllStatusesFresh().then(s => this.refresh(s)));
+    this.configDisposable = vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('gitcharm.suppressDivergedBranchWarning')) {
+        this.refresh();
+      }
+    });
     this.manager.getAllStatusesFresh().then(s => this.refresh(s));
   }
 
@@ -97,14 +103,15 @@ export class BranchStatusBar implements vscode.Disposable {
     const anyOnTag = !anyOnNamedBranch && branches.some(b => !!b.detachedTag);
     const headIcon = anyOnNamedBranch ? '$(git-branch)' : anyOnTag ? '$(tag)' : '$(git-commit)';
 
-    const divergeIcon = this.branchesDiverged ? '$(warning) ' : '';
+    const suppressDiverged = vscode.workspace.getConfiguration('gitcharm').get<boolean>('suppressDivergedBranchWarning') === true;
+    const divergeIcon = this.branchesDiverged && !suppressDiverged ? '$(warning) ' : '';
     const dirtyDot = this.hasUncommitted ? ' ●' : '';
     const pullPart = this.totalBehind > 0 ? ` $(arrow-down)${this.totalBehind}` : '';
     const pushPart = this.totalAhead > 0 ? ` $(arrow-up)${this.totalAhead}` : '';
     this.statusBarItem.text = `${divergeIcon}${headIcon} ${headLabel}${worktreeSuffix}${dirtyDot}${pullPart}${pushPart}`;
 
     const tooltipParts: string[] = [];
-    if (this.branchesDiverged) tooltipParts.push('Branches have diverged across repositories');
+    if (this.branchesDiverged && !suppressDiverged) tooltipParts.push('Branches have diverged across repositories');
     if (this.hasUncommitted) tooltipParts.push('Uncommitted changes present');
     if (this.hasUnpushed) tooltipParts.push('Unpushed commits or branch not on remote');
     if (this.hasBehind) tooltipParts.push('Incoming commits available');
@@ -112,7 +119,7 @@ export class BranchStatusBar implements vscode.Disposable {
       ? `GitCharm: ${tooltipParts.join(' · ')}`
       : 'GitCharm: Git Menu';
 
-    if (this.branchesDiverged) {
+    if (this.branchesDiverged && !suppressDiverged) {
       this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
       this.statusBarItem.color = undefined;
     } else if (this.hasBehind) {
@@ -188,7 +195,8 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} } as unknown as MenuItem);
     }
 
-    if (this.branchesDiverged) {
+    const suppressDivergedMenu = vscode.workspace.getConfiguration('gitcharm').get<boolean>('suppressDivergedBranchWarning') === true;
+    if (this.branchesDiverged && !suppressDivergedMenu) {
       items.push({
         label: '$(warning)  Branches have diverged',
         detail: '  Repositories are not on the same branch',
@@ -1924,5 +1932,6 @@ export class BranchStatusBar implements vscode.Disposable {
     this.statusBarItem.dispose();
     this.statusDisposable?.dispose();
     this.branchDisposable?.dispose();
+    this.configDisposable?.dispose();
   }
 }

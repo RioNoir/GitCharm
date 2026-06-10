@@ -194,6 +194,7 @@ function App() {
       requestId: reqId,
       repoId: selectedCommit.repoId,
       hash: selectedCommit.hash,
+      parents: selectedCommit.parents,
     } satisfies LogToHostMsg);
   }, [store.fileLoadSeq]);
 

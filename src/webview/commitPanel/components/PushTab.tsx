@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { UnpushedCommit } from '../../shared/msgTypes';
 import type { RepoStatus, RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
@@ -12,6 +12,10 @@ interface Props {
   onPushAll: () => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
+  onSquash: (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => void;
+  onDropCommits: (repoId: string, hashes: string[], oldestHash: string) => void;
+  onRevertCommits: (repoId: string, hashes: string[]) => void;
+  onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
 }
 
 function formatDate(iso: string): string {
@@ -29,24 +33,152 @@ function formatDate(iso: string): string {
   } catch { return iso; }
 }
 
+// ── Context menu ──────────────────────────────────────────────────────────────
+
+interface CommitCtxMenuState {
+  x: number;
+  y: number;
+  repoId: string;
+  selectedHashes: string[];
+  commits: UnpushedCommit[];
+  isHead: boolean;
+  singleHash: string | null; // set only when n === 1
+}
+
+function MenuItem({ icon, label, danger, onClick }: { icon: string; label: string; danger?: boolean; onClick: () => void }) {
+  return (
+    <div
+      style={{ ...ctxStyles.item, ...(danger ? { color: 'var(--vscode-errorForeground)' } : {}) }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      onClick={onClick}
+    >
+      <Codicon name={icon} style={{ fontSize: '13px', opacity: 0.8 }} />
+      {label}
+    </div>
+  );
+}
+
+function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onClose }: {
+  state: CommitCtxMenuState;
+  onSquash: () => void;
+  onDropCommits: () => void;
+  onRevertCommits: () => void;
+  onEditMsg: () => void;
+  onUndo: () => void;
+  onRevertSingle: () => void;
+  onDropSingle: () => void;
+  onViewInLog: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const n = state.selectedHashes.length;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const [pos, setPos] = useState({ x: state.x, y: state.y });
+  useEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    setPos({
+      x: state.x + rect.width > vw ? Math.max(0, vw - rect.width - 4) : state.x,
+      y: state.y + rect.height > vh ? Math.max(0, vh - rect.height - 4) : state.y,
+    });
+  }, [state.x, state.y]);
+
+  const wrap = (fn: () => void) => () => { fn(); onClose(); };
+
+  return (
+    <div ref={ref} style={{ ...ctxStyles.menu, left: pos.x, top: pos.y }} onContextMenu={e => e.preventDefault()}>
+      {n === 1 && (
+        <>
+          <MenuItem icon="go-to-file" label="View in Git Log" onClick={wrap(onViewInLog)} />
+          {state.isHead && <MenuItem icon="edit" label="Edit Commit Message…" onClick={wrap(onEditMsg)} />}
+          <MenuItem icon="discard" label="Revert Commit" onClick={wrap(onRevertSingle)} />
+          {state.isHead && (
+            <>
+              <div style={ctxStyles.separator} />
+              <MenuItem icon="arrow-left" label="Undo Commit" onClick={wrap(onUndo)} />
+              <MenuItem icon="trash" label="Drop Commit" danger onClick={wrap(onDropSingle)} />
+            </>
+          )}
+        </>
+      )}
+      {n >= 2 && (
+        <>
+          <MenuItem icon="discard" label={`Revert ${n} commits`} onClick={wrap(onRevertCommits)} />
+          <div style={ctxStyles.separator} />
+          <MenuItem icon="trash" label={`Drop ${n} commits`} danger onClick={wrap(onDropCommits)} />
+          <MenuItem icon="fold" label={`Squash ${n} commits…`} onClick={wrap(onSquash)} />
+        </>
+      )}
+    </div>
+  );
+}
+
+const ctxStyles = {
+  menu: {
+    position: 'fixed' as const,
+    zIndex: 9999,
+    background: 'var(--vscode-menu-background)',
+    border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+    borderRadius: '4px',
+    padding: '3px 0',
+    minWidth: '170px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    fontSize: '12px',
+    color: 'var(--vscode-menu-foreground)',
+  },
+  item: {
+    display: 'flex', alignItems: 'center', gap: '7px',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    background: 'transparent',
+    userSelect: 'none' as const,
+  },
+  separator: {
+    height: '1px',
+    background: 'var(--vscode-menu-separatorBackground, var(--vscode-panel-border))',
+    margin: '3px 0',
+  } as React.CSSProperties,
+};
+
 // ── Single commit row ─────────────────────────────────────────────────────────
 
-function CommitRow({ commit, repoId, isHead, onOpenInLog, onUndoCommit }: {
+function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoCommit, onClick, onContextMenu }: {
   commit: UnpushedCommit;
   repoId: string;
   isHead: boolean;
+  isSelected: boolean;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
+  onClick: (e: React.MouseEvent) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+
+  let bg = 'transparent';
+  if (isSelected) bg = 'var(--vscode-list-inactiveSelectionBackground)';
+  else if (hovered) bg = 'var(--vscode-list-hoverBackground)';
+
   return (
     <div
-      style={{ ...styles.commitRow, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
+      style={{ ...styles.commitRow, background: bg }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
     >
       <span style={styles.commitHash}>{commit.shortHash}</span>
-      <span style={styles.commitMessage}>{commit.message}</span>
+      <span style={styles.commitMessage}>{commit.message.split('\n')[0]}</span>
       <span style={styles.commitMeta}>
         {commit.author} · {formatDate(commit.date)}
         {commit.filesChanged != null && (
@@ -57,7 +189,7 @@ function CommitRow({ commit, repoId, isHead, onOpenInLog, onUndoCommit }: {
           </span>
         )}
       </span>
-      <div style={styles.commitActions(hovered)}>
+      <div style={styles.commitActions(hovered || isSelected)}>
         {isHead && (
           <button
             style={styles.actionBtn}
@@ -81,7 +213,8 @@ function CommitRow({ commit, repoId, isHead, onOpenInLog, onUndoCommit }: {
 
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, singleRepo }: {
+
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, singleRepo }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -90,9 +223,16 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onToggle: (repoId: string) => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
+  onSquash: (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => void;
+  onDropCommits: (repoId: string, hashes: string[], oldestHash: string) => void;
+  onRevertCommits: (repoId: string, hashes: string[]) => void;
+  onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   singleRepo?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
+  const [ctxMenu, setCtxMenu] = useState<CommitCtxMenuState | null>(null);
+
   const rawName = repoMeta?.name ?? repoStatus.repoId.split('/').pop() ?? repoStatus.repoId;
   const isWorktree = repoMeta?.isWorktree;
   const worktreeBranch = isWorktree
@@ -107,6 +247,96 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   const behind = repoStatus.branch.aheadBehind?.behind ?? 0;
   const hasUpstream = !!repoStatus.branch.upstream;
   const commitCount = hasUpstream ? ahead : (unpushed?.commits?.length ?? 0);
+  const commits = unpushed?.commits ?? [];
+
+  const handleCommitClick = (e: React.MouseEvent, hash: string) => {
+    if (e.ctrlKey || e.metaKey) {
+      setMultiSelectHashes(prev => {
+        const next = new Set(prev);
+        if (next.has(hash)) next.delete(hash); else next.add(hash);
+        return next;
+      });
+    } else {
+      setMultiSelectHashes(new Set());
+    }
+  };
+
+  const handleCommitContextMenu = (e: React.MouseEvent, commit: UnpushedCommit, isHead: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let selectedHashes: Set<string>;
+    if (multiSelectHashes.has(commit.hash) && multiSelectHashes.size > 1) {
+      selectedHashes = multiSelectHashes;
+    } else {
+      selectedHashes = new Set([commit.hash]);
+      setMultiSelectHashes(selectedHashes);
+    }
+    const isSingle = selectedHashes.size === 1;
+    const singleHash = isSingle ? commit.hash : null;
+    setCtxMenu({ x: e.clientX, y: e.clientY, repoId: repoStatus.repoId, selectedHashes: Array.from(selectedHashes), commits, isHead: isSingle && isHead, singleHash });
+  };
+
+  const handleEditMsg = () => {
+    if (!ctxMenu?.singleHash) return;
+    const commit = commits.find(c => c.hash === ctxMenu.singleHash);
+    if (!commit) return;
+    onEditCommitMsg(repoStatus.repoId, ctxMenu.singleHash, commit.message);
+  };
+
+  const handleUndo = () => {
+    onUndoCommit(repoStatus.repoId);
+  };
+
+  const handleRevertSingle = () => {
+    if (!ctxMenu?.singleHash) return;
+    onRevertCommits(repoStatus.repoId, [ctxMenu.singleHash]);
+  };
+
+  const handleDropSingle = () => {
+    if (!ctxMenu?.singleHash) return;
+    onDropCommits(repoStatus.repoId, [ctxMenu.singleHash], ctxMenu.singleHash);
+  };
+
+  const handleViewInLog = () => {
+    if (!ctxMenu?.singleHash) return;
+    onOpenInLog(ctxMenu.singleHash, repoStatus.repoId);
+  };
+
+  const getOrderedSelection = () => {
+    const hashes = ctxMenu?.selectedHashes ?? [];
+    const ordered = [...commits].filter(c => hashes.includes(c.hash));
+    const oldestHash = ordered[ordered.length - 1]?.hash ?? hashes[hashes.length - 1];
+    return { hashes, ordered, oldestHash };
+  };
+
+  const handleSquash = () => {
+    if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
+    const { hashes, ordered, oldestHash } = getOrderedSelection();
+    const combinedMessage = ordered.map(c => c.message).join('\n\n');
+    onSquash(repoStatus.repoId, hashes, oldestHash, combinedMessage, ordered.map(c => ({ hash: c.hash, shortHash: c.shortHash, message: c.message })));
+    setMultiSelectHashes(new Set());
+  };
+
+  const handleDropCommits = () => {
+    if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
+    const { hashes, oldestHash } = getOrderedSelection();
+    onDropCommits(repoStatus.repoId, hashes, oldestHash);
+    setMultiSelectHashes(new Set());
+  };
+
+  const handleRevertCommits = () => {
+    if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
+    const { hashes } = getOrderedSelection();
+    onRevertCommits(repoStatus.repoId, hashes);
+    setMultiSelectHashes(new Set());
+  };
+
+  // Clear selection when clicking outside commit list
+  const handleBodyClick = (e: React.MouseEvent) => {
+    if (!(e.target as HTMLElement).closest('[data-commit-row]')) {
+      setMultiSelectHashes(new Set());
+    }
+  };
 
   return (
     <div style={styles.repoRoot}>
@@ -157,7 +387,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
       {/* Content */}
       {expanded && (
-        <div style={styles.repoBody}>
+        <div style={styles.repoBody} onClick={handleBodyClick}>
           {hasUpstream && ahead === 0 && behind === 0 ? (
             <div style={styles.upToDate}>
               <Codicon name="check" style={{ marginRight: '6px', opacity: 0.6 }} />
@@ -177,10 +407,21 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
               <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
               {unpushed.error}
             </div>
-          ) : unpushed?.commits && unpushed.commits.length > 0 ? (
+          ) : commits.length > 0 ? (
             <div style={styles.commitList}>
-              {unpushed.commits.map((c, i) => (
-                <CommitRow key={c.hash} commit={c} repoId={repoStatus.repoId} isHead={i === 0} onOpenInLog={onOpenInLog} onUndoCommit={onUndoCommit} />
+              {commits.map((c, i) => (
+                <div key={c.hash} data-commit-row="true">
+                  <CommitRow
+                    commit={c}
+                    repoId={repoStatus.repoId}
+                    isHead={i === 0}
+                    isSelected={multiSelectHashes.has(c.hash)}
+                    onOpenInLog={onOpenInLog}
+                    onUndoCommit={onUndoCommit}
+                    onClick={e => handleCommitClick(e, c.hash)}
+                    onContextMenu={e => handleCommitContextMenu(e, c, i === 0)}
+                  />
+                </div>
               ))}
             </div>
           ) : !hasUpstream ? (
@@ -193,13 +434,28 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           )}
         </div>
       )}
+
+      {ctxMenu && (
+        <CommitContextMenu
+          state={ctxMenu}
+          onSquash={handleSquash}
+          onDropCommits={handleDropCommits}
+          onRevertCommits={handleRevertCommits}
+          onEditMsg={handleEditMsg}
+          onUndo={handleUndo}
+          onRevertSingle={handleRevertSingle}
+          onDropSingle={handleDropSingle}
+          onViewInLog={handleViewInLog}
+          onClose={() => { setCtxMenu(null); setMultiSelectHashes(new Set()); }}
+        />
+      )}
     </div>
   );
 }
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
@@ -232,7 +488,8 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
   const pushButtonLabel = (targets: RepoStatus[]) => {
     const hasPublish = targets.some(r => !r.branch.upstream);
     const hasPush = targets.some(r => !!r.branch.upstream);
-    if (hasPublish && hasPush) return 'Push & Publish';
+    const publishCount = targets.filter(r => !r.branch.upstream).length;
+    if (hasPublish && hasPush) return publishCount === 1 ? 'Push & Publish Branch' : 'Push & Publish Branches';
     if (hasPublish) return targets.length === 1 ? 'Publish Branch' : 'Publish Branches';
     return 'Push';
   };
@@ -241,7 +498,6 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
   if (isSingleRepo) {
     const solo = repos[0];
     const canPush = canPushRepo(solo);
-    const hasUpstream = !!solo.branch.upstream;
     return (
       <div style={css.root}>
         <div style={css.list}>
@@ -255,6 +511,10 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             onToggle={() => {}}
             onOpenInLog={onOpenInLog}
             onUndoCommit={onUndoCommit}
+            onSquash={onSquash}
+            onDropCommits={onDropCommits}
+            onRevertCommits={onRevertCommits}
+            onEditCommitMsg={onEditCommitMsg}
             singleRepo
           />
         </div>
@@ -296,6 +556,10 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             onToggle={toggleRepo}
             onOpenInLog={onOpenInLog}
             onUndoCommit={onUndoCommit}
+            onSquash={onSquash}
+            onDropCommits={onDropCommits}
+            onRevertCommits={onRevertCommits}
+            onEditCommitMsg={onEditCommitMsg}
           />
         ))}
       </div>
@@ -456,6 +720,12 @@ const styles = {
     color: 'var(--vscode-errorForeground)',
   } as React.CSSProperties,
   commitList: { display: 'flex', flexDirection: 'column' as const } as React.CSSProperties,
+  selectionHint: {
+    display: 'flex', alignItems: 'center', gap: '5px',
+    padding: '4px 12px', fontSize: '11px', opacity: 0.65,
+    background: 'var(--vscode-editor-selectionHighlightBackground, rgba(255,255,255,0.05))',
+    borderBottom: '1px solid var(--vscode-panel-border)',
+  } as React.CSSProperties,
   commitRow: {
     display: 'grid',
     gridTemplateColumns: '48px 1fr auto',
@@ -463,6 +733,8 @@ const styles = {
     gap: '0 8px',
     padding: '7px 12px',
     alignItems: 'center',
+    cursor: 'default',
+    userSelect: 'none' as const,
   } as React.CSSProperties,
   commitHash: {
     fontFamily: 'var(--vscode-editor-font-family, monospace)', fontSize: '10px',

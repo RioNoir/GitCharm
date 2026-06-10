@@ -464,6 +464,13 @@ function App() {
           }));
           break;
 
+        case 'PUSH_SQUASH_RESULT':
+        case 'PUSH_DROP_RESULT':
+        case 'PUSH_REVERT_RESULT':
+        case 'PUSH_EDIT_MSG_RESULT':
+          if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
+          break;
+
         case 'SUBMODULE_OP_RESULT':
           if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
@@ -488,6 +495,11 @@ function App() {
 
         case 'COMMIT_HIDDEN_REPOS_UPDATE':
           setHiddenRepoIds(msg.hiddenRepoIds);
+          break;
+
+        case 'COMMIT_SWITCH_TAB':
+          setActiveTab(msg.tab);
+          if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
           break;
       }
     };
@@ -804,6 +816,22 @@ function App() {
 
   const doPush = (repoId: string) => {
     send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId });
+  };
+
+  const doSquash = (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => {
+    send({ type: 'PUSH_SQUASH_COMMITS', requestId: generateId(), repoId, hashes, oldestHash, message: combinedMessage, commits } satisfies CommitToHostMsg);
+  };
+
+  const doDropCommits = (repoId: string, hashes: string[], oldestHash: string) => {
+    send({ type: 'PUSH_DROP_COMMITS', requestId: generateId(), repoId, hashes, oldestHash } satisfies CommitToHostMsg);
+  };
+
+  const doRevertCommits = (repoId: string, hashes: string[]) => {
+    send({ type: 'PUSH_REVERT_COMMITS', requestId: generateId(), repoId, hashes } satisfies CommitToHostMsg);
+  };
+
+  const doEditCommitMsg = (repoId: string, hash: string, currentMessage: string) => {
+    send({ type: 'PUSH_EDIT_COMMIT_MSG', requestId: generateId(), repoId, hash, currentMessage } satisfies CommitToHostMsg);
   };
 
   const doOpenInLog = (hash: string, repoId: string) => {
@@ -1403,6 +1431,10 @@ function App() {
               onPushAll={doPushAll}
               onOpenInLog={doOpenInLog}
               onUndoCommit={doUndoCommit}
+              onSquash={doSquash}
+              onDropCommits={doDropCommits}
+              onRevertCommits={doRevertCommits}
+              onEditCommitMsg={doEditCommitMsg}
             />
           </div>
         )}

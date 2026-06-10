@@ -721,6 +721,22 @@ export class WorkspaceGitManager implements vscode.Disposable {
       branches.push(cur);
     }
 
+    // For worktree repos, duplicate their isHead branch entry under the main repo's repoId.
+    // The Log Panel shows commits with repoId=mainRepo (since worktrees are filtered out),
+    // so headHashByRepo in the webview must be keyed by mainRepo to correctly identify HEAD.
+    for (const [repoId, meta] of this.repoMetas) {
+      if (!meta.isWorktree || !meta.mainWorktreePath) continue;
+      const headBranch = branches.find(b => b.repoId === repoId && b.isHead);
+      if (!headBranch) continue;
+      // Only add if the main repo doesn't already have an isHead entry with the same hash
+      const mainAlreadyHasThisHead = branches.some(
+        b => b.repoId === meta.mainWorktreePath && b.isHead && b.lastCommitHash === headBranch.lastCommitHash
+      );
+      if (!mainAlreadyHasThisHead) {
+        branches.push({ ...headBranch, repoId: meta.mainWorktreePath });
+      }
+    }
+
     return branches;
   }
 
@@ -729,7 +745,22 @@ export class WorkspaceGitManager implements vscode.Disposable {
       ? repoIds.map(id => this.repos.get(id)).filter(Boolean) as GitService[]
       : Array.from(this.repos.values());
 
-    const results = await Promise.allSettled(targets.map(r => r.getLog(limit, skip, opts)));
+    // Build a map from main repo path → worktree GitServices, so getLog can collect
+    // unpushed hashes from worktree branches (which appear in the log via --all)
+    const worktreesByMainRepo = new Map<string, GitService[]>();
+    for (const [repoId, meta] of this.repoMetas) {
+      if (meta.isWorktree && meta.mainWorktreePath) {
+        const wtService = this.repos.get(repoId);
+        if (!wtService) continue;
+        const list = worktreesByMainRepo.get(meta.mainWorktreePath) ?? [];
+        list.push(wtService);
+        worktreesByMainRepo.set(meta.mainWorktreePath, list);
+      }
+    }
+
+    const results = await Promise.allSettled(
+      targets.map(r => r.getLog(limit, skip, { ...opts, worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
+    );
     const allCommits = results
       .filter((r): r is PromiseFulfilledResult<CommitNode[]> => r.status === 'fulfilled')
       .flatMap(r => r.value);
