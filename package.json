@@ -103,7 +103,7 @@
       },
       {
         "command": "gitcharm.openMergeEditor",
-        "title": "Open Merge Editor"
+        "title": "GitCharm: Open Merge Editor"
       },
       {
         "command": "gitcharm.refreshCommitPanel",
@@ -132,12 +132,12 @@
       },
       {
         "command": "gitcharm.openGitAnnotations",
-        "title": "Open Git Annotations",
+        "title": "GitCharm: Open Git Annotations",
         "icon": "$(git-commit)"
       },
       {
         "command": "gitcharm.closeGitAnnotations",
-        "title": "Close Git Annotations",
+        "title": "GitCharm: Close Git Annotations",
         "icon": "$(git-commit)"
       },
       {
@@ -394,6 +394,12 @@
           ],
           "default": "simplified",
           "description": "How to display changed files in the Changes tab."
+        },
+        "gitcharm.promptAddUntrackedToGit": {
+          "order": 25,
+          "type": "boolean",
+          "default": true,
+          "description": "Show a prompt when new untracked files are detected, offering to add them to Git."
         },
         "gitcharm.defaultCommitAction": {
           "order": 20,

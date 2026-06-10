@@ -4,6 +4,7 @@ import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../../shared/t
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { ChangelistGroup } from './ChangelistGroup';
+import { SingleRepoHeader } from './ProjectGroup';
 
 interface Props {
   changelists: ChangelistData[];
@@ -47,6 +48,7 @@ export function ChangelistView({
   }
 
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
+  const singleRepo = repos.length === 1;
   const multiRepo = repos.length >= 1;
 
   // For each changelist, compute which files (from the live git status) belong to it
@@ -89,33 +91,73 @@ export function ChangelistView({
     onHeaderContextMenu(e, 'empty');
   };
 
+  const singleRepoStatus = singleRepo ? repos[0] : null;
+  const singleMeta = singleRepoStatus ? metaMap.get(singleRepoStatus.repoId) : null;
+
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}
       onContextMenu={handleEmptyContextMenu}
     >
+      {singleRepoStatus && (
+        <SingleRepoHeader
+          repoStatus={singleRepoStatus}
+          repoName={singleMeta?.name ?? singleRepoStatus.repoId.split('/').pop() ?? singleRepoStatus.repoId}
+          repoColor={singleMeta?.color ?? '#4ec9b0'}
+          isSubmodule={singleMeta?.isSubmodule}
+          submodulePath={singleMeta?.submodulePath}
+          isWorktree={singleMeta?.isWorktree}
+          mainWorktreePath={singleMeta?.mainWorktreePath}
+          onBranchClick={onBranchClick}
+          onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid)}
+          onOpenAllChanges={() => {}}
+          hideOpenChanges
+        />
+      )}
       {changelists.map(cl => {
         const clMap = changelistFiles.get(cl.id) ?? new Map<string, FileStatus[]>();
+
+        const buildGroup = (repoId: string, files: FileStatus[]) => {
+          const meta = metaMap.get(repoId);
+          const repoStatus = repos.find(r => r.repoId === repoId);
+          return {
+            repoId,
+            repoName: meta?.name ?? repoId.split('/').pop() ?? repoId,
+            repoColor: meta?.color ?? '#4ec9b0',
+            repoStatus,
+            files,
+            isSubmodule: meta?.isSubmodule,
+            submodulePath: meta?.submodulePath,
+            isWorktree: meta?.isWorktree,
+            mainWorktreePath: meta?.mainWorktreePath,
+          };
+        };
+
         const repoGroups = Array.from(clMap.entries())
           .filter(([, files]) => files.length > 0)
-          .map(([repoId, files]) => {
-            const meta = metaMap.get(repoId);
-            const repoStatus = repos.find(r => r.repoId === repoId);
-            return {
-              repoId,
-              repoName: meta?.name ?? repoId.split('/').pop() ?? repoId,
-              repoColor: meta?.color ?? '#4ec9b0',
-              repoStatus,
-              files,
-              isSubmodule: meta?.isSubmodule,
-              submodulePath: meta?.submodulePath,
-              isWorktree: meta?.isWorktree,
-              mainWorktreePath: meta?.mainWorktreePath,
-            };
-          });
+          .map(([repoId, files]) => buildGroup(repoId, files));
 
         // Hide "Unversioned Files" when empty
         if (cl.id === CHANGELIST_UNVERSIONED_ID && repoGroups.length === 0) return null;
+
+        // For "Changes": show all repos, but exclude repos that already appear in any other changelist (including Unversioned Files)
+        const reposInOtherChangelists = new Set<string>();
+        if (cl.id === CHANGELIST_DEFAULT_ID) {
+          for (const other of changelists) {
+            if (other.id === CHANGELIST_DEFAULT_ID) continue;
+            const otherMap = changelistFiles.get(other.id);
+            if (!otherMap) continue;
+            for (const [rid, files] of otherMap.entries()) {
+              if (files.length > 0) reposInOtherChangelists.add(rid);
+            }
+          }
+        }
+
+        const allRepoGroups = !singleRepo && cl.id === CHANGELIST_DEFAULT_ID
+          ? repos
+              .filter(r => !reposInOtherChangelists.has(r.repoId) || (clMap.get(r.repoId)?.length ?? 0) > 0)
+              .map(r => buildGroup(r.repoId, clMap.get(r.repoId) ?? []))
+          : repoGroups;
 
         const isFixed = cl.id === CHANGELIST_DEFAULT_ID || cl.id === CHANGELIST_UNVERSIONED_ID;
 
@@ -123,9 +165,10 @@ export function ChangelistView({
           <ChangelistGroup
             key={cl.id}
             changelist={cl}
-            repoGroups={repoGroups}
+            repoGroups={allRepoGroups}
             isFixed={isFixed}
             multiRepo={multiRepo}
+            singleRepo={singleRepo}
             selectedFile={selectedFile}
             viewMode={viewMode}
             isFileSelected={isFileSelected}

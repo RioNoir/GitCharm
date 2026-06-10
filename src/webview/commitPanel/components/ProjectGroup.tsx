@@ -84,10 +84,11 @@ export function ProjectGroup({
           ref={checkboxRef}
           type="checkbox"
           checked={allSelected}
-          onChange={toggleAll}
+          onChange={totalFiles > 0 ? toggleAll : () => {}}
           onClick={(e) => e.stopPropagation()}
-          style={styles.repoCheckbox}
-          title="Select all files in this repo"
+          disabled={totalFiles === 0}
+          style={{ ...styles.repoCheckbox, ...(totalFiles === 0 ? { opacity: 0.3, cursor: 'default', pointerEvents: 'none' } : {}) }}
+          title={totalFiles > 0 ? "Select all files in this repo" : undefined}
         />
 
         <div style={styles.headerMain} onClick={() => toggleCollapsed(repoId)}>
@@ -155,6 +156,7 @@ export function ProjectGroup({
           )}
         </div>
       )}
+      <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
     </div>
   );
 }
@@ -229,7 +231,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     background: color + '14',
-    borderBottom: '1px solid var(--vscode-panel-border)',
     height: '26px',
     boxSizing: 'border-box',
   }),

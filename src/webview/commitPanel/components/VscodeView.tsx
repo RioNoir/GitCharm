@@ -301,11 +301,11 @@ interface RepoSubGroupProps {
 function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
-  const collapsed = isCollapsed(collapseKey);
+  const isEmpty = files.length === 0;
+  // Empty repos default to collapsed; key presence means "explicitly opened"
+  const collapsed = isEmpty ? !isCollapsed(collapseKey) : isCollapsed(collapseKey);
   const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true);
   const [hovered, setHovered] = useState(false);
-
-  if (files.length === 0) return null;
 
   const onStage   = (file: FileStatus) => onStageFiles([file.path]);
   const onUnstage = (file: FileStatus) => onUnstageFiles([file.path]);
@@ -338,11 +338,12 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           {staged && onToggleRepoSelection && (
             <input
               type="checkbox"
-              checked={repoSelected ?? true}
-              onChange={e => { e.stopPropagation(); onToggleRepoSelection(); }}
+              checked={isEmpty ? false : (repoSelected ?? true)}
+              onChange={e => { if (!isEmpty) { e.stopPropagation(); onToggleRepoSelection?.(); } }}
               onClick={e => e.stopPropagation()}
-              title="Include this repository in the commit"
-              style={{ margin: '0 0 0 8px', flexShrink: 0, accentColor: 'var(--vscode-button-background)', cursor: 'pointer' }}
+              title={isEmpty ? undefined : "Include this repository in the commit"}
+              disabled={isEmpty}
+              style={{ margin: '0 0 0 8px', flexShrink: 0, accentColor: 'var(--vscode-button-background)', cursor: isEmpty ? 'default' : 'pointer', ...(isEmpty ? { opacity: 0.3, pointerEvents: 'none' } : {}) }}
             />
           )}
           <div style={repoHeaderMainStyle} onClick={() => toggleCollapsed(collapseKey)}>
@@ -363,35 +364,40 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               <span style={branchNameStyle}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
             </span>
           </div>
-          {/* Right side always rendered to avoid layout shift */}
-          <div style={repoActionsStyle}>
-            <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-              title={staged ? 'Open Staged Changes' : 'Open Changes'}
-              onClick={e => { e.stopPropagation(); onOpenChanges(); }}>
-              <Codicon name="diff-multiple" />
-            </button>
-            {!staged && (
-              <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Rollback All"
-                onClick={e => { e.stopPropagation(); onRollback(files); }}>
-                <Codicon name="discard" />
+          {!isEmpty && (
+            <div style={repoActionsStyle}>
+              <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+                title={staged ? 'Open Staged Changes' : 'Open Changes'}
+                onClick={e => { e.stopPropagation(); onOpenChanges(); }}>
+                <Codicon name="diff-multiple" />
               </button>
-            )}
-            {staged ? (
-              <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Unstage All"
-                onClick={e => { e.stopPropagation(); onUnstageFiles(files.map(f => f.path)); }}>
-                <Codicon name="remove" />
-              </button>
-            ) : (
-              <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Stage All"
-                onClick={e => { e.stopPropagation(); onStageFiles(files.map(f => f.path)); }}>
-                <Codicon name="add" />
-              </button>
-            )}
-            <span style={repoCountStyle}>{files.length}</span>
-          </div>
+              {!staged && (
+                <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Rollback All"
+                  onClick={e => { e.stopPropagation(); onRollback(files); }}>
+                  <Codicon name="discard" />
+                </button>
+              )}
+              {staged ? (
+                <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Unstage All"
+                  onClick={e => { e.stopPropagation(); onUnstageFiles(files.map(f => f.path)); }}>
+                  <Codicon name="remove" />
+                </button>
+              ) : (
+                <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Stage All"
+                  onClick={e => { e.stopPropagation(); onStageFiles(files.map(f => f.path)); }}>
+                  <Codicon name="add" />
+                </button>
+              )}
+              <span style={repoCountStyle}>{files.length}</span>
+            </div>
+          )}
         </div>
       )}
-      {!collapsed && <div style={{ paddingBottom: '2px' }}>{renderFiles()}</div>}
+      {!collapsed && isEmpty && (
+        <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+      )}
+      {!collapsed && !isEmpty && <div style={{ paddingBottom: '2px' }}>{renderFiles()}</div>}
+      <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
     </div>
   );
 }
@@ -405,9 +411,9 @@ interface SectionHeaderProps {
   collapsed: boolean;
   onToggle: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
-  actionIcon: string;
-  actionTitle: string;
-  onAction: () => void;
+  actionIcon?: string;
+  actionTitle?: string;
+  onAction?: () => void;
   secondActionIcon?: string;
   secondActionTitle?: string;
   onSecondAction?: () => void;
@@ -452,14 +458,16 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
             <Codicon name={secondActionIcon} />
           </button>
         )}
-        <button
-          data-action-btn=""
-          style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-          title={actionTitle}
-          onClick={e => { e.stopPropagation(); onAction(); }}
-        >
-          <Codicon name={actionIcon} />
-        </button>
+        {onAction && actionIcon && (
+          <button
+            data-action-btn=""
+            style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
+            title={actionTitle}
+            onClick={e => { e.stopPropagation(); onAction(); }}
+          >
+            <Codicon name={actionIcon} />
+          </button>
+        )}
         <span style={sectionCountStyle}>{count}</span>
       </div>
     </div>
@@ -516,14 +524,14 @@ export function VscodeView({
         collapsed={stagedCollapsed}
         onToggle={() => toggleCollapsed(STAGED_COLLAPSE_KEY)}
         onContextMenu={e => {/* no-op for now */}}
-        actionIcon="remove"
-        actionTitle="Unstage All"
-        onAction={() => repos.forEach(r => onUnstageAll(r.repoId))}
+        actionIcon={totalStaged > 0 ? "remove" : undefined}
+        actionTitle={totalStaged > 0 ? "Unstage All" : undefined}
+        onAction={totalStaged > 0 ? () => repos.forEach(r => onUnstageAll(r.repoId)) : undefined}
         openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
         openChangesTitle={isSingleRepo ? 'Open Staged Changes' : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenStagedChanges(singleRepoStatus.repoId) : undefined}
       />
-      {!stagedCollapsed && repos.map((r, idx) => {
+      {!stagedCollapsed && repos.filter(r => r.stagedFiles.length > 0).map((r, idx) => {
         const meta = metaMap.get(r.repoId);
         return (
           <VscodeRepoGroup
@@ -571,17 +579,17 @@ export function VscodeView({
         collapsed={unstagedCollapsed}
         onToggle={() => toggleCollapsed(UNSTAGED_COLLAPSE_KEY)}
         onContextMenu={e => {/* no-op */}}
-        actionIcon="add"
-        actionTitle="Stage All"
-        onAction={() => repos.forEach(r => onStageAll(r.repoId))}
-        secondActionIcon="discard"
-        secondActionTitle="Rollback All"
-        onSecondAction={() => onRollback(repos.flatMap(r => r.unstagedFiles))}
+        actionIcon={totalUnstaged > 0 ? "add" : undefined}
+        actionTitle={totalUnstaged > 0 ? "Stage All" : undefined}
+        onAction={totalUnstaged > 0 ? () => repos.forEach(r => onStageAll(r.repoId)) : undefined}
+        secondActionIcon={totalUnstaged > 0 ? "discard" : undefined}
+        secondActionTitle={totalUnstaged > 0 ? "Rollback All" : undefined}
+        onSecondAction={totalUnstaged > 0 ? () => onRollback(repos.flatMap(r => r.unstagedFiles)) : undefined}
         openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
         openChangesTitle={isSingleRepo ? 'Open Changes' : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenUnstagedChanges(singleRepoStatus.repoId) : undefined}
       />
-      {!unstagedCollapsed && repos.map((r, idx) => {
+      {!unstagedCollapsed && repos.filter(r => r.stagedFiles.length === 0 || r.unstagedFiles.length > 0).map((r, idx) => {
         const meta = metaMap.get(r.repoId);
         return (
           <VscodeRepoGroup
@@ -630,8 +638,8 @@ const sectionHeaderStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   background: 'var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.08))',
+  borderLeft: '3px solid var(--vscode-focusBorder, var(--vscode-button-background, #007acc))',
   borderBottom: '1px solid var(--vscode-panel-border)',
-  borderTop: '1px solid var(--vscode-panel-border)',
   position: 'sticky',
   top: 0,
   zIndex: 1,
@@ -678,7 +686,6 @@ const repoHeaderStyle = (color: string): React.CSSProperties => ({
   display: 'flex',
   alignItems: 'center',
   background: color + '14',
-  borderBottom: '1px solid var(--vscode-panel-border)',
   height: '26px',
   boxSizing: 'border-box',
 });

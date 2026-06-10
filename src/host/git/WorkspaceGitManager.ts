@@ -29,6 +29,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private reposListeners: BranchListener[] = [];
   private worktreeListeners: WorktreeListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
+  private refreshFollowUp: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
   /** Watchers for .git creation under workspace folders — rebuilt when folders/settings change. */
   private gitInitWatchers: vscode.Disposable[] = [];
@@ -42,11 +43,16 @@ export class WorkspaceGitManager implements vscode.Disposable {
       // Workspace folder changes → rebuild everything and push fresh status to listeners
       vscode.workspace.onDidChangeWorkspaceFolders(() => { this.reinitialize(); this.scheduleRefresh(); }),
 
-      // File saved inside a repo → refresh status
+      // File saved inside a repo → refresh status (immediate + follow-up for slow git index updates)
       vscode.workspace.onDidSaveTextDocument((doc) => {
         const filePath = doc.uri.fsPath;
         const inRepo = Array.from(this.repoMetas.values()).some(m => filePath.startsWith(m.rootPath));
-        if (inRepo) this.scheduleRefresh();
+        if (inRepo) {
+          this.scheduleRefresh();
+          // Schedule a follow-up refresh in case git hasn't updated its index yet
+          if (this.refreshFollowUp) clearTimeout(this.refreshFollowUp);
+          this.refreshFollowUp = setTimeout(() => this.scheduleRefresh(), 1200);
+        }
       }),
 
       // File-explorer operations (create/delete/rename via VSCode UI or extensions)
@@ -490,7 +496,12 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.initialStatusDone = true;
 
     if (newlyUntracked.length > 0) {
-      void this.promptAddToGit(newlyUntracked);
+      const cfg = vscode.workspace.getConfiguration('gitcharm');
+      const enabled = cfg.get<boolean>('promptAddUntrackedToGit', true);
+      const viewMode = cfg.get<string>('changesViewMode', 'simplified');
+      if (enabled && viewMode !== 'simplified') {
+        void this.promptAddToGit(newlyUntracked);
+      }
     }
   }
 
@@ -575,6 +586,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.watchers.forEach(d => d.dispose());
     this.watchers = [];
     if (this.refreshDebounce) { clearTimeout(this.refreshDebounce); this.refreshDebounce = null; }
+    if (this.refreshFollowUp) { clearTimeout(this.refreshFollowUp); this.refreshFollowUp = null; }
     if (this.branchDebounce) { clearTimeout(this.branchDebounce); this.branchDebounce = null; }
   }
 

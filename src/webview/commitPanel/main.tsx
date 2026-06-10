@@ -222,6 +222,9 @@ function App() {
   // repoId → headCommit — shown as dismissable banner above the file tree
   const [detachedWarnings, setDetachedWarnings] = useState<Record<string, string>>({});
 
+  // Track unstaged file counts per repo to detect new changes for auto-expand in vscode mode
+  const prevUnstagedCountsRef = useRef<Map<string, number>>(new Map());
+
   // ── Vscode mode: repo selection for commit ───────────────────────────────
   const [vscodeSelectedRepos, setVscodeSelectedRepos] = useState<Set<string>>(new Set());
 
@@ -349,6 +352,24 @@ function App() {
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
           store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.hasWorkspaceFolder);
+          if (Array.isArray(msg.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
+            const prevCounts = prevUnstagedCountsRef.current;
+            let hasNewChanges = false;
+            for (const repo of msg.repos) {
+              const prev = prevCounts.get(repo.repoId) ?? 0;
+              const curr = (repo.unstagedFiles ?? []).length;
+              if (prev === 0 && curr > 0) hasNewChanges = true;
+              prevCounts.set(repo.repoId, curr);
+            }
+            if (hasNewChanges && useCommitStore.getState().isCollapsed('vscode-section:unstaged')) {
+              useCommitStore.getState().toggleCollapsed('vscode-section:unstaged');
+            }
+          } else if (Array.isArray(msg.repos)) {
+            const prevCounts = prevUnstagedCountsRef.current;
+            for (const repo of msg.repos) {
+              prevCounts.set(repo.repoId, (repo.unstagedFiles ?? []).length);
+            }
+          }
           break;
         case 'CHANGELISTS_UPDATE':
           store.setChangelists(msg.changelists, msg.viewMode);
@@ -1047,10 +1068,10 @@ function App() {
                   }
                 }}
                 onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
-                onStageFiles={(rid, paths) => send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths })}
-                onUnstageFiles={(rid, paths) => send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths })}
-                onStageAll={rid => send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid })}
-                onUnstageAll={rid => send({ type: 'COMMIT_UNSTAGE_ALL', requestId: generateId(), repoId: rid })}
+                onStageFiles={(rid, paths) => { store.isCollapsed('vscode-section:staged') && store.toggleCollapsed('vscode-section:staged'); send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths }); }}
+                onUnstageFiles={(rid, paths) => { store.isCollapsed('vscode-section:unstaged') && store.toggleCollapsed('vscode-section:unstaged'); send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths }); }}
+                onStageAll={rid => { store.isCollapsed('vscode-section:staged') && store.toggleCollapsed('vscode-section:staged'); send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid }); }}
+                onUnstageAll={rid => { store.isCollapsed('vscode-section:unstaged') && store.toggleCollapsed('vscode-section:unstaged'); send({ type: 'COMMIT_UNSTAGE_ALL', requestId: generateId(), repoId: rid }); }}
                 onRepoContextMenu={(e, rid, staged) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, stagedSection: staged })}
                 onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
                 onOpenStagedChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid, section: 'staged' })}

@@ -5,38 +5,7 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
 import { Codicon } from '../../shared/Codicon';
-
-// ── Branch color (same logic as ProjectGroup) ─────────────────────────────────
-
-const BRANCH_HUES: Record<string, number> = {
-  main: 213, master: 213,
-  develop: 160, dev: 160, development: 160,
-  staging: 35, stage: 35,
-  release: 270, production: 270, prod: 270,
-};
-
-function branchHue(name: string): number {
-  const lower = name.toLowerCase();
-  if (lower in BRANCH_HUES) return BRANCH_HUES[lower];
-  const stripped = lower.replace(/^(feature|feat|fix|hotfix|bugfix|chore|refactor|release|support)[\\/\-]/, '');
-  let h = 0;
-  for (let i = 0; i < stripped.length; i++) h = (h * 31 + stripped.charCodeAt(i)) & 0xffff;
-  return h % 360;
-}
-
-function branchColor(name: string): { bg: string; fg: string; border: string } {
-  const hue = branchHue(name);
-  const isDark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
-  return isDark ? {
-    bg:     `hsla(${hue}, 55%, 50%, 0.15)`,
-    fg:     `hsl(${hue}, 70%, 65%)`,
-    border: `hsla(${hue}, 55%, 55%, 0.4)`,
-  } : {
-    bg:     `hsla(${hue}, 55%, 50%, 0.12)`,
-    fg:     `hsl(${hue}, 55%, 28%)`,
-    border: `hsla(${hue}, 55%, 40%, 0.55)`,
-  };
-}
+import { branchColor, tagColor } from '../../shared/branchColors';
 
 export interface RepoFileGroup {
   repoId: string;
@@ -55,6 +24,7 @@ interface Props {
   repoGroups: RepoFileGroup[];
   isFixed: boolean;
   multiRepo: boolean;
+  singleRepo?: boolean;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -78,7 +48,7 @@ interface Props {
 }
 
 export function ChangelistGroup({
-  changelist, repoGroups, isFixed, multiRepo,
+  changelist, repoGroups, isFixed, multiRepo, singleRepo,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
@@ -86,7 +56,6 @@ export function ChangelistGroup({
 }: Props) {
   const collapseKey = `cl:${changelist.id}`;
   const collapsed = isCollapsed(collapseKey);
-
   const allFiles = repoGroups.flatMap(g => g.files);
   const totalFiles = allFiles.length;
   const selectedCount = allFiles.filter(f => isFileSelected(f.repoId, f.path)).length;
@@ -120,9 +89,10 @@ export function ChangelistGroup({
           type="checkbox"
           checked={allSelected}
           onChange={() => {}}
-          onClick={toggleAll}
-          style={styles.clCheckbox}
-          title="Select all files in this changelist"
+          onClick={totalFiles > 0 ? toggleAll : e => e.stopPropagation()}
+          disabled={totalFiles === 0}
+          style={{ ...styles.clCheckbox, ...(totalFiles === 0 ? { opacity: 0.3, cursor: 'default', pointerEvents: 'none' } : {}) }}
+          title={totalFiles > 0 ? "Select all files in this changelist" : undefined}
         />
         <div style={styles.headerMain} onClick={() => toggleCollapsed(collapseKey)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
@@ -140,19 +110,21 @@ export function ChangelistGroup({
 
       {!collapsed && (
         <div style={styles.body}>
-          {repoGroups.length === 0 ? (
+          {repoGroups.length === 0 && (
             <div style={styles.empty}>No files</div>
-          ) : (
-            repoGroups.map((group, idx) => (
+          )}
+          {repoGroups.map((group, idx) => (
               <RepoSubGroup
                 key={group.repoId}
                 isFirst={idx === 0}
+                defaultCollapsed={group.files.length === 0}
                 repoId={group.repoId}
                 repoName={group.repoName}
                 repoColor={group.repoColor}
                 repoStatus={group.repoStatus}
                 files={group.files}
                 multiRepo={multiRepo}
+                singleRepo={singleRepo}
                 isSubmodule={group.isSubmodule}
                 submodulePath={group.submodulePath}
                 isWorktree={group.isWorktree}
@@ -178,8 +150,7 @@ export function ChangelistGroup({
                 changelistId={changelist.id}
                 ctxFile={ctxFile}
               />
-            ))
-          )}
+            ))}
         </div>
       )}
     </div>
@@ -195,6 +166,7 @@ interface RepoSubGroupProps {
   repoStatus?: RepoStatus;
   files: FileStatus[];
   multiRepo: boolean;
+  singleRepo?: boolean;
   isSubmodule?: boolean;
   submodulePath?: string;
   isWorktree?: boolean;
@@ -220,23 +192,27 @@ interface RepoSubGroupProps {
   changelistId?: string;
   ctxFile?: { repoId: string; path: string } | null;
   isFirst?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 function RepoSubGroup({
-  repoId, repoName, repoColor, repoStatus, files, multiRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath,
+  repoId, repoName, repoColor, repoStatus, files, multiRepo, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false,
+  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, defaultCollapsed = false,
 }: RepoSubGroupProps) {
-  const collapseKey = `cl-repo:${repoId}`;
-  const collapsed = isCollapsed(collapseKey);
+  const collapseKey = `cl-repo:${changelistId ?? ''}:${repoId}`;
+  // When defaultCollapsed, the key's presence means "user explicitly opened it"
+  const collapsed = defaultCollapsed ? !isCollapsed(collapseKey) : isCollapsed(collapseKey);
   const totalFiles = files.length;
   const selectedCount = files.filter(f => isFileSelected(repoId, f.path)).length;
   const allSelected = totalFiles > 0 && selectedCount === totalFiles;
   const someSelected = selectedCount > 0 && !allSelected;
 
-  const branchClr = repoStatus ? branchColor(repoStatus.branch.name) : branchColor('main');
+  const branchClr = repoStatus
+    ? (repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true))
+    : branchColor('main', true);
   const [hovered, setHovered] = useState(false);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
@@ -251,7 +227,7 @@ function RepoSubGroup({
 
   return (
     <div style={styles.repoSubGroup(isFirst)}>
-      {multiRepo && (
+      {multiRepo && !singleRepo && (
         <div
           style={styles.repoHeader(repoColor)}
           onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId, changelistId); }}
@@ -263,9 +239,10 @@ function RepoSubGroup({
             type="checkbox"
             checked={allSelected}
             onChange={() => {}}
-            onClick={toggleAll}
-            style={styles.repoCheckbox}
-            title={`Select all files in ${repoName}`}
+            onClick={totalFiles > 0 ? toggleAll : e => e.stopPropagation()}
+            style={{ ...styles.repoCheckbox, ...(totalFiles === 0 ? { opacity: 0.3, cursor: 'default', pointerEvents: 'none' } : {}) }}
+            title={totalFiles > 0 ? `Select all files in ${repoName}` : undefined}
+            disabled={totalFiles === 0}
           />
           <div style={styles.repoHeaderMain} onClick={() => toggleCollapsed(collapseKey)}>
             <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.repoChevron} />
@@ -309,7 +286,10 @@ function RepoSubGroup({
           </div>
         </div>
       )}
-      {(!multiRepo || !collapsed) && (
+      {files.length === 0 && (!multiRepo || singleRepo || !collapsed) && (
+        <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+      )}
+      {files.length > 0 && (!multiRepo || singleRepo || !collapsed) && (
         <FileTree
           repoId={repoId}
           files={files}
@@ -327,11 +307,12 @@ function RepoSubGroup({
           onRollback={onRollback}
           onResolveMerge={onResolveMerge}
           viewMode={viewMode}
-          basePad={multiRepo ? 36 : 24}
+          basePad={multiRepo && !singleRepo ? 36 : 24}
           activeFolderPath={activeFolderPath}
           ctxFile={ctxFile}
         />
       )}
+      <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
     </div>
   );
 }
@@ -340,7 +321,6 @@ function RepoSubGroup({
 
 const styles = {
   container: {
-    borderBottom: '1px solid var(--vscode-panel-border)',
   } as React.CSSProperties,
 
   // Changelist header — accent left border + solid background for clear hierarchy
@@ -416,10 +396,12 @@ const styles = {
     flexDirection: 'column' as const,
   },
   empty: {
-    padding: '8px 24px',
+    padding: '12px 8px',
     fontSize: '12px',
     color: 'var(--vscode-foreground)',
     opacity: 0.4,
+    textAlign: 'center' as const,
+    borderBottom: '1px solid var(--vscode-panel-border)',
   },
 
   repoSubGroup: (_isFirst: boolean): React.CSSProperties => ({
@@ -428,7 +410,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     background: color + '14',
-    borderBottom: '1px solid var(--vscode-panel-border)',
     height: '26px',
     boxSizing: 'border-box',
   }),
@@ -475,23 +456,24 @@ const styles = {
     flexShrink: 10,
     minWidth: '20px',
   } as React.CSSProperties,
-  branchBadge: (clr: { bg: string; fg: string; border: string }): React.CSSProperties => ({
+  branchBadge: (color: string): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
     fontSize: '10px',
-    fontWeight: 'normal' as const,
+    fontWeight: 600,
     textTransform: 'none' as const,
     letterSpacing: 0,
-    background: clr.bg,
-    color: clr.fg,
-    border: `1px solid ${clr.border}`,
+    background: `${color}33`,
+    color,
+    border: `1px solid ${color}88`,
     borderRadius: '3px',
     padding: '1px 5px',
     flexShrink: 1,
     minWidth: '0',
     maxWidth: '160px',
     marginLeft: '4px',
+    cursor: 'pointer',
     overflow: 'hidden',
   }),
   branchName: {

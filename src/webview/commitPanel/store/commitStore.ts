@@ -66,6 +66,20 @@ function allFilePaths(repoStatus: RepoStatus): string[] {
   return Array.from(paths);
 }
 
+function loadPersistedSelection(mode: 'simplified' | 'changelists', repoId: string): Set<string> | null {
+  try {
+    const raw = localStorage.getItem(`gitcharm:${mode}:selection:${repoId}`);
+    if (!raw) return null;
+    return new Set(JSON.parse(raw) as string[]);
+  } catch { return null; }
+}
+
+function savePersistedSelection(mode: 'simplified' | 'changelists', repoId: string, paths: Set<string>) {
+  try {
+    localStorage.setItem(`gitcharm:${mode}:selection:${repoId}`, JSON.stringify(Array.from(paths)));
+  } catch { /* ignore */ }
+}
+
 export const useCommitStore = create<CommitState>((set, get) => ({
   status: null,
   repoMetas: [],
@@ -116,13 +130,17 @@ export const useCommitStore = create<CommitState>((set, get) => ({
       const untrackedPaths = new Set(r.unstagedFiles.filter(f => f.status === 'untracked').map(f => f.path));
       const prevSelectedSet = prevFiles[r.repoId];
       const prevSeenSet = prevSeen[r.repoId];
+      const savedSelection = !prevSeenSet && (changesViewMode === 'simplified' || changesViewMode === 'changelists') ? loadPersistedSelection(changesViewMode, r.repoId) : null;
       const next = new Set<string>();
       for (const p of currentPaths) {
         const isFirstLoad = !prevSeenSet;
         const isNew = !isFirstLoad && !prevSeenSet.has(p);
         if (isFirstLoad) {
-          // Initial load: select everything except untracked in changelists mode
-          if (changesViewMode === 'changelists' && untrackedPaths.has(p)) continue;
+          // Initial load: in simplified/changelists mode restore from localStorage
+          if (changesViewMode === 'simplified' || changesViewMode === 'changelists') {
+            if (savedSelection?.has(p)) next.add(p);
+            continue;
+          }
           next.add(p);
         } else if (isNew) {
           // File appeared after initial load — never auto-select
@@ -133,13 +151,13 @@ export const useCommitStore = create<CommitState>((set, get) => ({
       fileSelections[r.repoId] = next;
       seenFiles[r.repoId] = new Set(currentPaths);
 
-      // Auto-collapse repos with no changes; auto-expand when changes appear
+      // Auto-collapse repos with no changes; auto-expand only when changes appear on a previously empty repo
       if (!(r.repoId in prev)) {
         if (currentPaths.length === 0) collapsedKeys.add(r.repoId);
       } else {
-        const hadFiles = (prevFiles[r.repoId]?.size ?? 0) > 0 || prevCollapsed.has(r.repoId) === false;
         const wasCollapsed = prevCollapsed.has(r.repoId);
-        if (wasCollapsed && currentPaths.length > 0 && (prevFiles[r.repoId]?.size ?? 0) === 0) {
+        const prevHadFiles = (prevSeen[r.repoId]?.size ?? 0) > 0;
+        if (wasCollapsed && currentPaths.length > 0 && !prevHadFiles) {
           collapsedKeys.delete(r.repoId);
         }
       }
@@ -155,6 +173,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
       const prev = new Set(s.fileSelections[repoId] ?? []);
       if (prev.has(path)) prev.delete(path);
       else prev.add(path);
+      if (s.changesViewMode === 'simplified' || s.changesViewMode === 'changelists') savePersistedSelection(s.changesViewMode, repoId, prev);
       return { fileSelections: { ...s.fileSelections, [repoId]: prev } };
     }),
 
@@ -165,6 +184,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
         if (selected) next.add(p);
         else next.delete(p);
       }
+      if (s.changesViewMode === 'simplified' || s.changesViewMode === 'changelists') savePersistedSelection(s.changesViewMode, repoId, next);
       return { fileSelections: { ...s.fileSelections, [repoId]: next } };
     }),
 
@@ -206,35 +226,6 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   setError: (err) => set({ error: err }),
   setChangelists: (changelists, viewMode) => {
     set({ changelists, changesViewMode: viewMode });
-    if (viewMode !== 'changelists' && viewMode !== 'vscode') return;
-    if (viewMode !== 'changelists') return;
-
-    // Build lookup: repoId::path → changelistId
-    const fileClId = new Map<string, string>();
-    for (const cl of changelists) {
-      for (const [repoId, paths] of Object.entries(cl.fileAssignments)) {
-        for (const p of paths) fileClId.set(`${repoId}::${p}`, cl.id);
-      }
-    }
-
-    const { fileSelections, status } = get();
-    const nextSelections: FileSelections = {};
-    let changed = false;
-    for (const r of status?.repos ?? []) {
-      const cur = fileSelections[r.repoId];
-      if (!cur) continue;
-      const next = new Set(cur);
-      for (const p of cur) {
-        const isUntracked = r.unstagedFiles.some(f => f.path === p && f.status === 'untracked');
-        const clId = fileClId.get(`${r.repoId}::${p}`) ?? 'default';
-        if (isUntracked || clId !== 'default') {
-          next.delete(p);
-          changed = true;
-        }
-      }
-      nextSelections[r.repoId] = next;
-    }
-    if (changed) set({ fileSelections: { ...fileSelections, ...nextSelections } });
   },
 
   getRepoStatus: (repoId) => get().status?.repos.find(r => r.repoId === repoId),
