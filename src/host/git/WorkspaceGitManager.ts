@@ -3,11 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GitService } from './GitService';
 import type { WorktreeEntry } from './GitService';
-import { getVscodeGitApi } from './VscodeGitApi';
+import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
 import { PROJECT_COLORS } from '../types/workspace';
 
 const MAX_SUBMODULE_DEPTH = 5;
+const DEFAULT_REPOSITORY_SCAN_MAX_DEPTH = 1;
+const DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS = ['node_modules'];
 
 type StatusListener = (status: WorkspaceStatus) => void;
 type BranchListener = () => void;
@@ -28,7 +30,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private worktreeListeners: WorktreeListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
-  /** Watchers for .git creation in non-repo workspace folders — rebuilt when folders change. */
+  /** Watchers for .git creation under workspace folders — rebuilt when folders/settings change. */
   private gitInitWatchers: vscode.Disposable[] = [];
   private prevHeads = new Map<string, string>();      // repoId → branch name
   private prevCommits = new Map<string, string>();    // repoId → commit hash
@@ -52,8 +54,21 @@ export class WorkspaceGitManager implements vscode.Disposable {
       vscode.workspace.onDidDeleteFiles(() => this.scheduleRefresh()),
       vscode.workspace.onDidRenameFiles(() => this.scheduleRefresh()),
 
+      // Repository discovery settings affect the repo set, watcher patterns, and colors.
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (
+          e.affectsConfiguration('gitcharm.repositoryScanMaxDepth') ||
+          e.affectsConfiguration('gitcharm.repositoryScanIgnoredFolders') ||
+          e.affectsConfiguration('gitcharm.projectColors')
+        ) {
+          this.reinitialize();
+          this.setupGitInitWatchers();
+          this.scheduleRefresh();
+        }
+      }),
+
       // A folder already in the workspace may become a git repo (via git init or clone).
-      // Watch for .git creation in any workspace folder root to trigger reinitialize.
+      // Watch for .git creation under workspace folders to trigger reinitialize.
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.setupGitInitWatchers()),
     );
 
@@ -100,8 +115,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const folders = vscode.workspace.workspaceFolders ?? [];
     const customColors = vscode.workspace.getConfiguration('gitcharm').get<Record<string, string>>('projectColors', {});
 
-    // Shared counter so every repo (workspace folder OR submodule) gets its own
-    // palette slot — submodules are visually distinct, just like multi-repo.
+    // Shared counter so every repo (workspace folder, scanned repo, or submodule)
+    // gets its own palette slot — submodules are visually distinct, just like multi-repo.
     const colorIdx = { value: 0 };
     folders.forEach((folder) => {
       const gitDir = path.join(folder.uri.fsPath, '.git');
@@ -109,62 +124,23 @@ export class WorkspaceGitManager implements vscode.Disposable {
         const repoId = folder.uri.fsPath;
         const color = customColors[folder.name] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
 
-        // Detect linked worktree: .git is a file (not a directory) containing
-        // "gitdir: /path/to/main/.git/worktrees/<name>"
-        let isWorktree = false;
-        let mainWorktreePath: string | undefined;
-        const gitStat = fs.statSync(gitDir);
-        if (gitStat.isFile()) {
-          try {
-            const content = fs.readFileSync(gitDir, 'utf8').trim();
-            const match = content.match(/^gitdir:\s*(.+)$/m);
-            if (match) {
-              // e.g. /abs/path/main/.git/worktrees/foo → strip /.git/worktrees/foo
-              const gitdirPath = match[1].trim();
-              const worktreesIdx = gitdirPath.indexOf(`${path.sep}.git${path.sep}worktrees${path.sep}`);
-              if (worktreesIdx !== -1) {
-                mainWorktreePath = gitdirPath.slice(0, worktreesIdx);
-              }
-            }
-          } catch { /* ignore */ }
-          // Only treat as worktree if the main repo is also open in this workspace.
-          // If opened standalone, behave as a normal repo.
-          const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-          if (mainWorktreePath && workspacePaths.includes(mainWorktreePath)) {
-            isWorktree = true;
-          }
-        }
+        const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(folder.uri.fsPath);
 
         const meta: RepoMeta = { id: repoId, name: folder.name, rootPath: folder.uri.fsPath, color, depth: 0, isWorktree, mainWorktreePath };
         this.repoMetas.set(repoId, meta);
         this.repos.set(repoId, new GitService(repoId, folder.uri.fsPath));
         this.setupWatcher(folder.uri.fsPath, repoId);
         this.discoverSubmodules(folder.uri.fsPath, repoId, 1, colorIdx, customColors);
-
-        // Always watch .gitmodules regardless of whether VS Code Git API is available —
-        // setupWatcher() returns early when vsRepo is found and skips the FileSystemWatcher fallback.
-        const gitmodulesWatcher = vscode.workspace.createFileSystemWatcher(
-          new vscode.RelativePattern(folder.uri.fsPath, '.gitmodules')
-        );
-        const onGitmodulesChanged = () => { this.reinitialize(); this.scheduleRefresh(); };
-        gitmodulesWatcher.onDidChange(onGitmodulesChanged);
-        gitmodulesWatcher.onDidCreate(onGitmodulesChanged);
-        gitmodulesWatcher.onDidDelete(onGitmodulesChanged);
-        this.watchers.push(gitmodulesWatcher);
-
-        // Watch .git/worktrees/ so the panel updates when worktrees are added/removed
-        const worktreesDir = path.join(folder.uri.fsPath, '.git', 'worktrees');
-        const worktreeWatcher = vscode.workspace.createFileSystemWatcher(
-          new vscode.RelativePattern(worktreesDir, '**')
-        );
-        const repoIdForWorktree = repoId;
-        const onWorktreesChanged = () => { this.worktreeListeners.forEach(l => l(repoIdForWorktree)); };
-        worktreeWatcher.onDidChange(onWorktreesChanged);
-        worktreeWatcher.onDidCreate(onWorktreesChanged);
-        worktreeWatcher.onDidDelete(onWorktreesChanged);
-        this.watchers.push(worktreeWatcher);
+        this.setupRepositoryAuxWatchers(folder.uri.fsPath, repoId);
       }
     });
+
+    const repositoryScanMaxDepth = this.getRepositoryScanMaxDepth();
+    if (repositoryScanMaxDepth > 0) {
+      folders.forEach((folder) => {
+        this.discoverNestedRepositories(folder.uri.fsPath, repositoryScanMaxDepth, colorIdx, customColors);
+      });
+    }
 
     const fetchOnStartup = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchOnStartup', false);
     if (fetchOnStartup) {
@@ -173,6 +149,182 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
     // Notify listeners that the set of known repos has changed (e.g. submodule added/removed)
     this.reposListeners.forEach(l => l());
+  }
+
+  private getRepositoryScanMaxDepth(): number {
+    const value = vscode.workspace
+      .getConfiguration('gitcharm')
+      .get<number>('repositoryScanMaxDepth', DEFAULT_REPOSITORY_SCAN_MAX_DEPTH);
+
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return DEFAULT_REPOSITORY_SCAN_MAX_DEPTH;
+    }
+    return Math.min(10, Math.max(0, Math.floor(value)));
+  }
+
+  private getRepositoryScanIgnoredFolders(): string[] {
+    const value = vscode.workspace
+      .getConfiguration('gitcharm')
+      .get<string[]>('repositoryScanIgnoredFolders', DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS);
+
+    return Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      : DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS;
+  }
+
+  private detectLinkedWorktree(rootPath: string): { isWorktree: boolean; mainWorktreePath?: string } {
+    const gitDir = path.join(rootPath, '.git');
+    let mainWorktreePath: string | undefined;
+
+    try {
+      if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isFile()) {
+        return { isWorktree: false };
+      }
+
+      const content = fs.readFileSync(gitDir, 'utf8').trim();
+      const match = content.match(/^gitdir:\s*(.+)$/m);
+      if (match) {
+        // e.g. /abs/path/main/.git/worktrees/foo → strip /.git/worktrees/foo
+        const gitdirPath = match[1].trim();
+        const worktreesIdx = gitdirPath.indexOf(`${path.sep}.git${path.sep}worktrees${path.sep}`);
+        if (worktreesIdx !== -1) {
+          mainWorktreePath = gitdirPath.slice(0, worktreesIdx);
+        }
+      }
+    } catch {
+      return { isWorktree: false };
+    }
+
+    // Only treat as worktree if the main repo is also known/open in this workspace.
+    // If opened standalone, behave as a normal repo.
+    const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+    const isWorktree = !!mainWorktreePath && (workspacePaths.includes(mainWorktreePath) || this.repos.has(mainWorktreePath));
+    return { isWorktree, mainWorktreePath };
+  }
+
+  private setupRepositoryAuxWatchers(repoPath: string, repoId: string): void {
+    // Always watch .gitmodules regardless of whether VS Code Git API is available —
+    // setupWatcher() returns early when vsRepo is found and skips the FileSystemWatcher fallback.
+    const gitmodulesWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(repoPath, '.gitmodules')
+    );
+    const onGitmodulesChanged = () => { this.reinitialize(); this.setupGitInitWatchers(); this.scheduleRefresh(); };
+    gitmodulesWatcher.onDidChange(onGitmodulesChanged);
+    gitmodulesWatcher.onDidCreate(onGitmodulesChanged);
+    gitmodulesWatcher.onDidDelete(onGitmodulesChanged);
+    this.watchers.push(gitmodulesWatcher);
+
+    // Watch .git/worktrees/ so the panel updates when worktrees are added/removed.
+    // Linked worktrees have .git as a file; their main repo owns .git/worktrees/.
+    const gitDir = path.join(repoPath, '.git');
+    try {
+      if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) return;
+    } catch {
+      return;
+    }
+
+    const worktreesDir = path.join(gitDir, 'worktrees');
+    const worktreeWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(worktreesDir, '**')
+    );
+    const onWorktreesChanged = () => { this.worktreeListeners.forEach(l => l(repoId)); };
+    worktreeWatcher.onDidChange(onWorktreesChanged);
+    worktreeWatcher.onDidCreate(onWorktreesChanged);
+    worktreeWatcher.onDidDelete(onWorktreesChanged);
+    this.watchers.push(worktreeWatcher);
+  }
+
+  private repositoryScanDepth(workspaceRoot: string, candidatePath: string): number {
+    const rel = path.relative(workspaceRoot, candidatePath);
+    if (!rel) return 0;
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return -1;
+    return rel.split(path.sep).filter(Boolean).length;
+  }
+
+  private isRepositoryScanIgnored(candidatePath: string, workspaceRoot: string): boolean {
+    const rel = path.relative(workspaceRoot, candidatePath);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+
+    const normalizedRel = rel.split(path.sep).join('/');
+    const parts = normalizedRel.split('/').filter(Boolean);
+    if (parts.includes('.git')) return true;
+
+    return this.getRepositoryScanIgnoredFolders().some(rawPattern => {
+      const pattern = rawPattern.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      if (!pattern) return false;
+      if (!pattern.includes('/')) return parts.includes(pattern);
+      return normalizedRel === pattern || normalizedRel.startsWith(`${pattern}/`);
+    });
+  }
+
+  private discoverNestedRepositories(
+    workspaceRoot: string,
+    maxDepth: number,
+    colorIdx: { value: number },
+    customColors: Record<string, string>,
+  ): void {
+    const visit = (parentPath: string, parentDepth: number) => {
+      if (parentDepth >= maxDepth) return;
+
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(parentPath, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+
+        const childPath = path.join(parentPath, entry.name);
+        if (this.isRepositoryScanIgnored(childPath, workspaceRoot)) continue;
+
+        const childDepth = parentDepth + 1;
+        const gitDir = path.join(childPath, '.git');
+        if (fs.existsSync(gitDir)) {
+          this.registerScannedRepository(childPath, workspaceRoot, colorIdx, customColors);
+          continue;
+        }
+
+        if (childDepth < maxDepth) {
+          visit(childPath, childDepth);
+        }
+      }
+    };
+
+    visit(workspaceRoot, 0);
+  }
+
+  private registerScannedRepository(
+    repoPath: string,
+    workspaceRoot: string,
+    colorIdx: { value: number },
+    customColors: Record<string, string>,
+  ): void {
+    const normalizedRepoPath = path.normalize(repoPath);
+    if (this.repos.has(normalizedRepoPath)) return;
+
+    const relPath = path.relative(workspaceRoot, normalizedRepoPath).split(path.sep).join('/');
+    const displayName = relPath && !relPath.startsWith('..') ? relPath : path.basename(normalizedRepoPath);
+    const basename = path.basename(normalizedRepoPath);
+    const customColor = customColors[displayName] ?? customColors[basename];
+    const color = customColor ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+    const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(normalizedRepoPath);
+
+    const meta: RepoMeta = {
+      id: normalizedRepoPath,
+      name: displayName,
+      rootPath: normalizedRepoPath,
+      color,
+      depth: 0,
+      isWorktree,
+      mainWorktreePath,
+    };
+    this.repoMetas.set(normalizedRepoPath, meta);
+    this.repos.set(normalizedRepoPath, new GitService(normalizedRepoPath, normalizedRepoPath));
+    this.setupWatcher(normalizedRepoPath, normalizedRepoPath);
+    this.discoverSubmodules(normalizedRepoPath, normalizedRepoPath, 1, colorIdx, customColors);
+    this.setupRepositoryAuxWatchers(normalizedRepoPath, normalizedRepoPath);
   }
 
   private discoverSubmodules(
@@ -244,7 +396,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private setupWatcher(repoPath: string, repoId: string): void {
     // Primary: VS Code Git API state changes — fired for all git operations
     // (built-in git, GitCharm, terminal, other extensions).
-    const vsRepo = getVscodeGitApi()?.getRepository(vscode.Uri.file(repoPath));
+    const vsRepo = getVscodeRepository(repoPath);
     if (vsRepo) {
       this.prevHeads.set(repoId, vsRepo.state.HEAD?.name ?? '');
       this.prevCommits.set(repoId, vsRepo.state.HEAD?.commit ?? '');
@@ -309,6 +461,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
   reinitializeAndRefresh(): void {
     this.reinitialize();
+    this.setupGitInitWatchers();
     this.scheduleRefresh();
   }
 
@@ -575,14 +728,26 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.gitInitWatchers.forEach(d => d.dispose());
     this.gitInitWatchers = [];
 
+    const maxDepth = this.getRepositoryScanMaxDepth();
+
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
-      // Only watch folders that are not already known git repos
-      if (this.repos.has(folder.uri.fsPath)) continue;
+      // At depth 0 only the workspace root can become a repo; if it already is
+      // one, its normal repo watcher is enough. At depth > 0, still watch known
+      // roots so newly cloned/git-init'ed child repositories are detected.
+      if (maxDepth === 0 && this.repos.has(folder.uri.fsPath)) continue;
 
       const w = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(folder.uri, '.git')
+        new vscode.RelativePattern(folder.uri, maxDepth > 0 ? '**/.git' : '.git')
       );
-      const onGitCreated = () => { this.reinitialize(); this.scheduleRefresh(); };
+      const onGitCreated = (gitUri: vscode.Uri) => {
+        const repoPath = path.dirname(gitUri.fsPath);
+        const depth = this.repositoryScanDepth(folder.uri.fsPath, repoPath);
+        if (depth < 0 || depth > maxDepth) return;
+        if (this.isRepositoryScanIgnored(repoPath, folder.uri.fsPath)) return;
+        this.reinitialize();
+        this.setupGitInitWatchers();
+        this.scheduleRefresh();
+      };
       w.onDidCreate(onGitCreated);
       this.gitInitWatchers.push(w);
     }

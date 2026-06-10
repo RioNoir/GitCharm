@@ -233,7 +233,9 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 |:--|:--|:--|
 | `gitcharm.graphMaxCommits` | `1000` | Maximum number of commits loaded into the Git Log graph. |
 | `gitcharm.fetchOnStartup` | `false` | Fetches all remotes when GitCharm activates. |
-| `gitcharm.projectColors` | `{}` | Maps workspace folder names to hex colors for multi-repo views. |
+| `gitcharm.projectColors` | `{}` | Maps workspace folder/repository names to hex colors for multi-repo views. |
+| `gitcharm.repositoryScanMaxDepth` | `1` | Maximum depth of workspace subfolders to scan for Git repositories. `0` only checks workspace folders. |
+| `gitcharm.repositoryScanIgnoredFolders` | `["node_modules"]` | Folder names or workspace-relative paths skipped while scanning for nested Git repositories. |
 | `gitcharm.autoRefreshInterval` | `0` | Auto-refresh interval in seconds. `0` disables interval refresh and uses file watchers only. |
 | `gitcharm.changesViewMode` | `"simplified"` | How to display changed files: `simplified`, `changelists`, or `vscode`. Chosen via QuickPick on first install. |
 | `gitcharm.gitAnnotations.enabled` | `true` | Enable inline Git blame annotations in the editor. |
