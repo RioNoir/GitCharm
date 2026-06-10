@@ -11,6 +11,8 @@ import type { WorkspaceStatus } from '../types/git';
 export class BadgeController implements vscode.Disposable {
   private readonly treeView: vscode.TreeView<never>;
   private progressResolve: (() => void) | undefined;
+  private hiddenRepoIds: string[] = [];
+  private lastStatus: WorkspaceStatus | undefined;
 
   constructor() {
     const emptyProvider: vscode.TreeDataProvider<never> = {
@@ -36,11 +38,17 @@ export class BadgeController implements vscode.Disposable {
     this.progressResolve = undefined;
   }
 
+  setHiddenRepoIds(ids: string[]): void {
+    this.hiddenRepoIds = ids;
+    if (this.lastStatus) this.update(this.lastStatus);
+  }
+
   update(status: WorkspaceStatus): void {
     this.stopLoading();
-    const total = status.repos.reduce(
-      (sum, r) => sum + r.stagedFiles.length + r.unstagedFiles.length, 0
-    );
+    this.lastStatus = status;
+    const total = status.repos
+      .filter(r => !this.hiddenRepoIds.includes(r.repoId))
+      .reduce((sum, r) => sum + r.stagedFiles.length + r.unstagedFiles.length, 0);
     this.treeView.badge = total > 0
       ? { value: total, tooltip: `${total} changed file${total === 1 ? '' : 's'}` }
       : undefined;

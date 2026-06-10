@@ -80,6 +80,10 @@ export function registerCommands(
       annotationController.navigateToCommit(hash, repoId);
     }),
 
+    vscode.commands.registerCommand('gitcharm.manageHiddenRepos', () => {
+      commitPanel.manageHiddenRepos();
+    }),
+
     vscode.commands.registerCommand('gitcharm.manageProfiles', () => {
       profileStatusBar.showMenu();
     }),

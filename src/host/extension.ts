@@ -140,12 +140,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();
 
-  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState);
+  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState);
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager);
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
+  commitPanel.setBadgeController(badge);
   logPanel.setCommitPanel(commitPanel);
+
+  // Apply saved hidden repos to badge immediately (before webview opens)
+  const savedHidden = context.workspaceState.get<string[]>('gitcharm.hiddenRepoIds', []);
+  if (savedHidden.length > 0) badge.setHiddenRepoIds(savedHidden);
 
   const branchStatusBar = new BranchStatusBar(manager, () => {
     vscode.commands.executeCommand('gitcharm.commitPanel.focus');

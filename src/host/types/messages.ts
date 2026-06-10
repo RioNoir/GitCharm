@@ -77,7 +77,8 @@ export type HostToCommitMsg =
   | { type: 'SUBMODULE_PULL_RESULT'; requestId: string; repoId: string; ok: boolean; output?: string; error?: string }
   | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string }
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
-  | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string };
+  | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
+  | { type: 'COMMIT_HIDDEN_REPOS_UPDATE'; hiddenRepoIds: string[] };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -156,7 +157,12 @@ export type CommitToHostMsg =
   | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string }
   | { type: 'COMMIT_INIT_REPO' }
   | { type: 'COMMIT_OPEN_FOLDER' }
-  | { type: 'COMMIT_CLONE_REPO' };
+  | { type: 'COMMIT_CLONE_REPO' }
+  | { type: 'COMMIT_HIDE_REPO'; repoId: string }
+  | { type: 'COMMIT_UNHIDE_REPO'; repoId: string }
+  | { type: 'COMMIT_MANAGE_HIDDEN_REPOS' }
+  | { type: 'COMMIT_MANAGE_REPO'; repoId: string }
+  | { type: 'COMMIT_VIEW_GIT_LOG'; repoId: string };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 
@@ -184,7 +190,8 @@ export type HostToLogMsg =
   | { type: 'LOG_FILE_OP_RESULT'; requestId: string; ok: boolean; error?: string }
   | { type: 'LOG_COMMIT_BRANCHES_RESULT'; requestId: string; branches: { local: string[]; remote: string[]; tags: string[] } }
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
-  | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean };
+  | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
+  | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 

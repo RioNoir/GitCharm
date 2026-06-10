@@ -74,9 +74,19 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private readonly managerListeners: vscode.Disposable[] = [];
   private refreshDebounce: ReturnType<typeof setTimeout> | null = null;
   private commitPanel?: CommitPanelProvider;
+  private hiddenRepoIds: string[] = [];
+  private pendingFilterRepoId: string | null = null;
+  private pendingFilterBranch: string | null = null;
 
   setCommitPanel(provider: CommitPanelProvider): void {
     this.commitPanel = provider;
+  }
+
+  notifyHiddenReposChanged(hiddenRepoIds: string[]): void {
+    this.hiddenRepoIds = hiddenRepoIds;
+    this.getFilteredBranches().then(branches => {
+      this.post({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches });
+    });
   }
 
   constructor(
@@ -88,14 +98,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // because resolveWebviewView performs an explicit initial sync when the panel first opens.
     this.managerListeners.push(
       this.manager.onBranchChange(async () => {
-        const repos = this.getNonWorktreeRepos();
+        const repos = this.getVisibleRepos();
         const branches = await this.getFilteredBranches();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
         this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
       }),
       this.manager.onReposChange(async () => {
-        const repos = this.getNonWorktreeRepos();
+        const repos = this.getVisibleRepos();
         const branches = await this.getFilteredBranches();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
@@ -134,12 +144,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.colorTheme')) {
           if (this.view) {
             loadIconTheme(this.view.webview).then(iconTheme => {
-              this.post({ type: 'LOG_INIT_DATA', repos: this.getNonWorktreeRepos(), branches: [], iconTheme });
+              this.post({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches: [], iconTheme });
             });
           }
         }
       })
     );
+
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible && this.pendingFilterRepoId !== null) {
+        const repoId = this.pendingFilterRepoId;
+        const branch = this.pendingFilterBranch;
+        this.pendingFilterRepoId = null;
+        this.pendingFilterBranch = null;
+        // Small delay to let the webview finish its initial LOG_REQUEST_COMMITS round-trip
+        setTimeout(() => this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch }), 150);
+      }
+    });
 
     webviewView.onDidDispose(() => {
       this.view = undefined;
@@ -159,6 +180,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId });
   }
 
+  /** Focus the panel and filter the log to a specific repository (and optionally branch). */
+  focusRepo(repoId: string, branch?: string): void {
+    this.pendingFilterRepoId = repoId;
+    this.pendingFilterBranch = branch ?? null;
+    this.focus();
+    if (this.view?.visible) {
+      this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
+      this.pendingFilterRepoId = null;
+      this.pendingFilterBranch = null;
+    }
+  }
+
   /** Trigger a full log refresh — call this after any operation that creates new commits. */
   refresh(): void {
     this.post({ type: 'LOG_REFRESH' });
@@ -176,6 +209,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     return this.manager.getRepoMetas().filter(m => !m.isWorktree);
   }
 
+  private getVisibleRepos() {
+    return this.getNonWorktreeRepos().filter(m => !this.hiddenRepoIds.includes(m.id));
+  }
+
   private async getFilteredBranches() {
     const ids = new Set(this.getNonWorktreeRepos().map(r => r.id));
     const all = await this.manager.getAllBranches();
@@ -188,7 +225,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const maxCommits = vscode.workspace.getConfiguration('gitcharm').get<number>('graphMaxCommits', 1000);
         const limit = Math.min(msg.limit, maxCommits);
 
-        const repos = this.getNonWorktreeRepos();
+        const repos = this.getVisibleRepos();
         const [branches, iconTheme] = await Promise.all([
           this.getFilteredBranches(),
           this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
@@ -205,8 +242,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         }
 
         const logRepoIds = msg.repoIds.length > 0
-          ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree)
-          : this.getNonWorktreeRepos().map(r => r.id);
+          ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
+          : this.getVisibleRepos().map(r => r.id);
         const commits = await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
           filterText: msg.filterText,
           filterAuthor: msg.filterAuthor,
@@ -577,7 +614,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           async () => { await this.manager.fetchAll(); }
         );
         const branches = await this.getFilteredBranches();
-        const repos = this.getNonWorktreeRepos();
+        const repos = this.getVisibleRepos();
         this.post({ type: 'LOG_INIT_DATA', repos, branches });
         this.post({ type: 'LOG_REFRESH' });
         break;

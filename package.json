@@ -145,6 +145,11 @@
         "title": "GitCharm: Navigate to Commit"
       },
       {
+        "command": "gitcharm.manageHiddenRepos",
+        "title": "GitCharm: Manage Hidden Repositories",
+        "icon": "$(eye-closed)"
+      },
+      {
         "command": "gitcharm.manageProfiles",
         "title": "GitCharm: Manage Git Profiles",
         "icon": "$(account)"
@@ -215,7 +220,16 @@
           "group": "navigation@5"
         }
       ],
+      "scm/sourceControl": [
+        {
+          "command": "gitcharm.manageHiddenRepos",
+          "group": "gitcharm@1"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "gitcharm.manageHiddenRepos"
+        },
         {
           "command": "gitcharm.openLog"
         },

@@ -27,6 +27,7 @@ function App() {
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadRef = useRef<() => void>(() => {});
+  const filterRepoRef = useRef<(repoId: string | null, branch?: string | null) => void>(() => {});
   // Generation counter — incremented on every reload so stale bg batches are ignored
   const bgGenRef = useRef(0);
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,6 +97,9 @@ function App() {
           break;
         case 'LOG_SCROLL_TO_COMMIT':
           store.setPendingScrollHash(msg.hash);
+          break;
+        case 'LOG_FILTER_BY_REPO':
+          filterRepoRef.current(msg.repoId, msg.branch ?? null);
           break;
         case 'LOG_REMOTES_RESULT':
           break;
@@ -248,6 +252,13 @@ function App() {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits({ repoId });
   }, [reloadCommits]);
+  filterRepoRef.current = (repoId: string | null, branch?: string | null) => {
+    const filters: { repoId: string | null; branch?: string } = { repoId };
+    if (branch) filters.branch = branch;
+    store.setCommitFilters(filters);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    reloadCommits(filters);
+  };
 
   const handleClearFilters = useCallback(() => {
     const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null };

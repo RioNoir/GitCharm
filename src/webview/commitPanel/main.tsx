@@ -59,22 +59,32 @@ const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
 ];
 
 const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
-  { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
-  { id: 'stash',     label: 'Stash Changes',       icon: 'save' },
+  { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
+  { id: 'shelve',       label: 'Shelve Changes',       icon: 'archive' },
+  { id: 'stash',        label: 'Stash Changes',        icon: 'save' },
   { separator: true },
-  { id: 'refresh',   label: 'Refresh',             icon: 'refresh' },
+  { id: 'manage-repo',  label: 'Manage Repository',    icon: 'git-branch' },
+  { id: 'view-git-log', label: 'View Git Log',         icon: 'git-commit' },
+  { separator: true },
+  { id: 'hide-repo',    label: 'Hide Repository',      icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',      label: 'Refresh',              icon: 'refresh' },
 ];
 
 const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
-  { id: 'rollback',    label: 'Rollback',             icon: 'discard' },
-  { id: 'shelve',      label: 'Shelve Changes',        icon: 'archive' },
-  { id: 'stash',       label: 'Stash Changes',         icon: 'save' },
+  { id: 'rollback',     label: 'Rollback',             icon: 'discard' },
+  { id: 'shelve',       label: 'Shelve Changes',        icon: 'archive' },
+  { id: 'stash',        label: 'Stash Changes',         icon: 'save' },
   { separator: true },
-  { id: 'add-to-git',  label: 'Add to Git',            icon: 'add' },
-  { id: 'move-to-cl',  label: 'Move to Changelist…',  icon: 'list-unordered' },
+  { id: 'add-to-git',   label: 'Add to Git',            icon: 'add' },
+  { id: 'move-to-cl',   label: 'Move to Changelist…',  icon: 'list-unordered' },
   { separator: true },
-  { id: 'refresh',     label: 'Refresh',               icon: 'refresh' },
+  { id: 'manage-repo',  label: 'Manage Repository',     icon: 'git-branch' },
+  { id: 'view-git-log', label: 'View Git Log',          icon: 'git-commit' },
+  { separator: true },
+  { id: 'hide-repo',    label: 'Hide Repository',       icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',      label: 'Refresh',               icon: 'refresh' },
 ];
 
 const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
@@ -126,18 +136,28 @@ const VSCODE_FOLDER_UNSTAGED_ITEMS: ContextMenuEntry[] = [
 ];
 
 const VSCODE_REPO_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage-all', label: 'Unstage All',       icon: 'remove' },
+  { id: 'unstage-all',  label: 'Unstage All',        icon: 'remove' },
   { separator: true },
-  { id: 'refresh',     label: 'Refresh',            icon: 'refresh' },
+  { id: 'manage-repo',  label: 'Manage Repository',  icon: 'git-branch' },
+  { id: 'view-git-log', label: 'View Git Log',        icon: 'git-commit' },
+  { separator: true },
+  { id: 'hide-repo',    label: 'Hide Repository',     icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',      label: 'Refresh',             icon: 'refresh' },
 ];
 
 const VSCODE_REPO_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage-all', label: 'Stage All',            icon: 'add' },
-  { id: 'rollback',  label: 'Rollback',             icon: 'discard' },
-  { id: 'shelve',    label: 'Shelve Changes',        icon: 'archive' },
-  { id: 'stash',     label: 'Stash Changes',         icon: 'save' },
+  { id: 'stage-all',    label: 'Stage All',           icon: 'add' },
+  { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
+  { id: 'shelve',       label: 'Shelve Changes',       icon: 'archive' },
+  { id: 'stash',        label: 'Stash Changes',        icon: 'save' },
   { separator: true },
-  { id: 'refresh',   label: 'Refresh',              icon: 'refresh' },
+  { id: 'manage-repo',  label: 'Manage Repository',   icon: 'git-branch' },
+  { id: 'view-git-log', label: 'View Git Log',         icon: 'git-commit' },
+  { separator: true },
+  { id: 'hide-repo',    label: 'Hide Repository',      icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',      label: 'Refresh',             icon: 'refresh' },
 ];
 
 const SUBMODULE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
@@ -217,6 +237,9 @@ function App() {
   const [worktreeRepos, setWorktreeRepos] = useState<Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }>>([]);
   const [worktreeLoading, setWorktreeLoading] = useState(false);
   const [worktreeError, setWorktreeError] = useState<string | null>(null);
+
+  // ── Hidden repositories ───────────────────────────────────────────────────
+  const [hiddenRepoIds, setHiddenRepoIds] = useState<string[]>([]);
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -462,6 +485,10 @@ function App() {
         case 'WORKTREE_OP_RESULT':
           if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
+
+        case 'COMMIT_HIDDEN_REPOS_UPDATE':
+          setHiddenRepoIds(msg.hiddenRepoIds);
+          break;
       }
     };
     window.addEventListener('message', handler);
@@ -585,7 +612,8 @@ function App() {
     send({ type: 'COMMIT_OPEN_DIFF', repoId, filePath, staged: isStaged });
   }, [store.status, send]);
 
-  const repos = store.status?.repos ?? [];
+  const allRepos = store.status?.repos ?? [];
+  const repos = hiddenRepoIds.length > 0 ? allRepos.filter(r => !hiddenRepoIds.includes(r.repoId)) : allRepos;
   const metaMap = new Map(store.repoMetas.map(m => [m.id, m]));
   const multiRepo = repos.length >= 1;
 
@@ -707,6 +735,15 @@ function App() {
         break;
       case 'stash':
         doStash(ctx.repoId, 'WIP stash');
+        break;
+      case 'manage-repo':
+        send({ type: 'COMMIT_MANAGE_REPO', repoId: ctx.repoId });
+        break;
+      case 'view-git-log':
+        send({ type: 'COMMIT_VIEW_GIT_LOG', repoId: ctx.repoId });
+        break;
+      case 'hide-repo':
+        send({ type: 'COMMIT_HIDE_REPO', repoId: ctx.repoId });
         break;
       case 'refresh':
         send({ type: 'COMMIT_REQUEST_STATUS' });
@@ -985,6 +1022,21 @@ function App() {
               <Codicon name="collapse-all" />
             </button>
           </>)}
+          {hiddenRepoIds.length > 0 && (
+            <button
+              style={{ ...css.iconBtn, position: 'relative' }}
+              title={`${hiddenRepoIds.length} hidden repositor${hiddenRepoIds.length === 1 ? 'y' : 'ies'} — click to manage`}
+              onClick={() => send({ type: 'COMMIT_MANAGE_HIDDEN_REPOS' })}
+            >
+              <Codicon name="eye-closed" />
+              <span style={{
+                position: 'absolute', top: '1px', right: '1px',
+                background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+                borderRadius: '8px', fontSize: '9px', lineHeight: '14px',
+                minWidth: '14px', height: '14px', textAlign: 'center', padding: '0 3px',
+              }}>{hiddenRepoIds.length}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1488,14 +1540,19 @@ function App() {
           repoItems = repoCtxMenu.stagedSection ? VSCODE_REPO_STAGED_ITEMS : VSCODE_REPO_UNSTAGED_ITEMS;
         } else if (store.changesViewMode === 'changelists') {
           const baseItems: ContextMenuEntry[] = [
-            { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
-            { id: 'shelve',     label: 'Shelve Changes',      icon: 'archive' },
-            { id: 'stash',      label: 'Stash Changes',       icon: 'save' },
+            { id: 'rollback',     label: 'Rollback',              icon: 'discard' },
+            { id: 'shelve',       label: 'Shelve Changes',         icon: 'archive' },
+            { id: 'stash',        label: 'Stash Changes',          icon: 'save' },
             { separator: true },
             ...(!isInDefaultCl ? [{ id: 'add-to-git', label: 'Add to Git', icon: 'add' } as ContextMenuEntry] : []),
             ...(hasCustomCls ? [{ id: 'move-to-cl', label: 'Move to Changelist…', icon: 'list-unordered' } as ContextMenuEntry] : []),
             { separator: true },
-            { id: 'refresh',    label: 'Refresh',             icon: 'refresh' },
+            { id: 'manage-repo',  label: 'Manage Repository',      icon: 'git-branch' },
+            { id: 'view-git-log', label: 'View Git Log',           icon: 'git-commit' },
+            { separator: true },
+            { id: 'hide-repo',    label: 'Hide Repository',        icon: 'eye-closed' },
+            { separator: true },
+            { id: 'refresh',      label: 'Refresh',                icon: 'refresh' },
           ];
           repoItems = baseItems;
         }

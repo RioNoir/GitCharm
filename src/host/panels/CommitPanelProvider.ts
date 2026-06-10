@@ -19,6 +19,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private logProvider?: GitLogPanelProvider;
   private changelistService?: ChangelistService;
+  private badgeController?: import('../ui/BadgeController').BadgeController;
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -26,6 +27,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   setLogProvider(provider: GitLogPanelProvider): void {
     this.logProvider = provider;
+  }
+
+  setBadgeController(controller: import('../ui/BadgeController').BadgeController): void {
+    this.badgeController = controller;
   }
 
   prefillCommitMessage(message: string): void {
@@ -49,7 +54,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private readonly shelveDocProvider: ShelveDocumentProvider,
     private mergeEditorProvider?: MergeEditorProvider,
     private readonly profileService?: GitProfileService,
-    private readonly globalState?: vscode.Memento
+    private readonly globalState?: vscode.Memento,
+    private readonly workspaceState?: vscode.Memento
   ) {
     this.manager.onStatusChange((status) => {
       this.postChangelistsUpdate(status);
@@ -143,6 +149,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.manager.getAllStatuses().then(status => {
       this.postChangelistsUpdate(status);
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, fileViewMode: this.getFileViewMode() });
+      this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: this.getHiddenRepoIds() });
       loadIconTheme(webviewView.webview).then(iconTheme => {
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme, fileViewMode: this.getFileViewMode() });
       }).catch(() => { /* icon theme optional */ });
@@ -196,6 +203,50 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
     return vscode.workspace.getConfiguration('gitcharm').get<'commit' | 'commitAndPush'>('defaultCommitAction', 'commit');
+  }
+
+  private getHiddenRepoIds(): string[] {
+    return this.workspaceState?.get<string[]>('gitcharm.hiddenRepoIds', []) ?? [];
+  }
+
+  private async setHiddenRepoIds(ids: string[]): Promise<void> {
+    await this.workspaceState?.update('gitcharm.hiddenRepoIds', ids);
+    this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: ids });
+    this.logProvider?.notifyHiddenReposChanged(ids);
+    this.badgeController?.setHiddenRepoIds(ids);
+  }
+
+  async hideRepo(repoId: string): Promise<void> {
+    const current = this.getHiddenRepoIds();
+    if (!current.includes(repoId)) {
+      await this.setHiddenRepoIds([...current, repoId]);
+    }
+  }
+
+  async unhideRepo(repoId: string): Promise<void> {
+    const current = this.getHiddenRepoIds();
+    await this.setHiddenRepoIds(current.filter(id => id !== repoId));
+  }
+
+  async manageHiddenRepos(): Promise<void> {
+    const hidden = this.getHiddenRepoIds();
+    if (hidden.length === 0) {
+      vscode.window.showInformationMessage('GitCharm: No hidden repositories.');
+      return;
+    }
+    const allMetas = this.manager.getRepoMetas();
+    const items = hidden.map(id => {
+      const meta = allMetas.find(m => m.id === id);
+      return { label: `$(eye) ${meta?.name ?? id}`, repoId: id };
+    });
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Select repositories to show again',
+      canPickMany: true,
+      title: 'Hidden Repositories',
+    });
+    if (!picked || picked.length === 0) return;
+    const toUnhide = picked.map(p => p.repoId);
+    await this.setHiddenRepoIds(hidden.filter(id => !toUnhide.includes(id)));
   }
 
   private getOrCreateChangelistService(): ChangelistService | undefined {
@@ -1322,6 +1373,44 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_SET_FILE_VIEW_MODE': {
         await this.globalState?.update('fileViewMode', msg.mode);
+        break;
+      }
+
+      case 'COMMIT_HIDE_REPO': {
+        await this.hideRepo(msg.repoId);
+        break;
+      }
+
+      case 'COMMIT_UNHIDE_REPO': {
+        await this.unhideRepo(msg.repoId);
+        break;
+      }
+
+      case 'COMMIT_MANAGE_HIDDEN_REPOS': {
+        await this.manageHiddenRepos();
+        break;
+      }
+
+      case 'COMMIT_MANAGE_REPO': {
+        await vscode.commands.executeCommand('gitcharm.showBranchMenu', msg.repoId);
+        break;
+      }
+
+      case 'COMMIT_VIEW_GIT_LOG': {
+        const meta = this.manager.getRepoMetas().find(m => m.id === msg.repoId);
+        let logRepoId = msg.repoId;
+        let branch: string | undefined;
+        if (meta?.isWorktree && meta.mainWorktreePath) {
+          // Worktrees are not shown in the Log Panel — use the parent repo and filter by branch
+          logRepoId = meta.mainWorktreePath;
+          const status = await this.manager.getAllStatuses();
+          const repoStatus = status.repos.find(r => r.repoId === msg.repoId);
+          const branchName = repoStatus?.branch?.name;
+          if (branchName && !repoStatus?.isDetachedHead) {
+            branch = branchName;
+          }
+        }
+        this.logProvider?.focusRepo(logRepoId, branch);
         break;
       }
 
