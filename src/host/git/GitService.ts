@@ -456,6 +456,7 @@ export class GitService {
   async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }): Promise<CommitNode[]> {
     const args: string[] = [
       'log',
+      '--topo-order',
       `--max-count=${limit}`, `--skip=${skip}`,
       '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s',
       '--date=iso-strict',
@@ -915,7 +916,7 @@ export class GitService {
     if (vsRepo && vsRepo.state.remotes.length > 0) {
       const branchName = vsRepo.state.HEAD?.name;
       const hasUpstream = !!vsRepo.state.HEAD?.upstream;
-      const targetRemote = remote ?? 'origin';
+      const targetRemote = remote ?? vsRepo.state.HEAD?.upstream?.remote ?? vsRepo.state.remotes[0]?.name ?? 'origin';
       const forceMode = force ? ForcePushMode.ForceWithLease : undefined;
       await vsRepo.push(targetRemote, branchName, !hasUpstream, forceMode);
       return;
@@ -923,7 +924,10 @@ export class GitService {
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
     const hasUpstream = !!tracking.trim();
     const branchName = (await this.git.revparse(['--abbrev-ref', 'HEAD'])).trim();
-    const targetRemote = remote ?? 'origin';
+    // Derive remote from tracking branch (e.g. "upstream/main" → "upstream"), else first available remote.
+    const trackingRemote = tracking.trim().split('/')[0] || '';
+    const firstRemote = (await this.getRemotes().catch(() => []))[0] ?? 'origin';
+    const targetRemote = remote ?? (trackingRemote || firstRemote);
     const args = ['push'];
     if (!hasUpstream) args.push('--set-upstream', targetRemote, branchName);
     else if (remote) args.push(remote, branchName);
@@ -1204,9 +1208,25 @@ export class GitService {
     await this.git.raw(['merge', name]);
   }
 
-  async getBranchesContaining(hash: string): Promise<string[]> {
-    const out = await this.git.raw(['branch', '--contains', hash, '--format=%(refname:short)']);
-    return out.split('\n').map(b => b.trim()).filter(Boolean);
+  async getBranchesContaining(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
+    const [localOut, remoteOut, tagOut] = await Promise.all([
+      this.git.raw(['branch', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
+      this.git.raw(['branch', '-r', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
+      // --points-at: only tags directly on this commit, not ancestors.
+      this.git.raw(['tag', '--points-at', hash]).catch(() => ''),
+    ]);
+    const parse = (out: string) => out.split('\n').map(b => b.trim()).filter(Boolean);
+    // Local branches must not contain a slash — anything with '/' is a remote ref
+    // that leaked into the local output on some git configurations.
+    // Exclude remote-leaked refs (contain '/') and the detached HEAD pseudo-entry "(HEAD detached at ...)".
+    const local = parse(localOut).filter(b => !b.includes('/') && !b.startsWith('('));
+    // Remote names come as "origin/foo" or "remotes/origin/foo" — normalise both.
+    // origin/HEAD is a symbolic alias, not a real branch — skip it here.
+    const remote = parse(remoteOut)
+      .map(b => b.replace(/^remotes\//, ''))
+      .filter(b => !b.endsWith('/HEAD'));
+    const tags = parse(tagOut);
+    return { local, remote, tags };
   }
 
   async getFullCommitMessage(hash: string): Promise<string> {

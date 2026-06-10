@@ -168,7 +168,7 @@ export interface TagInfo {
 
 export type HostToLogMsg =
   | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean }
-  | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number }
+  | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number }>; error?: string }
   | { type: 'LOG_BRANCH_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
@@ -179,14 +179,14 @@ export type HostToLogMsg =
   | { type: 'LOG_REFRESH' }
   | { type: 'LOG_MERGE_COMMITS_RESULT'; requestId: string; commits: MergeParentCommit[]; error?: string }
   | { type: 'LOG_FILE_OP_RESULT'; requestId: string; ok: boolean; error?: string }
-  | { type: 'LOG_COMMIT_BRANCHES_RESULT'; requestId: string; branches: string[] }
+  | { type: 'LOG_COMMIT_BRANCHES_RESULT'; requestId: string; branches: { local: string[]; remote: string[]; tags: string[] } }
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
 export type LogToHostMsg =
-  | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
+  | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
   | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string }

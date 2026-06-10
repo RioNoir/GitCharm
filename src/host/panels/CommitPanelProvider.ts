@@ -427,7 +427,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }
           if (noRemoteRepos.length > 0) {
             vscode.window.showInformationMessage(
-              `GitCharm: Cannot push — no remote configured for: ${noRemoteRepos.join(', ')}. Add a remote first (git remote add origin <url>).`
+              `GitCharm: Cannot push — no remote configured for: ${noRemoteRepos.join(', ')}. Add a remote first (git remote add <name> <url>).`
             );
             this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'No remote configured' });
             return;

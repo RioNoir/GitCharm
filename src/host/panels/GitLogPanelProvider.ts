@@ -214,7 +214,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           filterDateFrom: msg.filterDateFrom,
           filterDateTo: msg.filterDateTo,
         });
-        this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast: commits.length < limit, batchIndex: 0 });
+        this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast: commits.length < limit, batchIndex: 0, requestId: msg.requestId });
         break;
       }
 
@@ -374,6 +374,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
           const merged = mergeCurrentIntoBranches(branches, current);
           this.post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
+          this.post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
         }
@@ -1038,7 +1039,9 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_REQUEST_COMMIT_BRANCHES': {
         const repo = this.manager.getRepo(msg.repoId);
-        const branches = repo ? await repo.getBranchesContaining(msg.hash).catch(() => []) : [];
+        const branches = repo
+          ? await repo.getBranchesContaining(msg.hash).catch(() => ({ local: [], remote: [], tags: [] }))
+          : { local: [], remote: [], tags: [] };
         this.post({ type: 'LOG_COMMIT_BRANCHES_RESULT', requestId: msg.requestId, branches });
         break;
       }

@@ -290,6 +290,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
     // Count local branches present in ALL repos
     const localCount = new Map<string, number>();
+    // For remote branches: key = full "remote/branch" name, count per repo
     const remoteCount = new Map<string, number>();
 
     for (const r of perRepo) {
@@ -298,10 +299,11 @@ export class BranchStatusBar implements vscode.Disposable {
       const seenRemote = new Set<string>();
       for (const b of r.value) {
         if (b.isRemote) {
-          const name = b.name.replace(/^[^/]+\//, '');
-          if (!seenRemote.has(name)) {
-            seenRemote.add(name);
-            remoteCount.set(name, (remoteCount.get(name) ?? 0) + 1);
+          // Keep full name (e.g. "upstream/main") so we preserve the remote name
+          const fullName = b.name.startsWith('remotes/') ? b.name.slice('remotes/'.length) : b.name;
+          if (!seenRemote.has(fullName)) {
+            seenRemote.add(fullName);
+            remoteCount.set(fullName, (remoteCount.get(fullName) ?? 0) + 1);
           }
         } else {
           if (!seenLocal.has(b.name)) {
@@ -317,6 +319,7 @@ export class BranchStatusBar implements vscode.Disposable {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([name]) => name);
 
+    // commonRemote entries are full "remote/branch" strings (e.g. "origin/main", "upstream/main")
     const commonRemote = [...remoteCount.entries()]
       .filter(([, c]) => c === metas.length)
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -333,7 +336,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
     if (commonLocal.length > 0) {
       items.push({
-        label: 'COMMON LOCAL BRANCHES',
+        label: metas.length === 1 ? 'LOCAL BRANCHES' : 'COMMON LOCAL BRANCHES',
         kind: vscode.QuickPickItemKind.Separator,
         action: async () => {},
       } as unknown as typeof items[0]);
@@ -350,15 +353,16 @@ export class BranchStatusBar implements vscode.Disposable {
 
     if (commonRemote.length > 0) {
       items.push({
-        label: 'COMMON REMOTE BRANCHES',
+        label: metas.length === 1 ? 'REMOTE BRANCHES' : 'COMMON REMOTE BRANCHES',
         kind: vscode.QuickPickItemKind.Separator,
         action: async () => {},
       } as unknown as typeof items[0]);
-      for (const name of commonRemote) {
+      for (const fullName of commonRemote) {
+        const baseName = fullName.includes('/') ? fullName.slice(fullName.indexOf('/') + 1) : fullName;
         items.push({
-          label: `$(cloud) ${name}`,
+          label: `$(cloud) ${fullName}`,
           description: '',
-          action: () => this.showCommonBranchActionMenu(name, metas, false, headLabel),
+          action: () => this.showCommonBranchActionMenu(baseName, metas, false, headLabel),
         });
       }
     }

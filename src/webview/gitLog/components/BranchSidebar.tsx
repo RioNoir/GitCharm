@@ -24,7 +24,7 @@ interface Props {
   onDeleteTag: (repoIds: string[], tagName: string) => void;
 }
 
-type SectionKey = 'local' | 'remote' | 'tags';
+type SectionKey = string; // 'local' | 'remote:<name>' | 'tags'
 
 function stripRemotePrefix(name: string): string {
   return name.includes('/') ? name.slice(name.indexOf('/') + 1) : name;
@@ -109,7 +109,18 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
 
   // Exclude detached HEAD pseudo-branch from Local list — it shows up as a tag row instead
   const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD')));
-  const remoteMerged = sortMerged(buildMergedBranches(filtered.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD')));
+
+  // Group remote branches by remote name (e.g. "origin", "upstream"), sorted alphabetically
+  const remoteBranches = filtered.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD');
+  const remoteGroupsMap = new Map<string, MergedBranch[]>();
+  for (const b of remoteBranches) {
+    const rName = b.remoteName ?? b.name.split('/')[0] ?? 'remote';
+    if (!remoteGroupsMap.has(rName)) remoteGroupsMap.set(rName, []);
+    remoteGroupsMap.get(rName)!.push(b);
+  }
+  const remoteGroups: { name: string; merged: MergedBranch[] }[] = Array.from(remoteGroupsMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, bs]) => ({ name, merged: sortMerged(buildMergedBranches(bs)) }));
 
   // Active detached tag name(s) — shown as "current" in the Tags section
   const activeDetachedTags = new Set(branches.filter(b => b.detachedTag).map(b => b.detachedTag!));
@@ -190,33 +201,36 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
         />
       ))}
 
-      {/* ORIGIN / REMOTE section */}
-      {remoteMerged.length > 0 && (
-        <>
-          <div style={styles.sectionHeader} onClick={() => toggle('remote')}>
-            <span style={styles.chevron}>{collapsed.has('remote') ? '▶' : '▼'}</span>
-            <Codicon name="cloud" style={styles.sectionIcon} />
-            <span style={styles.sectionLabel}>Origin</span>
-            <span style={styles.count}>{remoteMerged.length}</span>
-          </div>
-          {!collapsed.has('remote') && remoteMerged.map(m => (
-            <BranchRow
-              key={m.baseName}
-              merged={m}
-              repoColorMap={repoColorMap}
-              multiRepo={multiRepo}
-              isFilterSelected={selectedBranchFilter === m.baseName}
-              isCtxActive={contextMenu?.merged.baseName === m.baseName}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setContextMenu({ merged: m, x: e.clientX, y: e.clientY });
-              }}
-              onDoubleClick={() => onBranchFilterSelect(m.baseName)}
-            />
-          ))}
-        </>
-      )}
+      {/* REMOTE sections — one per remote name (origin, upstream, …) */}
+      {remoteGroups.map(({ name, merged }) => {
+        const sectionKey = `remote:${name}`;
+        return (
+          <React.Fragment key={sectionKey}>
+            <div style={styles.sectionHeader} onClick={() => toggle(sectionKey)}>
+              <span style={styles.chevron}>{collapsed.has(sectionKey) ? '▶' : '▼'}</span>
+              <Codicon name="cloud" style={styles.sectionIcon} />
+              <span style={styles.sectionLabel}>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
+              <span style={styles.count}>{merged.length}</span>
+            </div>
+            {!collapsed.has(sectionKey) && merged.map(m => (
+              <BranchRow
+                key={m.baseName}
+                merged={m}
+                repoColorMap={repoColorMap}
+                multiRepo={multiRepo}
+                isFilterSelected={selectedBranchFilter === m.baseName}
+                isCtxActive={contextMenu?.merged.baseName === m.baseName}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ merged: m, x: e.clientX, y: e.clientY });
+                }}
+                onDoubleClick={() => onBranchFilterSelect(m.baseName)}
+              />
+            ))}
+          </React.Fragment>
+        );
+      })}
 
       {/* TAGS section */}
       {mergedTags.length > 0 && (

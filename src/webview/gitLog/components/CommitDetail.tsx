@@ -4,8 +4,10 @@ import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg, HostToLogMsg, IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
-import { groupRefs, branchColor } from '../utils/refs';
+import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
+import { formatDateTime } from '../../shared/dateUtils';
 import type { RefGroup } from '../utils/refs';
+import { isPrimaryBranch } from '../../shared/branchUtils';
 import { AuthorAvatar } from './AuthorAvatar';
 
 function generateId() {
@@ -295,14 +297,23 @@ function TreeDir({ node, depth, selectedFile, ctxFile, onOpen, onContextMenu, al
 
 /* ─── Badge helpers ───────────────────────────────────────────────────────── */
 
+function remoteLabel(group: RefGroup): string {
+  const r = group.remoteName || 'remote';
+  return `${r}/${group.label}`;
+}
+
 function badgeTitle(group: RefGroup): string {
+  if (group.isRemoteHead) return `Remote HEAD (${group.remoteName}/HEAD)`;
+  if (group.isDetached && group.isHead) return 'HEAD (detached)';
   if (group.isTag) return `Tag: ${group.label}`;
-  if (group.isRemote) return `Remote: origin/${group.label}`;
+  if (group.isRemote) return `Remote: ${remoteLabel(group)}`;
   return `Local: ${group.label}`;
 }
 
 function RefBadgeIcon({ group }: { group: RefGroup }) {
   const s: React.CSSProperties = { fontSize: '11px', flexShrink: 0, lineHeight: 1 };
+  if (group.isRemoteHead) return <Codicon name="milestone" style={s} />;
+  if (group.isDetached && group.isHead) return <Codicon name="warning" style={s} />;
   if (group.isTag) return <Codicon name="tag" style={s} />;
   if (group.isRemote) return <Codicon name="cloud" style={s} />;
   return <Codicon name="git-branch" style={s} />;
@@ -320,8 +331,9 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   const [loadingMergeFiles, setLoadingMergeFiles] = useState(false);
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
-  const [containingBranches, setContainingBranches] = useState<string[]>([]);
+  const [containingBranches, setContainingBranches] = useState<{ local: string[]; remote: string[]; tags: string[] }>({ local: [], remote: [], tags: [] });
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [refsExpanded, setRefsExpanded] = useState(false);
   const [messageExpanded, setMessageExpanded] = useState(false);
 
   const repoName = useMemo(() => {
@@ -346,7 +358,8 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   }, []);
 
   useEffect(() => {
-    if (!commit) { setContainingBranches([]); return; }
+    if (!commit) { setContainingBranches({ local: [], remote: [], tags: [] }); return; }
+    setRefsExpanded(false);
     setLoadingBranches(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -521,43 +534,133 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             <span style={styles.dot}>·</span>
             <span>{commit.authorEmail}</span>
             <span style={styles.dot}>·</span>
-            <span>{new Date(commit.authorDate).toLocaleString()}</span>
+            <span>{formatDateTime(commit.authorDate)}</span>
           </div>
         </div>
         {(() => {
+          const LIMIT = 5;
           const refGroups = groupRefs(commit.refs);
-          const existingLabels = new Set(refGroups.filter(g => !g.isTag).map(g => g.label));
-          const extraBranches = containingBranches.filter(b => !existingLabels.has(b));
-          const extraVisible = extraBranches.slice(0, 8);
-          const extraHidden = extraBranches.slice(8);
-          if (refGroups.length === 0 && extraBranches.length === 0 && !loadingBranches) return null;
+
+          // Build a flat list of all badges to display, deduplicating by label.
+          // Order:
+          //   1. HEAD branch (isHead, already first from groupRefs)
+          //   2. Tags directly on this commit (from refs)
+          //   3. Primary local branches (main/master/…) — from refs first, then containing
+          //   4. Other local branches — from refs first, then containing
+          //   5. Primary remote branches — from refs first, then containing
+          //   6. Other remote branches — from refs first, then containing
+          //   7. Tags from --contains (not directly on commit)
+          const refLabels = new Set(refGroups.map(g => g.label));
+          type Badge =
+            | { kind: 'ref'; group: RefGroup }
+            | { kind: 'local'; name: string }
+            | { kind: 'remote'; name: string; remoteName: string }
+            | { kind: 'tag'; name: string };
+
+          const headBadges    = refGroups.filter(g => g.isHead).map(g => ({ kind: 'ref' as const, group: g }));
+          const refTagBadges  = refGroups.filter(g => g.isTag).map(g => ({ kind: 'ref' as const, group: g }));
+          const refLocalPrim  = refGroups.filter(g => !g.isHead && !g.isTag && g.isLocal && isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
+          const refLocalOther = refGroups.filter(g => !g.isHead && !g.isTag && g.isLocal && !isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
+          const refRemPrim    = refGroups.filter(g => !g.isHead && !g.isTag && g.isRemote && isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
+          const refRemOther   = refGroups.filter(g => !g.isHead && !g.isTag && g.isRemote && !isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
+
+          // Strip remote prefix (upstream/foo → foo), used for dedup.
+          const stripRemote  = (b: string) => b.includes('/') ? b.slice(b.indexOf('/') + 1) : b;
+          const getRemote    = (b: string) => b.includes('/') ? b.slice(0, b.indexOf('/')) : '';
+          const isHEADRef    = (b: string) => stripRemote(b).toUpperCase() === 'HEAD';
+
+          // Local branches from --contains must never contain '/' — anything with
+          // a slash is a remote ref that leaked through (some git versions do this).
+          // Also deduplicate against refLabels which are already normalized.
+          const localOnly = containingBranches.local.filter(b => !b.includes('/'));
+          const extraLocalPrim  = localOnly.filter(b => !refLabels.has(b) && isPrimaryBranch(b)).map(b => ({ kind: 'local' as const, name: b }));
+          const extraLocalOther = localOnly.filter(b => !refLabels.has(b) && !isPrimaryBranch(b)).map(b => ({ kind: 'local' as const, name: b }));
+
+          // Remote dedup: strip prefix before comparing with refLabels. Preserve remote name for display.
+          const extraRemPrim    = containingBranches.remote.filter(b => !isHEADRef(b) && !refLabels.has(stripRemote(b)) && isPrimaryBranch(stripRemote(b))).map(b => ({ kind: 'remote' as const, name: stripRemote(b), remoteName: getRemote(b) }));
+          const extraRemOther   = containingBranches.remote.filter(b => !isHEADRef(b) && !refLabels.has(stripRemote(b)) && !isPrimaryBranch(stripRemote(b))).map(b => ({ kind: 'remote' as const, name: stripRemote(b), remoteName: getRemote(b) }));
+          const extraTags       = containingBranches.tags.filter(t => !refLabels.has(t)).map(t => ({ kind: 'tag' as const, name: t }));
+
+          const allBadges: Badge[] = [
+            ...headBadges,
+            ...refTagBadges,
+            ...refLocalPrim,  ...extraLocalPrim,
+            ...refLocalOther, ...extraLocalOther,
+            ...refRemPrim,    ...extraRemPrim,
+            ...refRemOther,   ...extraRemOther,
+            ...extraTags,
+          ];
+
+          const isEmpty = allBadges.length === 0;
+          if (isEmpty && !loadingBranches) return null;
+
+          const visible = refsExpanded ? allBadges : allBadges.slice(0, LIMIT);
+          const hiddenCount = allBadges.length - LIMIT;
+
+          function renderBadge(badge: Badge, key: string) {
+            if (badge.kind === 'ref') {
+              const g = badge.group;
+              const isSpecialHead = g.isRemoteHead || (g.isHead && g.isDetached);
+              const color = g.isTag ? tagColor() : isSpecialHead ? headColor() : branchColor(g.label, false);
+              const label = g.isRemoteHead ? `${g.remoteName}/HEAD` : g.isRemote ? remoteLabel(g) : g.label;
+              return (
+                <span key={key} style={styles.refBadge(color, (g.isHead || g.isDetached) && !g.isRemoteHead)} title={badgeTitle(g)}>
+                  <RefBadgeIcon group={g} />
+                  {label}
+                </span>
+              );
+            }
+            if (badge.kind === 'tag') {
+              const color = tagColor();
+              return (
+                <span key={key} style={styles.refBadge(color)} title={`Tag: ${badge.name}`}>
+                  <Codicon name="tag" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                  {badge.name}
+                </span>
+              );
+            }
+            const isRemote = badge.kind === 'remote';
+            const isRemoteHead = isRemote && badge.name.toUpperCase() === 'HEAD';
+            const rName = isRemote ? (badge as { remoteName: string }).remoteName : '';
+            const color = isRemoteHead ? headColor() : branchColor(badge.name, false);
+            const label = isRemote ? (isRemoteHead ? 'HEAD' : `${rName || 'remote'}/${badge.name}`) : badge.name;
+            return (
+              <span key={key} style={styles.refBadge(color, isRemoteHead)} title={isRemoteHead ? `Remote HEAD (${rName}/HEAD)` : `${isRemote ? 'Remote branch' : 'Branch'}: ${label}`}>
+                <Codicon name={isRemoteHead ? 'milestone' : isRemote ? 'cloud' : 'git-branch'} style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                {label}
+              </span>
+            );
+          }
+
+          const nonDetachedHeadGroup = refGroups.find(g => g.isHead && !g.isDetached && !g.isRemoteHead);
           return (
-            <div style={styles.refsRow}>
-              {refGroups.map(group => {
-                const color = branchColor(group.label);
-                return (
-                  <span key={group.key} style={styles.refBadge(color)} title={badgeTitle(group)}>
-                    <RefBadgeIcon group={group} />
-                    {group.isRemote ? `origin/${group.label}` : group.label}
-                  </span>
-                );
-              })}
-              {extraVisible.map(name => {
-                const color = branchColor(name);
-                return (
-                  <span key={`cb-${name}`} style={styles.refBadge(color)} title={`Branch: ${name}`}>
-                    <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
-                    {name}
-                  </span>
-                );
-              })}
-              {extraHidden.length > 0 && (
-                <span style={styles.refsMoreLabel} title={extraHidden.join(', ')}>
-                  +{extraHidden.length}
+            <div style={refsExpanded ? styles.refsRowExpanded : styles.refsRow}>
+              {nonDetachedHeadGroup && (
+                <span style={styles.refBadge(headColor(), true)} title={`HEAD → ${nonDetachedHeadGroup.label}`}>
+                  <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />
+                  HEAD
                 </span>
               )}
-              {loadingBranches && containingBranches.length === 0 && (
+              {visible.map((badge, i) => renderBadge(badge, String(i)))}
+              {!refsExpanded && hiddenCount > 0 && (
+                <span
+                  style={styles.refsShowMore}
+                  onClick={() => setRefsExpanded(true)}
+                  title={`Show ${hiddenCount} more`}
+                >
+                  +{hiddenCount} more
+                </span>
+              )}
+              {loadingBranches && allBadges.length === 0 && (
                 <span style={styles.refsLoadingLabel}>…</span>
+              )}
+              {refsExpanded && allBadges.length > LIMIT && (
+                <span
+                  style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
+                  onClick={() => setRefsExpanded(false)}
+                >
+                  Show less
+                </span>
               )}
             </div>
           );
@@ -829,6 +932,14 @@ const styles = {
     flexWrap: 'wrap' as const,
     gap: '4px',
   },
+  refsRowExpanded: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '4px',
+    maxHeight: '160px',
+    overflowY: 'auto' as const,
+    paddingRight: '2px',
+  },
   refsMoreLabel: {
     fontSize: '10px',
     opacity: 0.5,
@@ -836,13 +947,20 @@ const styles = {
     cursor: 'default',
     alignSelf: 'center',
   } as React.CSSProperties,
+  refsShowMore: {
+    fontSize: '10px',
+    color: 'var(--vscode-textLink-foreground)',
+    cursor: 'pointer',
+    alignSelf: 'center',
+    flexShrink: 0,
+  } as React.CSSProperties,
   refsLoadingLabel: {
     fontSize: '10px',
     opacity: 0.4,
     color: 'var(--vscode-foreground)',
     alignSelf: 'center',
   } as React.CSSProperties,
-  refBadge: (color: string): React.CSSProperties => ({
+  refBadge: (color: string, isHead = false): React.CSSProperties => ({
     fontSize: '10px',
     padding: '0 6px',
     height: '16px',
@@ -860,7 +978,7 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     flexShrink: 0,
     boxSizing: 'border-box' as const,
-    fontWeight: 500,
+    fontWeight: isHead ? 700 : 500,
   }),
   mergeSection: {
     marginTop: '6px',

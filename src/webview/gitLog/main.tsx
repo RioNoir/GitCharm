@@ -30,6 +30,8 @@ function App() {
   // Generation counter — incremented on every reload so stale bg batches are ignored
   const bgGenRef = useRef(0);
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Current active requestId — batches from previous requests are discarded
+  const activeRequestIdRef = useRef<string | null>(null);
 
   const send = useCallback((msg: LogToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -53,6 +55,7 @@ function App() {
         const resolve = pendingRef.current.get(msg.requestId as string)!;
         pendingRef.current.delete(msg.requestId as string);
         resolve(msg);
+        return;
       }
 
       switch (msg.type) {
@@ -62,6 +65,8 @@ function App() {
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           break;
         case 'LOG_COMMITS_BATCH': {
+          // Discard batches from superseded requests
+          if (msg.requestId && msg.requestId !== activeRequestIdRef.current) break;
           store.appendCommits(msg.commits, msg.isLast);
           if (!msg.isLast) {
             scheduleBgLoad(bgGenRef.current);
@@ -71,7 +76,9 @@ function App() {
           break;
         }
         case 'LOG_COMMIT_FILES':
-          store.setCommitFiles(msg.files);
+          // Only process responses that belong to the selected commit (no requestId = legacy broadcast)
+          // Responses with requestId are handled by pendingRef or the popover's own listener
+          if (!msg.requestId) store.setCommitFiles(msg.files);
           break;
         case 'LOG_REFS_UPDATE':
           store.updateBranches(msg.repoId, msg.branches);
@@ -115,11 +122,13 @@ function App() {
       const s = useLogStore.getState();
       if (!s.hasMore) { s.setBackgroundLoading(false); return; }
       const f = s.commitFilters;
+      const reqId = activeRequestIdRef.current ?? undefined;
       getVsCodeApi().postMessage({
         type: 'LOG_REQUEST_COMMITS',
         repoIds: f.repoId ? [f.repoId] : [],
         limit: BG_BATCH_SIZE,
         skip: s.commits.length,
+        requestId: reqId,
         filterText: f.text || undefined,
         filterAuthor: f.author || undefined,
         filterBranch: f.branch || undefined,
@@ -134,6 +143,10 @@ function App() {
     if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
     const gen = ++bgGenRef.current;
 
+    // New requestId invalidates any in-flight batches from previous requests
+    const reqId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    activeRequestIdRef.current = reqId;
+
     const f = { ...useLogStore.getState().commitFilters, ...overrides };
     useLogStore.getState().resetCommits();
     send({
@@ -141,6 +154,7 @@ function App() {
       repoIds: f.repoId ? [f.repoId] : [],
       limit: BATCH_SIZE,
       skip: 0,
+      requestId: reqId,
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
       filterBranch: f.branch || undefined,
@@ -185,11 +199,31 @@ function App() {
     return map;
   }, [store.repos]);
 
-  const laidOutCommits = useMemo(() => assignLanes(store.commits), [store.commits]);
+  const isFiltered = !!(
+    store.commitFilters.text ||
+    store.commitFilters.author ||
+    store.commitFilters.branch ||
+    store.commitFilters.dateFrom ||
+    store.commitFilters.dateTo
+  );
+  const laidOutCommits = useMemo(
+    () => assignLanes(store.commits, isFiltered),
+    [store.commits, isFiltered]
+  );
 
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};
     store.branches.forEach(b => { if (b.isHead && !b.isRemote) map[b.repoId] = b.name; });
+    return map;
+  }, [store.branches]);
+
+  // Authoritative HEAD hash per repo — from branch metadata, not commit refs.
+  // Used to show the HEAD badge on exactly the right commit regardless of ref timing.
+  const headHashByRepo = useMemo(() => {
+    const map: Record<string, string> = {};
+    store.branches.forEach(b => {
+      if (b.isHead && !b.isRemote && b.lastCommitHash) map[b.repoId] = b.lastCommitHash;
+    });
     return map;
   }, [store.branches]);
 
@@ -330,6 +364,7 @@ function App() {
           repoColors={repoColors}
           repos={store.repos}
           currentBranchByRepo={currentBranchByRepo}
+          headHashByRepo={headHashByRepo}
           onSelect={(commit) => store.selectCommit(commit)}
           onLoadMore={handleLoadMore}
           hasMore={store.hasMore && !store.loadingCommits && !store.backgroundLoading}
@@ -353,7 +388,7 @@ function App() {
               repoColor={selectedRepoColor}
               repos={store.repos}
               iconTheme={store.iconTheme}
-              onSelectFile={store.selectFile}
+                  onSelectFile={store.selectFile}
             />
           </div>
         )}

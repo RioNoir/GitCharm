@@ -4,7 +4,8 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
-import { branchColor, SingleRepoHeader } from './ProjectGroup';
+import { SingleRepoHeader } from './ProjectGroup';
+import { branchColor, tagColor } from '../../shared/branchColors';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -301,7 +302,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
   const collapsed = isCollapsed(collapseKey);
-  const branchClr = branchColor(repoStatus.branch.name);
+  const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true);
   const [hovered, setHovered] = useState(false);
 
   if (files.length === 0) return null;
@@ -707,10 +708,10 @@ const repoNameStyle: React.CSSProperties = {
   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 10, minWidth: '20px',
 };
 
-const branchBadgeStyle = (clr: { bg: string; fg: string; border: string }): React.CSSProperties => ({
+const branchBadgeStyle = (color: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: '3px',
-  fontSize: '10px', fontWeight: 'normal', textTransform: 'none', letterSpacing: 0,
-  background: clr.bg, color: clr.fg, border: `1px solid ${clr.border}`,
+  fontSize: '10px', fontWeight: 600, textTransform: 'none', letterSpacing: 0,
+  background: `${color}33`, color, border: `1px solid ${color}88`,
   borderRadius: '3px', padding: '1px 5px', flexShrink: 1, minWidth: 0, maxWidth: '160px',
   marginLeft: '4px', cursor: 'pointer', overflow: 'hidden',
 });

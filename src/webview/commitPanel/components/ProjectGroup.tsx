@@ -4,37 +4,7 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
 import { Codicon } from '../../shared/Codicon';
-
-// Deterministic hue from branch name — same name always yields same color.
-const BRANCH_HUES: Record<string, number> = {
-  main: 213, master: 213,
-  develop: 160, dev: 160, development: 160,
-  staging: 35, stage: 35,
-  release: 270, production: 270, prod: 270,
-};
-
-function branchHue(name: string): number {
-  const lower = name.toLowerCase();
-  if (lower in BRANCH_HUES) return BRANCH_HUES[lower];
-  const stripped = lower.replace(/^(feature|feat|fix|hotfix|bugfix|chore|refactor|release|support)[\\/\-]/, '');
-  let h = 0;
-  for (let i = 0; i < stripped.length; i++) h = (h * 31 + stripped.charCodeAt(i)) & 0xffff;
-  return h % 360;
-}
-
-export function branchColor(name: string): { bg: string; fg: string; border: string } {
-  const hue = branchHue(name);
-  const isDark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
-  return isDark ? {
-    bg:     `hsla(${hue}, 55%, 50%, 0.15)`,
-    fg:     `hsl(${hue}, 70%, 65%)`,
-    border: `hsla(${hue}, 55%, 55%, 0.4)`,
-  } : {
-    bg:     `hsla(${hue}, 55%, 50%, 0.12)`,
-    fg:     `hsl(${hue}, 55%, 28%)`,
-    border: `hsla(${hue}, 55%, 40%, 0.55)`,
-  };
-}
+import { branchColor, tagColor } from '../../shared/branchColors';
 
 interface Props {
   repoStatus: RepoStatus;
@@ -77,7 +47,9 @@ export function ProjectGroup({
 }: Props) {
   const repoId = repoStatus.repoId;
   const collapsed = isCollapsed(repoId);
-  const branchClr = branchColor(repoStatus.branch.name);
+  const branchClr = repoStatus.branch.detachedTag
+    ? tagColor()
+    : branchColor(repoStatus.branch.name, true);
 
   const fileMap = new Map<string, FileStatus>();
   for (const f of repoStatus.unstagedFiles) fileMap.set(f.path, f);
@@ -203,7 +175,9 @@ interface SingleRepoHeaderProps {
 
 export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onBranchClick, onRepoContextMenu, onOpenAllChanges, hideOpenChanges }: SingleRepoHeaderProps) {
   const repoId = repoStatus.repoId;
-  const branchClr = branchColor(repoStatus.branch.name);
+  const branchClr = repoStatus.branch.detachedTag
+    ? tagColor()
+    : branchColor(repoStatus.branch.name, true);
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -310,17 +284,17 @@ const styles = {
     flexShrink: 0,
     opacity: 0.75,
   } as React.CSSProperties,
-  branchBadge: (clr: { bg: string; fg: string; border: string }): React.CSSProperties => ({
+  branchBadge: (color: string): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
     fontSize: '10px',
-    fontWeight: 'normal' as const,
+    fontWeight: 600,
     textTransform: 'none' as const,
     letterSpacing: 0,
-    background: clr.bg,
-    color: clr.fg,
-    border: `1px solid ${clr.border}`,
+    background: `${color}33`,
+    color,
+    border: `1px solid ${color}88`,
     borderRadius: '3px',
     padding: '1px 5px',
     flexShrink: 1,

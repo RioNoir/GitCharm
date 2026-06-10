@@ -745,7 +745,7 @@ function App() {
   // ── Push actions ──────────────────────────────────────────────────────────
 
   const doPush = (repoId: string) => {
-    send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId, remote: 'origin' });
+    send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId });
   };
 
   const doOpenInLog = (hash: string, repoId: string) => {
@@ -760,7 +760,7 @@ function App() {
     const allRepos = useCommitStore.getState().status?.repos ?? [];
     for (const r of allRepos) {
       if ((r.branch.aheadBehind?.ahead ?? 0) > 0) {
-        send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId: r.repoId, remote: 'origin' });
+        send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId: r.repoId });
       }
     }
   };

@@ -68,6 +68,7 @@ export interface GraphLine {
   type: 'straight' | 'merge-in' | 'fork-out' | 'pass-through';
   repoId: string;
   isStart?: boolean; // true when this lane opens here (no line arrives from above)
+  color?: string;    // pre-computed color for this line segment
 }
 
 export type GitFileStatus =

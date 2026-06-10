@@ -1,4 +1,4 @@
-const PRIMARY_BRANCHES = new Set(['main', 'master', 'trunk', 'develop', 'dev', 'release']);
+const PRIMARY_BRANCHES = new Set(['main', 'master', 'release']);
 
 export function isPrimaryBranch(name: string): boolean {
   const base = name.replace(/^[^/]+\//, ''); // strip remote prefix (origin/main → main)

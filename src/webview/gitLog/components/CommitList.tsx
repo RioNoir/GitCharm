@@ -1,15 +1,17 @@
 import React, { useRef, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { LaidOutCommit } from '../utils/graphLayout';
 import { CommitRowSvg } from './CommitGraph';
 import { ROW_HEIGHT, LANE_WIDTH } from '../utils/graphLayout';
 import type { RepoMeta } from '../../shared/types';
-import { groupRefs, branchColor } from '../utils/refs';
+import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import type { RefGroup } from '../utils/refs';
 import { Codicon } from '../../shared/Codicon';
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg } from '../../../host/types/messages';
 import { AuthorAvatar } from './AuthorAvatar';
+import { formatDateTime } from '../../shared/dateUtils';
 
 // Suppress unused import warning — LANE_WIDTH is used by CommitRowSvg indirectly
 void LANE_WIDTH;
@@ -20,6 +22,7 @@ interface Props {
   repoColors: Record<string, string>;
   repos: RepoMeta[];
   currentBranchByRepo: Record<string, string>;
+  headHashByRepo: Record<string, string>;
   onSelect: (commit: LaidOutCommit) => void;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -108,6 +111,10 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
+  const [popover, setPopover] = useState<{ commit: LaidOutCommit; rowTop: number; listRect: DOMRect; mouseX: number } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const popoverHoveredRef = useRef(false);
+  const closePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [containerWidth, setContainerWidth] = useState<number>(9999);
   const containerRoRef = useRef<ResizeObserver | null>(null);
@@ -234,7 +241,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   }
 
   return (
-    <div ref={(el) => { (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el; containerRefCb(el); }} style={styles.container} onClick={() => setContextMenu(null)}>
+    <div ref={(el) => { (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el; containerRefCb(el); }} style={styles.container} onClick={() => { setContextMenu(null); setPopover(null); }}>
       <style>{BG_ANIM_STYLE}</style>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
@@ -270,8 +277,29 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
             <div
               key={commit.hash}
               style={styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash)}
-              onMouseEnter={() => setHoveredIndex(vrow.index)}
-              onMouseLeave={() => setHoveredIndex(null)}
+              onMouseEnter={(e) => {
+                setHoveredIndex(vrow.index);
+                if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
+                if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                // Don't restart the open-timer if popover for this commit is already showing
+                if (popover?.commit.hash === commit.hash) return;
+                setPopover(null);
+                const rowEl = e.currentTarget as HTMLElement;
+                const mouseX = e.clientX;
+                hoverTimerRef.current = setTimeout(() => {
+                  const rect = rowEl.getBoundingClientRect();
+                  const listRect = parentRef.current!.getBoundingClientRect();
+                  setPopover({ commit, rowTop: rect.top, listRect, mouseX });
+                }, 1000);
+              }}
+              onMouseLeave={() => {
+                setHoveredIndex(null);
+                if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                // Delay closing so mouse can travel into the popover
+                closePopoverTimerRef.current = setTimeout(() => {
+                  if (!popoverHoveredRef.current) setPopover(null);
+                }, 120);
+              }}
               onClick={(e) => {
                 if (e.ctrlKey || e.metaKey) {
                   setMultiSelectHashes(prev => {
@@ -291,13 +319,14 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
               onContextMenu={e => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                setPopover(null);
                 const isInMulti = multiSelectHashes.has(commit.hash) && multiSelectHashes.size > 1;
                 const multiSelected = isInMulti
                   ? commits.filter(c => multiSelectHashes.has(c.hash))
                   : [];
                 setContextMenu({ commit, x: e.clientX, y: e.clientY, multiSelected });
               }}
-              title={`${commit.hash}\n${commit.authorName} <${commit.authorEmail}>\n${commit.authorDate}`}
             >
               {labelColWidth > 0 && <div style={{ width: labelColWidth, flexShrink: 0 }} />}
 
@@ -312,44 +341,58 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
 
               {commit.refs.length > 0 && (() => {
                 const allGroups = mergeLocalRemote(groupRefs(commit.refs));
+                const headGroup = allGroups.find(g => g.isHead && !g.isDetached);
+                const remoteHeadGroup = allGroups.find(g => g.isRemoteHead);
+                const headAndRemoteHead = headGroup && remoteHeadGroup;
+                // All groups shown as branch badges; remoteHead excluded when merged into HEAD badge
+                const otherGroups = allGroups.filter(g => !(headAndRemoteHead && g.isRemoteHead));
                 const refsSpace = containerWidth - labelColWidth - 340;
                 const MAX = refsSpace < 80 ? 0 : refsSpace < 170 ? 1 : 2;
-                const visible = allGroups.slice(0, MAX);
-                const overflow = allGroups.slice(MAX);
+                const visible = otherGroups.slice(0, MAX);
+                const overflow = otherGroups.slice(MAX);
+                const hc = headColor();
                 return (
                   <div style={styles.refs}>
                     {visible.map(group => {
-                      const color = branchColor(group.label);
+                      const color = badgeColor(group);
                       return (
-                        <span key={group.key} style={styles.refBadge(color, group.isTag)} title={badgeTitle(group)}>
+                        <span key={group.key} style={styles.refBadge(color, group.isTag, group.isDetached && !group.isRemoteHead, isSelected)} title={badgeTitle(group)}>
                           <RefBadgeIcon group={group} />
                           <span style={styles.refBadgeLabel}>
-                            {group.isLocal && group.isRemote ? `origin & ${group.label}` : group.isRemote ? `origin/${group.label}` : group.label}
+                            {group.isRemoteHead ? `${group.remoteName}/HEAD` : group.isLocal && group.isRemote ? `${group.remoteName || 'remote'} & ${group.label}` : group.isRemote ? remoteLabel(group) : group.label}
                           </span>
                         </span>
                       );
                     })}
+                    {headGroup && (
+                      <span style={styles.refBadge(hc, false, true, isSelected)} title={headAndRemoteHead ? `HEAD → ${headGroup.label} (${remoteHeadGroup!.remoteName}/HEAD)` : `HEAD → ${headGroup.label}`}>
+                        {headAndRemoteHead
+                          ? <Codicon name="milestone" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                          : <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />}
+                        <span style={styles.refBadgeLabel}>{headAndRemoteHead ? `${remoteHeadGroup!.remoteName} & HEAD` : 'HEAD'}</span>
+                      </span>
+                    )}
                     {overflow.length > 0 && (() => {
                       const STEP = 4;
                       const layers = overflow.slice(0, 3).reverse();
                       const totalShift = layers.length * STEP;
-                      const frontColor = branchColor(overflow[0].label);
+                      const frontColor = badgeColor(overflow[0]);
                       return (
                         <span
                           style={{ ...styles.overflowWrapper, marginRight: totalShift }}
                           title={overflow.map(g => badgeTitle(g)).join('\n')}
                         >
                           {layers.map((g, i) => {
-                            const c = branchColor(g.label);
+                            const c = badgeColor(g);
                             const shift = (layers.length - i) * STEP;
                             return (
                               <span
                                 key={g.key}
-                                style={styles.overflowStackLayer(c, shift)}
+                                style={styles.overflowStackLayer(c, shift, isSelected)}
                               />
                             );
                           })}
-                          <span style={styles.overflowLabel(frontColor)}>{visible.length === 0 ? `${overflow.length}` : `+${overflow.length}`}</span>
+                          <span style={styles.overflowLabel(frontColor, isSelected)}>{visible.length === 0 ? `${overflow.length}` : `+${overflow.length}`}</span>
                         </span>
                       );
                     })()}
@@ -380,6 +423,18 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
         <div style={styles.bgLoadingBar}>
           <div style={styles.bgLoadingBarFill} />
         </div>
+      )}
+
+      {popover && (
+        <CommitPopover
+          commit={popover.commit}
+          rowTop={popover.rowTop}
+          listRect={popover.listRect}
+          mouseX={popover.mouseX}
+          onClose={() => setPopover(null)}
+          popoverHoveredRef={popoverHoveredRef}
+          closePopoverTimerRef={closePopoverTimerRef}
+        />
       )}
 
       {contextMenu && (
@@ -414,6 +469,254 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
     </div>
   );
 }
+
+function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHoveredRef, closePopoverTimerRef }: {
+  commit: LaidOutCommit;
+  rowTop: number;
+  listRect: DOMRect;
+  mouseX: number;
+  onClose: () => void;
+  popoverHoveredRef: React.MutableRefObject<boolean>;
+  closePopoverTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+}) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [stats, setStats] = useState<{ files: number; added: number; removed: number } | null>(null);
+  // null = measuring, object = positioned and visible
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Fetch file stats on mount
+  useEffect(() => {
+    const reqId = generateId();
+    const handler = (event: MessageEvent) => {
+      const msg = event.data;
+      if (msg?.type === 'LOG_COMMIT_FILES' && msg.requestId === reqId) {
+        window.removeEventListener('message', handler);
+        const files = msg.files as Array<{ added?: number; removed?: number }>;
+        const added = files.reduce((s: number, f: { added?: number }) => s + (f.added ?? 0), 0);
+        const removed = files.reduce((s: number, f: { removed?: number }) => s + (f.removed ?? 0), 0);
+        setStats({ files: files.length, added, removed });
+      }
+    };
+    window.addEventListener('message', handler);
+    getVsCodeApi().postMessage({ type: 'LOG_REQUEST_COMMIT_FILES', requestId: reqId, repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg);
+    return () => window.removeEventListener('message', handler);
+  }, [commit.hash]);
+
+  // Once stats arrive and the element is in the DOM (invisible), measure and position it
+  useLayoutEffect(() => {
+    if (!stats) return;
+    const el = popoverRef.current;
+    if (!el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    // Center on mouse X, clamped inside the list
+    const left = Math.max(listRect.left, Math.min(listRect.right - w, mouseX - w / 2));
+    // Prefer above the row; fall back to below if no room inside the list
+    const preferTop = rowTop - h - 6;
+    const top = preferTop >= listRect.top ? preferTop : rowTop + ROW_HEIGHT + 6;
+    setPos({ top, left });
+  }, [stats, rowTop, listRect, mouseX]);
+
+  // Close on window blur
+  useEffect(() => {
+    const close = () => onClose();
+    window.addEventListener('blur', close);
+    return () => window.removeEventListener('blur', close);
+  }, [onClose]);
+
+  // Reset hover flag on unmount
+  useEffect(() => () => { popoverHoveredRef.current = false; }, []);
+
+  // Don't render at all until stats are fetched
+  if (!stats) return null;
+
+  const refGroups = mergeLocalRemote(groupRefs(commit.refs));
+
+  // Render invisible for measurement on first paint, visible once pos is computed
+  const visible = pos !== null;
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      style={{
+        ...popoverStyles.container,
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        visibility: visible ? 'visible' : 'hidden',
+        pointerEvents: visible ? 'auto' : 'none',
+      }}
+      onMouseEnter={() => {
+        popoverHoveredRef.current = true;
+        if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
+      }}
+      onMouseLeave={() => {
+        popoverHoveredRef.current = false;
+        onClose();
+      }}
+    >
+      {/* Hash */}
+      <div style={popoverStyles.row}>
+        <Codicon name="git-commit" style={popoverStyles.icon} />
+        <span style={popoverStyles.hash}>{commit.shortHash}</span>
+      </div>
+
+      {/* Author + date */}
+      <div style={popoverStyles.row}>
+        <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={16} />
+        <span style={popoverStyles.author}>{commit.authorName}</span>
+        <span style={popoverStyles.dot}>·</span>
+        <span style={popoverStyles.date}>{formatDateTime(commit.authorDate)}</span>
+      </div>
+
+      {/* File stats */}
+      <div style={popoverStyles.row}>
+        <Codicon name="diff" style={popoverStyles.icon} />
+        <span style={popoverStyles.statText}>
+          {stats.files} file{stats.files !== 1 ? 's' : ''} changed
+        </span>
+        {stats.added > 0 && <span style={popoverStyles.added}>+{stats.added}</span>}
+        {stats.removed > 0 && <span style={popoverStyles.removed}>-{stats.removed}</span>}
+      </div>
+
+      {/* Ref badges */}
+      {refGroups.length > 0 && (() => {
+        const popoverHeadGroup = refGroups.find(g => g.isHead && !g.isDetached);
+        const popoverRemoteHeadGroup = refGroups.find(g => g.isRemoteHead);
+        const headAndRemoteHead = popoverHeadGroup && popoverRemoteHeadGroup;
+        const displayGroups = headAndRemoteHead ? refGroups.filter(g => !g.isRemoteHead) : refGroups;
+        const hc = headColor();
+        return (
+          <div style={popoverStyles.refs}>
+            {popoverHeadGroup && (
+              <span style={popoverStyles.badge(hc, true)} title={headAndRemoteHead ? `HEAD → ${popoverHeadGroup.label} (${popoverRemoteHeadGroup.remoteName}/HEAD)` : `HEAD → ${popoverHeadGroup.label}`}>
+                {headAndRemoteHead
+                  ? <Codicon name="milestone" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                  : <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />}
+                <span style={popoverStyles.badgeLabel}>{headAndRemoteHead ? `${popoverRemoteHeadGroup.remoteName} & HEAD` : 'HEAD'}</span>
+              </span>
+            )}
+            {displayGroups.map(group => {
+              const color = badgeColor(group);
+              return (
+                <span key={group.key} style={popoverStyles.badge(color, (group.isHead || group.isDetached) && !group.isRemoteHead)} title={badgeTitle(group)}>
+                  <RefBadgeIcon group={group} />
+                  <span style={popoverStyles.badgeLabel}>
+                    {group.isRemoteHead ? `${group.remoteName}/HEAD` : group.isLocal && group.isRemote ? `${group.remoteName || 'remote'} & ${group.label}` : group.isRemote ? remoteLabel(group) : group.label}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      <div style={popoverStyles.hint}>Click for more details</div>
+    </div>,
+    document.body
+  );
+}
+
+const popoverStyles = {
+  container: {
+    position: 'fixed',
+    zIndex: 1000,
+    background: 'var(--vscode-editorWidget-background)',
+    border: '1px solid var(--vscode-widget-border)',
+    borderRadius: '6px',
+    padding: '8px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '5px',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+    minWidth: '260px',
+    maxWidth: '420px',
+    fontFamily: 'var(--vscode-font-family)',
+    fontSize: '12px',
+    color: 'var(--vscode-foreground)',
+  } as React.CSSProperties,
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  } as React.CSSProperties,
+  icon: {
+    fontSize: '12px',
+    opacity: 0.6,
+    flexShrink: 0,
+  } as React.CSSProperties,
+  hash: {
+    fontFamily: 'var(--vscode-editor-font-family, monospace)',
+    fontWeight: 600,
+    fontSize: '12px',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  fullHash: {
+    fontFamily: 'var(--vscode-editor-font-family, monospace)',
+    fontSize: '10px',
+    opacity: 0.45,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    minWidth: 0,
+  },
+  author: {
+    fontWeight: 500,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    minWidth: 0,
+  } as React.CSSProperties,
+  dot: { opacity: 0.4, flexShrink: 0 } as React.CSSProperties,
+  date: { opacity: 0.6, flexShrink: 0, fontSize: '11px' } as React.CSSProperties,
+  statText: { opacity: 0.75 } as React.CSSProperties,
+  added: {
+    color: 'var(--vscode-gitDecoration-addedResourceForeground)',
+    fontWeight: 600,
+    fontSize: '11px',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  removed: {
+    color: 'var(--vscode-gitDecoration-deletedResourceForeground)',
+    fontWeight: 600,
+    fontSize: '11px',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  refs: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '3px',
+    marginTop: '1px',
+  } as React.CSSProperties,
+  badge: (color: string, isHead = false): React.CSSProperties => ({
+    fontSize: '10px',
+    padding: '0 5px',
+    height: '16px',
+    lineHeight: '16px',
+    borderRadius: '3px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    background: `${color}33`,
+    color,
+    border: `1px solid ${color}88`,
+    maxWidth: '180px',
+    overflow: 'hidden',
+    flexShrink: 0,
+    boxSizing: 'border-box' as const,
+    fontWeight: isHead ? 700 : 500,
+  }),
+  badgeLabel: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+  } as React.CSSProperties,
+  hint: {
+    fontSize: '10px',
+    opacity: 0.4,
+    textAlign: 'center',
+    marginTop: '2px',
+  } as React.CSSProperties,
+};
 
 function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, onClose, onSquash }: {
   commit: LaidOutCommit;
@@ -691,9 +994,9 @@ function mergeLocalRemote(groups: RefGroup[]): RefGroup[] {
   const merged: RefGroup[] = [];
   const seen = new Map<string, RefGroup>();
   for (const g of groups) {
-    if (!g.isTag && seen.has(g.label)) {
+    if (!g.isTag && !g.isRemoteHead && !g.isDetached && seen.has(g.label)) {
       const existing = seen.get(g.label)!;
-      const combined: RefGroup = { ...existing, isLocal: existing.isLocal || g.isLocal, isRemote: existing.isRemote || g.isRemote };
+      const combined: RefGroup = { ...existing, isLocal: existing.isLocal || g.isLocal, isRemote: existing.isRemote || g.isRemote, remoteName: existing.remoteName || g.remoteName };
       seen.set(g.label, combined);
       const idx = merged.findIndex(x => x.key === existing.key);
       if (idx >= 0) merged[idx] = combined;
@@ -702,11 +1005,17 @@ function mergeLocalRemote(groups: RefGroup[]): RefGroup[] {
       merged.push(g);
     }
   }
-  // HEAD first, then branches with remote (synced), then local-only, then remote-only, then tags
+  // Order: detached HEAD, local branches, remote branches, tags, origin/HEAD last
   merged.sort((a, b) => {
-    if (a.isHead !== b.isHead) return a.isHead ? -1 : 1;
-    if (a.isTag !== b.isTag) return a.isTag ? 1 : -1;
-    if (a.isRemote !== b.isRemote) return a.isRemote ? -1 : 1;
+    const rank = (g: RefGroup): number => {
+      if (g.isDetached) return 0;
+      if (g.isRemoteHead) return 4;
+      if (g.isTag) return 3;
+      if (g.isRemote) return 2;
+      return 1; // local (including isHead branch)
+    };
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
     return a.label.localeCompare(b.label);
   });
   return merged;
@@ -718,15 +1027,31 @@ function formatAuthorName(name: string): string {
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
+function remoteLabel(group: RefGroup): string {
+  const r = group.remoteName || 'remote';
+  return `${r}/${group.label}`;
+}
+
 function badgeTitle(group: RefGroup): string {
+  if (group.isRemoteHead) return `Remote HEAD (${group.remoteName}/HEAD)`;
+  if (group.isDetached && group.isHead) return 'HEAD (detached)';
   if (group.isTag) return group.isDetached ? `Tag: ${group.label} (HEAD)` : `Tag: ${group.label}`;
   if (group.isLocal && group.isRemote) return `Local & remote: ${group.label}`;
-  if (group.isRemote) return `Remote: origin/${group.label}`;
+  if (group.isRemote) return `Remote: ${remoteLabel(group)}`;
   return `Local: ${group.label}`;
+}
+
+function badgeColor(group: RefGroup): string {
+  if (group.isRemoteHead || (group.isHead && group.isDetached)) return headColor();
+  if (group.isTag) return tagColor();
+  // Never use headColor() for branch badges — that color is reserved for the explicit HEAD badge
+  return branchColor(group.label, false);
 }
 
 function RefBadgeIcon({ group }: { group: RefGroup }) {
   const s: React.CSSProperties = { fontSize: '11px', flexShrink: 0, lineHeight: 1 };
+  if (group.isRemoteHead) return <Codicon name="milestone" style={s} />;
+  if (group.isDetached && group.isHead) return <Codicon name="warning" style={s} />;
   if (group.isTag) return <Codicon name="tag" style={s} />;
   if (group.isLocal && group.isRemote) return (
     <>
@@ -739,17 +1064,6 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
   return <Codicon name="git-branch" style={s} />;
 }
 
-function formatDateTime(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    const d = date.getDate().toString().padStart(2, '0');
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const y = date.getFullYear();
-    const hh = date.getHours().toString().padStart(2, '0');
-    const mm = date.getMinutes().toString().padStart(2, '0');
-    return `${d}/${m}/${y} ${hh}:${mm}`;
-  } catch { return dateStr; }
-}
 
 const skeletonStyles = {
   container: {
@@ -904,7 +1218,7 @@ const styles = {
     flex: '0 0 auto',
     alignItems: 'center',
   },
-  refBadge: (color: string, isTag: boolean): React.CSSProperties => ({
+  refBadge: (color: string, isTag: boolean, isHead = false, isRowSelected = false): React.CSSProperties => ({
     fontSize: '10px',
     padding: '0 6px',
     height: '16px',
@@ -913,16 +1227,16 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
-    background: isTag ? `${color}33` : `${color}33`,
-    color,
-    border: `1px solid ${color}88`,
+    background: isRowSelected ? color : `${color}33`,
+    color: isRowSelected ? 'var(--vscode-editor-background)' : color,
+    border: `1px solid ${isRowSelected ? color : `${color}88`}`,
     maxWidth: '160px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
     flexShrink: 0,
     boxSizing: 'border-box' as const,
-    fontWeight: 500,
+    fontWeight: isHead ? 700 : 500,
   }),
   refBadgeLabel: {
     overflow: 'hidden',
@@ -937,25 +1251,26 @@ const styles = {
     height: '16px',
     flexShrink: 0,
   } as React.CSSProperties,
-  overflowStackLayer: (color: string, shift: number): React.CSSProperties => ({
+  overflowStackLayer: (color: string, shift: number, isRowSelected = false): React.CSSProperties => ({
     position: 'absolute',
     inset: 0,
     borderRadius: '3px',
     boxSizing: 'border-box',
-    background: `${color}33`,
-    border: `1px solid ${color}88`,
+    background: isRowSelected ? color : `${color}33`,
+    border: `1px solid ${isRowSelected ? color : `${color}88`}`,
     transform: `translateX(${shift}px)`,
+    opacity: isRowSelected ? 0.7 : 1,
   }),
-  overflowLabel: (color: string): React.CSSProperties => ({
+  overflowLabel: (color: string, isRowSelected = false): React.CSSProperties => ({
     position: 'relative',
     fontSize: '10px',
     fontWeight: 600,
     height: '16px',
     lineHeight: '14px',
     borderRadius: '3px',
-    border: `1px solid ${color}88`,
-    background: `color-mix(in srgb, var(--vscode-editor-background) 75%, ${color})`,
-    color,
+    border: `1px solid ${isRowSelected ? color : `${color}88`}`,
+    background: isRowSelected ? color : `color-mix(in srgb, var(--vscode-editor-background) 75%, ${color})`,
+    color: isRowSelected ? 'var(--vscode-editor-background)' : color,
     padding: '0 5px',
     whiteSpace: 'nowrap',
     boxSizing: 'border-box',
@@ -1004,6 +1319,7 @@ const styles = {
     flexShrink: 0,
     fontSize: '11px',
     opacity: 0.65,
+    marginLeft: '8px',
   },
   bgLoadingBar: {
     position: 'sticky' as const,

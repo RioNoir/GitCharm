@@ -1,19 +1,38 @@
+import { isPrimaryBranch } from '../../shared/branchUtils';
+import { currentPalette as _currentPalette } from '../../shared/branchColors';
+export {
+  primaryBranchColor,
+  headColor,
+  tagColor,
+  currentPalette,
+  branchPaletteIndex,
+  branchColor,
+  normalizeBranchName,
+  isDarkTheme,
+} from '../../shared/branchColors';
+
 export interface RefGroup {
   key: string;
   label: string;
-  isHead: boolean;    // this is the HEAD branch
-  isLocal: boolean;   // has a local branch
-  isRemote: boolean;  // has a remote counterpart
+  remoteName: string;    // name of the remote (e.g. "upstream", "origin"); empty for local
+  isHead: boolean;       // this is the current HEAD branch
+  isLocal: boolean;      // has a local branch
+  isRemote: boolean;     // has a remote counterpart
   isTag: boolean;
-  isDetached: boolean; // HEAD is detached (on this tag or commit)
+  isDetached: boolean;   // HEAD is detached (on this tag or commit)
+  isRemoteHead: boolean; // this is <remote>/HEAD (symbolic remote pointer)
 }
 
 export function groupRefs(refs: string[]): RefGroup[] {
   const headBranch = refs.find(r => r.startsWith('HEAD -> '))?.slice('HEAD -> '.length) ?? null;
   const isDetached = refs.includes('HEAD') && headBranch === null;
+
+  // For remote refs: map branch name → {remoteName, fullRef}
+  // e.g. "upstream/main" → { remoteName: "upstream", name: "main" }
+  const remotes = new Map<string, string>(); // name → remoteName
   const locals = new Set<string>();
-  const remotes = new Set<string>();
   const tags: string[] = [];
+  let remoteHeadRemoteName: string | null = null;
 
   for (const ref of refs) {
     if (ref.startsWith('HEAD -> ')) {
@@ -23,55 +42,96 @@ export function groupRefs(refs: string[]): RefGroup[] {
     } else if (ref.startsWith('tag: ')) {
       tags.push(ref.slice('tag: '.length));
     } else if (ref.includes('/')) {
-      const name = ref.slice(ref.indexOf('/') + 1);
-      remotes.add(name);
+      const slash = ref.indexOf('/');
+      const remoteName = ref.slice(0, slash);
+      const name = ref.slice(slash + 1);
+      if (name.toUpperCase() === 'HEAD') {
+        // <remote>/HEAD symbolic pointer — track the remote name
+        remoteHeadRemoteName = remoteName;
+      } else {
+        remotes.set(name, remoteName);
+      }
     } else {
       locals.add(ref);
     }
   }
 
-  // When a tag and a branch share the same name, git %D emits both "tag: v1.0.0"
-  // and a bare "v1.0.0" (the branch). The bare form lands in `locals`, creating a
-  // phantom branch badge. Remove any local name that is already covered by a tag.
   const tagSet = new Set(tags);
   for (const t of tagSet) locals.delete(t);
 
   const groups: RefGroup[] = [];
 
-  for (const local of locals) {
-    const synced = remotes.has(local);
+  // Detached HEAD: show a HEAD badge on this commit
+  if (isDetached) {
     groups.push({
-      key: local,
-      label: local,
-      isHead: local === headBranch,
-      isLocal: true,
+      key: 'HEAD',
+      label: 'HEAD',
+      remoteName: '',
+      isHead: true,
+      isLocal: false,
       isRemote: false,
       isTag: false,
-      isDetached: false,
+      isDetached: true,
+      isRemoteHead: false,
     });
-    if (synced) {
-      groups.push({
-        key: `remote:${local}`,
-        label: local,
-        isHead: false,
-        isLocal: false,
-        isRemote: true,
-        isTag: false,
-        isDetached: false,
-      });
-      remotes.delete(local);
-    }
   }
 
-  for (const remote of remotes) {
+  // <remote>/HEAD symbolic pointer
+  if (remoteHeadRemoteName !== null) {
     groups.push({
-      key: `remote:${remote}`,
-      label: remote,
+      key: `${remoteHeadRemoteName}/HEAD`,
+      label: 'HEAD',
+      remoteName: remoteHeadRemoteName,
       isHead: false,
       isLocal: false,
       isRemote: true,
       isTag: false,
       isDetached: false,
+      isRemoteHead: true,
+    });
+  }
+
+  for (const local of locals) {
+    const remoteEntry = remotes.get(local);
+    const synced = remoteEntry !== undefined;
+    groups.push({
+      key: local,
+      label: local,
+      remoteName: '',
+      isHead: local === headBranch,
+      isLocal: true,
+      isRemote: false,
+      isTag: false,
+      isDetached: false,
+      isRemoteHead: false,
+    });
+    if (synced) {
+      groups.push({
+        key: `remote:${local}`,
+        label: local,
+        remoteName: remoteEntry,
+        isHead: false,
+        isLocal: false,
+        isRemote: true,
+        isTag: false,
+        isDetached: false,
+        isRemoteHead: false,
+      });
+      remotes.delete(local);
+    }
+  }
+
+  for (const [name, remoteName] of remotes) {
+    groups.push({
+      key: `remote:${name}`,
+      label: name,
+      remoteName,
+      isHead: false,
+      isLocal: false,
+      isRemote: true,
+      isTag: false,
+      isDetached: false,
+      isRemoteHead: false,
     });
   }
 
@@ -79,21 +139,22 @@ export function groupRefs(refs: string[]): RefGroup[] {
     groups.push({
       key: `tag:${tag}`,
       label: tag,
+      remoteName: '',
       isHead: false,
       isLocal: false,
       isRemote: false,
       isTag: true,
       isDetached: isDetached,
+      isRemoteHead: false,
     });
   }
 
-  // HEAD local first, then its remote, then other locals+remotes, then tags
   groups.sort((a, b) => {
+    // HEAD (detached or remote) always first
+    if (a.isRemoteHead !== b.isRemoteHead) return a.isRemoteHead ? -1 : 1;
     if (a.isHead !== b.isHead) return a.isHead ? -1 : 1;
     if (a.isTag !== b.isTag) return a.isTag ? 1 : -1;
-    // group by label so remote badge stays next to local
     if (a.label !== b.label) return a.label.localeCompare(b.label);
-    // local before remote within same label
     if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
     return 0;
   });
@@ -101,25 +162,8 @@ export function groupRefs(refs: string[]): RefGroup[] {
   return groups;
 }
 
-const BADGE_PALETTE_DARK = [
-  '#569cd6', '#c586c0', '#4ec9b0', '#ce9178',
-  '#4fc1ff', '#dcdcaa', '#6796e6', '#cd9731',
-  '#b5cea8', '#d7ba7d', '#9cdcfe', '#f44747',
-];
-
-const BADGE_PALETTE_LIGHT = [
-  '#1565c0', '#6a1b9a', '#00695c', '#bf360c',
-  '#0277bd', '#f57f17', '#283593', '#e65100',
-  '#2e7d32', '#4e342e', '#01579b', '#b71c1c',
-];
-
-export function branchColor(name: string): string {
-  const isDark = typeof document !== 'undefined' &&
-    (document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast'));
-  const palette = isDark ? BADGE_PALETTE_DARK : BADGE_PALETTE_LIGHT;
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return palette[hash % palette.length];
+// Color for graph lanes with no associated branch name.
+export function anonymousLaneColor(laneIndex: number): string {
+  const p = _currentPalette();
+  return p[laneIndex % p.length];
 }
