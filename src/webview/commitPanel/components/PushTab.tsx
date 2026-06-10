@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { UnpushedCommit } from '../../shared/msgTypes';
 import type { RepoStatus, RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
+import { branchColor, tagColor } from '../../shared/branchColors';
 
 interface Props {
   repos: RepoStatus[];
@@ -46,7 +47,16 @@ function CommitRow({ commit, repoId, isHead, onOpenInLog, onUndoCommit }: {
     >
       <span style={styles.commitHash}>{commit.shortHash}</span>
       <span style={styles.commitMessage}>{commit.message}</span>
-      <span style={styles.commitMeta}>{commit.author} · {formatDate(commit.date)}</span>
+      <span style={styles.commitMeta}>
+        {commit.author} · {formatDate(commit.date)}
+        {commit.filesChanged != null && (
+          <span style={styles.commitStats}>
+            &nbsp;·&nbsp;{commit.filesChanged} file{commit.filesChanged !== 1 ? 's' : ''}
+            {commit.additions != null && commit.additions > 0 && <span style={styles.statAdd}>&nbsp;+{commit.additions}</span>}
+            {commit.deletions != null && commit.deletions > 0 && <span style={styles.statDel}>&nbsp;-{commit.deletions}</span>}
+          </span>
+        )}
+      </span>
       <div style={styles.commitActions(hovered)}>
         {isHead && (
           <button
@@ -90,8 +100,11 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
     : undefined;
   const mainRepoName = repoMeta?.mainWorktreePath?.split('/').pop();
   const repoName = worktreeBranch ? (mainRepoName ?? rawName) : rawName;
+  const branchLabel = repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name;
+  const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true);
   const repoColor = repoMeta?.color ?? '#4ec9b0';
   const ahead = repoStatus.branch.aheadBehind?.ahead ?? 0;
+  const behind = repoStatus.branch.aheadBehind?.behind ?? 0;
   const hasUpstream = !!repoStatus.branch.upstream;
   const commitCount = hasUpstream ? ahead : (unpushed?.commits?.length ?? 0);
 
@@ -114,16 +127,29 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />
           <span style={styles.dot(repoColor)} />
           <span style={styles.repoName}>{repoName}</span>
-          {worktreeBranch && (
-            <span style={styles.worktreeBadge} title={`Worktree branch: ${worktreeBranch}`}>
-              <Codicon name="repo-clone" style={{ fontSize: '11px', marginRight: '3px' }} />
-              {worktreeBranch}
-            </span>
-          )}
+          <span
+            style={styles.branchBadge(branchClr)}
+            title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : branchLabel}
+          >
+            <Codicon name={worktreeBranch ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+            <span style={styles.branchName}>{branchLabel}</span>
+          </span>
           {commitCount > 0 && (
             <span style={styles.aheadBadge}>
               <Codicon name="arrow-up" style={{ fontSize: '10px', marginRight: '2px' }} />
               {commitCount}
+            </span>
+          )}
+          {behind > 0 && commitCount === 0 && (
+            <span style={styles.behindBadge}>
+              <Codicon name="arrow-down" style={{ fontSize: '10px', marginRight: '2px' }} />
+              {behind}
+            </span>
+          )}
+          {!hasUpstream && commitCount === 0 && (
+            <span style={styles.publishBadge}>
+              <Codicon name="cloud-upload" style={{ fontSize: '10px', marginRight: '3px' }} />
+              Unpublished
             </span>
           )}
         </div>
@@ -132,13 +158,20 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
       {/* Content */}
       {expanded && (
         <div style={styles.repoBody}>
-          {hasUpstream && ahead === 0 ? (
+          {hasUpstream && ahead === 0 && behind === 0 ? (
             <div style={styles.upToDate}>
               <Codicon name="check" style={{ marginRight: '6px', opacity: 0.6 }} />
               Up to date
             </div>
+          ) : hasUpstream && ahead === 0 && behind > 0 ? (
+            <div style={styles.behindRow}>
+              <Codicon name="arrow-down" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
+              <span>
+                {behind} commit{behind !== 1 ? 's' : ''} to pull from <em>{repoStatus.branch.upstream}</em>
+              </span>
+            </div>
           ) : unpushed?.loading ? (
-            <div style={styles.loadingRow}>Loading commits…</div>
+            <div style={styles.emptyRow}>Loading commits…</div>
           ) : unpushed?.error ? (
             <div style={styles.errorRow}>
               <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
@@ -150,8 +183,13 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
                 <CommitRow key={c.hash} commit={c} repoId={repoStatus.repoId} isHead={i === 0} onOpenInLog={onOpenInLog} onUndoCommit={onUndoCommit} />
               ))}
             </div>
+          ) : !hasUpstream ? (
+            <div style={styles.unpublishedRow}>
+              <Codicon name="cloud-upload" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
+              <span>Local branch — not published to any remote yet</span>
+            </div>
           ) : (
-            <div style={styles.loadingRow}>No commits found</div>
+            <div style={styles.emptyRow}>No commits found</div>
           )}
         </div>
       )}
@@ -191,6 +229,14 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
     });
   };
 
+  const pushButtonLabel = (targets: RepoStatus[]) => {
+    const hasPublish = targets.some(r => !r.branch.upstream);
+    const hasPush = targets.some(r => !!r.branch.upstream);
+    if (hasPublish && hasPush) return 'Push & Publish';
+    if (hasPublish) return targets.length === 1 ? 'Publish Branch' : 'Publish Branches';
+    return 'Push';
+  };
+
   // Single repo: push directly, no checkbox needed
   if (isSingleRepo) {
     const solo = repos[0];
@@ -215,7 +261,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
         <div style={css.footer}>
           <button style={css.pushBtn(canPush)} disabled={!canPush} onClick={() => onPush(solo.repoId)}>
             <Codicon name="cloud-upload" style={{ marginRight: '6px' }} />
-            {!hasUpstream ? 'Publish Branch' : 'Push'}
+            {pushButtonLabel([solo])}
           </button>
         </div>
       </div>
@@ -288,7 +334,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
         )}
         <button style={css.pushBtn(canPush)} disabled={!canPush} onClick={handlePush}>
           <Codicon name="cloud-upload" style={{ marginRight: '6px' }} />
-          {checkedRepos.length === 1 && !checkedRepos[0].branch.upstream ? 'Publish Branch' : 'Push'}
+          {pushButtonLabel(pushableChecked)}
         </button>
       </div>
     </div>
@@ -367,15 +413,42 @@ const styles = {
     borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 'bold' as const,
     flexShrink: 0, marginLeft: 'auto',
   } as React.CSSProperties,
-  worktreeBadge: {
+  behindBadge: {
+    display: 'inline-flex', alignItems: 'center',
+    background: 'var(--vscode-inputValidation-warningBackground, #6b4f00)', color: 'var(--vscode-inputValidation-warningForeground, #cca700)',
+    borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 'bold' as const,
+    flexShrink: 0, marginLeft: 'auto',
+  } as React.CSSProperties,
+  publishBadge: {
     display: 'inline-flex', alignItems: 'center',
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
-    borderRadius: '3px', padding: '1px 5px 1px 4px', fontSize: '11px', fontWeight: 'normal' as const,
-    letterSpacing: '0.02em', flexShrink: 0, opacity: 0.75,
+    borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 500 as const,
+    flexShrink: 0, marginLeft: 'auto',
+  } as React.CSSProperties,
+  branchBadge: (color: string): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: '3px',
+    fontSize: '10px', fontWeight: 600,
+    background: `${color}33`, color, border: `1px solid ${color}88`,
+    borderRadius: '3px', padding: '1px 5px',
+    flexShrink: 1, minWidth: 0, maxWidth: '160px', marginLeft: '4px',
+    overflow: 'hidden',
+  }),
+  branchName: {
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0,
   } as React.CSSProperties,
   repoBody: { background: 'var(--vscode-sideBar-background)' } as React.CSSProperties,
   upToDate: {
-    display: 'flex', alignItems: 'center', padding: '8px 12px', fontSize: '12px', opacity: 0.5,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 8px', fontSize: '12px', opacity: 0.5,
+  } as React.CSSProperties,
+  emptyRow: { padding: '12px 8px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const } as React.CSSProperties,
+  behindRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '12px 8px', fontSize: '12px', opacity: 0.75,
+    color: 'var(--vscode-inputValidation-warningForeground, #cca700)',
+  } as React.CSSProperties,
+  unpublishedRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '12px 8px', fontSize: '12px', opacity: 0.5,
   } as React.CSSProperties,
   loadingRow: { padding: '8px 12px', fontSize: '12px', opacity: 0.45, fontStyle: 'italic' as const } as React.CSSProperties,
   errorRow: {
@@ -403,7 +476,11 @@ const styles = {
   commitMeta: {
     fontSize: '10px', opacity: 0.45, gridRow: '2', gridColumn: '2',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+    display: 'flex', alignItems: 'center',
   } as React.CSSProperties,
+  commitStats: { display: 'inline-flex', alignItems: 'center', flexShrink: 0 } as React.CSSProperties,
+  statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)' } as React.CSSProperties,
+  statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)' } as React.CSSProperties,
   commitActions: (visible: boolean): React.CSSProperties => ({
     gridRow: '1 / 3', gridColumn: '3',
     display: 'flex', alignItems: 'center', gap: '4px', alignSelf: 'center',

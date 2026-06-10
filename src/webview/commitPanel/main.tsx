@@ -589,12 +589,12 @@ function App() {
   const metaMap = new Map(store.repoMetas.map(m => [m.id, m]));
   const multiRepo = repos.length >= 1;
 
-  // When the push tab is open, refresh no-upstream repos whenever the set of those repos changes
-  // (e.g. a branch gains/loses its remote tracking branch). Upstream repos are live via aheadBehind.ahead.
+  // Keep unpushed-commit counts fresh for repos without upstream so the Push tab badge
+  // shows the correct number even before the tab is opened. Upstream repos are live via aheadBehind.ahead.
   // Full refresh on every status update is intentionally avoided to prevent visual noise.
   const noUpstreamKey = repos.filter(r => !r.branch.upstream).map(r => r.repoId).join(',');
   useEffect(() => {
-    if (activeTab !== 'push' || !noUpstreamKey) return;
+    if (!noUpstreamKey) return;
     noUpstreamKey.split(',').forEach(id => requestUnpushedCommits(id));
   }, [noUpstreamKey]);
 

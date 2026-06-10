@@ -1475,27 +1475,47 @@ export class GitService {
   }
 
   async getUnpushedCommits(): Promise<UnpushedCommit[]> {
-    const parseLines = (raw: string): UnpushedCommit[] => {
+    // GS before each header so splitting by GS gives: [empty, header+stat, header+stat, ...]
+    const FORMAT = '%x1D%H|%h|%s|%an|%ci';
+    const GS = '\x1D'; // ASCII group separator — never appears in git output
+
+    const parseRecords = (raw: string): UnpushedCommit[] => {
       const commits: UnpushedCommit[] = [];
-      for (const line of raw.trim().split('\n')) {
-        if (!line.trim()) continue;
-        const parts = line.split('|');
+      for (const record of raw.split(GS)) {
+        const trimmed = record.trim();
+        if (!trimmed) continue;
+        const lines = trimmed.split('\n');
+        const parts = lines[0].split('|');
         if (parts.length < 5) continue;
-        commits.push({
+        const commit: UnpushedCommit = {
           hash: parts[0].trim(),
           shortHash: parts[1].trim(),
           message: parts[2].trim(),
           author: parts[3].trim(),
           date: parts.slice(4).join('|').trim(),
-        });
+        };
+        // shortstat line looks like: " 3 files changed, 22 insertions(+), 10 deletions(-)"
+        const statLine = lines.find(l => l.includes('changed'));
+        if (statLine) {
+          const files = statLine.match(/(\d+) files? changed/);
+          const ins = statLine.match(/(\d+) insertion/);
+          const del = statLine.match(/(\d+) deletion/);
+          commit.filesChanged = files ? parseInt(files[1]) : 0;
+          commit.additions = ins ? parseInt(ins[1]) : 0;
+          commit.deletions = del ? parseInt(del[1]) : 0;
+        }
+        commits.push(commit);
       }
       return commits;
     };
 
+    const logArgs = (range: string[]): string[] =>
+      ['log', ...range, `--format=${FORMAT}`, '--shortstat'];
+
     try {
       // Fast path: upstream is configured
-      const raw = await this.git.raw(['log', '@{u}..HEAD', '--format=%H|%h|%s|%an|%ci']);
-      return parseLines(raw);
+      const raw = await this.git.raw(logArgs(['@{u}..HEAD']));
+      return parseRecords(raw);
     } catch {
       // No upstream — list commits not reachable from any remote ref
       try {
@@ -1503,12 +1523,12 @@ export class GitService {
         let raw: string;
         if (remotes.length === 0) {
           // Fully local repo: show recent commits (capped to avoid huge lists)
-          raw = await this.git.raw(['log', 'HEAD', '--max-count=100', '--format=%H|%h|%s|%an|%ci']);
+          raw = await this.git.raw(logArgs(['HEAD', '--max-count=100']));
         } else {
           // Remotes exist but this branch has no tracking ref
-          raw = await this.git.raw(['log', 'HEAD', '--not', '--remotes', '--format=%H|%h|%s|%an|%ci']);
+          raw = await this.git.raw(logArgs(['HEAD', '--not', '--remotes']));
         }
-        return parseLines(raw);
+        return parseRecords(raw);
       } catch {
         return [];
       }

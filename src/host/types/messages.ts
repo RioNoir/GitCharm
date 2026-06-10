@@ -49,6 +49,9 @@ export interface UnpushedCommit {
   message: string;
   author: string;
   date: string;
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 // ─── Commit Panel: Host → WebView ────────────────────────────────────────────
