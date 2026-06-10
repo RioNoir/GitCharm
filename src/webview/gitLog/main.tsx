@@ -388,7 +388,7 @@ function App() {
               repoColor={selectedRepoColor}
               repos={store.repos}
               iconTheme={store.iconTheme}
-                  onSelectFile={store.selectFile}
+              onSelectFile={store.selectFile}
             />
           </div>
         )}

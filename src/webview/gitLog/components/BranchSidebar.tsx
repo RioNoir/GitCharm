@@ -41,7 +41,7 @@ interface MergedBranch {
 function buildMergedBranches(branches: BranchInfo[]): MergedBranch[] {
   const map = new Map<string, MergedBranch>();
   for (const b of branches) {
-    const baseName = stripRemotePrefix(b.name);
+    const baseName = b.isRemote ? stripRemotePrefix(b.name) : b.name;
     const existing = map.get(baseName);
     if (existing) {
       existing.instances.push(b);

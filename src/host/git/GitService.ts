@@ -458,7 +458,7 @@ export class GitService {
       'log',
       '--topo-order',
       `--max-count=${limit}`, `--skip=${skip}`,
-      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s',
+      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full',
       '--date=iso-strict',
     ];
     if (opts?.filterText) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');

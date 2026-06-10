@@ -88,6 +88,12 @@ export function registerCommands(
       profileStatusBar.switchProfile();
     }),
 
+    vscode.commands.registerCommand('gitcharm.reloadRepositories', () => {
+      if (manager) {
+        manager.reinitializeAndRefresh();
+      }
+    }),
+
     // ── Submodule commands ────────────────────────────────────────────────────
 
     vscode.commands.registerCommand('gitcharm.submodule.init', async (repoId?: string) => {

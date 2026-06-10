@@ -79,7 +79,7 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash }: Props) {
+export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   // Start as true — skeleton is always shown until commits arrive (handles first load correctly)
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -445,6 +445,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           multiSelected={contextMenu.multiSelected}
           allCommits={commits}
           currentBranchByRepo={currentBranchByRepo}
+          headHashByRepo={headHashByRepo}
           onClose={() => setContextMenu(null)}
           onSquash={(selected) => {
             setContextMenu(null);
@@ -718,13 +719,14 @@ const popoverStyles = {
   } as React.CSSProperties,
 };
 
-function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, onClose, onSquash }: {
+function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, headHashByRepo, onClose, onSquash }: {
   commit: LaidOutCommit;
   x: number;
   y: number;
   multiSelected: LaidOutCommit[];
   allCommits: LaidOutCommit[];
   currentBranchByRepo: Record<string, string>;
+  headHashByRepo: Record<string, string>;
   onClose: () => void;
   onSquash: (selected: LaidOutCommit[]) => void;
 }) {
@@ -765,8 +767,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
 
   const isMulti = multiSelected.length > 1 && multiSelected.every(c => c.repoId === multiSelected[0].repoId);
   const allUnpushed = isMulti && multiSelected.every(c => c.unpushed);
-  // HEAD for this repo = the first commit in allCommits with the same repoId
-  const isHead = allCommits.find(c => c.repoId === commit.repoId)?.hash === commit.hash;
+  const isHead = headHashByRepo[commit.repoId] === commit.hash;
 
   function send(msg: LogToHostMsg) {
     getVsCodeApi().postMessage(msg);

@@ -111,6 +111,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "gitcharm.reloadRepositories",
+        "title": "GitCharm: Reload Repositories",
+        "icon": "$(sync)"
+      },
+      {
         "command": "gitcharm.showBranchMenu",
         "title": "GitCharm: Branch Menu",
         "icon": "$(git-branch)"
@@ -311,28 +316,15 @@
       "title": "GitCharm",
       "properties": {
         "gitcharm.graphMaxCommits": {
+          "order": 80,
           "type": "number",
           "default": 1000,
           "minimum": 100,
           "maximum": 10000,
           "description": "Maximum commits to load in the Git Log graph"
         },
-        "gitcharm.fetchOnStartup": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically fetch all remotes when the extension activates"
-        },
-        "gitcharm.notifyOnIncomingCommits": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show a notification on startup when there are incoming commits available to pull"
-        },
-        "gitcharm.projectColors": {
-          "type": "object",
-          "default": {},
-          "description": "Map of workspace folder/repository name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
-        },
         "gitcharm.repositoryScanMaxDepth": {
+          "order": 60,
           "type": "number",
           "default": 1,
           "minimum": 0,
@@ -340,6 +332,7 @@
           "description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders)."
         },
         "gitcharm.repositoryScanIgnoredFolders": {
+          "order": 70,
           "type": "array",
           "default": [
             "node_modules"
@@ -349,23 +342,45 @@
           },
           "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
         },
+        "gitcharm.fetchOnStartup": {
+          "order": 40,
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically fetch all remotes when the extension activates"
+        },
+        "gitcharm.notifyOnIncomingCommits": {
+          "order": 50,
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification on startup when there are incoming commits available to pull"
+        },
+        "gitcharm.projectColors": {
+          "order": 110,
+          "type": "object",
+          "default": {},
+          "description": "Map of workspace folder/repository name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
+        },
         "gitcharm.autoRefreshInterval": {
+          "order": 30,
           "type": "number",
           "default": 0,
           "minimum": 0,
           "description": "Auto-refresh interval in seconds (0 = disabled, use file watchers only)"
         },
         "gitcharm.gitAnnotations.enabled": {
+          "order": 90,
           "type": "boolean",
           "default": true,
           "description": "Enable Git Annotations in the editor."
         },
         "gitcharm.gitGhostText.enabled": {
+          "order": 100,
           "type": "boolean",
           "default": true,
           "description": "Enable inline Git ghost text in the editor."
         },
         "gitcharm.changesViewMode": {
+          "order": 10,
           "type": "string",
           "enum": [
             "simplified",
@@ -381,6 +396,7 @@
           "description": "How to display changed files in the Changes tab."
         },
         "gitcharm.defaultCommitAction": {
+          "order": 20,
           "type": "string",
           "enum": [
             "commit",

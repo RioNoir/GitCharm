@@ -624,14 +624,35 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private applySubmoduleStatus(repos: import('../types/git').RepoStatus[]): import('../types/git').RepoStatus[] {
     const submodulePaths = this.buildSubmodulePaths();
     return repos.map(r => {
-      const paths = submodulePaths.get(r.repoId);
-      if (!paths || paths.size === 0) return r;
+      const subPaths = submodulePaths.get(r.repoId);
+
       const reclassify = (f: import('../types/git').FileStatus) =>
-        paths.has(f.path) ? { ...f, status: 'submodule' as const } : f;
+        subPaths?.has(f.path) ? { ...f, status: 'submodule' as const } : f;
+
+      // Hide any file/directory whose absolute path sits inside a nested git
+      // repository — i.e. absolutePath/.git exists (or absolutePath is itself
+      // inside such a directory). This matches VS Code's built-in behaviour of
+      // not surfacing files from foreign repos in the parent's status panel.
+      // We check the first path component so "deep/nested-repo/foo.ts" is also
+      // caught even though git reports only "deep/nested-repo/" as untracked.
+      const isInsideNestedRepo = (f: import('../types/git').FileStatus): boolean => {
+        // Walk from the file's absolute path (inclusive) up to the repo root.
+        // git status reports nested repo directories as the directory itself
+        // (e.g. "deep/nested-repo/"), so absolutePath IS the nested repo root —
+        // we must check it first, then its ancestors.
+        const repoRoot = r.repoId;
+        let dir = f.absolutePath;
+        while (dir.startsWith(repoRoot + path.sep)) {
+          if (fs.existsSync(path.join(dir, '.git'))) return true;
+          dir = path.dirname(dir);
+        }
+        return false;
+      };
+
       return {
         ...r,
-        stagedFiles: r.stagedFiles.map(reclassify),
-        unstagedFiles: r.unstagedFiles.map(reclassify),
+        stagedFiles: r.stagedFiles.map(reclassify).filter(f => !isInsideNestedRepo(f)),
+        unstagedFiles: r.unstagedFiles.map(reclassify).filter(f => !isInsideNestedRepo(f)),
       };
     });
   }
