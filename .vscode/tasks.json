@@ -4,7 +4,7 @@
     {
       "label": "build",
       "type": "shell",
-      "command": "npm run build",
+      "command": "npm run typecheck && npm run typecheck:webview && npm run build",
       "group": { "kind": "build", "isDefault": true },
       "presentation": { "reveal": "silent", "panel": "shared" },
       "problemMatcher": []
@@ -12,7 +12,7 @@
     {
       "label": "watch",
       "type": "shell",
-      "command": "npm run watch",
+      "command": "npm run typecheck && npm run typecheck:webview && npm run watch",
       "isBackground": true,
       "group": "build",
       "presentation": { "reveal": "silent", "panel": "shared" },

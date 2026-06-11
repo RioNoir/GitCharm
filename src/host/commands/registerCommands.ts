@@ -164,8 +164,10 @@ export function registerCommands(
         { label: '$(copilot) VS Code LM', description: 'GitHub Copilot or any registered LM extension', providerId: 'vscode-lm' },
         { label: '$(cloud) Claude API', description: 'Anthropic API  (requires API key)', providerId: 'claude-api' },
         { label: '$(cloud) OpenAI API', description: 'OpenAI API  (requires API key)', providerId: 'openai-api' },
+        { label: '$(cloud) Gemini API', description: 'Google Gemini API  (requires API key)', providerId: 'gemini-api' },
         { label: '$(terminal) Claude CLI', description: 'claude --print  (Claude Code / Anthropic)', providerId: 'claude-cli' },
         { label: '$(terminal) Codex CLI', description: 'codex exec  (OpenAI Codex)', providerId: 'codex-cli' },
+        { label: '$(terminal) Gemini CLI', description: 'gemini -p  (Google Gemini CLI)', providerId: 'gemini-cli' },
         { label: '$(server) Ollama', description: 'Local model via Ollama HTTP API', providerId: 'ollama' },
         { label: '$(server) LM Studio', description: 'Local model via LM Studio HTTP API', providerId: 'lmstudio' },
       ].map(item => ({
@@ -425,6 +427,38 @@ export function registerCommands(
         }
         await config.update('ai.codexModel', chosenCodex, vscode.ConfigurationTarget.Global);
         vscode.window.showInformationMessage(`GitCharm AI: Codex CLI — ${chosenCodex || 'default'}`);
+
+      } else if (pickedProvider.providerId === 'gemini-api' || pickedProvider.providerId === 'gemini-cli') {
+        const isApi = pickedProvider.providerId === 'gemini-api';
+        const currentModel: string = config.get('ai.geminiModel', '');
+        const CUSTOM_ID = '__custom__';
+        type GeminiItem = vscode.QuickPickItem & { modelId: string };
+        const geminiModels: GeminiItem[] = [
+          { label: isApi ? 'Default (gemini-2.0-flash)' : 'Default (gemini account default)', description: !currentModel ? '$(check) current' : '', modelId: '' },
+          { label: 'gemini-2.0-flash',  description: 'Fast & efficient' + (currentModel === 'gemini-2.0-flash'  ? '  $(check)' : ''), modelId: 'gemini-2.0-flash' },
+          { label: 'gemini-2.5-flash',  description: 'Balanced'         + (currentModel === 'gemini-2.5-flash'  ? '  $(check)' : ''), modelId: 'gemini-2.5-flash' },
+          { label: 'gemini-2.5-pro',    description: 'Most capable'     + (currentModel === 'gemini-2.5-pro'    ? '  $(check)' : ''), modelId: 'gemini-2.5-pro' },
+          { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
+        ];
+        const pickedGemini = await vscode.window.showQuickPick(geminiModels, {
+          title: `GitCharm: Select Gemini Model`,
+          placeHolder: 'Pick a model…',
+        });
+        if (!pickedGemini) return;
+        let chosenGemini = pickedGemini.modelId;
+        if (chosenGemini === CUSTOM_ID) {
+          const input = await vscode.window.showInputBox({
+            title: 'GitCharm: Gemini Model ID',
+            prompt: 'Enter the full model ID',
+            value: currentModel,
+            placeHolder: 'e.g. gemini-2.5-pro',
+          });
+          if (input === undefined) return;
+          chosenGemini = input.trim();
+        }
+        await config.update('ai.geminiModel', chosenGemini, vscode.ConfigurationTarget.Global);
+        const label = isApi ? 'Gemini API' : 'Gemini CLI';
+        vscode.window.showInformationMessage(`GitCharm AI: ${label} — ${chosenGemini || 'default'}`);
       }
     }),
 

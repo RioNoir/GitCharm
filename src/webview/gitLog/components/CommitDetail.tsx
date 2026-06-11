@@ -23,6 +23,7 @@ interface FileContextMenuProps {
   y: number;
   file: { path: string; status: string };
   onShowDiff: () => void;
+  onShowCombinedDiff: () => void;
   onEditSource: () => void;
   onRevertFile: () => void;
   onRevealExplorer: () => void;
@@ -30,7 +31,7 @@ interface FileContextMenuProps {
   onClose: () => void;
 }
 
-function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onRevealExplorer, onRevealOS, onClose }: FileContextMenuProps) {
+function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onRevertFile, onRevealExplorer, onRevealOS, onClose }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -103,6 +104,7 @@ function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onRevea
   return (
     <div ref={menuRef} style={menuStyle} onContextMenu={e => e.preventDefault()}>
       <Item icon="diff" label="Show Diff" onClick={onShowDiff} />
+      <Item icon="diff-multiple" label="Show Combined Diff" onClick={onShowCombinedDiff} />
       <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
       <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
       <Item icon="list-tree" label="Reveal in Explorer" onClick={onRevealExplorer} />
@@ -113,13 +115,14 @@ function FileContextMenu({ x, y, onShowDiff, onEditSource, onRevertFile, onRevea
 
 interface Props {
   commit: CommitNode | null;
-  files: Array<{ path: string; status: string; added?: number; removed?: number }>;
+  files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>;
   selectedFile: { path: string; status: string } | null;
   loadingFiles: boolean;
   repoColor?: string;
   repos: RepoMeta[];
   iconTheme?: IconThemeData | null;
   onSelectFile: (file: { path: string; status: string }) => void;
+  onClose?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -132,7 +135,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 /* ─── Tree builder ────────────────────────────────────────────────────────── */
 
-interface FileEntry { path: string; status: string; added?: number; removed?: number; }
+interface FileEntry { path: string; status: string; added?: number; removed?: number; oldPath?: string; }
 
 interface TreeNode {
   name: string;
@@ -321,7 +324,7 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile }: Props) {
+export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose }: Props) {
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree');
   const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
   const [mergeCommits, setMergeCommits] = useState<MergeParentCommit[]>([]);
@@ -396,7 +399,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     } satisfies LogToHostMsg);
   }, [commit?.hash]);
 
-  function openVscodeDiff(file: { path: string; status: string }, hash?: string) {
+  function openVscodeDiff(file: FileEntry, hash?: string, combined?: boolean) {
     onSelectFile(file);
     if (!commit) return;
     getVsCodeApi().postMessage({
@@ -405,12 +408,21 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       hash: hash ?? commit.hash,
       filePath: file.path,
       fileStatus: file.status,
+      oldPath: file.oldPath,
+      parents: commit.parents,
+      combined,
     } as LogToHostMsg);
   }
 
   const handleCtxShowDiff = useCallback(() => {
     if (!ctxMenu || !commit) return;
     openVscodeDiff(ctxMenu.file);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
+
+  const handleCtxShowCombinedDiff = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    openVscodeDiff(ctxMenu.file, undefined, true);
     setCtxMenu(null);
   }, [ctxMenu, commit]);
 
@@ -488,6 +500,20 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
 
   return (
     <div style={styles.container} onContextMenu={e => e.preventDefault()}>
+      <div style={styles.topActions}>
+        <button
+          style={styles.topActionBtn}
+          title="Open extended commit detail"
+          onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+        >
+          <Codicon name="open-preview" style={{ fontSize: '16px' }} />
+        </button>
+        {onClose && (
+          <button style={styles.topActionBtn} title="Close commit detail" onClick={onClose}>
+            <Codicon name="layout-sidebar-right" style={{ fontSize: '16px' }} />
+          </button>
+        )}
+      </div>
       {/* Commit header */}
       <div style={styles.header}>
         {repoName && (
@@ -501,13 +527,6 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           <span style={styles.message}>
             {commit.message}
           </span>
-          <button
-            style={styles.expandBtn}
-            title="Open extended commit detail"
-            onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
-          >
-            <Codicon name="open-preview" style={{ fontSize: '13px' }} />
-          </button>
         </div>
         <div style={styles.authorRow}>
           <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
@@ -754,6 +773,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           y={ctxMenu.y}
           file={ctxMenu.file}
           onShowDiff={handleCtxShowDiff}
+          onShowCombinedDiff={handleCtxShowCombinedDiff}
           onEditSource={handleCtxEditSource}
           onRevertFile={handleCtxRevertFile}
           onRevealExplorer={handleCtxRevealExplorer}
@@ -817,6 +837,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
 
 const styles = {
   container: {
+    position: 'relative' as const,
     display: 'flex',
     flexDirection: 'column' as const,
     height: '100%',
@@ -834,6 +855,26 @@ const styles = {
     fontSize: '13px',
     opacity: 0.4,
     color: 'var(--vscode-foreground)',
+  },
+  topActions: {
+    position: 'absolute' as const,
+    top: '4px',
+    right: '4px',
+    zIndex: 10,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  topActionBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '3px 4px',
+    borderRadius: '3px',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.5,
+    display: 'flex',
+    alignItems: 'center',
   },
   header: {
     padding: '10px 12px',
@@ -865,18 +906,6 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
   },
-  expandBtn: {
-    flexShrink: 0,
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '2px 3px',
-    borderRadius: '3px',
-    color: 'var(--vscode-foreground)',
-    opacity: 0.5,
-    display: 'flex',
-    alignItems: 'center',
-  } as React.CSSProperties,
   hash: {
     fontFamily: 'monospace',
     fontSize: '11px',

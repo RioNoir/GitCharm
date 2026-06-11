@@ -172,8 +172,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState);
 
   let startupNotificationsDone = false;
+  const badgeDisposable = manager.onStatusChange(status => { badge.update(status); });
   const startupDisposable = manager.onStatusChange(async status => {
-    badge.update(status);
     if (!startupNotificationsDone) {
       startupNotificationsDone = true;
       startupDisposable.dispose();
@@ -181,6 +181,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await maybeNotifyUnpushedCommits(manager, commitPanel);
     }
   });
+  context.subscriptions.push(badgeDisposable);
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager);
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   commitPanel.setMergeEditorProvider(mergeEditor);

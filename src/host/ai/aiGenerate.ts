@@ -61,6 +61,28 @@ export async function generateWithAI(
       return text;
     }
 
+    case 'gemini-cli': {
+      const geminiModel: string = cfg.get('ai.geminiModel', '');
+      const geminiArgs = geminiModel ? ['-m', geminiModel, '-p', prompt] : ['-p', prompt];
+      return runCli(cfg.get('ai.geminiPath', 'gemini'), geminiArgs, '');
+    }
+
+    case 'gemini-api': {
+      const apiKey: string = cfg.get('ai.geminiApiKey', '');
+      if (!apiKey) throw new Error('Gemini API key not set. Configure gitcharm.ai.geminiApiKey in settings.');
+      const model: string = cfg.get('ai.geminiModel', 'gemini-2.0-flash');
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      });
+      if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
+      const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!text) throw new Error('Gemini API returned an empty response');
+      return text;
+    }
+
     case 'codex-cli': {
       const codexModel: string = cfg.get('ai.codexModel', '');
       const codexArgs = ['exec', '--dangerously-bypass-approvals-and-sandbox', ...(codexModel ? ['-m', codexModel] : [])];
@@ -136,21 +158,25 @@ function runCli(
   extractOutput: (raw: string) => string = s => s.trim(),
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { timeout: 60_000, maxBuffer: 1024 * 1024, input }, (err: Error | null, stdout: string, stderr: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    execFile(bin, args, { timeout: 60_000, maxBuffer: 1024 * 1024, input } as any, (err: Error | null, stdout: string, stderr: string) => {
       if (err) { reject(new Error(stderr.trim() || err.message)); return; }
       const message = extractOutput(stdout);
       if (!message) reject(new Error('CLI returned an empty response'));
       else resolve(message);
     });
   }).then(undefined, (firstErr: Error) => {
+    // On Windows there is no login shell to resolve PATH from — fail immediately.
+    if (process.platform === 'win32') return Promise.reject(firstErr);
+    // On macOS/Linux: resolve the login shell PATH, then re-exec the binary with that env.
+    // The prompt is always passed via stdin — never interpolated into a shell command.
     const shell = process.env.SHELL ?? '/bin/zsh';
-    // Resolve the login shell PATH first, then re-exec the binary directly with that env.
-    // We never interpolate `input` into a shell command — it always goes via stdin.
     return new Promise<string>((resolve, reject) => {
       execFile(shell, ['-lc', 'echo $PATH'], { timeout: 10_000 }, (pathErr: Error | null, pathOut: string) => {
         const shellPath = pathErr ? process.env.PATH : pathOut.trim();
         const env = { ...process.env, PATH: shellPath };
-        execFile(bin, args, { timeout: 60_000, maxBuffer: 1024 * 1024, input, env },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        execFile(bin, args, { timeout: 60_000, maxBuffer: 1024 * 1024, input, env } as any,
           (err2: Error | null, stdout2: string, stderr2: string) => {
             if (err2) { reject(new Error(stderr2.trim() || err2.message || firstErr.message)); return; }
             const message = extractOutput(stdout2);

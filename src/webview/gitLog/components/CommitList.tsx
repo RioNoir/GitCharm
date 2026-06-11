@@ -272,6 +272,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           const commit = commits[vrow.index];
           if (!commit) return null;
           const isSelected = commit.hash === selectedHash;
+          const isCurrentHead = headHashByRepo[commit.repoId] === commit.hash;
           const isMultiSelected = multiSelectHashes.has(commit.hash);
 
           return (
@@ -342,57 +343,72 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
 
               {commit.refs.length > 0 && (() => {
                 const allGroups = mergeLocalRemote(groupRefs(commit.refs));
-                const headGroup = allGroups.find(g => g.isHead && !g.isDetached);
+                const headBranchGroup = allGroups.find(g => g.isHead && !g.isDetached);
                 const remoteHeadGroup = allGroups.find(g => g.isRemoteHead);
-                const headAndRemoteHead = headGroup && remoteHeadGroup;
-                // All groups shown as branch badges; remoteHead excluded when merged into HEAD badge
-                const otherGroups = allGroups.filter(g => !(headAndRemoteHead && g.isRemoteHead));
+                const headAndRemoteHead = headBranchGroup && remoteHeadGroup;
+                const hc = headColor();
+
+                // Build the flat badge list in display order:
+                //   1. All branch/tag/remoteHead groups from mergeLocalRemote (unchanged order)
+                //      — remoteHead is skipped only when it is absorbed into the HEAD badge
+                //   2. A synthetic HEAD sentinel appended last (when HEAD branch exists)
+                // The HEAD sentinel is a separate entry so the branch badge ("origin & main")
+                // and the HEAD arrow badge are independent items in the MAX/overflow logic.
+                const HEAD_SENTINEL = '__HEAD__' as const;
+                type DisplayItem = RefGroup | '__HEAD__';
+                const displayItems: DisplayItem[] = [
+                  ...allGroups.filter(g => !(headAndRemoteHead && g.isRemoteHead)),
+                  ...(headBranchGroup ? [HEAD_SENTINEL] : []),
+                ];
+
                 const refsSpace = containerWidth - labelColWidth - 340;
                 const MAX = refsSpace < 80 ? 0 : refsSpace < 170 ? 1 : 2;
-                const visible = otherGroups.slice(0, MAX);
-                const overflow = otherGroups.slice(MAX);
-                const hc = headColor();
-                return (
-                  <div style={styles.refs}>
-                    {visible.map(group => {
-                      const color = badgeColor(group);
-                      return (
-                        <span key={group.key} style={styles.refBadge(color, group.isTag, (group.isHead || group.isDetached) && !group.isRemoteHead, isSelected)} title={badgeTitle(group)}>
-                          <RefBadgeIcon group={group} />
-                          <span style={styles.refBadgeLabel}>
-                            {group.isRemoteHead ? `${group.remoteName}/HEAD` : group.isLocal && group.isRemote ? `${group.remoteName || 'remote'} & ${group.label}` : group.isRemote ? remoteLabel(group) : group.label}
-                          </span>
-                        </span>
-                      );
-                    })}
-                    {headGroup && (
-                      <span style={styles.refBadge(hc, false, true, isSelected)} title={headAndRemoteHead ? `HEAD → ${headGroup.label} (${remoteHeadGroup!.remoteName}/HEAD)` : `HEAD → ${headGroup.label}`}>
+                const visible = displayItems.slice(0, MAX);
+                const overflow = displayItems.slice(MAX);
+
+                const renderBadge = (item: DisplayItem, key: string | number) => {
+                  if (item === HEAD_SENTINEL) {
+                    const title = headAndRemoteHead
+                      ? `HEAD → ${headBranchGroup!.label} (${remoteHeadGroup!.remoteName}/HEAD)`
+                      : `HEAD → ${headBranchGroup!.label}`;
+                    return (
+                      <span key={key} style={styles.refBadge(hc, false, true, isSelected)} title={title}>
                         {headAndRemoteHead
                           ? <Codicon name="milestone" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
                           : <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />}
                         <span style={styles.refBadgeLabel}>{headAndRemoteHead ? `${remoteHeadGroup!.remoteName} & HEAD` : 'HEAD'}</span>
                       </span>
-                    )}
+                    );
+                  }
+                  const color = badgeColor(item);
+                  return (
+                    <span key={key} style={styles.refBadge(color, item.isTag, (item.isHead || item.isDetached) && !item.isRemoteHead, isSelected)} title={badgeTitle(item)}>
+                      <RefBadgeIcon group={item} />
+                      <span style={styles.refBadgeLabel}>
+                        {item.isRemoteHead ? `${item.remoteName}/HEAD` : item.isLocal && item.isRemote ? `${item.remoteName || 'remote'} & ${item.label}` : item.isRemote ? remoteLabel(item) : item.label}
+                      </span>
+                    </span>
+                  );
+                };
+
+                const overflowColor = (item: DisplayItem) => item === HEAD_SENTINEL ? hc : badgeColor(item as RefGroup);
+
+                return (
+                  <div style={styles.refs}>
+                    {visible.map((item, i) => renderBadge(item, i))}
                     {overflow.length > 0 && (() => {
                       const STEP = 4;
                       const layers = overflow.slice(0, 3).reverse();
                       const totalShift = layers.length * STEP;
-                      const frontColor = badgeColor(overflow[0]);
+                      const frontColor = overflowColor(overflow[0]);
                       return (
                         <span
                           style={{ ...styles.overflowWrapper, marginRight: totalShift }}
-                          title={overflow.map(g => badgeTitle(g)).join('\n')}
+                          title={overflow.map(g => g === HEAD_SENTINEL ? `HEAD → ${headBranchGroup!.label}` : badgeTitle(g as RefGroup)).join('\n')}
                         >
-                          {layers.map((g, i) => {
-                            const c = badgeColor(g);
-                            const shift = (layers.length - i) * STEP;
-                            return (
-                              <span
-                                key={g.key}
-                                style={styles.overflowStackLayer(c, shift, isSelected)}
-                              />
-                            );
-                          })}
+                          {layers.map((g, i) => (
+                            <span key={i} style={styles.overflowStackLayer(overflowColor(g), (layers.length - i) * STEP, isSelected)} />
+                          ))}
                           <span style={styles.overflowLabel(frontColor, isSelected)}>{visible.length === 0 ? `${overflow.length}` : `+${overflow.length}`}</span>
                         </span>
                       );
@@ -401,7 +417,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                 );
               })()}
               <div style={styles.info}>
-                <span style={styles.message}>{commit.message}</span>
+                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}) }}>{commit.message}</span>
               </div>
 
               {commit.incoming && (
@@ -412,7 +428,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
               )}
               <div style={styles.meta}>
                 <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={20} />
-                <span style={styles.author}>{formatAuthorName(commit.authorName)}</span>
+                {containerWidth > 500 && <span style={styles.author}>{formatAuthorName(commit.authorName)}</span>}
               </div>
               <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
             </div>
@@ -1310,6 +1326,7 @@ const styles = {
     fontSize: '11px',
     opacity: 0.65,
     overflow: 'hidden',
+    marginLeft: '8px',
   },
   incomingIcon: {
     fontSize: '12px',

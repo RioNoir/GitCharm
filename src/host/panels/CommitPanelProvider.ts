@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { generateWithAI } from '../ai/aiGenerate';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
@@ -652,7 +653,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_OPEN_DIFF': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        const path = require('path') as typeof import('path');
         const absUri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
         // git.openChange opens the native VS Code diff (index↔worktree or HEAD↔index)
         // depending on which group the file is in. Passing the file URI is enough.
@@ -676,7 +676,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_SHOW_DIFF_TAB': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        const absPath = vscode.Uri.file(require('path').join(repo.rootPath, msg.filePath));
+        const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
         await vscode.commands.executeCommand('git.openChange', absPath).then(
           undefined,
           // fallback: open as diff with HEAD
@@ -692,7 +692,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_OPEN_FILE': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        const absPath = vscode.Uri.file(require('path').join(repo.rootPath, msg.filePath));
+        const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
         await vscode.window.showTextDocument(absPath, { preview: false });
         break;
       }
@@ -706,7 +706,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         );
         if (confirm !== 'Delete') { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
-          const absPath = vscode.Uri.file(require('path').join(repo.rootPath, msg.filePath));
+          const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
           await vscode.workspace.fs.delete(absPath, { useTrash: true });
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
         } catch (e: unknown) {
@@ -724,7 +724,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         );
         if (confirm !== 'Delete') { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
-          const path = require('path') as typeof import('path');
+          
           const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.folderPath));
           await vscode.workspace.fs.delete(absPath, { recursive: true, useTrash: true });
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -739,7 +739,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_ADD_TO_GITIGNORE': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        const path = require('path') as typeof import('path');
+        
         const fs = require('fs') as typeof import('fs');
 
         // Find all .gitignore files in the repo
@@ -813,7 +813,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_OPEN_MERGE_EDITOR': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        const absPath = vscode.Uri.file(require('path').join(repo.rootPath, msg.filePath));
+        const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
         await vscode.commands.executeCommand('git.openMergeEditor', absPath)
           .then(undefined, () => vscode.window.showTextDocument(absPath));
         break;
@@ -839,7 +839,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           // Collect file summary + diff per repo
           const sections: string[] = [];
           for (const repo of ws.repos) {
-            const repoName = require('path').basename(repo.repoId);
+            const repoName = path.basename(repo.repoId);
             const files = [...repo.stagedFiles, ...repo.unstagedFiles];
             if (files.length === 0) continue;
 
@@ -941,7 +941,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               hasConflicts: true,
               conflictFiles: err.conflictFiles,
             });
-            const path = require('path') as typeof import('path');
+            
             for (const filePath of err.conflictFiles) {
               const absUri = vscode.Uri.file(path.join(repo.rootPath, filePath));
               try {
@@ -992,7 +992,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!svc || !repo) return;
         try {
           const fs = require('fs') as typeof import('fs');
-          const path = require('path') as typeof import('path');
+          
 
           const diffChunk = svc.getFileDiff(msg.shelveId, msg.filePath);
           const absFilePath = path.join(repo.rootPath, msg.filePath);
@@ -1035,7 +1035,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         try {
-          const path = require('path') as typeof import('path');
+          
           const fs = require('fs') as typeof import('fs');
           const fileName = msg.filePath.split('/').pop() ?? msg.filePath;
           const absPath = path.join(repo.rootPath, msg.filePath);
@@ -1650,7 +1650,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               await parentRepoU.updateSubmodule(msg.submodulePath, true, msg.recursive);
               this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: true });
               // Check if the submodule is now in detached HEAD (almost always true after update)
-              const subRepoId = require('path').join(parentRepoU.rootPath, msg.submodulePath);
+              const subRepoId = path.join(parentRepoU.rootPath, msg.submodulePath);
               const subRepo = this.manager.getRepo(subRepoId);
               if (subRepo) {
                 const subStatus = await subRepo.getStatus().catch(() => null);
@@ -1675,8 +1675,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'WORKTREE_CREATE_PROMPT': {
         const repoCP = this.manager.getRepo(msg.repoId);
         if (!repoCP) return;
-
-        const nodePath = require('path') as typeof import('path');
 
         // Step 1: pick branch or "new branch"
         const branches = await repoCP.getBranches();
@@ -1711,9 +1709,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         }
 
         // Step 2: worktree path — format: <repo-folder-name>--<branch-name>
-        const repoParent = nodePath.dirname(repoCP.rootPath);
-        const repoFolderName = nodePath.basename(repoCP.rootPath);
-        const defaultPath = nodePath.join(repoParent, `${repoFolderName}--${baseBranchName.replace(/\//g, '-')}`);
+        const repoParent = path.dirname(repoCP.rootPath);
+        const repoFolderName = path.basename(repoCP.rootPath);
+        const defaultPath = path.join(repoParent, `${repoFolderName}--${baseBranchName.replace(/\//g, '-')}`);
         const worktreePath = await vscode.window.showInputBox({
           prompt: 'Path for the new worktree directory',
           value: defaultPath,
@@ -1878,7 +1876,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_REVEAL_IN_EXPLORER': {
         const repoRE = this.manager.getRepo(msg.repoId);
         if (!repoRE) return;
-        const absPathRE = require('path').join(repoRE.rootPath, msg.filePath);
+        const absPathRE = path.join(repoRE.rootPath, msg.filePath);
         await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(absPathRE));
         break;
       }
@@ -1886,7 +1884,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_REVEAL_IN_OS': {
         const repoOS = this.manager.getRepo(msg.repoId);
         if (!repoOS) return;
-        const absPathOS = require('path').join(repoOS.rootPath, msg.filePath);
+        const absPathOS = path.join(repoOS.rootPath, msg.filePath);
         await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(absPathOS));
         break;
       }

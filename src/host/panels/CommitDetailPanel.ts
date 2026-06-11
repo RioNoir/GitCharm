@@ -148,11 +148,14 @@ export async function openCommitDetailPanel(
         const diffHash = msg.hash ?? hash; // support merge commit files
         const fileName = pathMod.basename(msg.filePath);
         const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
-        const gitUri = (ref: string) => vscode.Uri.from({
-          scheme: 'git',
-          path: pathMod.join(repo.rootPath, msg.filePath!),
-          query: JSON.stringify({ path: pathMod.join(repo.rootPath, msg.filePath!), ref }),
-        });
+        const gitUri = (ref: string) => {
+          const fileUri = vscode.Uri.file(pathMod.join(repo.rootPath, msg.filePath!));
+          return vscode.Uri.from({
+            scheme: 'git',
+            path: fileUri.path,
+            query: JSON.stringify({ path: fileUri.fsPath, ref }),
+          });
+        };
         let leftUri: vscode.Uri;
         let rightUri: vscode.Uri;
         let title: string;
@@ -248,6 +251,14 @@ function getAiModelLabel(cfg: vscode.WorkspaceConfiguration): string {
       const model: string = cfg.get('ai.codexModel', '');
       return model ? `codex · ${model}` : 'codex';
     }
+    case 'gemini-api': {
+      const model: string = cfg.get('ai.geminiModel', 'gemini-2.0-flash');
+      return `gemini api · ${model || 'gemini-2.0-flash'}`;
+    }
+    case 'gemini-cli': {
+      const model: string = cfg.get('ai.geminiModel', '');
+      return model ? `gemini · ${model}` : 'gemini';
+    }
     case 'ollama': {
       const model: string = cfg.get('ai.ollamaModel', 'llama3');
       return `ollama · ${model}`;
@@ -336,6 +347,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
       color: var(--vscode-button-foreground);
       display: flex; align-items: center; justify-content: center;
       font-size: 13px; font-weight: 600; flex-shrink: 0;
+      border: 1px solid rgba(128,128,128,0.35); box-sizing: border-box;
     }
     .author-meta { display: flex; flex-direction: column; gap: 2px; }
     .author-name { font-weight: 500; }
@@ -961,7 +973,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         if (url) {
           const img = document.createElement('img');
           img.src = url;
-          img.style.cssText = 'width:' + SIZE + 'px;height:' + SIZE + 'px;border-radius:50%;object-fit:cover;';
+          img.style.cssText = 'width:' + SIZE + 'px;height:' + SIZE + 'px;border-radius:50%;object-fit:cover;border:1px solid rgba(128,128,128,0.35);box-sizing:border-box;';
           img.onerror = () => {};
           avatarEl.textContent = '';
           avatarEl.style.background = 'none';

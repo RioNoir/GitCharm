@@ -192,7 +192,7 @@ export type HostToLogMsg =
   | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean }
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
-  | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number }>; error?: string }
+  | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
   | { type: 'LOG_BRANCH_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'LOG_REFS_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'LOG_TAGS_UPDATE'; repoId: string; tags: TagInfo[] }
@@ -212,7 +212,7 @@ export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string; parents?: string[] }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
-  | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string }
+  | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string; oldPath?: string; parents?: string[]; combined?: boolean }
   | { type: 'LOG_OPEN_FILE'; repoId: string; filePath: string }
   | { type: 'LOG_REVERT_FILE'; requestId: string; repoId: string; hash: string; filePath: string; fileStatus?: string }
   | { type: 'LOG_CHECKOUT'; requestId: string; repoId: string; branchName: string; createNew?: boolean; from?: string }

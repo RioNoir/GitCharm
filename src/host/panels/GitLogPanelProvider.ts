@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
@@ -298,40 +299,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         try {
-          const path = await import('path');
-          const status = msg.fileStatus ?? 'M';
-          const fileName = path.basename(msg.filePath);
-          const rootPath = repo.rootPath;
-          // git empty tree SHA — used as "no file" side for added/deleted diffs
-          const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
-
-          const gitUri = (ref: string, filePath?: string) => vscode.Uri.from({
-            scheme: 'git',
-            path: path.join(rootPath, filePath ?? msg.filePath),
-            query: JSON.stringify({ path: path.join(rootPath, filePath ?? msg.filePath), ref }),
-          });
-
-          let leftUri: vscode.Uri;
-          let rightUri: vscode.Uri;
-          let title: string;
-
-          if (status === 'A') {
-            // File was added in this commit — left side is empty
-            leftUri  = gitUri(EMPTY_TREE);
-            rightUri = gitUri(msg.hash);
-            title    = `${fileName} (added in ${msg.hash.slice(0, 7)})`;
-          } else if (status === 'D') {
-            // File was deleted in this commit — right side is empty
-            leftUri  = gitUri(`${msg.hash}~1`);
-            rightUri = gitUri(EMPTY_TREE);
-            title    = `${fileName} (deleted in ${msg.hash.slice(0, 7)})`;
-          } else {
-            leftUri  = gitUri(`${msg.hash}~1`);
-            rightUri = gitUri(msg.hash);
-            title    = `${fileName} (${msg.hash.slice(0, 7)})`;
-          }
-
-          await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
+          await openSmartDiff(repo, msg);
         } catch (e: unknown) {
           vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${String(e)}`);
         }
@@ -342,7 +310,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         try {
-          const path = await import('path');
           const uri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
           await vscode.commands.executeCommand('vscode.open', uri);
         } catch (e: unknown) {
@@ -352,18 +319,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
 
       case 'LOG_REVEAL_IN_EXPLORER': {
-        const repoRE = this.manager.getRepo(msg.repoId);
-        if (!repoRE) return;
-        const pathRE = await import('path');
-        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(pathRE.join(repoRE.rootPath, msg.filePath)));
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(path.join(repo.rootPath, msg.filePath)));
         break;
       }
 
       case 'LOG_REVEAL_IN_OS': {
-        const repoOS = this.manager.getRepo(msg.repoId);
-        if (!repoOS) return;
-        const pathOS = await import('path');
-        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(pathOS.join(repoOS.rootPath, msg.filePath)));
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(path.join(repo.rootPath, msg.filePath)));
         break;
       }
 
@@ -390,7 +355,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         try {
           if (msg.fileStatus === 'A') {
             // File was added in this commit — reverting means deleting it from the working tree
-            const path = await import('path');
             const uri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
             await vscode.workspace.fs.delete(uri, { useTrash: false });
           } else {
@@ -840,7 +804,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             return;
           }
           const folderPath = folderUris[0].fsPath;
-          const path = await import('path');
           for (const hash of msg.hashes) {
             const patch = await repo.createPatch(hash);
             const filePath = path.join(folderPath, `${hash.slice(0, 7)}.patch`);
@@ -1431,4 +1394,89 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.disposables.forEach(d => d.dispose());
     if (this.refreshDebounce) { clearTimeout(this.refreshDebounce); this.refreshDebounce = null; }
   }
+}
+
+// git empty tree SHA — represents an empty file for added/deleted diffs
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+async function openSmartDiff(
+  repo: import('../git/GitService').GitService,
+  msg: { hash: string; filePath: string; fileStatus?: string; oldPath?: string; parents?: string[]; combined?: boolean },
+): Promise<void> {
+  const rootPath = repo.rootPath;
+  const status = msg.fileStatus ?? 'M';
+  const shortHash = msg.hash.slice(0, 7);
+  const fileName = path.basename(msg.filePath);
+
+  const gitUri = (ref: string, filePath: string): vscode.Uri => {
+    const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+    return vscode.Uri.from({
+      scheme: 'git',
+      path: fileUri.path,
+      query: JSON.stringify({ path: fileUri.fsPath, ref }),
+    });
+  };
+
+  // Resolve parent hash: use provided parents array, fall back to git log
+  const resolveParent = async (index = 0): Promise<string | null> => {
+    const parents = msg.parents?.filter(Boolean) ?? [];
+    if (parents[index]) return parents[index];
+    const list = await repo.getParents(msg.hash);
+    return list[index] ?? null;
+  };
+
+  let leftUri: vscode.Uri;
+  let rightUri: vscode.Uri;
+  let title: string;
+
+  if (status === 'A' || status === 'C') {
+    // File added or copied — left side is empty
+    leftUri  = gitUri(EMPTY_TREE, msg.filePath);
+    rightUri = gitUri(msg.hash, msg.filePath);
+    title    = `${fileName} (added in ${shortHash})`;
+
+  } else if (status === 'D') {
+    // File deleted — right side is empty; find the correct parent
+    const parent = await resolveParent();
+    const parentRef = parent ?? `${msg.hash}~1`;
+    leftUri  = gitUri(parentRef, msg.filePath);
+    rightUri = gitUri(EMPTY_TREE, msg.filePath);
+    title    = `${fileName} (deleted in ${shortHash})`;
+
+  } else if (status === 'R') {
+    // File renamed — diff old path at parent vs new path at commit
+    const oldFilePath = msg.oldPath ?? msg.filePath;
+    const parent = await resolveParent();
+    const parentRef = parent ?? `${msg.hash}~1`;
+    leftUri  = gitUri(parentRef, oldFilePath);
+    rightUri = gitUri(msg.hash, msg.filePath);
+    title    = `${path.basename(oldFilePath)} → ${fileName} (renamed in ${shortHash})`;
+
+  } else {
+    // Modified (M), or combined/merge diff
+    let parentRef: string;
+
+    if (msg.combined) {
+      // Combined diff: find the parent where this file actually changed
+      const differingParent = await repo.findParentWithFileDiff(msg.hash, msg.filePath, msg.parents ?? []);
+      parentRef = differingParent ?? `${msg.hash}~1`;
+    } else {
+      const parent = await resolveParent(0);
+      parentRef = parent ?? `${msg.hash}~1`;
+    }
+
+    // Fallback: if parent doesn't have the file, treat as newly added
+    const parentHasFile = await repo.gitObjectExists(parentRef, msg.filePath);
+    if (!parentHasFile) {
+      leftUri  = gitUri(EMPTY_TREE, msg.filePath);
+      rightUri = gitUri(msg.hash, msg.filePath);
+      title    = `${fileName} (added in ${shortHash})`;
+    } else {
+      leftUri  = gitUri(parentRef, msg.filePath);
+      rightUri = gitUri(msg.hash, msg.filePath);
+      title    = `${fileName} (${shortHash})`;
+    }
+  }
+
+  await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
 }

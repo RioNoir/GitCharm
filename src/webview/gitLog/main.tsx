@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useLogStore } from './store/logStore';
 import { BranchSidebar } from './components/BranchSidebar';
@@ -25,6 +25,7 @@ function App() {
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
   const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 220, 120, 400);
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
+  const [detailCollapsed, setDetailCollapsed] = useState(false);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadRef = useRef<() => void>(() => {});
   const filterRepoRef = useRef<(repoId: string | null, branch?: string | null) => void>(() => {});
@@ -377,7 +378,7 @@ function App() {
           repos={store.repos}
           currentBranchByRepo={currentBranchByRepo}
           headHashByRepo={headHashByRepo}
-          onSelect={(commit) => store.selectCommit(commit)}
+          onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
           onLoadMore={handleLoadMore}
           hasMore={store.hasMore && !store.loadingCommits && !store.backgroundLoading}
           storeHasMore={store.hasMore}
@@ -388,10 +389,10 @@ function App() {
           aiEnabled={store.aiEnabled}
         />
 
-        {hasSelectedCommit && <ResizeHandle onMouseDown={onDetailResize} />}
+        {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
 
-        {/* Commit detail (right) — hidden when no commit selected */}
-        {hasSelectedCommit && (
+        {/* Commit detail (right) — hidden when no commit selected or closed */}
+        {hasSelectedCommit && !detailCollapsed && (
           <div ref={detailRef} style={detailPane}>
             <CommitDetail
               commit={store.selectedCommit}
@@ -402,6 +403,7 @@ function App() {
               repos={store.repos}
               iconTheme={store.iconTheme}
               onSelectFile={store.selectFile}
+              onClose={() => setDetailCollapsed(true)}
             />
           </div>
         )}
@@ -458,5 +460,6 @@ const detailPane: React.CSSProperties = {
   flexDirection: 'column',
   userSelect: 'text',
 };
+
 
 createRoot(document.getElementById('root')!).render(<App />);

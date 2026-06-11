@@ -605,13 +605,14 @@ export class GitService {
       parents = raw.trim().split(' ').filter(Boolean);
     }
     const isMerge = parents.length >= 2;
+    const isRoot  = parents.length === 0;
 
     const baseArgs = isMerge
       ? ['diff', '--name-status', parents[0], hash]
-      : ['diff-tree', '--no-commit-id', '-r', '--name-status', hash];
+      : ['diff-tree', '--no-commit-id', '-r', '--name-status', ...(isRoot ? ['--root'] : []), hash];
     const numArgs = isMerge
       ? ['diff', '--numstat', parents[0], hash]
-      : ['diff-tree', '--no-commit-id', '-r', '--numstat', hash];
+      : ['diff-tree', '--no-commit-id', '-r', '--numstat', ...(isRoot ? ['--root'] : []), hash];
 
     const [nameStatus, numStat] = await Promise.all([
       this.git.raw(baseArgs),
@@ -627,16 +628,45 @@ export class GitService {
       const path = parts[parts.length - 1];
       if (!isNaN(added) && !isNaN(removed)) stats.set(path, { added, removed });
     }
-    const files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+    const files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }> = [];
     for (const line of nameStatus.trim().split('\n')) {
       if (!line.trim()) continue;
       const parts = line.split('\t');
       if (parts.length < 2) continue;
-      const path = parts[parts.length - 1];
-      const s = stats.get(path);
-      files.push({ status: parts[0][0], path, added: s?.added, removed: s?.removed });
+      const statusCode = parts[0][0];
+      // Renames and copies: R100\told_path\tnew_path (3 parts)
+      const isRenameOrCopy = (statusCode === 'R' || statusCode === 'C') && parts.length >= 3;
+      const filePath = parts[parts.length - 1];
+      const oldPath = isRenameOrCopy ? parts[1] : undefined;
+      const s = stats.get(filePath);
+      files.push({ status: statusCode, path: filePath, added: s?.added, removed: s?.removed, ...(oldPath ? { oldPath } : {}) });
     }
     return files;
+  }
+
+  async gitObjectExists(ref: string, filePath: string): Promise<boolean> {
+    try {
+      await this.git.raw(['cat-file', '-e', `${ref}:${filePath}`]);
+      return true;
+    } catch { return false; }
+  }
+
+  async getParents(hash: string): Promise<string[]> {
+    try {
+      const raw = await this.git.raw(['log', '-1', '--format=%P', hash]);
+      return raw.trim().split(' ').filter(Boolean);
+    } catch { return []; }
+  }
+
+  async findParentWithFileDiff(hash: string, filePath: string, parents: string[]): Promise<string | null> {
+    const list = parents.length > 0 ? parents : await this.getParents(hash);
+    for (const p of list) {
+      try {
+        const out = await this.git.raw(['diff', '--name-only', p, hash, '--', filePath]);
+        if (out.trim()) return p;
+      } catch { /* try next */ }
+    }
+    return list[0] ?? null;
   }
 
   async getCommitDiff(hash: string, maxChars = 8000): Promise<string> {

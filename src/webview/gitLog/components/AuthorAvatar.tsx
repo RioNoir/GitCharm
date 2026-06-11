@@ -109,6 +109,8 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20 }: Props) {
     fontWeight: 600,
     lineHeight: 1,
     userSelect: 'none',
+    border: '1px solid rgba(128,128,128,0.35)',
+    boxSizing: 'border-box' as const,
   };
 
   if (url === null) {

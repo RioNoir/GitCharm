@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -469,13 +469,15 @@
         "gitcharm.ai.provider": {
           "order": 2,
           "type": "string",
-          "enum": ["vscode-lm", "claude-api", "openai-api", "claude-cli", "codex-cli", "ollama", "lmstudio"],
+          "enum": ["vscode-lm", "claude-api", "openai-api", "gemini-api", "claude-cli", "codex-cli", "gemini-cli", "ollama", "lmstudio"],
           "enumDescriptions": [
             "Use VS Code Language Model API (GitHub Copilot or any registered LM extension)",
             "Use Anthropic API directly (requires API key)",
             "Use OpenAI API directly (requires API key)",
+            "Use Google Gemini API directly (requires API key)",
             "Use Claude CLI (claude --print)",
             "Use Codex CLI (codex exec)",
+            "Use Gemini CLI (gemini -p)",
             "Use a local Ollama model via HTTP API",
             "Use a local LM Studio model via HTTP API"
           ],
@@ -518,8 +520,26 @@
           "default": "gpt-4o",
           "description": "OpenAI model ID (e.g. 'gpt-4o', 'gpt-4o-mini', 'o3'). Only used when provider is 'openai-api'."
         },
-        "gitcharm.ai.codexModel": {
+        "gitcharm.ai.geminiApiKey": {
           "order": 8,
+          "type": "string",
+          "default": "",
+          "description": "Google Gemini API key. Only used when provider is 'gemini-api'. Get your key at aistudio.google.com."
+        },
+        "gitcharm.ai.geminiModel": {
+          "order": 9,
+          "type": "string",
+          "default": "gemini-2.0-flash",
+          "description": "Gemini model ID (e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'). Used when provider is 'gemini-api' or 'gemini-cli'."
+        },
+        "gitcharm.ai.geminiPath": {
+          "order": 10,
+          "type": "string",
+          "default": "gemini",
+          "description": "Path to the Gemini CLI binary. Only used when provider is 'gemini-cli'. Defaults to 'gemini' (must be on PATH)."
+        },
+        "gitcharm.ai.codexModel": {
+          "order": 11,
           "type": "string",
           "default": "",
           "description": "Codex model ID to use (e.g. 'o3', 'o4-mini'). Only used when provider is 'codex-cli'. Leave empty to use the CLI default. Use the 'GitCharm: Select AI Model' command to pick interactively."
