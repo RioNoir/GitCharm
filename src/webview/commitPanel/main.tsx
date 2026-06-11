@@ -1454,6 +1454,7 @@ function App() {
               onEditCommitMsg={doEditCommitMsg}
               onOpenDetail={doPushOpenDetail}
               onExplainCommit={doPushExplainCommit}
+              onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
               aiEnabled={store.aiEnabled}
             />
           </div>

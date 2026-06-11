@@ -18,6 +18,7 @@ interface Props {
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
   onExplainCommit: (repoId: string, hash: string) => void;
+  onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
 }
 
@@ -223,7 +224,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, aiEnabled, singleRepo }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, onBranchClick, aiEnabled, singleRepo }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -238,6 +239,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
   onExplainCommit: (repoId: string, hash: string) => void;
+  onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
   singleRepo?: boolean;
 }) {
@@ -380,8 +382,9 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           <span style={styles.dot(repoColor)} />
           <span style={styles.repoName}>{repoName}</span>
           <span
-            style={styles.branchBadge(branchClr)}
+            style={{ ...styles.branchBadge(branchClr), cursor: 'pointer' }}
             title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : branchLabel}
+            onClick={e => { e.stopPropagation(); onBranchClick(repoStatus.repoId); }}
           >
             <Codicon name={worktreeBranch ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
             <span style={styles.branchName}>{branchLabel}</span>
@@ -480,7 +483,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, onBranchClick, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
@@ -542,6 +545,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             onEditCommitMsg={onEditCommitMsg}
             onOpenDetail={onOpenDetail}
             onExplainCommit={onExplainCommit}
+            onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
             singleRepo
           />
@@ -590,6 +594,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             onEditCommitMsg={onEditCommitMsg}
             onOpenDetail={onOpenDetail}
             onExplainCommit={onExplainCommit}
+            onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
           />
         ))}

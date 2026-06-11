@@ -32,7 +32,7 @@ It activates automatically when the opened workspace contains a Git repository.
 - Per-file actions: open, rollback, delete, add to `.gitignore`.
 - Commit selected files only, or all staged changes.
 - **Commit** and **Commit & Push** unified dropdown button; **Amend** and **Amend & Push** via the dropdown.
-- Optional AI commit-message generation via the VS Code Language Model API (GitHub Copilot).
+- AI commit-message generation with multi-provider support: Anthropic API, OpenAI API, Claude CLI, Codex CLI, Gemini CLI, Gemini API, Ollama, and LM Studio. API keys and models configurable per provider.
 - Commit message pre-filled automatically with `Merge branch 'X' into 'Y'` when merge conflicts are detected.
 - New and modified files are **not** automatically selected — only files that were already selected before the change are preserved.
 
@@ -64,7 +64,12 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 
 - Lists unpushed commits for every repository, including branches without an upstream tracking branch.
 - Commit count badge on the tab label, auto-updated after each commit, undo, or push.
+- Branch info header with sync state: "Up to date", "N commits to pull from `<upstream>`", or "Local branch — not published" with matching badges (↑ ahead, ↓ behind, Unpublished).
+- Per-commit stats showing files changed, additions, and deletions.
+- Push button label adapts to context: "Push", "Publish Branch", "Publish Branches", or "Push & Publish" for mixed upstream/no-upstream selections.
 - **Undo** the HEAD commit (with confirmation) directly from the push list.
+- **Explain with AI** context menu action on commits: opens the detail panel with an auto-generated explanation of the changes.
+- **Open Full Detail** context menu action on commits.
 - Click any row to jump to that commit in the Git Log panel.
 - **Publish** button for branches that have never been pushed.
 - Silent refresh: existing commits stay visible while reloading (no flicker).
@@ -83,8 +88,14 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Branch sidebar: local branches, remote branches, tags; single-repo workspaces hide the repository list.
 - Filters by text, author, branch, date, and repository.
 - Commit detail with changed-file list and per-file diffs.
+- Smart diff resolution for added, deleted, renamed, copied, merge, and root commits.
+- **Show Combined Diff** context menu entry in the commit file list.
+- Close button in the commit detail panel; clicking any commit re-opens it.
+- Bold commit message for the HEAD commit in the list.
+- Author name shown in commit rows when panel width > 500 px.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
 - Author avatars in commit rows and commit detail: resolves GitHub noreply emails to GitHub avatars, other emails to Gravatar, with a colored-initials fallback.
+- **Explain with AI** and **Open Full Detail** context menu actions; AI actions hidden when AI is disabled.
 - Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, and create new branch.
 - **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
 - Tag context menu: checkout, merge into current, push to remote, and delete (local, remote, or both).
@@ -138,6 +149,8 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Grouped changes and a shared commit flow across repositories.
 - Common branch actions applied across all repositories in one step.
 - Activity bar badge showing the total number of changed files across all repositories.
+- Nested repository scanning: automatically discovers Git repositories inside workspace subfolders up to a configurable depth, skipping ignored folders (e.g. `node_modules`). Files belonging to nested repos are filtered out from their parent repository's change list, matching VS Code's built-in behavior.
+- Repository context menu in the Commit Panel header (all view modes): quick access to branch operations, fetch, push, and settings for each repository.
 
 ### ⚔️ Merge Editor
 
@@ -168,7 +181,7 @@ npm run package
 Then install the generated `.vsix`:
 
 ```bash
-code --install-extension gitcharm-0.2.5.vsix
+code --install-extension gitcharm-0.3.5.vsix
 ```
 
 ### Development Host
@@ -216,9 +229,12 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Settings` | Opens GitCharm settings. |
 | `GitCharm: Manage Git Profiles` | Opens the Git profile manager. |
 | `GitCharm: Switch Git Profile` | Switches the active Git profile for the current workspace. |
-| `Open Git Annotations` | Shows inline blame annotations in the active editor. |
-| `Close Git Annotations` | Hides inline blame annotations in the active editor. |
+| `GitCharm: Open Git Annotations` | Shows inline blame annotations in the active editor. |
+| `GitCharm: Close Git Annotations` | Hides inline blame annotations in the active editor. |
 | `GitCharm: Navigate to Commit` | Navigates to the commit linked from a blame annotation. |
+| `GitCharm: Select AI Provider` | Opens a QuickPick to choose and configure the AI provider and model. |
+| `GitCharm: Generate Commit Message` | Generates an AI commit message from the current staged diff. |
+| `GitCharm: Explain Commit` | Opens the commit detail panel with an AI-generated explanation of the selected commit. |
 
 ## ⌨️ Keybindings
 
@@ -242,6 +258,14 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.gitGhostText.enabled` | `true` | Enable inline Git ghost text in the editor. |
 | `gitcharm.gitProfiles` | `[]` | Named Git identity profiles (name, email) managed by GitCharm. |
 | `gitcharm.activeGitProfileId` | `""` | ID of the currently active Git profile for this workspace. |
+| `gitcharm.suppressDivergedWarning` | `false` | Suppress the "diverged" warning in the status bar when local and remote have diverged. |
+| `gitcharm.ai.enabled` | `false` | Enable AI-powered features (commit message generation, commit explanation). |
+| `gitcharm.ai.provider` | `"copilot"` | AI provider: `copilot`, `anthropic`, `openai`, `claude-cli`, `codex-cli`, `gemini-cli`, `gemini-api`, `ollama`, or `lmstudio`. |
+| `gitcharm.ai.model` | `""` | Model identifier for the selected provider (leave empty to use the provider default). |
+| `gitcharm.ai.language` | `""` | Language for AI-generated text (e.g. `en`, `it`). Defaults to English when empty. |
+| `gitcharm.ai.anthropicApiKey` | `""` | API key for the Anthropic provider. |
+| `gitcharm.ai.openaiApiKey` | `""` | API key for the OpenAI provider. |
+| `gitcharm.ai.geminiApiKey` | `""` | API key for the Gemini API provider. |
 
 Example:
 
