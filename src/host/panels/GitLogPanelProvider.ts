@@ -201,8 +201,9 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   private post(msg: HostToLogMsg): void {
     if (msg.type === 'LOG_INIT_DATA') {
-      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean };
+      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean; aiEnabled?: boolean };
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+      if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
     }
     this.view?.webview.postMessage(msg);
   }
@@ -1326,6 +1327,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_OPEN_EXTENDED_DETAIL': {
         const { openCommitDetailPanel } = await import('./CommitDetailPanel');
         await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        break;
+      }
+
+      case 'LOG_EXPLAIN_COMMIT': {
+        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
+        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
         break;
       }
     }

@@ -12,7 +12,8 @@
     "resolveJsonModule": true,
     "composite": true,
     "declaration": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "types": ["node"]
   },
   "include": ["src/host/**/*"],
   "exclude": ["node_modules", "out"]

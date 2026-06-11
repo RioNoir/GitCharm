@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getWebviewHtml } from '../utils/webviewHtml';
+import { generateWithAI } from '../ai/aiGenerate';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService } from '../git/ChangelistService';
@@ -168,6 +169,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }).catch(() => { /* icon theme optional */ });
         }
       }
+      if (e.affectsConfiguration('gitcharm.ai.enabled')) {
+        this.manager.getAllStatuses().then(status => {
+          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+        });
+      }
       if (e.affectsConfiguration('gitcharm.changesViewMode') || e.affectsConfiguration('gitcharm.defaultCommitAction')) {
         this.changelistService?.setChangelistMode(this.getChangesViewMode() === 'changelists');
         this.manager.getAllStatuses().then(status => {
@@ -186,6 +192,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       if (m.fileViewMode === undefined) m.fileViewMode = this.getFileViewMode();
       if (m.defaultCommitAction === undefined) m.defaultCommitAction = this.getDefaultCommitAction();
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+      if (m.aiEnabled === undefined) m.aiEnabled = this.getAiEnabled();
     }
     this.view?.webview.postMessage(msg);
   }
@@ -209,6 +216,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
     return vscode.workspace.getConfiguration('gitcharm').get<'commit' | 'commitAndPush'>('defaultCommitAction', 'commit');
+  }
+
+  private getAiEnabled(): boolean {
+    return vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
   }
 
   private getHiddenRepoIds(): string[] {
@@ -808,47 +819,63 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_SELECT_AI_MODEL': {
+        await vscode.commands.executeCommand('gitcharm.selectAiModel');
+        break;
+      }
+
+      case 'COMMIT_OPEN_AI_SETTINGS': {
+        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm gitcharm.ai');
+        break;
+      }
+
       case 'COMMIT_GENERATE_MESSAGE': {
         try {
-          // Collect changed file paths across all repos for context
           const ws = await this.manager.getAllStatuses();
-          const lines: string[] = [];
+          const cfg = vscode.workspace.getConfiguration('gitcharm');
+          const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
+          const multiRepo = ws.repos.length > 1;
+
+          // Collect file summary + diff per repo
+          const sections: string[] = [];
           for (const repo of ws.repos) {
             const repoName = require('path').basename(repo.repoId);
-            const files = [...repo.unstagedFiles, ...repo.stagedFiles];
+            const files = [...repo.stagedFiles, ...repo.unstagedFiles];
             if (files.length === 0) continue;
-            if (ws.repos.length > 1) lines.push(`[${repoName}]`);
-            for (const f of files.slice(0, 30)) lines.push(`${f.status[0].toUpperCase()} ${f.path}`);
+
+            const fileLines = files.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`);
+            const svc = this.manager.getRepo(repo.repoId);
+            const diff = svc ? await svc.getFullStagedDiff(maxDiffChars) : '';
+
+            const block = [
+              multiRepo ? `### Repository: ${repoName}` : '',
+              '## Changed files',
+              fileLines.join('\n'),
+              diff ? `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\`` : '',
+            ].filter(Boolean).join('\n');
+            sections.push(block);
           }
 
-          // Try VS Code LM API (Copilot) — prefer gpt-4o but fall back to any available Copilot model
-          let model: vscode.LanguageModelChat | undefined;
-          try {
-            const preferred = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
-            model = preferred[0];
-            if (!model) {
-              const any = await vscode.lm.selectChatModels({ vendor: 'copilot' });
-              model = any[0];
-            }
-          } catch {
-            model = undefined;
-          }
+          const context = sections.join('\n\n');
+          const configuredLang: string = cfg.get('ai.language', '');
+          const language = configuredLang.trim() || vscode.env.language || 'en';
+          const prompt = [
+            'You are a git commit message writer. Analyze the following changes and write a commit message.',
+            '',
+            'Rules:',
+            `- Write the commit message in this language: ${language}`,
+            '- First line: imperative mood, max 72 characters (e.g. "Add user authentication")',
+            '- Leave a blank line after the first line',
+            '- Body: 2-4 bullet points explaining WHAT changed and WHY, each starting with "- "',
+            '- Be specific and technical, reference file names or module names when relevant',
+            '- Output ONLY the commit message, no explanations, no markdown fences',
+            '',
+            context,
+          ].join('\n');
 
-          if (!model) {
-            this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, error: 'No AI model available. Install GitHub Copilot to use this feature.' });
-            return;
-          }
-
-          const prompt = `Generate a concise git commit message in imperative mood (max 72 chars). Only output the message, nothing else.\n\nChanged files:\n${lines.join('\n')}`;
-          const response = await model.sendRequest(
-            [vscode.LanguageModelChatMessage.User(prompt)],
-            {},
-            new vscode.CancellationTokenSource().token
-          );
-
-          let result = '';
-          for await (const chunk of response.text) result += chunk;
-          this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, message: result.trim() });
+          const provider: string = cfg.get('ai.provider', 'vscode-lm');
+          const message = await generateWithAI(provider, prompt, cfg);
+          this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, message });
         } catch (e: unknown) {
           this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, error: String(e) });
         }
@@ -1255,6 +1282,18 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
           vscode.window.showErrorMessage(`GitCharm: Edit commit message failed: ${String(e)}`);
         }
+        break;
+      }
+
+      case 'PUSH_OPEN_DETAIL': {
+        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
+        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        break;
+      }
+
+      case 'PUSH_EXPLAIN_COMMIT': {
+        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
+        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
         break;
       }
 
@@ -1865,3 +1904,4 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 }
+

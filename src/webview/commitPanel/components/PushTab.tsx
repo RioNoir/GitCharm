@@ -16,6 +16,9 @@ interface Props {
   onDropCommits: (repoId: string, hashes: string[], oldestHash: string) => void;
   onRevertCommits: (repoId: string, hashes: string[]) => void;
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
+  onOpenDetail: (repoId: string, hash: string) => void;
+  onExplainCommit: (repoId: string, hash: string) => void;
+  aiEnabled: boolean;
 }
 
 function formatDate(iso: string): string {
@@ -59,7 +62,7 @@ function MenuItem({ icon, label, danger, onClick }: { icon: string; label: strin
   );
 }
 
-function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onClose }: {
+function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onExplain, aiEnabled, onClose }: {
   state: CommitCtxMenuState;
   onSquash: () => void;
   onDropCommits: () => void;
@@ -69,6 +72,9 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
   onRevertSingle: () => void;
   onDropSingle: () => void;
   onViewInLog: () => void;
+  onOpenDetail: () => void;
+  onExplain: () => void;
+  aiEnabled: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -101,6 +107,9 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
       {n === 1 && (
         <>
           <MenuItem icon="go-to-file" label="View in Git Log" onClick={wrap(onViewInLog)} />
+          <MenuItem icon="open-preview" label="Open Full Detail" onClick={wrap(onOpenDetail)} />
+          {aiEnabled && <MenuItem icon="sparkle" label="Explain with AI" onClick={wrap(onExplain)} />}
+          <div style={ctxStyles.separator} />
           {state.isHead && <MenuItem icon="edit" label="Edit Commit Message…" onClick={wrap(onEditMsg)} />}
           <MenuItem icon="discard" label="Revert Commit" onClick={wrap(onRevertSingle)} />
           {state.isHead && (
@@ -214,7 +223,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, singleRepo }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, aiEnabled, singleRepo }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -227,6 +236,9 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onDropCommits: (repoId: string, hashes: string[], oldestHash: string) => void;
   onRevertCommits: (repoId: string, hashes: string[]) => void;
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
+  onOpenDetail: (repoId: string, hash: string) => void;
+  onExplainCommit: (repoId: string, hash: string) => void;
+  aiEnabled: boolean;
   singleRepo?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -300,6 +312,16 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   const handleViewInLog = () => {
     if (!ctxMenu?.singleHash) return;
     onOpenInLog(ctxMenu.singleHash, repoStatus.repoId);
+  };
+
+  const handleOpenDetail = () => {
+    if (!ctxMenu?.singleHash) return;
+    onOpenDetail(repoStatus.repoId, ctxMenu.singleHash);
+  };
+
+  const handleExplain = () => {
+    if (!ctxMenu?.singleHash) return;
+    onExplainCommit(repoStatus.repoId, ctxMenu.singleHash);
   };
 
   const getOrderedSelection = () => {
@@ -446,6 +468,9 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           onRevertSingle={handleRevertSingle}
           onDropSingle={handleDropSingle}
           onViewInLog={handleViewInLog}
+          onOpenDetail={handleOpenDetail}
+          onExplain={handleExplain}
+          aiEnabled={aiEnabled}
           onClose={() => { setCtxMenu(null); setMultiSelectHashes(new Set()); }}
         />
       )}
@@ -455,7 +480,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
@@ -515,6 +540,9 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             onDropCommits={onDropCommits}
             onRevertCommits={onRevertCommits}
             onEditCommitMsg={onEditCommitMsg}
+            onOpenDetail={onOpenDetail}
+            onExplainCommit={onExplainCommit}
+            aiEnabled={aiEnabled}
             singleRepo
           />
         </div>
@@ -560,6 +588,9 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             onDropCommits={onDropCommits}
             onRevertCommits={onRevertCommits}
             onEditCommitMsg={onEditCommitMsg}
+            onOpenDetail={onOpenDetail}
+            onExplainCommit={onExplainCommit}
+            aiEnabled={aiEnabled}
           />
         ))}
       </div>

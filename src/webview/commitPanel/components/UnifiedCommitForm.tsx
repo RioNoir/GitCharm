@@ -21,7 +21,9 @@ interface Props {
   onStash: () => void;
   onPush: (repoId: string) => void;
   onPushAll: () => void;
+  aiEnabled: boolean;
   onAutopilot: () => void;
+  onAutopilotContextMenu: (e: React.MouseEvent) => void;
   generatingMessage: boolean;
 }
 
@@ -155,7 +157,7 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
 export function UnifiedCommitForm({
   message, repoStatuses, repoMetas, amendFlags,
   loading, changesViewMode, defaultCommitAction = 'commit', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
-  onAutopilot, generatingMessage,
+  aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
 
@@ -288,14 +290,17 @@ export function UnifiedCommitForm({
             }
           }}
         />
-        <button
-          style={styles.autopilotBtn(generatingMessage)}
-          onClick={onAutopilot}
-          disabled={generatingMessage}
-          title="Generate commit message with AI"
-        >
-          <Codicon name={generatingMessage ? 'loading~spin' : 'sparkle'} style={{ fontSize: '16px' }} />
-        </button>
+        {aiEnabled && (
+          <button
+            style={styles.autopilotBtn(generatingMessage)}
+            onClick={onAutopilot}
+            onContextMenu={onAutopilotContextMenu}
+            disabled={generatingMessage}
+            title="Generate commit message with AI (right-click for options)"
+          >
+            <Codicon name={generatingMessage ? 'loading~spin' : 'sparkle'} style={{ fontSize: '16px' }} />
+          </button>
+        )}
       </div>
 
       {/* Amend + actions row */}

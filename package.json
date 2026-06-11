@@ -190,6 +190,10 @@
       {
         "command": "gitcharm.worktree.prune",
         "title": "GitCharm: Prune Worktrees"
+      },
+      {
+        "command": "gitcharm.selectAiModel",
+        "title": "GitCharm: Select AI Model"
       }
     ],
     "menus": {
@@ -250,6 +254,9 @@
         {
           "command": "gitcharm.navigateToAnnotationCommit",
           "when": "false"
+        },
+        {
+          "command": "gitcharm.selectAiModel"
         }
       ],
       "editor/lineNumber/context": [
@@ -326,8 +333,9 @@
         }
       }
     ],
-    "configuration": {
-      "title": "GitCharm",
+    "configuration": [
+      {
+      "title": "Basic Settings",
       "properties": {
         "gitcharm.graphMaxCommits": {
           "order": 80,
@@ -442,7 +450,121 @@
           "description": "Suppress the 'Branches have diverged' warning in the Git Menu and status bar."
         }
       }
+    },
+    {
+      "title": "AI Settings",
+      "properties": {
+        "gitcharm.ai.enabled": {
+          "order": 0,
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI features in GitCharm (commit message generation, commit explanation). When disabled, all AI actions are hidden."
+        },
+        "gitcharm.ai.language": {
+          "order": 1,
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Language for AI-generated text (e.g. `en`, `it`, `fr`, `de`). Leave empty to use the VS Code display language."
+        },
+        "gitcharm.ai.provider": {
+          "order": 2,
+          "type": "string",
+          "enum": ["vscode-lm", "claude-api", "openai-api", "claude-cli", "codex-cli", "ollama", "lmstudio"],
+          "enumDescriptions": [
+            "Use VS Code Language Model API (GitHub Copilot or any registered LM extension)",
+            "Use Anthropic API directly (requires API key)",
+            "Use OpenAI API directly (requires API key)",
+            "Use Claude CLI (claude --print)",
+            "Use Codex CLI (codex exec)",
+            "Use a local Ollama model via HTTP API",
+            "Use a local LM Studio model via HTTP API"
+          ],
+          "default": "vscode-lm",
+          "description": "AI provider to use for all AI features."
+        },
+        "gitcharm.ai.modelId": {
+          "order": 2,
+          "type": "string",
+          "default": "",
+          "description": "VS Code LM model ID (e.g. 'copilot:gpt-4o'). Only used when provider is 'vscode-lm'. Leave empty to auto-select. Use the 'GitCharm: Select AI Model' command to pick interactively."
+        },
+        "gitcharm.ai.claudeApiKey": {
+          "order": 3,
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key. Only used when provider is 'claude-api'. Get your key at console.anthropic.com."
+        },
+        "gitcharm.ai.claudeModel": {
+          "order": 4,
+          "type": "string",
+          "default": "",
+          "description": "Claude model ID (e.g. 'claude-opus-4-7', 'claude-sonnet-4-6'). Used when provider is 'claude-api' or 'claude-cli'. Leave empty to use the default. Use the 'GitCharm: Select AI Model' command to pick interactively."
+        },
+        "gitcharm.ai.claudePath": {
+          "order": 5,
+          "type": "string",
+          "default": "claude",
+          "description": "Path to the Claude CLI binary. Only used when provider is 'claude-cli'. Defaults to 'claude' (must be on PATH)."
+        },
+        "gitcharm.ai.openaiApiKey": {
+          "order": 6,
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API key. Only used when provider is 'openai-api'. Get your key at platform.openai.com."
+        },
+        "gitcharm.ai.openaiModel": {
+          "order": 7,
+          "type": "string",
+          "default": "gpt-4o",
+          "description": "OpenAI model ID (e.g. 'gpt-4o', 'gpt-4o-mini', 'o3'). Only used when provider is 'openai-api'."
+        },
+        "gitcharm.ai.codexModel": {
+          "order": 8,
+          "type": "string",
+          "default": "",
+          "description": "Codex model ID to use (e.g. 'o3', 'o4-mini'). Only used when provider is 'codex-cli'. Leave empty to use the CLI default. Use the 'GitCharm: Select AI Model' command to pick interactively."
+        },
+        "gitcharm.ai.codexPath": {
+          "order": 9,
+          "type": "string",
+          "default": "codex",
+          "description": "Path to the Codex CLI binary. Only used when provider is 'codex-cli'. Defaults to 'codex' (must be on PATH)."
+        },
+        "gitcharm.ai.lmStudioModel": {
+          "order": 7,
+          "type": "string",
+          "default": "",
+          "description": "LM Studio model identifier. Only used when provider is 'lmstudio'. Leave empty to use the currently loaded model. Use the 'GitCharm: Select AI Model' command to pick interactively."
+        },
+        "gitcharm.ai.lmStudioUrl": {
+          "order": 8,
+          "type": "string",
+          "default": "http://localhost:1234",
+          "description": "Base URL of the LM Studio local server. Only used when provider is 'lmstudio'."
+        },
+        "gitcharm.ai.ollamaModel": {
+          "order": 11,
+          "type": "string",
+          "default": "llama3",
+          "description": "Ollama model name (e.g. 'llama3', 'mistral', 'qwen3.5:9b'). Only used when provider is 'ollama'."
+        },
+        "gitcharm.ai.ollamaUrl": {
+          "order": 12,
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Base URL of the Ollama API. Only used when provider is 'ollama'."
+        },
+        "gitcharm.ai.maxDiffChars": {
+          "order": 13,
+          "type": "number",
+          "default": 8000,
+          "minimum": 1000,
+          "maximum": 100000,
+          "description": "Maximum characters of git diff to send to the AI model. Larger values give more context but consume more tokens."
+        }
+      }
     }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

@@ -374,7 +374,7 @@ function App() {
 
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.hasWorkspaceFolder);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.hasWorkspaceFolder, msg.aiEnabled);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
             let hasNewChanges = false;
@@ -839,6 +839,14 @@ function App() {
     send({ type: 'COMMIT_OPEN_LOG', hash, repoId });
   };
 
+  const doPushOpenDetail = (repoId: string, hash: string) => {
+    send({ type: 'PUSH_OPEN_DETAIL', repoId, hash } satisfies CommitToHostMsg);
+  };
+
+  const doPushExplainCommit = (repoId: string, hash: string) => {
+    send({ type: 'PUSH_EXPLAIN_COMMIT', repoId, hash } satisfies CommitToHostMsg);
+  };
+
   const doUndoCommit = (repoId: string) => {
     send({ type: 'COMMIT_UNDO_COMMIT', requestId: generateId(), repoId });
   };
@@ -860,6 +868,11 @@ function App() {
     setGeneratingMessage(true);
     send({ type: 'COMMIT_GENERATE_MESSAGE', requestId: generateId() });
   }, [generatingMessage, send]);
+
+  const doAutopilotContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    send({ type: 'COMMIT_SELECT_AI_MODEL' });
+  }, [send]);
 
   // ── Loading / empty states ────────────────────────────────────────────────
 
@@ -1325,7 +1338,9 @@ function App() {
             onCommitAndPush={() => doCommit(true)}
             onPush={doPush}
             onPushAll={doPushAll}
+            aiEnabled={store.aiEnabled}
             onAutopilot={doAutopilot}
+            onAutopilotContextMenu={doAutopilotContextMenu}
             generatingMessage={generatingMessage}
             onShelve={() => {
               const name = store.commitMessage.trim();
@@ -1437,6 +1452,9 @@ function App() {
               onDropCommits={doDropCommits}
               onRevertCommits={doRevertCommits}
               onEditCommitMsg={doEditCommitMsg}
+              onOpenDetail={doPushOpenDetail}
+              onExplainCommit={doPushExplainCommit}
+              aiEnabled={store.aiEnabled}
             />
           </div>
         )}

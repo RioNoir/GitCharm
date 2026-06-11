@@ -61,7 +61,7 @@ function App() {
 
       switch (msg.type) {
         case 'LOG_INIT_DATA':
-          store.setRepos(msg.repos, msg.hasWorkspaceFolder);
+          store.setRepos(msg.repos, msg.hasWorkspaceFolder, msg.aiEnabled);
           store.setBranches(msg.branches);
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           break;
@@ -385,6 +385,7 @@ function App() {
           backgroundLoading={store.backgroundLoading}
           scrollToHash={store.pendingScrollHash}
           onScrolledToHash={() => store.setPendingScrollHash(null)}
+          aiEnabled={store.aiEnabled}
         />
 
         {hasSelectedCommit && <ResizeHandle onMouseDown={onDetailResize} />}

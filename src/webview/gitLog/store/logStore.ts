@@ -36,7 +36,8 @@ interface LogState {
   fileLoadSeq: number;
 
   hasWorkspaceFolder: boolean;
-  setRepos: (repos: RepoMeta[], hasWorkspaceFolder?: boolean) => void;
+  aiEnabled: boolean;
+  setRepos: (repos: RepoMeta[], hasWorkspaceFolder?: boolean, aiEnabled?: boolean) => void;
   setBranches: (branches: BranchInfo[]) => void;
   updateTags: (repoId: string, tags: TagInfo[]) => void;
   setIconTheme: (theme: IconThemeData | null) => void;
@@ -71,6 +72,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   repos: [],
   initialized: false,
   hasWorkspaceFolder: true,
+  aiEnabled: true,
   branches: [],
   tags: [],
   iconTheme: null,
@@ -92,7 +94,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   pendingScrollHash: null,
   fileLoadSeq: 0,
 
-  setRepos: (repos, hasWorkspaceFolder) => set({ repos, initialized: true, ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}) }),
+  setRepos: (repos, hasWorkspaceFolder, aiEnabled) => set({ repos, initialized: true, ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}) }),
   setBranches: (branches) => set({ branches }),
   updateTags: (repoId, tags) => set(s => ({
     tags: [...s.tags.filter(t => t.repoId !== repoId), ...tags],

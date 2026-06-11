@@ -30,8 +30,9 @@ export interface CommitState {
   changesViewMode: 'simplified' | 'changelists' | 'vscode';
   defaultCommitAction: 'commit' | 'commitAndPush';
   hasWorkspaceFolder: boolean;
+  aiEnabled: boolean;
 
-  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, fileViewMode?: 'flat' | 'tree', defaultCommitAction?: 'commit' | 'commitAndPush', hasWorkspaceFolder?: boolean) => void;
+  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, fileViewMode?: 'flat' | 'tree', defaultCommitAction?: 'commit' | 'commitAndPush', hasWorkspaceFolder?: boolean, aiEnabled?: boolean) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
   toggleFileSelection: (repoId: string, path: string) => void;
   setFileSelections: (repoId: string, paths: string[], selected: boolean) => void;
@@ -102,8 +103,9 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   changesViewMode: 'simplified',
   defaultCommitAction: 'commit',
   hasWorkspaceFolder: true,
+  aiEnabled: true,
 
-  setStatus: (repoMetas, status, iconTheme, fileViewMode, defaultCommitAction, hasWorkspaceFolder) => {
+  setStatus: (repoMetas, status, iconTheme, fileViewMode, defaultCommitAction, hasWorkspaceFolder, aiEnabled) => {
     const prev = get().repoSelections;
     const prevFiles = get().fileSelections;
     const prevSeen = get().seenFiles;
@@ -162,7 +164,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
         }
       }
     }
-    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(fileViewMode !== undefined ? { viewMode: fileViewMode } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}) });
+    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(fileViewMode !== undefined ? { viewMode: fileViewMode } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}) });
   },
 
   setRepoSelection: (repoId, selected) =>

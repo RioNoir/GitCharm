@@ -7,6 +7,7 @@ export async function openCommitDetailPanel(
   manager: WorkspaceGitManager,
   repoId: string,
   hash: string,
+  opts: { autoExplain?: boolean } = {},
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
@@ -75,9 +76,53 @@ export async function openCommitDetailPanel(
     parents: commitInfo.parents,
     files,
     branches,
+    autoExplain: opts.autoExplain ?? false,
+    aiEnabled: vscode.workspace.getConfiguration('gitcharm').get('ai.enabled', true),
+    aiModelLabel: getAiModelLabel(vscode.workspace.getConfiguration('gitcharm')),
   });
 
   panel.webview.onDidReceiveMessage(async (msg: { type: string; filePath?: string; fileStatus?: string; hash?: string; parents?: string[]; requestId?: string }) => {
+    if (msg.type === 'explainCommit') {
+      try {
+        const cfg = vscode.workspace.getConfiguration('gitcharm');
+        const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
+        const configuredLang: string = cfg.get('ai.language', '');
+        const language = configuredLang.trim() || vscode.env.language || 'en';
+
+        const diff = await repo.getCommitDiff(hash, maxDiffChars);
+
+        const fileList = files.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`).join('\n');
+        const prompt = [
+          'You are a code reviewer explaining a git commit to a developer.',
+          '',
+          'Rules:',
+          `- Write the explanation in this language: ${language}`,
+          '- Start with a one-sentence summary of what this commit does',
+          '- Then explain the key changes: what was modified and why',
+          '- Be specific: reference file names, function names, or module names when relevant',
+          '- Keep it concise but complete (3-8 sentences or bullet points)',
+          '- Output ONLY the explanation, no markdown fences, no preamble',
+          '',
+          `## Commit: ${commitInfo!.shortHash}`,
+          `## Message: ${fullMessage.trim() || commitInfo!.message}`,
+          '',
+          '## Changed files',
+          fileList,
+          diff ? `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\`` : '',
+        ].filter(Boolean).join('\n');
+
+        const { generateWithAI } = await import('../ai/aiGenerate');
+        const explanation = await generateWithAI(
+          cfg.get('ai.provider', 'vscode-lm'),
+          prompt,
+          cfg,
+        );
+        panel.webview.postMessage({ type: 'explainCommitResult', explanation });
+      } catch (e: unknown) {
+        panel.webview.postMessage({ type: 'explainCommitResult', error: String(e) });
+      }
+      return;
+    }
     if (msg.type === 'getMergeCommits' && msg.hash && msg.parents && msg.requestId) {
       try {
         const commits = await repo.getMergeCommits(msg.hash, msg.parents);
@@ -179,6 +224,43 @@ interface PanelData {
   parents: string[];
   files: Array<{ path: string; status: string; added?: number; removed?: number }>;
   branches: { local: string[]; remote: string[]; tags: string[] };
+  autoExplain: boolean;
+  aiEnabled: boolean;
+  aiModelLabel: string;
+}
+
+function getAiModelLabel(cfg: vscode.WorkspaceConfiguration): string {
+  const provider: string = cfg.get('ai.provider', 'vscode-lm');
+  switch (provider) {
+    case 'claude-api': {
+      const model: string = cfg.get('ai.claudeModel', 'claude-sonnet-4-6');
+      return `claude api · ${model || 'claude-sonnet-4-6'}`;
+    }
+    case 'openai-api': {
+      const model: string = cfg.get('ai.openaiModel', 'gpt-4o');
+      return `openai api · ${model || 'gpt-4o'}`;
+    }
+    case 'claude-cli': {
+      const model: string = cfg.get('ai.claudeModel', '');
+      return model ? `claude · ${model}` : 'claude';
+    }
+    case 'codex-cli': {
+      const model: string = cfg.get('ai.codexModel', '');
+      return model ? `codex · ${model}` : 'codex';
+    }
+    case 'ollama': {
+      const model: string = cfg.get('ai.ollamaModel', 'llama3');
+      return `ollama · ${model}`;
+    }
+    case 'lmstudio': {
+      const model: string = cfg.get('ai.lmStudioModel', '');
+      return model ? `lmstudio · ${model}` : 'lmstudio';
+    }
+    default: {
+      const modelId: string = cfg.get('ai.modelId', '');
+      return modelId ? modelId.replace('copilot:', '') : 'copilot';
+    }
+  }
 }
 
 function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData): string {
@@ -387,6 +469,54 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     .merge-file-row:hover { background: var(--vscode-list-hoverBackground); }
     .merge-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .merge-file-status { font-size: 10px; font-weight: 700; flex-shrink: 0; }
+
+    /* ── AI Explanation ── */
+    .ai-section {
+      border-bottom: 1px solid var(--vscode-panel-border);
+      flex-shrink: 0;
+    }
+    .ai-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px; cursor: pointer; user-select: none;
+    }
+    .ai-header:hover { background: var(--vscode-list-hoverBackground); }
+    .ai-title {
+      flex: 1; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6;
+    }
+    .ai-model-label {
+      font-size: 10px; opacity: 0.5;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 160px;
+    }
+    .ai-toggle-btn {
+      display: flex; align-items: center; gap: 5px;
+      border: none; cursor: pointer;
+      padding: 5px 10px; border-radius: 4px; font-size: 12px;
+      color: var(--vscode-button-foreground);
+      background: var(--vscode-button-background);
+      opacity: 0.9;
+    }
+    .ai-toggle-btn:hover { opacity: 1; }
+    .ai-toggle-btn:disabled { opacity: 0.4; cursor: default; }
+    .ai-body {
+      padding: 0 16px 14px;
+    }
+    .hidden { display: none !important; }
+    .ai-body.hidden { display: none; }
+    .ai-text {
+      font-size: 12px; line-height: 1.65;
+      white-space: pre-wrap; word-break: break-word;
+      color: var(--vscode-editor-foreground);
+      max-height: 240px; overflow-y: auto;
+    }
+    .ai-error { font-size: 12px; color: var(--vscode-errorForeground); }
+    .ai-loading {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; opacity: 0.6;
+    }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -395,6 +525,27 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     <span class="toolbar-hash">${escHtml(data.shortHash)}</span>
     <span class="toolbar-message">${escHtml(data.message)}</span>
   </div>
+
+  ${data.aiEnabled ? `
+  <div class="ai-section" id="aiSection">
+    <div class="ai-header" id="aiHeader">
+      <span class="codicon codicon-sparkle" style="font-size:13px;opacity:0.7"></span>
+      <span class="ai-title">AI Explanation</span>
+      <span class="ai-model-label">${escHtml(data.aiModelLabel)}</span>
+      <button class="ai-toggle-btn" id="aiBtn" title="Generate AI explanation">
+        <span class="codicon codicon-sparkle"></span>
+        <span id="aiBtnLabel">Generate</span>
+      </button>
+    </div>
+    <div class="ai-body hidden" id="aiBody">
+      <div class="ai-loading hidden" id="aiLoading">
+        <span class="codicon codicon-loading spin"></span>
+        <span>Generating explanation…</span>
+      </div>
+      <div class="ai-error hidden" id="aiError"></div>
+      <div class="ai-text" id="aiText"></div>
+    </div>
+  </div>` : ''}
 
   <div class="split">
     <div class="left-panel">
@@ -467,6 +618,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     authorEmail: data.authorEmail,
     authorName: data.authorName,
     branches: allBranches,
+    autoExplain: data.autoExplain,
   })}</script>
 
   <script nonce="${nonce}">
@@ -972,6 +1124,52 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         if (row) { row.style.opacity = '0.4'; }
       }
     });
+
+    // ── AI Explanation ──
+    if (${data.aiEnabled}) {
+      const aiBtn     = document.getElementById('aiBtn');
+      const aiBtnLabel = document.getElementById('aiBtnLabel');
+      const aiHeader  = document.getElementById('aiHeader');
+      const aiBody    = document.getElementById('aiBody');
+      const aiLoading = document.getElementById('aiLoading');
+      const aiText    = document.getElementById('aiText');
+      const aiError   = document.getElementById('aiError');
+      let aiExpanded = false;
+
+      window.addEventListener('message', e => {
+        if (e.data?.type !== 'explainCommitResult') return;
+        aiLoading.classList.add('hidden');
+        aiBtn.disabled = false;
+        aiBtnLabel.textContent = 'Regenerate';
+        if (e.data.error) {
+          aiError.textContent = e.data.error;
+          aiError.classList.remove('hidden');
+          aiText.textContent = '';
+        } else {
+          aiError.classList.add('hidden');
+          aiText.textContent = e.data.explanation;
+        }
+      });
+
+      function triggerExplain() {
+        aiExpanded = true;
+        aiBody.classList.remove('hidden');
+        aiLoading.classList.remove('hidden');
+        aiText.textContent = '';
+        aiError.classList.add('hidden');
+        aiBtn.disabled = true;
+        aiBtnLabel.textContent = 'Generating…';
+        vscode.postMessage({ type: 'explainCommit' });
+      }
+
+      aiBtn.addEventListener('click', e => { e.stopPropagation(); triggerExplain(); });
+      aiHeader.addEventListener('click', () => {
+        if (!aiExpanded) return;
+        aiBody.classList.toggle('hidden');
+      });
+
+      if (${data.autoExplain}) { triggerExplain(); }
+    }
   </script>
 </body>
 </html>`;

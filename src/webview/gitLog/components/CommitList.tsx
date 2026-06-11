@@ -31,6 +31,7 @@ interface Props {
   backgroundLoading?: boolean;
   scrollToHash?: string | null;
   onScrolledToHash?: () => void;
+  aiEnabled?: boolean;
 }
 
 interface RepoBlock {
@@ -79,7 +80,7 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash }: Props) {
+export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   // Start as true — skeleton is always shown until commits arrive (handles first load correctly)
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -446,6 +447,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           allCommits={commits}
           currentBranchByRepo={currentBranchByRepo}
           headHashByRepo={headHashByRepo}
+          aiEnabled={aiEnabled}
           onClose={() => setContextMenu(null)}
           onSquash={(selected) => {
             setContextMenu(null);
@@ -720,7 +722,7 @@ const popoverStyles = {
   } as React.CSSProperties,
 };
 
-function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, headHashByRepo, onClose, onSquash }: {
+function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, headHashByRepo, aiEnabled, onClose, onSquash }: {
   commit: LaidOutCommit;
   x: number;
   y: number;
@@ -728,6 +730,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   allCommits: LaidOutCommit[];
   currentBranchByRepo: Record<string, string>;
   headHashByRepo: Record<string, string>;
+  aiEnabled?: boolean;
   onClose: () => void;
   onSquash: (selected: LaidOutCommit[]) => void;
 }) {
@@ -842,6 +845,17 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
           <Codicon name="copy" style={ctxStyles.icon} />
           <span>Copy Revision Number</span>
         </div>
+        <div style={ctxStyles.separator} />
+        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash })}>
+          <Codicon name="open-preview" style={ctxStyles.icon} />
+          <span>Open Full Detail</span>
+        </div>
+        {aiEnabled && (
+          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_EXPLAIN_COMMIT', repoId: commit.repoId, hash: commit.hash })}>
+            <Codicon name="sparkle" style={ctxStyles.icon} />
+            <span>Explain with AI</span>
+          </div>
+        )}
         <div style={ctxStyles.separator} />
         <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_NEW_BRANCH_FROM_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="git-branch" style={ctxStyles.icon} />

@@ -639,6 +639,26 @@ export class GitService {
     return files;
   }
 
+  async getCommitDiff(hash: string, maxChars = 8000): Promise<string> {
+    try {
+      const raw = await this.git.raw(['show', hash, '--stat', '--patch', '--format=']);
+      return raw.length > maxChars ? raw.slice(0, maxChars) + '\n...[diff truncated]' : raw;
+    } catch { return ''; }
+  }
+
+  async getFullStagedDiff(maxChars = 8000): Promise<string> {
+    try {
+      const vsRepo = this.vsRepo();
+      const raw = vsRepo ? await vsRepo.diff(true) : await this.git.diff(['--staged']);
+      if (!raw) {
+        // Nothing staged — fall back to unstaged diff
+        const unstaged = vsRepo ? await vsRepo.diff(false) : await this.git.diff([]);
+        return unstaged.length > maxChars ? unstaged.slice(0, maxChars) + '\n...[diff truncated]' : unstaged;
+      }
+      return raw.length > maxChars ? raw.slice(0, maxChars) + '\n...[diff truncated]' : raw;
+    } catch { return ''; }
+  }
+
   async getFileDiff(repoId: string, hash: string, filePath: string): Promise<FileDiff | null> {
     try {
       const vsRepo = this.vsRepo();
