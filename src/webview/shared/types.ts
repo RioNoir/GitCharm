@@ -41,7 +41,8 @@ export interface BranchInfo {
   lastCommitHash?: string;
   lastCommitDate?: string;
   detachedTag?: string;
-  detachedHash?: string;
+  detachedHash?: string;       // short hash for display
+  detachedFullHash?: string;   // full hash for commit matching
 }
 
 export interface CommitNode {
@@ -57,18 +58,6 @@ export interface CommitNode {
   refs: string[];
   unpushed?: boolean;
   incoming?: boolean;
-  lane?: number;
-  totalLanes?: number;
-  graphLines?: GraphLine[];
-}
-
-export interface GraphLine {
-  fromLane: number;
-  toLane: number;
-  type: 'straight' | 'merge-in' | 'fork-out' | 'pass-through';
-  repoId: string;
-  isStart?: boolean; // true when this lane opens here (no line arrives from above)
-  color?: string;    // pre-computed color for this line segment
 }
 
 export type GitFileStatus =

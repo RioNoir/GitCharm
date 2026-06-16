@@ -6,8 +6,10 @@ import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
 import { CommitFiltersBar } from './components/CommitFiltersBar';
 import { assignLanes } from './utils/graphLayout';
+import type { GraphLayout } from './utils/graphLayout';
 import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
+import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import type { LogToHostMsg, HostToLogMsg } from '../../host/types/messages';
 
@@ -15,10 +17,8 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-const BATCH_SIZE = 200;
-const BG_BATCH_SIZE = 500;
-// Delay between background batches (ms) — keeps the UI thread free
-const BG_DELAY = 120;
+const LOAD_STEP = 150;
+
 
 function App() {
   const store = useLogStore();
@@ -26,13 +26,20 @@ function App() {
   const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 220, 120, 400);
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [themeVersion, setThemeVersion] = useState(0);
+
+  useEffect(() => {
+    const obs = new MutationObserver(() => setThemeVersion(v => v + 1));
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadRef = useRef<() => void>(() => {});
   const filterRepoRef = useRef<(repoId: string | null, branch?: string | null) => void>(() => {});
-  // Generation counter — incremented on every reload so stale bg batches are ignored
-  const bgGenRef = useRef(0);
-  const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Current active requestId — batches from previous requests are discarded
+  // Prevents concurrent requests
+  const loadingInFlightRef = useRef(false);
+  // Current requestId — used to discard responses from superseded requests
   const activeRequestIdRef = useRef<string | null>(null);
 
   const send = useCallback((msg: LogToHostMsg) => {
@@ -67,14 +74,10 @@ function App() {
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           break;
         case 'LOG_COMMITS_BATCH': {
-          // Discard batches from superseded requests
-          if (msg.requestId && msg.requestId !== activeRequestIdRef.current) break;
+          const match = msg.requestId === activeRequestIdRef.current;
+          if (!match) break;
+          loadingInFlightRef.current = false;
           store.appendCommits(msg.commits, msg.isLast);
-          if (!msg.isLast) {
-            scheduleBgLoad(bgGenRef.current);
-          } else {
-            useLogStore.getState().setBackgroundLoading(false);
-          }
           break;
         }
         case 'LOG_COMMIT_FILES':
@@ -109,77 +112,60 @@ function App() {
     window.addEventListener('message', handler);
 
     // Initial load
+    const initReqId = generateId();
+    activeRequestIdRef.current = initReqId;
     send({
       type: 'LOG_REQUEST_COMMITS',
       repoIds: [],
-      limit: BATCH_SIZE,
+      limit: LOAD_STEP,
       skip: 0,
+      requestId: initReqId,
     });
-
 
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const scheduleBgLoad = useCallback((gen: number) => {
-    if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
-    bgTimerRef.current = setTimeout(() => {
-      if (gen !== bgGenRef.current) return;
-      const s = useLogStore.getState();
-      if (!s.hasMore) { s.setBackgroundLoading(false); return; }
-      const f = s.commitFilters;
-      const reqId = activeRequestIdRef.current ?? undefined;
-      getVsCodeApi().postMessage({
-        type: 'LOG_REQUEST_COMMITS',
-        repoIds: f.repoId ? [f.repoId] : [],
-        limit: BG_BATCH_SIZE,
-        skip: s.commits.length,
-        requestId: reqId,
-        filterText: f.text || undefined,
-        filterAuthor: f.author || undefined,
-        filterBranch: f.branch || undefined,
-        filterDateFrom: f.dateFrom || undefined,
-        filterDateTo: f.dateTo || undefined,
-      });
-    }, BG_DELAY);
-  }, []);
 
-  const reloadCommits = useCallback((overrides?: Partial<import('./store/logStore').CommitFilters>) => {
-    // Cancel any in-flight background load
-    if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
-    const gen = ++bgGenRef.current;
-
-    // New requestId invalidates any in-flight batches from previous requests
-    const reqId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const sendAppendRequest = useCallback((f: import('./store/logStore').CommitFilters, skip: number) => {
+    if (loadingInFlightRef.current) return;
+    loadingInFlightRef.current = true;
+    const reqId = generateId();
     activeRequestIdRef.current = reqId;
-
-    const f = { ...useLogStore.getState().commitFilters, ...overrides };
-    useLogStore.getState().resetCommits();
-    send({
+    useLogStore.getState().setBackgroundLoading(true);
+    getVsCodeApi().postMessage({
       type: 'LOG_REQUEST_COMMITS',
       repoIds: f.repoId ? [f.repoId] : [],
-      limit: BATCH_SIZE,
-      skip: 0,
+      limit: LOAD_STEP,
+      skip,
       requestId: reqId,
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
       filterBranch: f.branch || undefined,
-      filterDateFrom: f.dateFrom || undefined,
-      filterDateTo: f.dateTo || undefined,
-    });
-  }, [send]);
+      // git --after and --before are exclusive; use time suffixes to make the range fully inclusive
+      filterDateFrom: f.dateFrom ? `${f.dateFrom}T00:00:00` : undefined,
+      filterDateTo: f.dateTo ? `${f.dateTo}T23:59:59` : undefined,
+    } satisfies LogToHostMsg);
+  }, []);
+
+  const loadMore = useCallback(() => {
+    const s = useLogStore.getState();
+    if (loadingInFlightRef.current || !s.hasMore) return;
+    sendAppendRequest(s.commitFilters, s.commits.length);
+  }, [sendAppendRequest]);
+
+  const reloadCommits = useCallback((overrides?: Partial<import('./store/logStore').CommitFilters>) => {
+    loadingInFlightRef.current = false;
+    const f = { ...useLogStore.getState().commitFilters, ...overrides };
+    useLogStore.getState().resetCommits();
+    sendAppendRequest(f, 0);
+  }, [sendAppendRequest]);
 
   // Keep reloadRef current so the message handler (mounted once) always calls the latest version
   reloadRef.current = reloadCommits;
 
-  // Load more on scroll (manual trigger — kept for scroll-to-hash fallback)
   const handleLoadMore = useCallback(() => {
-    // Background loading is already fetching everything; nothing to do
-    const s = useLogStore.getState();
-    if (s.loadingCommits || s.backgroundLoading || !s.hasMore) return;
-    // Force an immediate bg fetch instead of waiting for the next scheduled one
-    if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
-    scheduleBgLoad(bgGenRef.current);
-  }, [scheduleBgLoad]);
+    loadMore();
+  }, [loadMore]);
 
   // When a commit is selected, load its files
   useEffect(() => {
@@ -212,10 +198,27 @@ function App() {
     store.commitFilters.dateFrom ||
     store.commitFilters.dateTo
   );
-  const laidOutCommits = useMemo(
-    () => assignLanes(store.commits, isFiltered),
-    [store.commits, isFiltered]
+
+  // assignLanes is expensive — run it off the render path via useEffect + rAF
+  // so scroll events never block the UI thread waiting for layout recalc.
+  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() =>
+    assignLanes(store.commits, isFiltered)
   );
+
+  const layoutRafRef = useRef<number | null>(null);
+  const pendingCommitsRef = useRef(store.commits);
+  const pendingFilteredRef = useRef(isFiltered);
+  pendingCommitsRef.current = store.commits;
+  pendingFilteredRef.current = isFiltered;
+
+  useEffect(() => {
+    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
+    layoutRafRef.current = requestAnimationFrame(() => {
+      layoutRafRef.current = null;
+      setGraphLayout(assignLanes(pendingCommitsRef.current, pendingFilteredRef.current));
+    });
+    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
+  }, [store.commits, isFiltered, themeVersion]);
 
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -228,7 +231,10 @@ function App() {
   const headHashByRepo = useMemo(() => {
     const map: Record<string, string> = {};
     store.branches.forEach(b => {
-      if (b.isHead && !b.isRemote && b.lastCommitHash) map[b.repoId] = b.lastCommitHash;
+      if (!b.isRemote && b.isHead) {
+        if (b.lastCommitHash) map[b.repoId] = b.lastCommitHash;
+        else if (b.detachedFullHash) map[b.repoId] = b.detachedFullHash;
+      }
     });
     return map;
   }, [store.branches]);
@@ -315,6 +321,13 @@ function App() {
       {/* Main layout */}
       <div style={{ ...mainLayout, visibility: showNoRepo ? 'hidden' : 'visible' }}>
         {/* Branch sidebar */}
+        {sidebarCollapsed && (
+          <div style={collapsedSidebarStrip}>
+            <button style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title="Expand sidebar">
+              <Codicon name="layout-sidebar-left-off" style={{ fontSize: '14px' }} />
+            </button>
+          </div>
+        )}
         <BranchSidebar
           ref={sidebarRef}
           repos={store.repos.filter(r => !r.isWorktree)}
@@ -367,12 +380,14 @@ function App() {
           onDeleteTag={(repoIds, tagName) => {
             getVsCodeApi().postMessage({ type: 'LOG_DELETE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg);
           }}
+          onCollapse={() => setSidebarCollapsed(true)}
+          hidden={sidebarCollapsed}
         />
-        <ResizeHandle onMouseDown={onSidebarResize} />
+        {!sidebarCollapsed && <ResizeHandle onMouseDown={onSidebarResize} />}
 
         {/* Commit list (center) */}
         <CommitList
-          commits={laidOutCommits}
+          layout={graphLayout}
           selectedHash={store.selectedCommit?.hash ?? null}
           repoColors={repoColors}
           repos={store.repos}
@@ -380,13 +395,14 @@ function App() {
           headHashByRepo={headHashByRepo}
           onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
           onLoadMore={handleLoadMore}
-          hasMore={store.hasMore && !store.loadingCommits && !store.backgroundLoading}
+          hasMore={store.hasMore}
           storeHasMore={store.hasMore}
           loading={store.loadingCommits}
           backgroundLoading={store.backgroundLoading}
           scrollToHash={store.pendingScrollHash}
           onScrolledToHash={() => store.setPendingScrollHash(null)}
           aiEnabled={store.aiEnabled}
+          themeVersion={themeVersion}
         />
 
         {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
@@ -404,6 +420,8 @@ function App() {
               iconTheme={store.iconTheme}
               onSelectFile={store.selectFile}
               onClose={() => setDetailCollapsed(true)}
+              refColors={graphLayout.refColors}
+              themeVersion={themeVersion}
             />
           </div>
         )}
@@ -444,6 +462,30 @@ const appStyle: React.CSSProperties = {
   userSelect: 'none',
 };
 
+
+const collapsedSidebarStrip: React.CSSProperties = {
+  width: '24px',
+  flexShrink: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  paddingTop: '6px',
+  borderRight: '1px solid var(--vscode-panel-border)',
+  background: 'var(--vscode-sideBar-background)',
+};
+
+const expandSidebarBtn: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: '3px',
+  borderRadius: '3px',
+  color: 'var(--vscode-foreground)',
+  opacity: 0.6,
+};
 
 const mainLayout: React.CSSProperties = {
   display: 'flex',

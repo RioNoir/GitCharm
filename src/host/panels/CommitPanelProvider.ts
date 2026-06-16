@@ -1267,7 +1267,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const fullMessage = (await repo.getFullCommitMessage(msg.hash)).trim();
-        const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 7), fullMessage);
+        const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 8), fullMessage);
         if (!result.confirmed) {
           this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;

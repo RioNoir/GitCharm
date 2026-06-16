@@ -255,7 +255,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   const mainRepoName = repoMeta?.mainWorktreePath?.split('/').pop();
   const repoName = worktreeBranch ? (mainRepoName ?? rawName) : rawName;
   const branchLabel = repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name;
-  const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true);
+  const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, false);
   const repoColor = repoMeta?.color ?? '#4ec9b0';
   const ahead = repoStatus.branch.aheadBehind?.ahead ?? 0;
   const behind = repoStatus.branch.aheadBehind?.behind ?? 0;

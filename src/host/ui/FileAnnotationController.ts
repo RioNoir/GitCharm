@@ -561,7 +561,7 @@ export class FileAnnotationController implements vscode.Disposable {
 
     const md = new vscode.MarkdownString(
       `**${escapeMarkdown(line.author)}** — ${formatDateFull(line.date)}\n\n` +
-      `\`${line.hash.slice(0, 7)}\` ${escapeMarkdown(line.summary)}\n\n` +
+      `\`${line.hash.slice(0, 8)}\` ${escapeMarkdown(line.summary)}\n\n` +
       `[$(history) Open in Git Log](${commandUri})`
     );
     md.isTrusted = true;

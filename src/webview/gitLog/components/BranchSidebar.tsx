@@ -1,6 +1,7 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, forwardRef } from 'react';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { isPrimaryBranch } from '../../shared/branchUtils';
+import { primaryBranchColor } from '../../shared/branchColors';
 import { Codicon } from '../../shared/Codicon';
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
   onMergeTag: (repoIds: string[], tagName: string) => void;
   onPushTag: (repoId: string, tagName: string) => void;
   onDeleteTag: (repoIds: string[], tagName: string) => void;
+  onCollapse: () => void;
+  hidden?: boolean;
 }
 
 type SectionKey = string; // 'local' | 'remote:<name>' | 'tags'
@@ -89,7 +92,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, onFilterChange, onBranchFilterSelect,
   onCheckout, onMerge, onRebase, onDelete, onFetchRepo, onPull, onPush,
-  onCheckoutTag, onMergeTag, onPushTag, onDeleteTag,
+  onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
 }, ref) {
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
@@ -137,7 +140,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   }
 
   return (
-    <div ref={ref} style={styles.container} onClick={() => { setContextMenu(null); setTagContextMenu(null); }}>
+    <div ref={ref} style={hidden ? { ...styles.container, display: 'none' } : styles.container} onClick={() => { setContextMenu(null); setTagContextMenu(null); }}>
       {/* Sticky header: search + repo list */}
       <div style={styles.stickyHeader}>
         <div style={styles.searchBox}>
@@ -147,6 +150,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             onChange={e => onFilterChange(e.target.value)}
             placeholder="Filter branches & tags..."
           />
+          <button style={styles.collapseBtn} onClick={onCollapse} title="Collapse sidebar">
+            <Codicon name="layout-sidebar-left" style={{ fontSize: '14px' }} />
+          </button>
         </div>
 
         {repos.length > 1 && (
@@ -309,6 +315,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
   const { baseName, isPrimary, isHead, repoIds } = merged;
   const isRemote = merged.instances[0].isRemote;
   const [hovered, setHovered] = useState(false);
+  const primaryColor = primaryBranchColor();
 
   return (
     <div
@@ -321,10 +328,10 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
     >
       <Codicon
         name={isPrimary ? 'git-branch' : isRemote ? 'cloud' : 'git-branch'}
-        style={styles.branchIcon(isPrimary, isHead)}
+        style={styles.branchIcon(isPrimary, isHead, primaryColor)}
       />
 
-      <span style={styles.branchName(isHead, isPrimary)}>{baseName}</span>
+      <span style={styles.branchName(isHead, isPrimary, primaryColor)}>{baseName}</span>
 
       {multiRepo && (
         <span style={styles.dotGroup}>
@@ -353,6 +360,7 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const primaryColor = primaryBranchColor();
 
   return (
     <div
@@ -362,17 +370,8 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
       onContextMenu={onContextMenu}
       title={`Tag: ${mergedTag.name}${isActive ? ' (current)' : ''}\nRight-click for actions`}
     >
-      <Codicon
-        name="tag"
-        style={{
-          ...styles.branchIcon(false, isActive),
-          color: isActive
-            ? 'var(--vscode-gitDecoration-addedResourceForeground)'
-            : 'var(--vscode-gitDecoration-modifiedResourceForeground)',
-          opacity: 1,
-        }}
-      />
-      <span style={styles.branchName(isActive, false)}>{mergedTag.name}</span>
+      <Codicon name="tag" style={styles.branchIcon(false, isActive, primaryColor)} />
+      <span style={styles.branchName(isActive, false, primaryColor)}>{mergedTag.name}</span>
       {multiRepo && (
         <span style={styles.dotGroup}>
           {mergedTag.repoIds.map(id => (
@@ -507,9 +506,13 @@ const styles = {
   searchBox: {
     padding: '6px',
     borderBottom: '1px solid var(--vscode-panel-border)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
   },
   searchInput: {
-    width: '100%',
+    flex: 1,
+    minWidth: 0,
     padding: '4px 6px',
     background: 'var(--vscode-input-background)',
     color: 'var(--vscode-input-foreground)',
@@ -519,6 +522,19 @@ const styles = {
     outline: 'none',
     boxSizing: 'border-box' as const,
   },
+  collapseBtn: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '3px',
+    borderRadius: '3px',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.6,
+  } as React.CSSProperties,
   repoList: {
     borderBottom: '1px solid var(--vscode-panel-border)',
     padding: '3px 0',
@@ -630,24 +646,24 @@ const styles = {
     outline: isFilterSelected ? '1px solid var(--vscode-focusBorder)' : 'none',
     outlineOffset: '-1px',
   }),
-  branchIcon: (isPrimary: boolean, isHead: boolean): React.CSSProperties => ({
+  branchIcon: (isPrimary: boolean, isHead: boolean, primaryColor: string): React.CSSProperties => ({
     fontSize: '13px',
     flexShrink: 0,
     color: isPrimary
-      ? 'var(--vscode-gitDecoration-untrackedResourceForeground)'
+      ? primaryColor
       : isHead
-        ? 'var(--vscode-gitDecoration-addedResourceForeground)'
+        ? primaryColor
         : 'var(--vscode-foreground)',
     opacity: isPrimary ? 1 : isHead ? 1 : 0.55,
   }),
-  branchName: (isHead: boolean, isPrimary: boolean): React.CSSProperties => ({
+  branchName: (isHead: boolean, isPrimary: boolean, primaryColor: string): React.CSSProperties => ({
     flex: 1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
     fontWeight: (isHead || isPrimary) ? 'bold' : 'normal',
     color: isPrimary && !isHead
-      ? 'var(--vscode-gitDecoration-untrackedResourceForeground)'
+      ? primaryColor
       : undefined,
   }),
   dotGroup: {

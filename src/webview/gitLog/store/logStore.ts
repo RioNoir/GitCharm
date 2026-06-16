@@ -42,6 +42,7 @@ interface LogState {
   updateTags: (repoId: string, tags: TagInfo[]) => void;
   setIconTheme: (theme: IconThemeData | null) => void;
   appendCommits: (commits: CommitNode[], isLast: boolean) => void;
+  setCommits: (commits: CommitNode[], hasMore: boolean) => void;
   resetCommits: () => void;
   selectCommit: (commit: CommitNode | null) => void;
   setCommitFiles: (files: Array<{ path: string; status: string; added?: number; removed?: number }>) => void;
@@ -103,9 +104,10 @@ export const useLogStore = create<LogState>((set, get) => ({
   appendCommits: (commits, isLast) => set(s => ({
     commits: [...s.commits, ...commits],
     loadingCommits: false,
-    backgroundLoading: !isLast,
+    backgroundLoading: false,
     hasMore: !isLast,
   })),
+  setCommits: (commits, hasMore) => set({ commits, hasMore, loadingCommits: false, backgroundLoading: false }),
   resetCommits: () => set({ commits: [], hasMore: true, backgroundLoading: false, loadingCommits: true, selectedCommit: null, commitFiles: [], currentDiff: null }),
   selectCommit: (commit) => set(s => ({ selectedCommit: commit, commitFiles: [], currentDiff: null, selectedFile: null, fileLoadSeq: s.fileLoadSeq + 1 })),
   setCommitFiles: (files) => set({ commitFiles: files, loadingFiles: false }),

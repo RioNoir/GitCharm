@@ -3,20 +3,48 @@ import { isPrimaryBranch } from './branchUtils';
 export const HEAD_COLOR_DARK  = '#c9a84c';
 export const HEAD_COLOR_LIGHT = '#8a6914';
 
-// Tag color — fixed cyan/teal, distinct from HEAD gold and the blue primary.
-const TAG_COLOR_DARK  = '#4aaa9a';
-const TAG_COLOR_LIGHT = '#1a7a6a';
+// Tag color — muted grey-brown, neutral so it doesn't compete with branch colors.
+const TAG_COLOR_DARK  = '#909090';
+const TAG_COLOR_LIGHT = '#707070';
 
+// Muted palette — 16 hues, each at least 22° apart on the wheel, desaturated for a calm graph look.
+// Avoids the HEAD gold zone (~35°-55°). The former tag teal (~170°) is now free to use.
 const PALETTE_DARK: readonly string[] = [
-  '#6a9fc2', '#a07cb0', '#5aaa96', '#b87c5a',
-  '#7a9e5a', '#b09050', '#7085b8', '#a06060',
-  '#5a8fa0', '#908060', '#7aaa70', '#9a7060',
+  '#6aaed0', //   200° steel blue
+  '#cc6a9a', //   330° pink
+  '#6ab86a', //   120° green
+  '#cc7070', //     0° red
+  '#8c70cc', //   255° indigo
+  '#cc7a50', //    18° orange
+  '#4aaa9a', //   170° teal (ex-tag color)
+  '#cc8060', //    16° orange-red
+  '#a0cc6a', //    82° yellow-green
+  '#6a8ecc', //   218° cornflower
+  '#cc6ab0', //   308° magenta
+  '#7acc80', //   128° mint-green
+  '#cc6060', //   355° coral-red
+  '#6accc0', //   183° aqua
+  '#b870cc', //   290° purple
+  '#6ab0d0', //   203° sky (replaces duplicate red)
 ];
 
 const PALETTE_LIGHT: readonly string[] = [
-  '#2a6090', '#6a3a80', '#2a7a68', '#8a4a28',
-  '#3a6a28', '#7a5a18', '#3a4a88', '#7a2828',
-  '#1a5a70', '#605030', '#3a6a30', '#603828',
+  '#2e6898', //   200°
+  '#962860', //   330°
+  '#2a7828', //   120°
+  '#963232', //     0°
+  '#4a2e96', //   255°
+  '#963818', //    18°
+  '#1a7a6a', //   170° teal (ex-tag color)
+  '#964018', //    16°
+  '#587818', //    82°
+  '#2a4e98', //   218°
+  '#962878', //   308°
+  '#2a7840', //   128°
+  '#982020', //   355°
+  '#287878', //   183°
+  '#6a2496', //   290°
+  '#2a6890', //   203°
 ];
 
 function parseColor(raw: string): [number, number, number] | null {
@@ -85,7 +113,7 @@ function readCssVar(...vars: string[]): string {
 
 export function primaryBranchColor(): string {
   const raw = readCssVar('--vscode-button-background') || '#0078d4';
-  return isDarkTheme() ? lightenToThreshold(raw, 0.18) : darkenToThreshold(raw, 0.3);
+  return isDarkTheme() ? lightenToThreshold(raw, 0.28) : darkenToThreshold(raw, 0.22);
 }
 
 export function headColor(): string {

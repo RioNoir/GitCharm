@@ -49,7 +49,7 @@ export function ProjectGroup({
   const collapsed = isCollapsed(repoId);
   const branchClr = repoStatus.branch.detachedTag
     ? tagColor()
-    : branchColor(repoStatus.branch.name, true);
+    : branchColor(repoStatus.branch.name, false);
 
   const fileMap = new Map<string, FileStatus>();
   for (const f of repoStatus.unstagedFiles) fileMap.set(f.path, f);
@@ -179,7 +179,7 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
   const repoId = repoStatus.repoId;
   const branchClr = repoStatus.branch.detachedTag
     ? tagColor()
-    : branchColor(repoStatus.branch.name, true);
+    : branchColor(repoStatus.branch.name, false);
   const [hovered, setHovered] = useState(false);
 
   return (

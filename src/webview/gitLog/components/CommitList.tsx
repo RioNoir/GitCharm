@@ -1,9 +1,9 @@
 import React, { useRef, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { LaidOutCommit } from '../utils/graphLayout';
-import { CommitRowSvg } from './CommitGraph';
-import { ROW_HEIGHT, LANE_WIDTH } from '../utils/graphLayout';
+import type { LaidOutCommit, GraphLayout } from '../utils/graphLayout';
+import { GraphOverlay, CommitDot, laneX } from './CommitGraph';
+import { ROW_HEIGHT, LANE_WIDTH, getRowMaxX } from '../utils/graphLayout';
 import type { RepoMeta } from '../../shared/types';
 import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import type { RefGroup } from '../utils/refs';
@@ -13,11 +13,9 @@ import type { LogToHostMsg } from '../../../host/types/messages';
 import { AuthorAvatar } from './AuthorAvatar';
 import { formatDateTime } from '../../shared/dateUtils';
 
-// Suppress unused import warning — LANE_WIDTH is used by CommitRowSvg indirectly
-void LANE_WIDTH;
 
 interface Props {
-  commits: LaidOutCommit[];
+  layout: GraphLayout;
   selectedHash: string | null;
   repoColors: Record<string, string>;
   repos: RepoMeta[];
@@ -32,6 +30,7 @@ interface Props {
   scrollToHash?: string | null;
   onScrolledToHash?: () => void;
   aiEnabled?: boolean;
+  themeVersion?: number;
 }
 
 interface RepoBlock {
@@ -80,7 +79,15 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ commits, selectedHash, repoColors, repos, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
+export function CommitList({ layout, selectedHash, repoColors, repos, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
+  const { commits, segments, refColors } = layout;
+
+  // graphWidth is stable: it only grows, never shrinks, so adding new commits
+  // doesn't cause the existing rows to shift right.
+  const graphWidthRef = useRef(0);
+  const graphWidth = Math.max(graphWidthRef.current, layout.totalCols * LANE_WIDTH + 4);
+  graphWidthRef.current = graphWidth;
+
   const parentRef = useRef<HTMLDivElement>(null);
   // Start as true — skeleton is always shown until commits arrive (handles first load correctly)
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -119,17 +126,6 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [containerWidth, setContainerWidth] = useState<number>(9999);
   const containerRoRef = useRef<ResizeObserver | null>(null);
-
-  const containerRefCb = useCallback((el: HTMLDivElement | null) => {
-    if (containerRoRef.current) { containerRoRef.current.disconnect(); containerRoRef.current = null; }
-    if (!el) return;
-    setContainerWidth(el.clientWidth);
-    const ro = new ResizeObserver(entries => {
-      setContainerWidth(entries[0]?.contentRect.width ?? el.clientWidth);
-    });
-    ro.observe(el);
-    containerRoRef.current = ro;
-  }, []);
 
   const repoMeta = useMemo(() => {
     const map: Record<string, RepoMeta> = {};
@@ -180,21 +176,42 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   // variable sizes above, so no manual offset calculation is needed.
   const items = rawItems;
 
-  const handleScroll = useCallback(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    if (hasMore && !loading) {
-      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_HEIGHT * 5;
-      if (nearBottom) onLoadMore();
-    }
-  }, [hasMore, loading, onLoadMore]);
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
+  const onLoadMoreRef = useRef(onLoadMore);
+  onLoadMoreRef.current = onLoadMore;
 
-  useEffect(() => {
-    const el = parentRef.current;
+  const scrollRafRef = useRef<number | null>(null);
+
+  // Attach scroll listener once via callback ref — avoids dependency on parentRef timing
+  const scrollListenerRef = useRef<(() => void) | null>(null);
+  const containerRefCb = useCallback((el: HTMLDivElement | null) => {
+    if (containerRoRef.current) { containerRoRef.current.disconnect(); containerRoRef.current = null; }
+    // Remove old scroll listener
+    if (scrollListenerRef.current && (parentRef as React.MutableRefObject<HTMLDivElement | null>).current) {
+      (parentRef as React.MutableRefObject<HTMLDivElement | null>).current!.removeEventListener('scroll', scrollListenerRef.current);
+      scrollListenerRef.current = null;
+    }
+    (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
     if (!el) return;
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+    setContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver(entries => {
+      setContainerWidth(entries[0]?.contentRect.width ?? el.clientWidth);
+    });
+    ro.observe(el);
+    containerRoRef.current = ro;
+    // Attach scroll listener directly on the element
+    const listener = () => {
+      if (scrollRafRef.current !== null) return;
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_HEIGHT * 15;
+        if (hasMoreRef.current && nearBottom) onLoadMoreRef.current();
+      });
+    };
+    scrollListenerRef.current = listener;
+    el.addEventListener('scroll', listener, { passive: true });
+  }, []);
 
   useEffect(() => {
     if (!scrollToHash) return;
@@ -210,7 +227,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   }, [scrollToHash, commits, hasMore, loading]);
 
   const anyExpanded = expandedRepos.size > 0;
-  const labelColWidth = multiRepo ? (anyExpanded ? REPO_LABEL_WIDTH_EXPANDED : REPO_LABEL_WIDTH + 2) : 0;
+  const labelColWidth = multiRepo ? (anyExpanded ? REPO_LABEL_WIDTH_EXPANDED + 6 : REPO_LABEL_WIDTH + 8) : 0;
 
   // Map from commit index → virtualizer start position, for strip positioning.
   const itemStartByIndex = useMemo(() => {
@@ -242,7 +259,8 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
   }
 
   return (
-    <div ref={(el) => { (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el; containerRefCb(el); }} style={styles.container} onClick={() => { setContextMenu(null); setPopover(null); }}>
+    <div style={styles.outerWrapper}>
+    <div ref={containerRefCb} style={styles.container} onClick={() => { setContextMenu(null); setPopover(null); }}>
       <style>{BG_ANIM_STYLE}</style>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
@@ -267,6 +285,15 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           );
         })}
 
+        {/* Graph overlay SVG — single SVG covering the entire virtual height */}
+        <GraphOverlay
+          segments={segments}
+          visibleRows={items}
+          totalHeight={virtualizer.getTotalSize()}
+          graphWidth={graphWidth}
+          offsetX={labelColWidth}
+        />
+
         {/* Commit rows (virtual) */}
         {items.map((vrow) => {
           const commit = commits[vrow.index];
@@ -274,11 +301,16 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           const isSelected = commit.hash === selectedHash;
           const isCurrentHead = headHashByRepo[commit.repoId] === commit.hash;
           const isMultiSelected = multiSelectHashes.has(commit.hash);
+          const rowMaxX = Math.max(getRowMaxX(vrow.index, segments), laneX(commit.lane ?? 0));
+          const rawTextStart = rowMaxX + LANE_WIDTH / 2 + 10;
+          // Snap to the nearest LANE_WIDTH boundary so adjacent rows with near-identical
+          // graph widths align rather than showing a few-pixel stagger.
+          const textStart = Math.ceil(rawTextStart / LANE_WIDTH) * LANE_WIDTH + labelColWidth;
 
           return (
             <div
               key={commit.hash}
-              style={styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash)}
+              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash), paddingLeft: textStart }}
               onMouseEnter={(e) => {
                 setHoveredIndex(vrow.index);
                 if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
@@ -330,15 +362,11 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                 setContextMenu({ commit, x: e.clientX, y: e.clientY, multiSelected });
               }}
             >
-              {labelColWidth > 0 && <div style={{ width: labelColWidth, flexShrink: 0 }} />}
-
-              <CommitRowSvg
+              <CommitDot
                 commit={commit}
                 isSelected={isSelected}
-                prevCommit={vrow.index > 0 ? commits[vrow.index - 1] : null}
-                nextCommit={vrow.index < commits.length - 1 ? commits[vrow.index + 1] : null}
-                index={vrow.index}
-                totalCommits={commits.length}
+                graphWidth={graphWidth}
+                offsetX={labelColWidth}
               />
 
               {commit.refs.length > 0 && (() => {
@@ -357,8 +385,8 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                 const HEAD_SENTINEL = '__HEAD__' as const;
                 type DisplayItem = RefGroup | '__HEAD__';
                 const displayItems: DisplayItem[] = [
-                  ...allGroups.filter(g => !(headAndRemoteHead && g.isRemoteHead)),
                   ...(headBranchGroup ? [HEAD_SENTINEL] : []),
+                  ...allGroups.filter(g => !(headAndRemoteHead && g.isRemoteHead)),
                 ];
 
                 const refsSpace = containerWidth - labelColWidth - 340;
@@ -380,7 +408,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                       </span>
                     );
                   }
-                  const color = badgeColor(item);
+                  const color = badgeColor(item, commit.repoId, refColors);
                   return (
                     <span key={key} style={styles.refBadge(color, item.isTag, (item.isHead || item.isDetached) && !item.isRemoteHead, isSelected)} title={badgeTitle(item)}>
                       <RefBadgeIcon group={item} />
@@ -391,7 +419,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                   );
                 };
 
-                const overflowColor = (item: DisplayItem) => item === HEAD_SENTINEL ? hc : badgeColor(item as RefGroup);
+                const overflowColor = (item: DisplayItem) => item === HEAD_SENTINEL ? hc : badgeColor(item as RefGroup, commit.repoId, refColors);
 
                 return (
                   <div style={styles.refs}>
@@ -417,7 +445,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
                 );
               })()}
               <div style={styles.info}>
-                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}) }}>{commit.message}</span>
+                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message}</span>
               </div>
 
               {commit.incoming && (
@@ -436,12 +464,6 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
         })}
       </div>
 
-      {backgroundLoading && (
-        <div style={styles.bgLoadingBar}>
-          <div style={styles.bgLoadingBarFill} />
-        </div>
-      )}
-
       {popover && (
         <CommitPopover
           commit={popover.commit}
@@ -451,6 +473,7 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
           onClose={() => setPopover(null)}
           popoverHoveredRef={popoverHoveredRef}
           closePopoverTimerRef={closePopoverTimerRef}
+          refColors={refColors}
         />
       )}
 
@@ -480,17 +503,24 @@ export function CommitList({ commits, selectedHash, repoColors, repos, currentBr
               hashes: selected.map(c => c.hash),
               oldestHash,
               message: selected.map(c => c.message).join('\n\n'),
-              commits: selected.map(c => ({ hash: c.hash, shortHash: c.hash.slice(0, 7), message: c.message })),
+              commits: selected.map(c => ({ hash: c.hash, shortHash: c.hash.slice(0, 8), message: c.message })),
             } satisfies LogToHostMsg);
             setMultiSelectHashes(new Set());
           }}
         />
       )}
     </div>
+
+    {(backgroundLoading || (hasMore && loading)) && (
+      <div style={styles.bgLoadingBar}>
+        <div style={styles.bgLoadingBarFill} />
+      </div>
+    )}
+    </div>
   );
 }
 
-function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHoveredRef, closePopoverTimerRef }: {
+function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHoveredRef, closePopoverTimerRef, refColors }: {
   commit: LaidOutCommit;
   rowTop: number;
   listRect: DOMRect;
@@ -498,6 +528,7 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
   onClose: () => void;
   popoverHoveredRef: React.MutableRefObject<boolean>;
   closePopoverTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  refColors?: Map<string, string>;
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<{ files: number; added: number; removed: number } | null>(null);
@@ -615,7 +646,7 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
               </span>
             )}
             {displayGroups.map(group => {
-              const color = badgeColor(group);
+              const color = badgeColor(group, commit.repoId, refColors);
               return (
                 <span key={group.key} style={popoverStyles.badge(color, (group.isHead || group.isDetached) && !group.isRemoteHead)} title={badgeTitle(group)}>
                   <RefBadgeIcon group={group} />
@@ -1073,10 +1104,17 @@ function badgeTitle(group: RefGroup): string {
   return `Local: ${group.label}`;
 }
 
-function badgeColor(group: RefGroup): string {
+function badgeColor(group: RefGroup, repoId: string, refColors?: Map<string, string>): string {
   if (group.isRemoteHead || (group.isHead && group.isDetached)) return headColor();
   if (group.isTag) return tagColor();
-  // Never use headColor() for branch badges — that color is reserved for the explicit HEAD badge
+  if (refColors && repoId) {
+    // Remote badge: look up "origin/beta" key first, fall back to bare "beta"
+    // Local badge: look up "beta" directly
+    const remoteKey = group.remoteName ? `${repoId}:${group.remoteName}/${group.label}` : null;
+    const localKey  = `${repoId}:${group.label}`;
+    const c = (remoteKey ? refColors.get(remoteKey) : undefined) ?? refColors.get(localKey);
+    if (c) return c;
+  }
   return branchColor(group.label, false);
 }
 
@@ -1145,6 +1183,12 @@ const skeletonStyles = {
 };
 
 const styles = {
+  outerWrapper: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
   container: {
     flex: 1,
     overflowY: 'auto' as const,
@@ -1212,10 +1256,9 @@ const styles = {
       ? 'var(--vscode-list-inactiveSelectionBackground)'
       : hovered
       ? 'var(--vscode-list-hoverBackground)'
-      : 'transparent',
+      : 'var(--vscode-editor-background)',
     color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     fontSize: '12px',
-    zIndex: 2,
   }),
   refsMeasureRow: (labelColWidth: number): React.CSSProperties => ({
     position: 'absolute',
@@ -1355,14 +1398,10 @@ const styles = {
     marginLeft: '8px',
   },
   bgLoadingBar: {
-    position: 'sticky' as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2,
+    flexShrink: 0,
+    height: 3,
     background: 'var(--vscode-editor-background)',
     overflow: 'hidden' as const,
-    zIndex: 10,
   },
   bgLoadingBarFill: {
     height: '100%',

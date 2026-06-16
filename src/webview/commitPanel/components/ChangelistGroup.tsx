@@ -211,8 +211,8 @@ function RepoSubGroup({
   const someSelected = selectedCount > 0 && !allSelected;
 
   const branchClr = repoStatus
-    ? (repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true))
-    : branchColor('main', true);
+    ? (repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, false))
+    : branchColor('main', false);
   const [hovered, setHovered] = useState(false);
 
   const checkboxRef = useRef<HTMLInputElement>(null);

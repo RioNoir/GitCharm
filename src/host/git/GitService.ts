@@ -127,6 +127,14 @@ export class GitService {
     }
   }
 
+  private async getFullHash(): Promise<string | undefined> {
+    try {
+      return (await this.git.raw(['rev-parse', 'HEAD'])).trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async resolveHeadName(hint?: string): Promise<string> {
     if (hint) return hint;
     try {
@@ -175,9 +183,8 @@ export class GitService {
       const branchName = isDetached ? 'HEAD' : resolvedBranchName!;
       // When type === Tag, head.name is the exact tag checked out
       const detachedTag = isDetached ? await this.getDetachedTag(head?.type === RefType.Tag ? head.name : undefined) : undefined;
-      const detachedHash = (isDetached && !detachedTag)
-        ? (head?.commit ? head.commit.slice(0, 8) : await this.getShortHash())
-        : undefined;
+      const detachedFullHash = (isDetached && !detachedTag) ? (head?.commit ?? await this.getFullHash()) : undefined;
+      const detachedHash = detachedFullHash ? detachedFullHash.slice(0, 8) : undefined;
       const branchInfo: BranchInfo = {
         repoId: this.repoId,
         name: branchName,
@@ -190,6 +197,7 @@ export class GitService {
           : undefined,
         detachedTag,
         detachedHash,
+        detachedFullHash,
       };
 
       const stagedFiles: FileStatus[] = [];
@@ -340,9 +348,8 @@ export class GitService {
       // If VS Code API reports a branch (no longer detached), clear pending.
       if (!isDetached) this._pendingDetachedTag = undefined;
       const detachedTag = isDetached ? await this.getDetachedTag(vsTagName) : undefined;
-      const detachedHash = (isDetached && !detachedTag)
-        ? (head?.commit ? head.commit.slice(0, 8) : await this.getShortHash())
-        : undefined;
+      const detachedFullHash = (isDetached && !detachedTag) ? (head?.commit ?? await this.getFullHash()) : undefined;
+      const detachedHash = detachedFullHash ? detachedFullHash.slice(0, 8) : undefined;
       return {
         repoId: this.repoId,
         name: branchName,
@@ -355,13 +362,15 @@ export class GitService {
           : undefined,
         detachedTag,
         detachedHash,
+        detachedFullHash,
       };
     }
     const status = await this.git.status();
     const isDetached = status.detached;
     const branchName = await this.resolveHeadName(status.current ?? undefined);
     const detachedTag = isDetached ? await this.getDetachedTag() : undefined;
-    const detachedHash = (isDetached && !detachedTag) ? await this.getShortHash() : undefined;
+    const detachedFullHash = (isDetached && !detachedTag) ? await this.getFullHash() : undefined;
+    const detachedHash = detachedFullHash ? detachedFullHash.slice(0, 8) : undefined;
     return {
       repoId: this.repoId,
       name: branchName,
@@ -372,6 +381,7 @@ export class GitService {
       aheadBehind: status.tracking ? { ahead: status.ahead, behind: status.behind } : undefined,
       detachedTag,
       detachedHash,
+      detachedFullHash,
     };
   }
 
@@ -468,24 +478,30 @@ export class GitService {
       '--topo-order',
       `--max-count=${limit}`, `--skip=${skip}`,
       '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full',
-      '--date=iso-strict',
+      '--date=iso-strict', '--abbrev=8',
     ];
-    if (opts?.filterText) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');
+    const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
+    if (opts?.filterText && !isHashSearch) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');
     if (opts?.filterAuthor) args.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
     if (opts?.filterDateFrom) args.push(`--after=${opts.filterDateFrom}`);
     if (opts?.filterDateTo) args.push(`--before=${opts.filterDateTo}`);
-    if (opts?.filterBranch) {
+    if (isHashSearch) {
+      // Hash search: use --all and filter results by prefix match after fetching
+      args.push('--exclude=refs/stash', '--all');
+    } else if (opts?.filterBranch) {
       args.push(opts.filterBranch);
     } else {
       args.push('--exclude=refs/stash', '--all');
     }
     const raw = await this.git.raw(args);
+    const hashPrefix = isHashSearch ? opts!.filterText!.trim().toLowerCase() : null;
     const commits: CommitNode[] = [];
     for (const line of raw.trim().split('\n')) {
       if (!line.trim()) continue;
       const parts = line.split('\x00');
       if (parts.length < 9) continue;
       const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message] = parts;
+      if (hashPrefix && !hash.toLowerCase().startsWith(hashPrefix)) continue;
       commits.push({ hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] });
     }
 
@@ -585,7 +601,7 @@ export class GitService {
       const range = `${parents[0]}..${parents[i]}`;
       const raw = await this.git.raw([
         'log', range,
-        '--format=%H%x00%h%x00%an%x00%ai%x00%s',
+        '--format=%H%x00%h%x00%an%x00%ai%x00%s', '--abbrev=8',
       ]).catch(() => '');
       for (const line of raw.trim().split('\n')) {
         if (!line.trim()) continue;
@@ -1325,11 +1341,11 @@ export class GitService {
 
   async getCommitMeta(hash: string): Promise<{ hash: string; shortHash: string; message: string; authorName: string; authorEmail: string; authorDate: string; committerDate: string; parents: string[] }> {
     const GS = '\x1D';
-    const raw = await this.git.raw(['log', '-1', `--format=%H${GS}%h${GS}%s${GS}%aN${GS}%aE${GS}%aI${GS}%cI${GS}%P`, hash]);
+    const raw = await this.git.raw(['log', '-1', `--format=%H${GS}%h${GS}%s${GS}%aN${GS}%aE${GS}%aI${GS}%cI${GS}%P`, '--abbrev=8', hash]);
     const parts = raw.trim().split(GS);
     return {
       hash: parts[0] ?? hash,
-      shortHash: parts[1] ?? hash.slice(0, 7),
+      shortHash: parts[1] ?? hash.slice(0, 8),
       message: parts[2] ?? '',
       authorName: parts[3] ?? '',
       authorEmail: parts[4] ?? '',
@@ -1617,7 +1633,7 @@ export class GitService {
     };
 
     const logArgs = (range: string[]): string[] =>
-      ['log', ...range, `--format=${FORMAT}`, '--shortstat'];
+      ['log', ...range, `--format=${FORMAT}`, '--shortstat', '--abbrev=8'];
 
     try {
       // Fast path: upstream is configured

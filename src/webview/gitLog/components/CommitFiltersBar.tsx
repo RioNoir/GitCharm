@@ -40,7 +40,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         placeholder="Search commits…"
         icon="search"
         onChange={v => onFilterChange('text', v)}
-        width={170}
         debounceMs={600}
       />
 
@@ -50,7 +49,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         placeholder="Author…"
         icon="person"
         onChange={v => onFilterChange('author', v)}
-        width={140}
         debounceMs={600}
       />
 
@@ -70,7 +68,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         branches={uniqueBranchNames}
         tags={uniqueTagNames}
         onChange={v => onFilterChange('branch', v)}
-        width={200}
         isLight={isLight}
       />
 
@@ -78,6 +75,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
       <DateRangePicker
         from={filters.dateFrom}
         to={filters.dateTo}
+        isLight={isLight}
         onFromChange={v => onFilterChange('dateFrom', v)}
         onToChange={v => onFilterChange('dateTo', v)}
       />
@@ -89,7 +87,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
       )}
 
       {/* More menu — pushed to the right */}
-      <div style={{ flex: 1 }} />
       <MoreMenu onFetchAll={onFetchAll} />
     </div>
   );
@@ -110,7 +107,7 @@ function MoreMenu({ onFetchAll }: { onFetchAll: () => void }) {
   }, [open]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
+    <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 'auto' }}>
       <button
         style={styles.moreBtn}
         onClick={() => setOpen(o => !o)}
@@ -135,12 +132,13 @@ function MoreMenu({ onFetchAll }: { onFetchAll: () => void }) {
 
 /* ─── DebouncedInput ──────────────────────────────────────────────────────── */
 
-function DebouncedInput({ value, placeholder, icon, onChange, width, debounceMs }: {
+function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth, debounceMs }: {
   value: string;
   placeholder: string;
   icon: string;
   onChange: (v: string) => void;
-  width: number;
+  width?: number;
+  maxWidth?: number;
   debounceMs: number;
 }) {
   // Local display value so typing feels instant; fires onChange after debounce
@@ -162,7 +160,7 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, debounceMs 
   }
 
   return (
-    <div style={{ ...styles.fieldWrap, width }}>
+    <div style={{ ...styles.fieldWrap, ...(width ? { width } : { flex: 1, minWidth: 60 }) }}>
       <Codicon name={icon} style={styles.fieldIcon} />
       <input
         style={styles.fieldInput}
@@ -188,7 +186,7 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
   branches: string[];
   tags: string[];
   onChange: (v: string) => void;
-  width: number;
+  width?: number;
   isLight: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -214,9 +212,9 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
   }, [open]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative', ...(width ? { width } : { flex: 1, minWidth: 60 }) }}>
       <button
-        style={{ ...styles.pickerBtn(!!value), width }}
+        style={{ ...styles.pickerBtn(!!value), width: '100%' }}
         onClick={() => setOpen(o => !o)}
         title={value || 'Filter by branch or tag'}
       >
@@ -307,9 +305,9 @@ function RepoPicker({ value, repos, onChange, isLight }: {
   const active = repos.find(r => r.id === value) ?? null;
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 60 }}>
       <button
-        style={{ ...styles.pickerBtn(!!value), width: 150 }}
+        style={{ ...styles.pickerBtn(!!value), width: '100%' }}
         onClick={() => setOpen(o => !o)}
         title={active?.name ?? 'Filter by repository'}
       >
@@ -353,51 +351,261 @@ function RepoPicker({ value, repos, onChange, isLight }: {
 
 /* ─── DateRangePicker ─────────────────────────────────────────────────────── */
 
-function DateRangePicker({ from, to, onFromChange, onToChange }: {
-  from: string;
-  to: string;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+function toYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function parseYMD(s: string): Date | null {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + 'T00:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function CalendarMonth({ year, month, from, to, hovered, onDay, onHover }: {
+  year: number; month: number;
+  from: Date | null; to: Date | null; hovered: Date | null;
+  onDay: (d: Date) => void;
+  onHover: (d: Date | null) => void;
+}) {
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+
+  const rangeEnd = hovered ?? to;
+
+  return (
+    <div style={calStyles.month}>
+      <div style={calStyles.monthTitle}>{MONTHS[month]} {year}</div>
+      <div style={calStyles.grid}>
+        {DAYS.map(d => <div key={d} style={calStyles.dayHeader}>{d}</div>)}
+        {cells.map((date, i) => {
+          if (!date) return <div key={`e${i}`} />;
+          const ymd = toYMD(date);
+          const isFrom = from ? toYMD(from) === ymd : false;
+          const isTo = to ? toYMD(to) === ymd : false;
+          const isHovered = hovered ? toYMD(hovered) === ymd : false;
+          const lo = from && rangeEnd ? (from <= rangeEnd ? from : rangeEnd) : null;
+          const hi = from && rangeEnd ? (from <= rangeEnd ? rangeEnd : from) : null;
+          const inRange = lo && hi ? date > lo && date < hi : false;
+          const isEdge = isFrom || isTo || isHovered;
+          return (
+            <div
+              key={ymd}
+              style={calStyles.day(isEdge, inRange, isFrom || (isHovered && !from))}
+              onClick={() => onDay(date)}
+              onMouseEnter={() => onHover(date)}
+              onMouseLeave={() => onHover(null)}
+            >
+              {date.getDate()}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
+  from: string; to: string;
+  isLight: boolean;
   onFromChange: (v: string) => void;
   onToChange: (v: string) => void;
 }) {
-  function normalise(raw: string, commit: (v: string) => void) {
-    const v = raw.trim();
-    if (!v) { commit(''); return; }
-    const d = new Date(v);
-    if (!isNaN(d.getTime())) commit(d.toISOString().slice(0, 10));
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState<Date | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const today = new Date();
+  const fromDate = parseYMD(from);
+  const toDate = parseYMD(to);
+
+  // Show left calendar around "from" date, right around "to" or next month
+  const initLeft = fromDate ?? new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const initRight = toDate ?? new Date(today.getFullYear(), today.getMonth(), 1);
+  const [leftYM, setLeftYM] = useState({ y: initLeft.getFullYear(), m: initLeft.getMonth() });
+  const [rightYM, setRightYM] = useState({ y: initRight.getFullYear(), m: initRight.getMonth() });
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  function handleDay(date: Date) {
+    const ymd = toYMD(date);
+    if (!from || (from && to)) {
+      // Start new selection
+      onFromChange(ymd);
+      onToChange('');
+    } else {
+      // Complete selection — ensure from <= to
+      const f = parseYMD(from)!;
+      if (date < f) { onFromChange(ymd); onToChange(from); }
+      else { onToChange(ymd); }
+      setOpen(false);
+    }
   }
 
+  function navLeft(dir: -1 | 1) {
+    setLeftYM(p => {
+      let m = p.m + dir, y = p.y;
+      if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
+      return { y, m };
+    });
+  }
+  function navRight(dir: -1 | 1) {
+    setRightYM(p => {
+      let m = p.m + dir, y = p.y;
+      if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
+      return { y, m };
+    });
+  }
+
+  const hasRange = !!(from || to);
+  const label = from && to ? `${from}  →  ${to}` : from ? `${from}  →  …` : null;
+
   return (
-    <div style={styles.dateRange}>
-      <Codicon name="calendar" style={styles.fieldIcon} />
-      <input
-        style={styles.dateInput}
-        type="text"
-        placeholder="From YYYY-MM-DD"
-        value={from}
-        onChange={e => onFromChange(e.target.value)}
-        onBlur={e => normalise(e.target.value, onFromChange)}
-        onKeyDown={e => { if (e.key === 'Escape' || (e.key === 'Enter' && !e.currentTarget.value.trim())) onFromChange(''); }}
-        maxLength={10}
-      />
-      <span style={styles.dateSep}>→</span>
-      <input
-        style={styles.dateInput}
-        type="text"
-        placeholder="To YYYY-MM-DD"
-        value={to}
-        onChange={e => onToChange(e.target.value)}
-        onBlur={e => normalise(e.target.value, onToChange)}
-        onKeyDown={e => { if (e.key === 'Escape' || (e.key === 'Enter' && !e.currentTarget.value.trim())) onToChange(''); }}
-        maxLength={10}
-      />
-      {(from || to) && (
-        <button style={styles.fieldClear} onClick={() => { onFromChange(''); onToChange(''); }} tabIndex={-1}>
-          <Codicon name="close" style={{ fontSize: '10px' }} />
-        </button>
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 60 }}>
+      <button style={{ ...styles.pickerBtn(hasRange), width: '100%' }} onClick={() => setOpen(o => !o)}>
+        <Codicon name="calendar" style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
+        {label
+          ? <span style={styles.pickerLabelActive}>{label}</span>
+          : <span style={{ ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>From → To</span>}
+        {hasRange && (
+          <span
+            style={{ ...styles.fieldClear, marginLeft: 2 }}
+            onClick={e => { e.stopPropagation(); onFromChange(''); onToChange(''); }}
+          >
+            <Codicon name="close" style={{ fontSize: '10px' }} />
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div style={calStyles.popup}>
+          {/* Left calendar */}
+          <div style={calStyles.calCol}>
+            <div style={calStyles.navRow}>
+              <button style={calStyles.navBtn} onClick={() => navLeft(-1)}><Codicon name="chevron-left" style={{ fontSize: '12px' }} /></button>
+              <span style={calStyles.navLabel}>{MONTHS[leftYM.m]} {leftYM.y}</span>
+              <button style={calStyles.navBtn} onClick={() => navLeft(1)}><Codicon name="chevron-right" style={{ fontSize: '12px' }} /></button>
+            </div>
+            <CalendarMonth year={leftYM.y} month={leftYM.m} from={fromDate} to={toDate} hovered={hovered} onDay={handleDay} onHover={setHovered} />
+          </div>
+
+          <div style={calStyles.divider} />
+
+          {/* Right calendar */}
+          <div style={calStyles.calCol}>
+            <div style={calStyles.navRow}>
+              <button style={calStyles.navBtn} onClick={() => navRight(-1)}><Codicon name="chevron-left" style={{ fontSize: '12px' }} /></button>
+              <span style={calStyles.navLabel}>{MONTHS[rightYM.m]} {rightYM.y}</span>
+              <button style={calStyles.navBtn} onClick={() => navRight(1)}><Codicon name="chevron-right" style={{ fontSize: '12px' }} /></button>
+            </div>
+            <CalendarMonth year={rightYM.y} month={rightYM.m} from={fromDate} to={toDate} hovered={hovered} onDay={handleDay} onHover={setHovered} />
+          </div>
+        </div>
       )}
     </div>
   );
 }
+
+const calStyles = {
+  popup: {
+    position: 'absolute' as const,
+    top: 'calc(100% + 4px)',
+    right: 0,
+    zIndex: 300,
+    background: 'var(--vscode-dropdown-background, var(--vscode-editor-background))',
+    border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border))',
+    borderRadius: '6px',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+    display: 'flex',
+    flexDirection: 'row' as const,
+    gap: '0',
+    padding: '10px',
+  },
+  calCol: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
+    minWidth: '168px',
+  },
+  divider: {
+    width: '1px',
+    background: 'var(--vscode-panel-border)',
+    margin: '0 10px',
+    alignSelf: 'stretch',
+  },
+  navRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '2px',
+  },
+  navBtn: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.6,
+    padding: '2px 4px',
+    display: 'flex',
+    alignItems: 'center',
+    borderRadius: '3px',
+  } as React.CSSProperties,
+  navLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'var(--vscode-foreground)',
+  } as React.CSSProperties,
+  month: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+  },
+  monthTitle: { display: 'none' },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '1px',
+  },
+  dayHeader: {
+    fontSize: '10px',
+    textAlign: 'center' as const,
+    opacity: 0.4,
+    color: 'var(--vscode-foreground)',
+    padding: '2px 0',
+    fontWeight: 600,
+  },
+  day: (isEdge: boolean, inRange: boolean, isStart: boolean): React.CSSProperties => ({
+    fontSize: '11px',
+    textAlign: 'center',
+    padding: '3px 1px',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    userSelect: 'none',
+    background: isEdge
+      ? 'var(--vscode-list-activeSelectionBackground)'
+      : inRange
+      ? 'var(--vscode-list-inactiveSelectionBackground)'
+      : 'transparent',
+    color: isEdge
+      ? 'var(--vscode-list-activeSelectionForeground)'
+      : 'var(--vscode-foreground)',
+    fontWeight: isEdge ? 700 : 'normal',
+    opacity: 1,
+  }),
+};
 
 /* ─── Styles ──────────────────────────────────────────────────────────────── */
 
@@ -495,8 +703,8 @@ const styles = {
     border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border))',
     borderRadius: '4px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-    minWidth: '200px',
-    maxWidth: '300px',
+    width: '100%',
+    boxSizing: 'border-box' as const,
     overflow: 'hidden',
   },
   dropdownSearch: {
@@ -551,32 +759,6 @@ const styles = {
     letterSpacing: '0.06em',
     opacity: 0.45,
     color: 'var(--vscode-foreground)',
-  },
-  dateRange: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    background: 'var(--vscode-input-background)',
-    border: '1px solid var(--vscode-input-border)',
-    borderRadius: '4px',
-    padding: '0 6px',
-    height: '26px',
-    boxSizing: 'border-box' as const,
-  },
-  dateInput: {
-    background: 'transparent',
-    border: 'none',
-    outline: 'none',
-    color: 'var(--vscode-input-foreground)',
-    fontSize: '12px',
-    width: '108px',
-    padding: 0,
-  } as React.CSSProperties,
-  dateSep: {
-    fontSize: '11px',
-    opacity: 0.35,
-    userSelect: 'none' as const,
-    padding: '0 2px',
   },
   repoDot: {
     width: '8px',

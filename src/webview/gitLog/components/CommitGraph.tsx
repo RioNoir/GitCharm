@@ -1,116 +1,124 @@
 import React from 'react';
-import type { LaidOutCommit } from '../utils/graphLayout';
-import { LANE_WIDTH, ROW_HEIGHT, DOT_RADIUS } from '../utils/graphLayout';
+import type { LaidOutCommit, Segment } from '../utils/graphLayout';
+import { LANE_WIDTH, ROW_HEIGHT, DOT_RADIUS, laneX } from '../utils/graphLayout';
 import { anonymousLaneColor } from '../utils/refs';
 
-function laneX(lane: number): number {
-  return lane * LANE_WIDTH + LANE_WIDTH / 2;
-}
+export { laneX };
 
 const STROKE = 1.5;
-const H = ROW_HEIGHT;
-const cy = H / 2;
+const D = ROW_HEIGHT * 0.8;
 
-interface RowSvgProps {
-  commit: LaidOutCommit;
-  isSelected: boolean;
-  prevCommit: LaidOutCommit | null;
-  nextCommit: LaidOutCommit | null;
-  index: number;
-  totalCommits: number;
+function colToX(col: number): number {
+  return col * LANE_WIDTH + LANE_WIDTH / 2;
 }
 
-export const CommitRowSvg = React.memo(function CommitRowSvg({
-  commit, isSelected,
-}: RowSvgProps) {
-  const lines = commit.graphLines ?? [];
-  const dotLane = commit.lane ?? 0;
-  const dotColor = commit.dotColor ?? anonymousLaneColor(dotLane);
+// ─── Overlay SVG ─────────────────────────────────────────────────────────────
 
-  const activeLanes = lines.reduce(
-    (m, l) => Math.max(m, l.fromLane + 1, l.toLane + 1),
-    dotLane + 1
-  );
-  const svgWidth = activeLanes * LANE_WIDTH + 4;
+interface GraphOverlayProps {
+  segments: Segment[];
+  visibleRows: Array<{ index: number; start: number }>;
+  totalHeight: number;
+  graphWidth: number;
+  offsetX?: number;
+}
 
-  const dotX = laneX(dotLane);
+export const GraphOverlay = React.memo(function GraphOverlay({
+  segments, visibleRows, totalHeight, graphWidth, offsetX = 0,
+}: GraphOverlayProps) {
+  if (visibleRows.length === 0) return null;
 
-  const segments: React.ReactNode[] = [];
+  const firstVisible = visibleRows[0].index;
+  const lastVisible = visibleRows[visibleRows.length - 1].index;
 
-  for (let idx = 0; idx < lines.length; idx++) {
-    const line = lines[idx];
-    const color = line.color ?? anonymousLaneColor(line.fromLane);
+  const rowYMap = new Map<number, number>();
+  for (const r of visibleRows) rowYMap.set(r.index, r.start + ROW_HEIGHT / 2);
+  function getY(row: number): number {
+    return rowYMap.get(row) ?? row * ROW_HEIGHT + ROW_HEIGHT / 2;
+  }
 
-    if (line.type === 'pass-through') {
-      const x = laneX(line.fromLane);
-      segments.push(
-        <line key={idx} x1={x} y1={0} x2={x} y2={H}
-          stroke={color} strokeWidth={STROKE} />
-      );
+  const branchPaths = new Map<number, { color: string; path: string; lastY: number; lastX: number }>();
 
-    } else if (line.type === 'straight') {
-      const fromX = laneX(line.fromLane);
-      const toX = laneX(line.toLane);
+  for (const s of segments) {
+    if (s.p2y < firstVisible || s.p1y > lastVisible) continue;
+    const x1 = colToX(s.p1x);
+    const x2 = colToX(s.p2x);
+    let entry = branchPaths.get(s.branchId);
 
-      if (!line.isStart) {
-        segments.push(
-          <line key={`${idx}u`} x1={fromX} y1={0} x2={fromX} y2={cy}
-            stroke={color} strokeWidth={STROKE} />
-        );
+    if (x1 === x2) {
+      const y1 = getY(s.p1y);
+      const y2 = getY(s.p2y);
+      if (!entry) {
+        entry = { color: s.color, path: `M${x1.toFixed(0)},${y1.toFixed(1)}`, lastY: y1, lastX: x1 };
+        branchPaths.set(s.branchId, entry);
+      } else if (entry.lastX !== x1 || entry.lastY !== y1) {
+        entry.path += `M${x1.toFixed(0)},${y1.toFixed(1)}`;
       }
-      if (commit.parents.length > 0) {
-        if (fromX === toX) {
-          segments.push(
-            <line key={`${idx}d`} x1={fromX} y1={cy} x2={toX} y2={H}
-              stroke={color} strokeWidth={STROKE} />
-          );
-        } else {
-          segments.push(
-            <path key={`${idx}d`} d={bezier(fromX, cy, toX, H)}
-              stroke={color} strokeWidth={STROKE} fill="none" />
-          );
+      entry.path += `L${x2.toFixed(0)},${y2.toFixed(1)}`;
+      entry.lastX = x2; entry.lastY = y2;
+    } else {
+      for (let row = s.p1y; row < s.p2y; row++) {
+        if (row + 1 < firstVisible || row > lastVisible) continue;
+        const y1 = getY(row);
+        const y2 = getY(row + 1);
+        if (!entry) {
+          entry = { color: s.color, path: `M${x1.toFixed(0)},${y1.toFixed(1)}`, lastY: y1, lastX: x1 };
+          branchPaths.set(s.branchId, entry);
+        } else if (entry.lastX !== x1 || entry.lastY !== y1) {
+          entry.path += `M${x1.toFixed(0)},${y1.toFixed(1)}`;
         }
-      }
-
-    } else if (line.type === 'merge-in') {
-      const outerX = laneX(line.toLane);
-
-      if (dotX === outerX) {
-        segments.push(
-          <line key={`${idx}d`} x1={dotX} y1={cy} x2={outerX} y2={H}
-            stroke={color} strokeWidth={STROKE} />
-        );
-      } else {
-        segments.push(
-          <path key={`${idx}d`} d={bezier(dotX, cy, outerX, H)}
-            stroke={color} strokeWidth={STROKE} fill="none" />
-        );
+        entry.path += `C${x1.toFixed(0)},${(y1 + D).toFixed(1)} ${x2.toFixed(0)},${(y2 - D).toFixed(1)} ${x2.toFixed(0)},${y2.toFixed(1)}`;
+        entry.lastX = x2; entry.lastY = y2;
       }
     }
   }
 
-  const r = isSelected ? DOT_RADIUS + 1 : DOT_RADIUS;
-  const isMerge = commit.parents.length > 1;
-  // Merge commits get an outer ring; the halo must be wide enough to clear it.
-  const haloR = isMerge ? r + 4.5 : r + 2.5;
+  const pathElements: React.ReactNode[] = [];
+  let i = 0;
+  for (const [, { color, path }] of branchPaths) {
+    pathElements.push(<path key={i++} d={path} stroke={color} strokeWidth={STROKE} fill="none" />);
+  }
 
   return (
-    <svg width={svgWidth} height={H}
-      style={{ display: 'block', flexShrink: 0, overflow: 'visible' }}>
-      {segments}
-      {/* Halo — clears lines behind the dot and ring */}
-      <circle cx={dotX} cy={cy} r={haloR}
-        fill="var(--vscode-editor-background)" />
-      {/* Outer ring for merge commits */}
+    <svg width={graphWidth} height={totalHeight} style={{
+      position: 'absolute', top: 0, left: offsetX,
+      pointerEvents: 'none', overflow: 'visible', zIndex: 2,
+    }}>
+      {pathElements}
+    </svg>
+  );
+});
+
+// ─── Per-row dot + text mask ──────────────────────────────────────────────────
+
+interface CommitDotProps {
+  commit: LaidOutCommit;
+  isSelected: boolean;
+  graphWidth: number;
+  offsetX?: number;
+}
+
+export const CommitDot = React.memo(function CommitDot({ commit, isSelected, graphWidth, offsetX = 0 }: CommitDotProps) {
+  const dotCol = commit.lane ?? 0;
+  const dotColor = commit.dotColor ?? anonymousLaneColor(dotCol);
+  const dotX = laneX(dotCol);
+  const cy = ROW_HEIGHT / 2;
+  const r = isSelected ? DOT_RADIUS + 1 : DOT_RADIUS;
+  const isMerge = commit.parents.length > 1;
+  const haloR = isMerge ? r + 4.5 : r + 2.5;
+  return (
+    <svg
+      width={graphWidth}
+      height={ROW_HEIGHT}
+      style={{ position: 'absolute', left: offsetX, top: 0, overflow: 'hidden', zIndex: 3, pointerEvents: 'none' }}
+    >
+      <circle cx={dotX} cy={cy} r={haloR} fill="var(--vscode-editor-background)" />
       {isMerge && (
         <circle cx={dotX} cy={cy} r={r + 3}
           fill="none"
           stroke={isSelected ? '#ffffff' : dotColor}
-          strokeWidth={1.5}
-          strokeOpacity={0.6}
+          strokeWidth={1.5} strokeOpacity={0.6}
         />
       )}
-      {/* Commit dot */}
       <circle cx={dotX} cy={cy} r={r}
         fill={isSelected ? '#ffffff' : dotColor}
         stroke={isSelected ? dotColor : 'var(--vscode-editor-background)'}
@@ -119,8 +127,3 @@ export const CommitRowSvg = React.memo(function CommitRowSvg({
     </svg>
   );
 });
-
-function bezier(x1: number, y1: number, x2: number, y2: number): string {
-  const midY = (y1 + y2) / 2;
-  return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-}

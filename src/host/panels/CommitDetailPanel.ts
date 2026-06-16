@@ -987,21 +987,37 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
       const refsRow = document.getElementById('refsRow');
       if (refsRow) {
         const BRANCHES = __d.branches;
-        const PAL_D = ['#6a9fc2','#a07cb0','#5aaa96','#b87c5a','#7a9e5a','#b09050','#7085b8','#a06060','#5a8fa0','#908060','#7aaa70','#9a7060'];
-        const PAL_L = ['#2a6090','#6a3a80','#2a7a68','#8a4a28','#3a6a28','#7a5a18','#3a4a88','#7a2828','#1a5a70','#605030','#3a6a30','#603828'];
-        const PRIM  = ['main','master','develop','dev','trunk','release'];
+        const PAL_D = ['#6aaed0','#cc6a9a','#6ab86a','#cc7070','#8c70cc','#cc7a50','#4aaa9a','#cc8060','#a0cc6a','#6a8ecc','#cc6ab0','#7acc80','#cc6060','#6accc0','#b870cc','#6ab0d0'];
+        const PAL_L = ['#2e6898','#962860','#2a7828','#963232','#4a2e96','#963818','#1a7a6a','#964018','#587818','#2a4e98','#962878','#2a7840','#982020','#287878','#6a2496','#2a6890'];
+        const PRIM  = ['main','master','release','production'];
         const dark  = () => document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
         function normB(n) { const i=n.indexOf('/'); return i>=0?n.slice(i+1):n; }
         function hashB(n) { let h=0; const s=normB(n); for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h%PAL_D.length; }
+        function chanLum(c) { var v=c/255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); }
+        function lumRgb(r,g,b) { return 0.2126*chanLum(r)+0.7152*chanLum(g)+0.0722*chanLum(b); }
+        function toHex(r,g,b) { return '#'+[r,g,b].map(function(v){return v.toString(16).padStart(2,'0');}).join(''); }
+        function lightenC(raw,t) {
+          var m=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(raw.trim());
+          if(!m) return raw;
+          var r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16),l=lumRgb(r,g,b),nx;
+          while(l<t){r=Math.min(255,Math.round(r*1.15+8));g=Math.min(255,Math.round(g*1.15+8));b=Math.min(255,Math.round(b*1.15+8));nx=lumRgb(r,g,b);if(nx===l)break;l=nx;}
+          return toHex(r,g,b);
+        }
+        function darkenC(raw,t) {
+          var m=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(raw.trim());
+          if(!m) return raw;
+          var r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16),l=lumRgb(r,g,b);
+          while(l>t){r=Math.round(r*0.82);g=Math.round(g*0.82);b=Math.round(b*0.82);l=lumRgb(r,g,b);}
+          return toHex(r,g,b);
+        }
         function bColor(n) {
           if (PRIM.includes(normB(n).toLowerCase())) {
             const raw = getComputedStyle(document.body).getPropertyValue('--vscode-button-background').trim() || '#0078d4';
-            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(raw);
-            return m ? raw : '#0078d4';
+            return dark() ? lightenC(raw,0.28) : darkenC(raw,0.22);
           }
           return (dark() ? PAL_D : PAL_L)[hashB(n)];
         }
-        const tColor = () => dark() ? '#4aaa9a' : '#1a7a6a';
+        const tColor = () => dark() ? '#909090' : '#707070';
         for (const b of BRANCHES) {
           const color = b.type === 'tag' ? tColor() : bColor(b.name);
           const icon  = b.type === 'tag' ? 'tag' : b.type === 'remote' ? 'cloud' : 'git-branch';

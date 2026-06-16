@@ -1,5 +1,5 @@
-import type { CommitNode, GraphLine } from '../../shared/types';
-import { branchColor, anonymousLaneColor } from './refs';
+import type { CommitNode } from '../../shared/types';
+import { anonymousLaneColor } from './refs';
 import { headColor, primaryBranchColor, currentPalette, branchPaletteIndex } from '../../shared/branchColors';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 
@@ -7,304 +7,396 @@ export const LANE_WIDTH = 20;
 export const ROW_HEIGHT = 28;
 export const DOT_RADIUS = 4;
 
+export function laneX(col: number): number {
+  return col * LANE_WIDTH + LANE_WIDTH / 2;
+}
+
+// ─── Public types ─────────────────────────────────────────────────────────────
+
 export interface LaidOutCommit extends CommitNode {
   lane: number;
   totalLanes: number;
-  graphLines: GraphLine[];
   dotColor: string;
 }
 
-// Extract the branch name that "owns" a commit from its refs array.
-// Priority: HEAD → local branch → remote branch → tag.
-// Returns null for commits with no refs (middle-of-branch commits).
+/**
+ * A branch segment stored as grid coordinates (not pre-expanded per-row).
+ * p1 = source (newer commit, lower row index), p2 = target (older commit, higher row index).
+ * lockedFirst: true = diagonal bend at p1 row (lower half), false = bend at p2 row (upper half).
+ */
+export interface Segment {
+  p1x: number; p1y: number;
+  p2x: number; p2y: number;
+  color: string;
+  lockedFirst: boolean;
+  branchId: number;
+}
+
+export interface GraphLayout {
+  commits: LaidOutCommit[];
+  segments: Segment[];
+  totalCols: number;
+  /** Maps normalized branch/tag ref name → graph color, for badge color consistency. */
+  refColors: Map<string, string>;
+}
+
+/**
+ * Given all segments, return the RowLine descriptors for a specific row.
+ * Called per visible row by the virtualizer — O(segments) per call, but
+ * segments is bounded by O(commits) not O(commits²).
+ */
+export interface RowLine {
+  /** pixel x entering this row from above */
+  x1: number;
+  /** pixel x leaving this row downward */
+  x2: number;
+  color: string;
+  lockedFirst: boolean;
+}
+
+/**
+ * Returns the maximum pixel X occupied by any segment passing through this row.
+ * Used to determine where text can safely start without overlapping graph lines.
+ */
+export function getRowMaxX(row: number, segments: Segment[]): number {
+  let max = 0;
+  for (const s of segments) {
+    if (row < s.p1y || row > s.p2y) continue;
+    const px1 = laneX(s.p1x);
+    const px2 = laneX(s.p2x);
+    if (px1 > max) max = px1;
+    if (px2 > max) max = px2;
+  }
+  return max;
+}
+
+export function getRowLines(row: number, segments: Segment[]): RowLine[] {
+  const result: RowLine[] = [];
+  for (const s of segments) {
+    if (row < s.p1y || row > s.p2y) continue;
+
+    const px1 = laneX(s.p1x);
+    const px2 = laneX(s.p2x);
+
+    let x1: number, x2: number;
+
+    if (s.p1x === s.p2x) {
+      // Straight vertical
+      x1 = px1; x2 = px1;
+    } else if (row === s.p1y) {
+      // Source row
+      x1 = px1;
+      x2 = s.lockedFirst ? px2 : px1; // bend here (lower half) or not yet
+    } else if (row === s.p2y) {
+      // Target row
+      if (s.lockedFirst) {
+        x1 = px2; x2 = px2; // already transitioned, straight arrive
+      } else {
+        x1 = px1; x2 = px2; // bend here (upper half)
+      }
+    } else {
+      // Intermediate row: straight at whichever x the line settled into
+      const x = s.lockedFirst ? px2 : px1;
+      x1 = x; x2 = x;
+    }
+
+    result.push({ x1, x2, color: s.color, lockedFirst: s.lockedFirst });
+  }
+  return result;
+}
+
+// ─── Internal GVertex / GBranch ──────────────────────────────────────────────
+
+const NULL_ID = -1;
+
+class GVertex {
+  public readonly id: number;
+  private x: number = 0;
+  private parents: GVertex[] = [];
+  private nextParentIdx: number = 0;
+  private onBranch: GBranch | null = null;
+  public nextX: number = 0;
+  private connections: Array<{ connectsTo: GVertex | null; onBranch: GBranch } | undefined> = [];
+
+  constructor(id: number) { this.id = id; }
+
+  addParent(v: GVertex) { this.parents.push(v); }
+  getNextParent(): GVertex | null {
+    return this.nextParentIdx < this.parents.length ? this.parents[this.nextParentIdx] : null;
+  }
+  registerParentProcessed() { this.nextParentIdx++; }
+  addToBranch(branch: GBranch, x: number) {
+    if (this.onBranch === null) { this.onBranch = branch; this.x = x; }
+  }
+  isNotOnBranch() { return this.onBranch === null; }
+  getBranch() { return this.onBranch; }
+  isMerge() { return this.parents.length > 1; }
+  getPoint() { return { x: this.x, y: this.id }; }
+  getNextPoint() { return { x: this.nextX, y: this.id }; }
+  getPointConnectingTo(targetVertex: GVertex | null, branch: GBranch): { x: number; y: number } | null {
+    for (let i = 0; i < this.connections.length; i++) {
+      const c = this.connections[i];
+      if (c && c.connectsTo === targetVertex && c.onBranch === branch) return { x: i, y: this.id };
+    }
+    return null;
+  }
+  registerUnavailablePoint(x: number, connectsTo: GVertex | null, onBranch: GBranch) {
+    if (x === this.nextX) {
+      this.nextX = x + 1;
+      this.connections[x] = { connectsTo, onBranch };
+    }
+  }
+}
+
+class GBranch {
+  public readonly colourSlot: number;
+  public endRow: number = 0;
+  public readonly lines: Array<{
+    p1: { x: number; y: number };
+    p2: { x: number; y: number };
+    lockedFirst: boolean;
+  }> = [];
+
+  constructor(colourSlot: number) { this.colourSlot = colourSlot; }
+  addLine(p1: { x: number; y: number }, p2: { x: number; y: number }, lockedFirst: boolean) {
+    this.lines.push({ p1, p2, lockedFirst });
+  }
+}
+
+// ─── Color helpers ────────────────────────────────────────────────────────────
+
 function primaryRefName(refs: string[]): string | null {
-  for (const r of refs) {
-    if (r.startsWith('HEAD -> ')) return r.slice('HEAD -> '.length);
-  }
-  for (const r of refs) {
-    if (!r.startsWith('HEAD') && !r.startsWith('tag: ') && !r.includes('/')) return r;
-  }
-  for (const r of refs) {
-    if (!r.startsWith('HEAD') && !r.startsWith('tag: ') && r.includes('/')) return r;
-  }
-  for (const r of refs) {
-    if (r.startsWith('tag: ')) return r.slice('tag: '.length);
-  }
+  for (const r of refs) { if (r.startsWith('HEAD -> ')) return r.slice('HEAD -> '.length); }
+  for (const r of refs) { if (!r.startsWith('HEAD') && !r.startsWith('tag: ') && !r.includes('/')) return r; }
+  for (const r of refs) { if (!r.startsWith('HEAD') && !r.startsWith('tag: ') && r.includes('/')) return r; }
+  for (const r of refs) { if (r.startsWith('tag: ')) return r.slice('tag: '.length); }
   return null;
 }
 
-// Returns true if this commit has a ref that is a primary branch (main/master/…).
-function hasPrimaryBranchRef(refs: string[]): boolean {
-  for (const r of refs) {
-    let name = r;
-    if (name.startsWith('HEAD -> ')) name = name.slice('HEAD -> '.length);
-    else if (name === 'HEAD' || name.startsWith('tag: ')) continue;
-    else if (name.includes('/')) name = name.slice(name.indexOf('/') + 1);
-    if (isPrimaryBranch(name)) return true;
-  }
-  return false;
-}
-
-// Walk the first-parent chain from a starting commit, returning every hash.
-function firstParentChain(startIdx: number, commits: CommitNode[], hashIndex: Map<string, number>): Set<string> {
-  const chain = new Set<string>();
-  let idx = startIdx;
-  while (idx >= 0 && idx < commits.length) {
-    const hash = commits[idx].hash;
-    if (chain.has(hash)) break; // cycle guard
-    chain.add(hash);
-    const p0 = commits[idx].parents[0];
-    if (!p0) break;
-    idx = hashIndex.get(p0) ?? -1;
-  }
-  return chain;
-}
-
-// Circular distance between two palette indices.
-function paletteDist(a: number, b: number, n: number): number {
-  const d = Math.abs(a - b);
-  return Math.min(d, n - d);
-}
-
-// Given a preferred starting index and the set of palette indices already used
-// by active lanes, return the index that:
-//   1. Maximises the minimum circular distance from all used indices.
-//   2. Breaks ties by preferring the index closest to `preferred` (stable naming).
-function pickPaletteIndex(preferred: number, usedIndices: Set<number>): number {
+function colorForBranch(colourSlot: number, refName: string | null): string {
   const palette = currentPalette();
-  const n = palette.length;
+  if (refName !== null) {
+    const norm = refName.replace(/^[^/]+\//, '');
+    if (isPrimaryBranch(norm)) return primaryBranchColor();
+    return palette[branchPaletteIndex(norm)];
+  }
+  return palette[colourSlot % palette.length];
+}
 
-  if (usedIndices.size === 0) return preferred;
+// ─── Main export ──────────────────────────────────────────────────────────────
 
-  let bestIdx = preferred;
-  let bestMinDist = -1;
+export function assignLanes(commits: CommitNode[], isFiltered = false): GraphLayout {
+  // In filtered/search mode each result is an isolated node — strip all parent links so
+  // the graph shows only dots with no connecting lines between unrelated results.
+  if (commits.length === 0) return { commits: [], segments: [], totalCols: 1, refColors: new Map() };
+
+  // Always filter out parents not in the visible set — without this, commits whose
+  // parent hasn't been loaded yet (or was filtered out) create dangling branches that
+  // never close, corrupting the graph layout.
+  const visibleHashes = new Set(commits.map(c => c.hash));
+  commits = commits.map(c => ({ ...c, parents: c.parents.filter(p => visibleHashes.has(p)) }));
+
+  const n = commits.length;
+  const hashIndex = new Map<string, number>();
+  for (let i = 0; i < n; i++) hashIndex.set(commits[i].hash, i);
+
+  // ── Build vertices ────────────────────────────────────────────────────────
+  const nullVertex = new GVertex(NULL_ID);
+  const vertices: GVertex[] = Array.from({ length: n }, (_, i) => new GVertex(i));
 
   for (let i = 0; i < n; i++) {
-    // Min distance from this candidate to any used index.
-    let minDist = n;
-    for (const u of usedIndices) {
-      const d = paletteDist(i, u, n);
-      if (d < minDist) minDist = d;
-    }
-    // Prefer: larger minDist first; same minDist → closer to preferred.
-    if (
-      minDist > bestMinDist ||
-      (minDist === bestMinDist && paletteDist(i, preferred, n) < paletteDist(bestIdx, preferred, n))
-    ) {
-      bestMinDist = minDist;
-      bestIdx = i;
+    for (const ph of commits[i].parents) {
+      const pidx = hashIndex.get(ph) ?? -1;
+      if (pidx >= 0) { vertices[i].addParent(vertices[pidx]); }
+      else vertices[i].addParent(nullVertex);
     }
   }
 
-  return bestIdx;
-}
+  // ── determinePath (faithful port of vscode-git-graph) ────────────────────
+  const branches: GBranch[] = [];
+  const availableColours: number[] = [];
 
-export function assignLanes(commits: CommitNode[], isFiltered = false): LaidOutCommit[] {
-  if (isFiltered) {
-    const visibleHashes = new Set(commits.map(c => c.hash));
-    commits = commits.map(c => ({
-      ...c,
-      parents: c.parents.filter(p => visibleHashes.has(p)),
-    }));
+  function getAvailableColour(startAt: number): number {
+    for (let i = 0; i < availableColours.length; i++) {
+      if (startAt > availableColours[i]) return i;
+    }
+    availableColours.push(0);
+    return availableColours.length - 1;
   }
 
-  // Build a hash→index lookup for chain walking.
-  const hashIndex = new Map<string, number>();
-  for (let i = 0; i < commits.length; i++) hashIndex.set(commits[i].hash, i);
+  function determinePath(startAt: number) {
+    let i = startAt;
+    let vertex = vertices[i];
+    let parentVertex = vertex.getNextParent();
+    let lastPoint = vertex.isNotOnBranch() ? vertex.getNextPoint() : vertex.getPoint();
 
-  // Identify the set of hashes that belong to the primary branch's first-parent
-  // chain. These commits will be forced onto lane 0 when they are first seen,
-  // overriding nextFreeLane() which would otherwise give lane 0 to whoever
-  // happens to appear first in the list (e.g. a feature branch at HEAD).
-  const primaryStartIdx = commits.findIndex(c => hasPrimaryBranchRef(c.refs));
-  const primaryChain: Set<string> = primaryStartIdx >= 0
-    ? firstParentChain(primaryStartIdx, commits, hashIndex)
-    : new Set();
+    if (parentVertex !== null && parentVertex.id !== NULL_ID && vertex.isMerge() &&
+        !vertex.isNotOnBranch() && !parentVertex.isNotOnBranch()) {
+      let foundPointToParent = false;
+      const parentBranch = parentVertex.getBranch()!;
+      for (i = startAt + 1; i < vertices.length; i++) {
+        const curVertex = vertices[i];
+        let curPoint = curVertex.getPointConnectingTo(parentVertex, parentBranch);
+        if (curPoint !== null) { foundPointToParent = true; }
+        else { curPoint = curVertex.getNextPoint(); }
+        // vscode-git-graph line 721
+        const lockedFirst = !foundPointToParent && curVertex !== parentVertex ? lastPoint.x < curPoint.x : true;
+        parentBranch.addLine(lastPoint, curPoint, lockedFirst);
+        curVertex.registerUnavailablePoint(curPoint.x, parentVertex, parentBranch);
+        lastPoint = curPoint;
+        if (foundPointToParent) { vertex.registerParentProcessed(); break; }
+      }
+    } else {
+      const branch = new GBranch(getAvailableColour(startAt));
+      vertex.addToBranch(branch, lastPoint.x);
+      vertex.registerUnavailablePoint(lastPoint.x, vertex, branch);
+      // No parent in the visible set — close the branch immediately, no lines drawn.
+      if (parentVertex === null) {
+        branch.endRow = startAt;
+        branches.push(branch);
+        availableColours[branch.colourSlot] = startAt;
+        return;
+      }
+      for (i = startAt + 1; i < vertices.length; i++) {
+        const curVertex = vertices[i];
+        const curPoint = (parentVertex === curVertex && !parentVertex.isNotOnBranch())
+          ? curVertex.getPoint() : curVertex.getNextPoint();
+        // vscode-git-graph line 738
+        branch.addLine(lastPoint, curPoint, lastPoint.x < curPoint.x);
+        curVertex.registerUnavailablePoint(curPoint.x, parentVertex, branch);
+        lastPoint = curPoint;
+        if (parentVertex === curVertex) {
+          vertex.registerParentProcessed();
+          const parentVertexOnBranch = !parentVertex.isNotOnBranch();
+          parentVertex.addToBranch(branch, curPoint.x);
+          vertex = parentVertex;
+          parentVertex = vertex.getNextParent();
+          if (parentVertex === null || parentVertexOnBranch) break;
+        }
+      }
+      if (i === vertices.length && parentVertex !== null && parentVertex.id === NULL_ID) {
+        vertex.registerParentProcessed();
+      }
+      branch.endRow = i;
+      branches.push(branch);
+      availableColours[branch.colourSlot] = i;
+    }
+  }
 
-  // laneOf: parent-hash → lane index reserved by one of its children.
-  const laneOf = new Map<string, number>();
-  // laneNameOf: lane → branch name that "owns" this lane (for coloring).
-  const laneNameOf = new Map<number, string | null>();
-  // laneColorOf: lane → resolved color string.
-  const laneColorOf = new Map<number, string>();
-  // lanePaletteIdx: lane → palette index currently assigned to that lane.
-  const lanePaletteIdx = new Map<number, number>();
-  // occupied: lane indices that have an active "thread" going downward.
-  const occupied = new Set<number>();
+  let j = 0;
+  while (j < vertices.length) {
+    if (vertices[j].getNextParent() !== null || vertices[j].isNotOnBranch()) {
+      determinePath(j);
+    } else {
+      j++;
+    }
+  }
+
+  // ── Assign colors ─────────────────────────────────────────────────────────
+  const branchColors: string[] = new Array(branches.length);
+  const refColors = new Map<string, string>();
+  for (let bi = 0; bi < branches.length; bi++) {
+    const branch = branches[bi];
+    let refName: string | null = null;
+    let repoId = '';
+    for (let vi = 0; vi < n; vi++) {
+      if (vertices[vi].getBranch() === branch) {
+        refName = primaryRefName(commits[vi].refs);
+        repoId = commits[vi].repoId;
+        break;
+      }
+    }
+    const color = colorForBranch(branch.colourSlot, refName);
+    branchColors[bi] = color;
+    if (refName && repoId) {
+      let normKey = refName.replace(/^HEAD -> /, '');
+      normKey = normKey
+        .replace(/^refs\/remotes\//, '')
+        .replace(/^remotes\//, '')
+        .replace(/^refs\/heads\//, '')
+        .replace(/^heads\//, '');
+      if (normKey && normKey !== 'HEAD') {
+        refColors.set(`${repoId}:${normKey}`, color);
+      }
+    }
+  }
+
+  // ── Build Segment[] — O(total branch lines), NOT O(n²) ───────────────────
+  // Merge consecutive collinear segments on the same branch to minimize count.
+  const segments: Segment[] = [];
+  let totalCols = 1;
+
+  for (let bi = 0; bi < branches.length; bi++) {
+    const color = branchColors[bi];
+    const lines = branches[bi].lines;
+    if (lines.length === 0) continue;
+
+    // Merge consecutive straight segments (same x, no bend needed)
+    let cur = lines[0];
+    for (let li = 1; li < lines.length; li++) {
+      const next = lines[li];
+      const canMerge =
+        cur.p1.x === cur.p2.x &&   // cur is straight
+        next.p1.x === next.p2.x && // next is straight
+        cur.p1.x === next.p1.x &&  // same column
+        cur.p2.y === next.p1.y;    // consecutive rows
+      if (canMerge) {
+        cur = { p1: cur.p1, p2: next.p2, lockedFirst: false };
+      } else {
+        const s: Segment = { p1x: cur.p1.x, p1y: cur.p1.y, p2x: cur.p2.x, p2y: cur.p2.y, color, lockedFirst: cur.lockedFirst, branchId: bi };
+        segments.push(s);
+        if (cur.p1.x + 1 > totalCols) totalCols = cur.p1.x + 1;
+        if (cur.p2.x + 1 > totalCols) totalCols = cur.p2.x + 1;
+        cur = next;
+      }
+    }
+    const s: Segment = { p1x: cur.p1.x, p1y: cur.p1.y, p2x: cur.p2.x, p2y: cur.p2.y, color, lockedFirst: cur.lockedFirst, branchId: bi };
+    segments.push(s);
+    if (cur.p1.x + 1 > totalCols) totalCols = cur.p1.x + 1;
+    if (cur.p2.x + 1 > totalCols) totalCols = cur.p2.x + 1;
+  }
+
+  // ── Build LaidOutCommit[] ─────────────────────────────────────────────────
   const laidOut: LaidOutCommit[] = [];
 
-  // Returns the set of palette indices currently in use by occupied lanes.
-  function usedPaletteIndices(): Set<number> {
-    const s = new Set<number>();
-    for (const l of occupied) {
-      const idx = lanePaletteIdx.get(l);
-      if (idx !== undefined) s.add(idx);
-    }
-    return s;
+  for (let vi = 0; vi < n; vi++) {
+    const dotCol = vertices[vi].getPoint().x;
+    const myBranch = vertices[vi].getBranch();
+    const myBranchIdx = myBranch ? branches.indexOf(myBranch) : -1;
+    const dotColor = myBranchIdx >= 0 ? branchColors[myBranchIdx] : anonymousLaneColor(dotCol);
+    if (dotCol + 1 > totalCols) totalCols = dotCol + 1;
+    laidOut.push({ ...commits[vi], lane: dotCol, totalLanes: totalCols, dotColor });
   }
 
-  // Assign a color to a lane, choosing the palette index that is maximally
-  // distant from all currently occupied lanes' indices.
-  // For named branches: preferred index comes from the branch name hash.
-  // For anonymous lanes: preferred index is based on lane number.
-  function assignLaneColor(lane: number, refName: string | null, isHeadCommit: boolean): void {
-    const palette = currentPalette();
+  for (const c of laidOut) c.totalLanes = totalCols;
 
-    // Fixed colors for primary and HEAD — not from palette.
-    if (refName !== null) {
-      const norm = refName.replace(/^[^/]+\//, '');
-      if (isPrimaryBranch(norm)) {
-        laneColorOf.set(lane, primaryBranchColor());
-        // Use a virtual index outside palette range so it doesn't affect spacing.
-        lanePaletteIdx.set(lane, -1);
-        return;
-      }
-      if (isHeadCommit) {
-        laneColorOf.set(lane, headColor());
-        lanePaletteIdx.set(lane, -2);
-        return;
-      }
+  // Second pass: register the dot color of every commit against all its refs.
+  // Key format: "repoId:name" where name preserves the remote prefix for remote refs,
+  // so "origin/beta" and "beta" remain distinct keys and don't overwrite each other.
+  //
+  // Ref forms and how they are stored:
+  //   "HEAD -> beta"              → "beta"           (local, HEAD points here)
+  //   "refs/heads/beta"           → "beta"           (local)
+  //   "heads/beta"                → "beta"           (local)
+  //   "refs/remotes/origin/beta"  → "origin/beta"    (remote — keeps remote/ prefix)
+  //   "remotes/origin/beta"       → "origin/beta"    (remote — keeps remote/ prefix)
+  //   "origin/beta"               → "origin/beta"    (remote — already has prefix)
+  for (const c of laidOut) {
+    for (const ref of c.refs) {
+      if (ref.startsWith('tag: ') || ref === 'HEAD') continue;
+      let name = ref;
+      if (name.startsWith('HEAD -> ')) name = name.slice('HEAD -> '.length);
+      // Strip only the full git path prefixes, keeping remote/branch intact
+      name = name
+        .replace(/^refs\/remotes\//, '')   // "refs/remotes/origin/beta" → "origin/beta"
+        .replace(/^remotes\//, '')         // "remotes/origin/beta"      → "origin/beta"
+        .replace(/^refs\/heads\//, '')     // "refs/heads/beta"          → "beta"
+        .replace(/^heads\//, '');          // "heads/beta"               → "beta"
+      if (!name || name === 'HEAD') continue;
+      const key = `${c.repoId}:${name}`;
+      if (!refColors.has(key)) refColors.set(key, c.dotColor);
     }
-
-    const preferred = refName !== null
-      ? branchPaletteIndex(refName)
-      : lane % palette.length;
-
-    // Exclude this lane's own current index so it can shift if needed.
-    const used = usedPaletteIndices();
-    used.delete(lanePaletteIdx.get(lane) ?? -99);
-
-    const chosen = pickPaletteIndex(preferred, used);
-    lanePaletteIdx.set(lane, chosen);
-    laneColorOf.set(lane, palette[chosen]);
   }
 
-  function nextFreeLane(preferZero = false): number {
-    if (preferZero && !occupied.has(0)) return 0;
-    let i = 0;
-    while (occupied.has(i)) i++;
-    return i;
-  }
-
-  for (const commit of commits) {
-    // ── Step 1: find this commit's lane ──────────────────────────────────────
-    let lane: number;
-    let isStart: boolean;
-
-    if (laneOf.has(commit.hash)) {
-      // This commit was already claimed by one of its children.
-      lane = laneOf.get(commit.hash)!;
-      isStart = false;
-      laneOf.delete(commit.hash);
-    } else {
-      // New thread: pick lane 0 if this commit is on the primary chain and
-      // lane 0 is free, otherwise pick the next available lane.
-      const wantPrimary = primaryChain.has(commit.hash);
-      lane = nextFreeLane(wantPrimary);
-      isStart = true;
-      occupied.add(lane);
-    }
-
-    // ── Assign / update branch name and color for this lane ──────────────────
-    const refName = primaryRefName(commit.refs);
-    const isHeadCommit = commit.refs.some(r => r.startsWith('HEAD -> ') || r === 'HEAD');
-    if (isStart || refName !== null) {
-      laneNameOf.set(lane, refName);
-      assignLaneColor(lane, refName, isHeadCommit);
-    }
-
-    // ── Step 2: snapshot lanes active *entering* this row ────────────────────
-    const enteringLanes = new Set(occupied);
-
-    // ── Step 3: assign lanes to parents ──────────────────────────────────────
-    const parentLanes: number[] = [];
-
-    for (let i = 0; i < commit.parents.length; i++) {
-      const parentHash = commit.parents[i];
-
-      if (i === 0) {
-        if (laneOf.has(parentHash)) {
-          // Parent already claimed by another child (diamond merge).
-          // Our lane thread ends here.
-          parentLanes.push(laneOf.get(parentHash)!);
-          occupied.delete(lane);
-          laneColorOf.delete(lane);
-          laneNameOf.delete(lane);
-          lanePaletteIdx.delete(lane);
-        } else {
-          laneOf.set(parentHash, lane);
-          parentLanes.push(lane);
-        }
-      } else {
-        // Secondary (merge) parent.
-        if (laneOf.has(parentHash)) {
-          parentLanes.push(laneOf.get(parentHash)!);
-        } else {
-          // Open a new lane for this merge parent. Prefer lane 0 if the parent
-          // is on the primary chain and lane 0 is free.
-          const wantPrimary = primaryChain.has(parentHash);
-          const newLane = nextFreeLane(wantPrimary);
-          occupied.add(newLane);
-          laneOf.set(parentHash, newLane);
-          parentLanes.push(newLane);
-          laneNameOf.set(newLane, null);
-          assignLaneColor(newLane, null, false);
-        }
-      }
-    }
-
-    if (commit.parents.length === 0) {
-      occupied.delete(lane);
-      laneColorOf.delete(lane);
-      laneNameOf.delete(lane);
-      lanePaletteIdx.delete(lane);
-    }
-
-    // ── Step 4: build graph lines with pre-computed colors ───────────────────
-    const dotColor = laneColorOf.get(lane) ?? anonymousLaneColor(lane);
-    const graphLines: GraphLine[] = [];
-
-    graphLines.push({
-      fromLane: lane,
-      toLane: parentLanes.length > 0 ? parentLanes[0] : lane,
-      type: 'straight',
-      repoId: commit.repoId,
-      isStart,
-      color: dotColor,
-    });
-
-    for (let p = 1; p < parentLanes.length; p++) {
-      const pl = parentLanes[p];
-      graphLines.push({
-        fromLane: lane,
-        toLane: pl,
-        type: 'merge-in',
-        repoId: commit.repoId,
-        color: laneColorOf.get(pl) ?? dotColor,
-      });
-    }
-
-    for (const l of enteringLanes) {
-      if (l === lane) continue;
-      graphLines.push({
-        fromLane: l,
-        toLane: l,
-        type: 'pass-through',
-        repoId: commit.repoId,
-        color: laneColorOf.get(l) ?? anonymousLaneColor(l),
-      });
-    }
-
-    const activeLaneCount = occupied.size > 0 ? Math.max(...occupied) + 1 : lane + 1;
-
-    laidOut.push({
-      ...commit,
-      lane,
-      totalLanes: activeLaneCount,
-      graphLines,
-      dotColor,
-    });
-  }
-
-  return laidOut;
+  return { commits: laidOut, segments, totalCols, refColors };
 }

@@ -146,8 +146,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.colorTheme')) {
           if (this.view) {
-            loadIconTheme(this.view.webview).then(iconTheme => {
-              this.post({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches: [], iconTheme });
+            Promise.all([loadIconTheme(this.view.webview), this.getFilteredBranches()]).then(([iconTheme, branches]) => {
+              this.post({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches, iconTheme });
             });
           }
         }
@@ -612,7 +612,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not apply')) {
             const choice = await vscode.window.showWarningMessage(
-              `Cherry-pick of ${msg.hash.slice(0, 7)} has conflicts. Resolve them in the editor, then choose an action.`,
+              `Cherry-pick of ${msg.hash.slice(0, 8)} has conflicts. Resolve them in the editor, then choose an action.`,
               'Continue', 'Skip', 'Abort'
             );
             if (choice === 'Continue') {
@@ -634,7 +634,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         {
           const confirm = await vscode.window.showWarningMessage(
-            `Revert commit ${msg.hash.slice(0, 7)}? This creates a new commit that undoes the changes.`,
+            `Revert commit ${msg.hash.slice(0, 8)}? This creates a new commit that undoes the changes.`,
             { modal: true }, 'Revert'
           );
           if (confirm !== 'Revert') {
@@ -650,7 +650,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not revert')) {
             const choice = await vscode.window.showWarningMessage(
-              `Revert of ${msg.hash.slice(0, 7)} has conflicts. Resolve them in the editor, then choose an action.`,
+              `Revert of ${msg.hash.slice(0, 8)} has conflicts. Resolve them in the editor, then choose an action.`,
               'Continue', 'Abort'
             );
             if (choice === 'Continue') {
@@ -670,7 +670,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const modeLabel = msg.mode === 'hard' ? 'Hard Reset (discard all changes)' : msg.mode === 'mixed' ? 'Mixed Reset (keep unstaged)' : 'Soft Reset (keep staged)';
         const confirm = await vscode.window.showWarningMessage(
-          `Reset current branch to ${msg.hash.slice(0, 7)}? (${modeLabel})`,
+          `Reset current branch to ${msg.hash.slice(0, 8)}? (${modeLabel})`,
           { modal: true }, 'Reset'
         );
         if (confirm !== 'Reset') {
@@ -693,7 +693,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         try {
           const patch = await repo.createPatch(msg.hash);
           const uri = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(`${msg.hash.slice(0, 7)}.patch`),
+            defaultUri: vscode.Uri.file(`${msg.hash.slice(0, 8)}.patch`),
             filters: { 'Patch files': ['patch'], 'All files': ['*'] },
           });
           if (uri) {
@@ -806,7 +806,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const folderPath = folderUris[0].fsPath;
           for (const hash of msg.hashes) {
             const patch = await repo.createPatch(hash);
-            const filePath = path.join(folderPath, `${hash.slice(0, 7)}.patch`);
+            const filePath = path.join(folderPath, `${hash.slice(0, 8)}.patch`);
             await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), Buffer.from(patch, 'utf8'));
           }
           vscode.window.showInformationMessage(`${msg.hashes.length} patches saved to ${folderPath}`);
@@ -822,7 +822,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const confirm = await vscode.window.showWarningMessage(
-          `Drop commit ${msg.hash.slice(0, 7)}? This rewrites history. Only drop unpushed commits — dropping a pushed commit will require a force push.`,
+          `Drop commit ${msg.hash.slice(0, 8)}? This rewrites history. Only drop unpushed commits — dropping a pushed commit will require a force push.`,
           { modal: true }, 'Drop'
         );
         if (confirm !== 'Drop') {
@@ -888,7 +888,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const fullMessage = (await repo.getFullCommitMessage(msg.hash)).trim();
-        const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 7), fullMessage);
+        const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 8), fullMessage);
         if (!result.confirmed) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
@@ -908,7 +908,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const branchName = await vscode.window.showInputBox({
-          prompt: `Create new branch from ${msg.hash.slice(0, 7)}`,
+          prompt: `Create new branch from ${msg.hash.slice(0, 8)}`,
           placeHolder: 'my-feature-branch',
           validateInput: v => v.trim() ? undefined : 'Branch name cannot be empty',
         });
@@ -933,7 +933,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const tagName = await vscode.window.showInputBox({
-          prompt: `Tag name for commit ${msg.hash.slice(0, 7)}`,
+          prompt: `Tag name for commit ${msg.hash.slice(0, 8)}`,
           placeHolder: 'v1.0.0',
           validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
         });
@@ -1165,7 +1165,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             { label: '$(discard) Mixed', description: 'Keep unstaged changes, unstage staged changes', mode: 'mixed' as const },
             { label: '$(trash) Hard', description: 'Discard all local changes', mode: 'hard' as const },
           ] satisfies ModeItem[],
-          { title: `Reset Current Branch to ${msg.hash.slice(0, 7)}` }
+          { title: `Reset Current Branch to ${msg.hash.slice(0, 8)}` }
         ) as ModeItem | undefined;
         if (!pick) return;
         const reqId = msg.hash + pick.mode;
@@ -1318,7 +1318,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     ];
 
     const tagPick = await vscode.window.showQuickPick(tagListItems, {
-      title: `Tags on commit ${hash.slice(0, 7)}`,
+      title: `Tags on commit ${hash.slice(0, 8)}`,
       placeHolder: 'Select a tag or create a new one',
     }) as TagListItem | undefined;
     if (!tagPick) return;
@@ -1326,7 +1326,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // "New Tag..." selected
     if (tagPick.tagName === null) {
       const newName = await vscode.window.showInputBox({
-        prompt: `Tag name for commit ${hash.slice(0, 7)}`,
+        prompt: `Tag name for commit ${hash.slice(0, 8)}`,
         placeHolder: 'v1.0.0',
         validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
       });
@@ -1405,7 +1405,7 @@ async function openSmartDiff(
 ): Promise<void> {
   const rootPath = repo.rootPath;
   const status = msg.fileStatus ?? 'M';
-  const shortHash = msg.hash.slice(0, 7);
+  const shortHash = msg.hash.slice(0, 8);
   const fileName = path.basename(msg.filePath);
 
   const gitUri = (ref: string, filePath: string): vscode.Uri => {

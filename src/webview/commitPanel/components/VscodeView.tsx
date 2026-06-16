@@ -304,7 +304,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
   const isEmpty = files.length === 0;
   // Empty repos default to collapsed; key presence means "explicitly opened"
   const collapsed = isEmpty ? !isCollapsed(collapseKey) : isCollapsed(collapseKey);
-  const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, true);
+  const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, false);
   const [hovered, setHovered] = useState(false);
 
   const onStage   = (file: FileStatus) => onStageFiles([file.path]);

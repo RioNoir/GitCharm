@@ -123,6 +123,8 @@ interface Props {
   iconTheme?: IconThemeData | null;
   onSelectFile: (file: { path: string; status: string }) => void;
   onClose?: () => void;
+  refColors?: Map<string, string>;
+  themeVersion?: number;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -324,7 +326,7 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose }: Props) {
+export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose, refColors }: Props) {
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree');
   const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
   const [mergeCommits, setMergeCommits] = useState<MergeParentCommit[]>([]);
@@ -602,7 +604,10 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             if (badge.kind === 'ref') {
               const g = badge.group;
               const isSpecialHead = g.isRemoteHead || (g.isHead && g.isDetached);
-              const color = g.isTag ? tagColor() : isSpecialHead ? headColor() : branchColor(g.label, false);
+              const rid = commit!.repoId;
+              const remoteRefKey = g.remoteName ? `${rid}:${g.remoteName}/${g.label}` : null;
+              const resolvedRefColor = (remoteRefKey ? refColors?.get(remoteRefKey) : undefined) ?? refColors?.get(`${rid}:${g.label}`);
+              const color = g.isTag ? tagColor() : isSpecialHead ? headColor() : (resolvedRefColor ?? branchColor(g.label, false));
               const label = g.isRemoteHead ? `${g.remoteName}/HEAD` : g.isRemote ? remoteLabel(g) : g.label;
               return (
                 <span key={key} style={styles.refBadge(color, (g.isHead || g.isDetached) && !g.isRemoteHead)} title={badgeTitle(g)}>
@@ -623,7 +628,10 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             const isRemote = badge.kind === 'remote';
             const isRemoteHead = isRemote && badge.name.toUpperCase() === 'HEAD';
             const rName = isRemote ? (badge as { remoteName: string }).remoteName : '';
-            const color = isRemoteHead ? headColor() : branchColor(badge.name, false);
+            const rid2 = commit!.repoId;
+            const remoteBadgeKey = rName ? `${rid2}:${rName}/${badge.name}` : null;
+            const resolvedBadgeColor = (remoteBadgeKey ? refColors?.get(remoteBadgeKey) : undefined) ?? refColors?.get(`${rid2}:${badge.name}`);
+            const color = isRemoteHead ? headColor() : (resolvedBadgeColor ?? branchColor(badge.name, false));
             const label = isRemote ? (isRemoteHead ? 'HEAD' : `${rName || 'remote'}/${badge.name}`) : badge.name;
             return (
               <span key={key} style={styles.refBadge(color, isRemoteHead)} title={isRemoteHead ? `Remote HEAD (${rName}/HEAD)` : `${isRemote ? 'Remote branch' : 'Branch'}: ${label}`}>
@@ -1003,6 +1011,9 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '2px',
+    maxHeight: '180px',
+    overflowY: 'auto' as const,
+    flexShrink: 0,
   },
   mergeSectionTitle: {
     display: 'flex',
