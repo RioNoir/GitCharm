@@ -39,14 +39,93 @@ export function registerCommands(
       return branchStatusBar.updateProject();
     }),
 
-    vscode.commands.registerCommand('gitcharm.push', () => {
-      return branchStatusBar.push();
+    vscode.commands.registerCommand('gitcharm.push', async () => {
+      if (!manager) return;
+      const metas = manager.getRepoMetas();
+      const metaById = new Map(metas.map(m => [m.id, m]));
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pushing all repositories…', cancellable: false },
+        async () => {
+          const results = await manager.pushAll();
+          const failed = results.filter(r => !r.ok);
+          const ok = results.filter(r => r.ok);
+          if (failed.length === 0) {
+            vscode.window.showInformationMessage(
+              `GitCharm: ${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} pushed.`
+            );
+          } else {
+            const failedDesc = failed.map(r => {
+              const name = metaById.get(r.repoId)?.name ?? r.repoId;
+              return `${name}: ${r.message}`;
+            }).join('; ');
+            vscode.window.showWarningMessage(
+              `GitCharm: ${ok.length} pushed, ${failed.length} failed: ${failedDesc}`
+            );
+          }
+        }
+      );
+      commitPanel.refresh();
     }),
 
     vscode.commands.registerCommand('gitcharm.fetchAll', async () => {
+      if (!manager) return;
+      await branchStatusBar.fetchAll();
+      commitPanel.refresh();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.syncAll', async () => {
+      if (!manager) return;
+      const metas = manager.getRepoMetas();
+      const metaById = new Map(metas.map(m => [m.id, m]));
+
+      const pick = await vscode.window.showQuickPick(
+        [
+          { label: '$(git-merge) Merge incoming changes into the current branch', rebase: false },
+          { label: '$(repo-forked) Rebase the current branch on top of incoming changes', rebase: true },
+        ],
+        { title: 'Sync — Pull Strategy' }
+      ) as { label: string; rebase: boolean } | undefined;
+      if (!pick) return;
+
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Fetching all remotes', cancellable: false },
-        async () => { /* delegated to panel message handler */ }
+        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Syncing all repositories…', cancellable: false },
+        async () => {
+          // Pull first
+          const pullResults = await manager.pullAll(pick.rebase);
+          const pullFailed = pullResults.filter(r => !r.ok);
+
+          if (pullFailed.length > 0) {
+            const failedDesc = pullFailed.map(r => {
+              const name = metaById.get(r.repoId)?.name ?? r.repoId;
+              return `${name}: ${r.message}`;
+            }).join('; ');
+            vscode.window.showWarningMessage(
+              `GitCharm Sync: Pull failed — stopping before push. ${failedDesc}`
+            );
+            commitPanel.refresh();
+            return;
+          }
+
+          // Push only if all pulls succeeded
+          const pushResults = await manager.pushAll();
+          const pushFailed = pushResults.filter(r => !r.ok);
+          const pushOk = pushResults.filter(r => r.ok);
+
+          if (pushFailed.length === 0) {
+            vscode.window.showInformationMessage(
+              `GitCharm Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`
+            );
+          } else {
+            const failedDesc = pushFailed.map(r => {
+              const name = metaById.get(r.repoId)?.name ?? r.repoId;
+              return `${name}: ${r.message}`;
+            }).join('; ');
+            vscode.window.showWarningMessage(
+              `GitCharm Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`
+            );
+          }
+          commitPanel.refresh();
+        }
       );
     }),
 

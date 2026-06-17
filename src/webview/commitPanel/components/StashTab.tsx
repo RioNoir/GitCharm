@@ -11,6 +11,7 @@ interface Props {
   repoName: string;
   repoColor: string;
   multiRepo: boolean;
+  singleRepo?: boolean;
   worktreeBranch?: string;
   mainRepoName?: string;
   stashes: StashEntry[];
@@ -20,16 +21,18 @@ interface Props {
   onApply: (repoId: string, stashRef: string) => void;
   onPop: (repoId: string, stashRef: string) => void;
   onDrop: (repoId: string, stashRef: string) => void;
+  onRename: (repoId: string, stashRef: string, currentMessage: string) => void;
   onRequestList: (repoId: string) => void;
   onOpenFileDiff: (repoId: string, stashRef: string, filePath: string) => void;
   expandAll?: boolean;
 }
 
 const STASH_CTX_ITEMS: ContextMenuEntry[] = [
-  { id: 'pop',   label: 'Pop (apply & drop)', icon: 'git-stash-pop' },
-  { id: 'apply', label: 'Apply (keep stash)', icon: 'git-stash-apply' },
+  { id: 'pop',    label: 'Pop (apply & drop)', icon: 'git-stash-pop' },
+  { id: 'apply',  label: 'Apply (keep stash)', icon: 'git-stash-apply' },
+  { id: 'rename', label: 'Rename',             icon: 'edit' },
   { separator: true },
-  { id: 'drop',  label: 'Delete',             icon: 'trash', danger: true },
+  { id: 'drop',   label: 'Delete',             icon: 'trash', danger: true },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -209,13 +212,14 @@ function TreeDirNode({ node, depth, repoId, entry, onOpenFileDiff, openDirs, tog
 
 // ── Single stash entry row ────────────────────────────────────────────────────
 
-function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onOpenFileDiff, expandAll, isLast }: {
+function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, onOpenFileDiff, expandAll, isLast }: {
   entry: StashEntry;
   repoId: string;
   viewMode: ViewMode;
   onApply: Props['onApply'];
   onPop: Props['onPop'];
   onDrop: Props['onDrop'];
+  onRename: Props['onRename'];
   onOpenFileDiff: Props['onOpenFileDiff'];
   expandAll: boolean;
   isLast?: boolean;
@@ -245,7 +249,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onOpenFileD
     <div style={{ ...row.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
       {/* Header */}
       <div
-        style={{ ...row.header, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
+        style={{ ...row.header, background: ctxMenu ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
@@ -311,9 +315,10 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onOpenFileD
           items={STASH_CTX_ITEMS}
           onSelect={id => {
             setCtxMenu(null);
-            if (id === 'pop')   onPop(repoId, entry.ref);
-            if (id === 'apply') onApply(repoId, entry.ref);
-            if (id === 'drop')  onDrop(repoId, entry.ref);
+            if (id === 'pop')    onPop(repoId, entry.ref);
+            if (id === 'apply')  onApply(repoId, entry.ref);
+            if (id === 'rename') onRename(repoId, entry.ref, entry.message);
+            if (id === 'drop')   onDrop(repoId, entry.ref);
           }}
           onClose={() => setCtxMenu(null)}
         />
@@ -325,17 +330,20 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onOpenFileD
 // ── Public component ──────────────────────────────────────────────────────────
 
 export function StashTab({
-  repoId, repoName, repoColor, multiRepo,
+  repoId, repoName, repoColor, multiRepo, singleRepo = false,
   worktreeBranch, mainRepoName,
   stashes, loading, error, viewMode,
-  onApply, onPop, onDrop, onRequestList, onOpenFileDiff,
+  onApply, onPop, onDrop, onRename, onRequestList, onOpenFileDiff,
   expandAll = false,
 }: Props) {
   return (
     <div style={css.root}>
       {multiRepo && (
-        <div style={css.repoHeader(repoColor)}>
-          <span style={css.dot(repoColor)} />
+        <div style={css.repoHeader(repoColor, singleRepo)}>
+          {singleRepo
+            ? <Codicon name="repo" style={css.repoIcon} />
+            : <span style={css.dot(repoColor)} />
+          }
           <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
           {worktreeBranch && (
             <span style={css.worktreeBadge}>
@@ -365,6 +373,7 @@ export function StashTab({
             onApply={onApply}
             onPop={onPop}
             onDrop={onDrop}
+            onRename={onRename}
             onOpenFileDiff={onOpenFileDiff}
             expandAll={expandAll}
             isLast={i === stashes.length - 1}
@@ -381,12 +390,14 @@ export type { Props as StashTabProps };
 
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
-  repoHeader: (color: string): React.CSSProperties => ({
+  repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: color + '14', borderBottom: '1px solid var(--vscode-panel-border)',
+    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
+  repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
   repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   worktreeBadge: { display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em', color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)', borderRadius: '3px', padding: '1px 5px 1px 4px', flexShrink: 0, opacity: 0.75 } as React.CSSProperties,
   errorRow: {

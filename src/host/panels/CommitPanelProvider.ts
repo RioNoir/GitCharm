@@ -607,13 +607,41 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pushing', cancellable: false },
           async () => {
             try {
-              await repo.push(false, msg.remote);
+              await repo.push(msg.force ?? false, msg.remote);
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
               this.logProvider?.refresh();
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+            }
+          }
+        );
+        break;
+      }
+
+      case 'COMMIT_SYNC_AND_PUSH_REPO': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Syncing', cancellable: false },
+          async () => {
+            try {
+              await (msg.rebase ? repo.pullRebase() : repo.pull());
+            } catch (e: unknown) {
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Pull failed: ${String(e)}` });
+              const status = await this.manager.getAllStatusesFresh();
+              this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+              return;
+            }
+            try {
+              await repo.push();
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.logProvider?.refresh();
+              const status = await this.manager.getAllStatusesFresh();
+              this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+            } catch (e: unknown) {
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Push failed: ${String(e)}` });
             }
           }
         );
@@ -990,6 +1018,24 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'SHELVE_RENAME': {
+        const svc = this.getShelveService(msg.repoId);
+        if (!svc) { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Repo not found' }); return; }
+        const newName = await vscode.window.showInputBox({
+          title: 'Rename Shelf',
+          prompt: 'Enter a new name for the shelf',
+          value: msg.currentName,
+        });
+        if (!newName || newName === msg.currentName) { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' }); return; }
+        try {
+          svc.rename(msg.shelveId, newName);
+          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
+        } catch (e: unknown) {
+          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
+        }
+        break;
+      }
+
       case 'SHELVE_GET_FILE_DIFF': {
         const svc = this.getShelveService(msg.repoId);
         if (!svc) { this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff: '', error: 'Repo not found' }); return; }
@@ -1162,6 +1208,24 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         }
         try {
           await repo.stashDrop(msg.stashRef);
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
+        } catch (e: unknown) {
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
+        }
+        break;
+      }
+
+      case 'STASH_RENAME': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Repo not found' }); return; }
+        const newMessage = await vscode.window.showInputBox({
+          title: 'Rename Stash',
+          prompt: 'Enter a new description for the stash',
+          value: msg.currentMessage,
+        });
+        if (!newMessage || newMessage === msg.currentMessage) { this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' }); return; }
+        try {
+          await repo.stashRename(msg.stashRef, newMessage);
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
         } catch (e: unknown) {
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
@@ -1557,6 +1621,27 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_REVEAL_REPO_IN_EXPLORER': {
+        const repoReveal = this.manager.getRepo(msg.repoId);
+        if (!repoReveal) break;
+        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(repoReveal.rootPath));
+        break;
+      }
+
+      case 'COMMIT_OPEN_REPO_IN_NEW_WINDOW': {
+        const repoNewWindow = this.manager.getRepo(msg.repoId);
+        if (!repoNewWindow) break;
+        await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(repoNewWindow.rootPath), { forceNewWindow: true });
+        break;
+      }
+
+      case 'COMMIT_REVEAL_REPO_IN_OS': {
+        const repoOS = this.manager.getRepo(msg.repoId);
+        if (!repoOS) break;
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(repoOS.rootPath));
+        break;
+      }
+
       case 'COMMIT_VIEW_GIT_LOG': {
         const meta = this.manager.getRepoMetas().find(m => m.id === msg.repoId);
         let logRepoId = msg.repoId;
@@ -1913,8 +1998,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   refresh(): void {
     this.manager.getAllStatuses().then(status => {
-      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
       this.postChangelistsUpdate(status);
+      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+      this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: this.getHiddenRepoIds() });
     });
   }
 }

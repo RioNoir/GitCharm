@@ -104,7 +104,8 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_PULL_ALL' }
   | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_REMOTES'; requestId: string; repoId: string }
-  | { type: 'COMMIT_PUSH_REPO'; requestId: string; repoId: string; remote: string }
+  | { type: 'COMMIT_PUSH_REPO'; requestId: string; repoId: string; remote: string; force?: boolean }
+  | { type: 'COMMIT_SYNC_AND_PUSH_REPO'; requestId: string; repoId: string; rebase: boolean }
   | { type: 'COMMIT_DISCARD_FILE'; requestId: string; repoId: string; path: string }
   | { type: 'COMMIT_DISCARD_FILES'; requestId: string; files: Array<{ repoId: string; path: string }> }
   | { type: 'COMMIT_DISCARD_ALL'; requestId: string; repoId: string }
@@ -123,6 +124,7 @@ export type CommitToHostMsg =
   | { type: 'SHELVE_PUSH'; requestId: string; repoId: string; name: string; paths?: string[] }
   | { type: 'SHELVE_APPLY'; requestId: string; repoId: string; shelveId: string; paths?: string[] }
   | { type: 'SHELVE_DROP'; requestId: string; repoId: string; shelveId: string }
+  | { type: 'SHELVE_RENAME'; requestId: string; repoId: string; shelveId: string; currentName: string }
   | { type: 'SHELVE_GET_FILE_DIFF'; requestId: string; repoId: string; shelveId: string; filePath: string }
   | { type: 'SHELVE_OPEN_FILE_DIFF'; repoId: string; shelveId: string; filePath: string }
   | { type: 'STASH_LIST'; requestId: string; repoId: string }
@@ -131,6 +133,7 @@ export type CommitToHostMsg =
   | { type: 'STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_POP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'STASH_DROP'; requestId: string; repoId: string; stashRef: string }
+  | { type: 'STASH_RENAME'; requestId: string; repoId: string; stashRef: string; currentMessage: string }
   | { type: 'STASH_OPEN_FILE_DIFF'; repoId: string; stashRef: string; filePath: string }
   | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string }
   | { type: 'PUSH_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string; message: string; commits: { hash: string; shortHash: string; message: string }[] }
@@ -179,7 +182,10 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_UNHIDE_REPO'; repoId: string }
   | { type: 'COMMIT_MANAGE_HIDDEN_REPOS' }
   | { type: 'COMMIT_MANAGE_REPO'; repoId: string }
-  | { type: 'COMMIT_VIEW_GIT_LOG'; repoId: string };
+  | { type: 'COMMIT_VIEW_GIT_LOG'; repoId: string }
+  | { type: 'COMMIT_REVEAL_REPO_IN_EXPLORER'; repoId: string }
+  | { type: 'COMMIT_OPEN_REPO_IN_NEW_WINDOW'; repoId: string }
+  | { type: 'COMMIT_REVEAL_REPO_IN_OS'; repoId: string };
 
 // ─── Git Log: Host → WebView ─────────────────────────────────────────────────
 

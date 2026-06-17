@@ -11,6 +11,7 @@ interface Props {
   repoName: string;
   repoColor: string;
   multiRepo: boolean;
+  singleRepo?: boolean;
   isFirst?: boolean;
   isSubmodule?: boolean;
   submodulePath?: string;
@@ -40,7 +41,7 @@ interface Props {
 }
 
 export function ProjectGroup({
-  repoStatus, repoName, repoColor, multiRepo, isFirst = false,
+  repoStatus, repoName, repoColor, multiRepo, singleRepo = false, isFirst = false,
   isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed,
@@ -78,7 +79,7 @@ export function ProjectGroup({
   return (
     <div style={styles.container(isFirst)}>
       <div
-        style={styles.header(repoColor)}
+        style={styles.header(repoColor, singleRepo)}
         onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -96,7 +97,10 @@ export function ProjectGroup({
 
         <div style={styles.headerMain} onClick={() => toggleCollapsed(repoId)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
-          <span style={styles.dot(repoColor)} />
+          {singleRepo
+            ? <Codicon name="repo" style={styles.repoIcon} />
+            : <span style={styles.dot(repoColor)} />
+          }
           <span style={styles.name}>
             {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
           </span>
@@ -189,13 +193,13 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
 
   return (
     <div
-      style={styles.header(repoColor)}
+      style={styles.header(repoColor, true)}
       onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div style={styles.headerMain} onClick={() => onBranchClick(repoId)}>
-        <span style={styles.dot(repoColor)} />
+        <Codicon name="repo" style={styles.repoIcon} />
         <span style={styles.name}>
           {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
         </span>
@@ -232,10 +236,10 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
 const styles = {
   container: (_isFirst: boolean): React.CSSProperties => ({
   }),
-  header: (color: string): React.CSSProperties => ({
+  header: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
-    background: color + '14',
+    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
     height: '26px',
     boxSizing: 'border-box',
   }),
@@ -271,6 +275,11 @@ const styles = {
     background: color,
     flexShrink: 0,
   }),
+  repoIcon: {
+    fontSize: '13px',
+    opacity: 0.7,
+    flexShrink: 0,
+  } as React.CSSProperties,
   name: {
     overflow: 'hidden',
     textOverflow: 'ellipsis',

@@ -50,6 +50,34 @@ async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void>
   }
 }
 
+async function maybeShowSupportNotification(globalState: vscode.Memento): Promise<void> {
+  const DO_NOT_SHOW_KEY = 'doNotShowSupportNotification';
+  const LAST_SHOWN_KEY = 'supportNotificationLastShown';
+
+  if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
+
+  const lastShown = globalState.get<number>(LAST_SHOWN_KEY, 0);
+  const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+  if (Date.now() - lastShown < oneMonthMs) return;
+
+  await globalState.update(LAST_SHOWN_KEY, Date.now());
+
+  const picked = await vscode.window.showInformationMessage(
+    'Do you like GitCharm?',
+    'Leave a Star',
+    'Donate',
+    'Do Not Show Again',
+  );
+
+  if (picked === 'Do Not Show Again') {
+    await globalState.update(DO_NOT_SHOW_KEY, true);
+  } else if (picked === 'Leave a Star') {
+    await vscode.env.openExternal(vscode.Uri.parse('https://github.com/RioNoir/gitcharm'));
+  } else if (picked === 'Donate') {
+    await vscode.env.openExternal(vscode.Uri.parse('https://buymeacoffee.com/rionoir'));
+  }
+}
+
 async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPanel: CommitPanelProvider): Promise<void> {
   if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnUnpushedCommits', true)) return;
 
@@ -153,7 +181,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // DEV ONLY: uncomment to reset the quickpick flag
   //context.globalState.update('hasShownViewModeQuickpick', false);
+  // DEV ONLY: uncomment to reset the support notification
+  //context.globalState.update('doNotShowSupportNotification', false);
+  //context.globalState.update('supportNotificationLastShown', 0);
   showViewModeQuickpick(context.globalState);
+  setTimeout(() => maybeShowSupportNotification(context.globalState), 5 * 60 * 1000); // DEV: use 5 * 60 * 1000 for production
 
   const shelveDocProvider = new ShelveDocumentProvider();
   context.subscriptions.push(

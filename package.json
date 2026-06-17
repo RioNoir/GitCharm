@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -95,11 +95,18 @@
       },
       {
         "command": "gitcharm.push",
-        "title": "GitCharm: Push"
+        "title": "GitCharm: Push All",
+        "icon": "$(repo-push)"
       },
       {
         "command": "gitcharm.fetchAll",
-        "title": "GitCharm: Fetch All Remotes"
+        "title": "GitCharm: Fetch All Remotes",
+        "icon": "$(repo-fetch)"
+      },
+      {
+        "command": "gitcharm.syncAll",
+        "title": "GitCharm: Sync All (Pull + Push)",
+        "icon": "$(sync)"
       },
       {
         "command": "gitcharm.openMergeEditor",
@@ -122,8 +129,8 @@
       },
       {
         "command": "gitcharm.updateProject",
-        "title": "GitCharm: Update Project",
-        "icon": "$(cloud-download)"
+        "title": "GitCharm: Pull All (Update Project)",
+        "icon": "$(repo-pull)"
       },
       {
         "command": "gitcharm.openSettings",
@@ -194,34 +201,48 @@
       {
         "command": "gitcharm.selectAiModel",
         "title": "GitCharm: Select AI Model"
+      },
+      {
+        "command": "gitcharm.showBranchOptions",
+        "title": "GitCharm: Branch Options"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "gitcharm.updateProject",
+          "command": "gitcharm.fetchAll",
           "when": "view == gitcharm.commitPanel",
           "group": "navigation@1"
         },
         {
-          "command": "gitcharm.refreshCommitPanel",
+          "command": "gitcharm.updateProject",
           "when": "view == gitcharm.commitPanel",
           "group": "navigation@2"
         },
         {
-          "command": "gitcharm.showBranchMenu",
+          "command": "gitcharm.push",
           "when": "view == gitcharm.commitPanel",
           "group": "navigation@3"
         },
         {
-          "command": "gitcharm.openLog",
+          "command": "gitcharm.syncAll",
           "when": "view == gitcharm.commitPanel",
           "group": "navigation@4"
         },
         {
-          "command": "gitcharm.openSettings",
+          "command": "gitcharm.showBranchMenu",
           "when": "view == gitcharm.commitPanel",
           "group": "navigation@5"
+        },
+        {
+          "command": "gitcharm.openLog",
+          "when": "view == gitcharm.commitPanel",
+          "group": "navigation@6"
+        },
+        {
+          "command": "gitcharm.openSettings",
+          "when": "view == gitcharm.commitPanel",
+          "group": "navigation@7"
         }
       ],
       "scm/sourceControl": [
@@ -231,18 +252,28 @@
         }
       ],
       "commandPalette": [
-        {
-          "command": "gitcharm.manageHiddenRepos"
-        },
-        {
-          "command": "gitcharm.openLog"
-        },
-        {
-          "command": "gitcharm.fetchAll"
-        },
-        {
-          "command": "gitcharm.openMergeEditor"
-        },
+        { "command": "gitcharm.openLog" },
+        { "command": "gitcharm.showBranchMenu" },
+        { "command": "gitcharm.commit" },
+        { "command": "gitcharm.fetchAll" },
+        { "command": "gitcharm.updateProject" },
+        { "command": "gitcharm.push" },
+        { "command": "gitcharm.syncAll" },
+        { "command": "gitcharm.refreshCommitPanel" },
+        { "command": "gitcharm.reloadRepositories" },
+        { "command": "gitcharm.openMergeEditor" },
+        { "command": "gitcharm.manageHiddenRepos" },
+        { "command": "gitcharm.manageProfiles" },
+        { "command": "gitcharm.switchProfile" },
+        { "command": "gitcharm.selectAiModel" },
+        { "command": "gitcharm.submodule.init" },
+        { "command": "gitcharm.submodule.update" },
+        { "command": "gitcharm.submodule.updateRecursive" },
+        { "command": "gitcharm.submodule.deinit" },
+        { "command": "gitcharm.submodule.deinitForce" },
+        { "command": "gitcharm.submodule.openInNewWindow" },
+        { "command": "gitcharm.worktree.add" },
+        { "command": "gitcharm.worktree.prune" },
         {
           "command": "gitcharm.openGitAnnotations",
           "when": "resourceScheme == file && config.gitcharm.gitAnnotations.enabled"
@@ -251,13 +282,11 @@
           "command": "gitcharm.closeGitAnnotations",
           "when": "resourceScheme == file && gitcharm.annotationsVisible"
         },
-        {
-          "command": "gitcharm.navigateToAnnotationCommit",
-          "when": "false"
-        },
-        {
-          "command": "gitcharm.selectAiModel"
-        }
+        { "command": "gitcharm.navigateToAnnotationCommit", "when": "false" },
+        { "command": "gitcharm.commitAndPush", "when": "false" },
+        { "command": "gitcharm.pull", "when": "false" },
+        { "command": "gitcharm.openSettings", "when": "false" },
+        { "command": "gitcharm.showBranchOptions", "when": "false" }
       ],
       "editor/lineNumber/context": [
         {
@@ -367,7 +396,7 @@
         "gitcharm.fetchOnStartup": {
           "order": 40,
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Automatically fetch all remotes when the extension activates"
         },
         "gitcharm.notifyOnIncomingCommits": {

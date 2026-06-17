@@ -11,6 +11,7 @@ interface Props {
   repoName: string;
   repoColor: string;
   multiRepo: boolean;
+  singleRepo?: boolean;
   worktreeBranch?: string;
   mainRepoName?: string;
   shelves: ShelveEntry[];
@@ -20,12 +21,14 @@ interface Props {
   onUnshelve: (repoId: string, shelveId: string) => void;
   onUnshelveFile: (repoId: string, shelveId: string, filePath: string) => void;
   onDrop: (repoId: string, shelveId: string) => void;
+  onRename: (repoId: string, shelveId: string, currentName: string) => void;
   onRequestList: (repoId: string) => void;
   onOpenFileDiff: (repoId: string, shelveId: string, filePath: string) => void;
 }
 
 const SHELVE_CTX_ITEMS: ContextMenuEntry[] = [
   { id: 'unshelve', label: 'Unshelve', icon: 'desktop-download' },
+  { id: 'rename', label: 'Rename', icon: 'edit' },
   { separator: true },
   { id: 'drop', label: 'Delete', icon: 'trash', danger: true },
 ];
@@ -209,13 +212,14 @@ function TreeDirNode({ node, depth, repoId, entry, onOpenFileDiff, onUnshelveFil
 
 // ── Single shelve row ─────────────────────────────────────────────────────────
 
-function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop, onOpenFileDiff, isLast }: {
+function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop, onRename, onOpenFileDiff, isLast }: {
   entry: ShelveEntry;
   repoId: string;
   viewMode: ViewMode;
   onUnshelve: Props['onUnshelve'];
   onUnshelveFile: Props['onUnshelveFile'];
   onDrop: Props['onDrop'];
+  onRename: Props['onRename'];
   onOpenFileDiff: Props['onOpenFileDiff'];
   isLast?: boolean;
 }) {
@@ -230,7 +234,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
     <div style={{ ...rowStyle.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
       {/* Header */}
       <div
-        style={{ ...rowStyle.header, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
+        style={{ ...rowStyle.header, background: ctxMenu ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
@@ -288,6 +292,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
           onSelect={id => {
             setCtxMenu(null);
             if (id === 'unshelve') onUnshelve(repoId, entry.id);
+            if (id === 'rename') onRename(repoId, entry.id, entry.name);
             if (id === 'drop') onDrop(repoId, entry.id);
           }}
           onClose={() => setCtxMenu(null)}
@@ -329,14 +334,17 @@ const rowStyle = {
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, worktreeBranch, mainRepoName, shelves, loading, error, viewMode, onUnshelve, onUnshelveFile, onDrop, onRequestList, onOpenFileDiff }: Props) {
+export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo = false, worktreeBranch, mainRepoName, shelves, loading, error, viewMode, onUnshelve, onUnshelveFile, onDrop, onRename, onRequestList, onOpenFileDiff }: Props) {
   useEffect(() => { onRequestList(repoId); }, [repoId]);
 
   return (
     <div style={css.root}>
       {multiRepo && (
-        <div style={css.repoHeader(repoColor)}>
-          <span style={css.dot(repoColor)} />
+        <div style={css.repoHeader(repoColor, singleRepo)}>
+          {singleRepo
+            ? <Codicon name="repo" style={css.repoIcon} />
+            : <span style={css.dot(repoColor)} />
+          }
           <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
           {worktreeBranch && (
             <span style={css.worktreeBadge}>
@@ -368,6 +376,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, worktreeBr
             onUnshelve={onUnshelve}
             onUnshelveFile={onUnshelveFile}
             onDrop={onDrop}
+            onRename={onRename}
             onOpenFileDiff={onOpenFileDiff}
             isLast={i === shelves.length - 1}
           />
@@ -379,12 +388,14 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, worktreeBr
 
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
-  repoHeader: (color: string): React.CSSProperties => ({
+  repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: color + '14', borderBottom: '1px solid var(--vscode-panel-border)',
+    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
+  repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
   repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   worktreeBadge: { display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em', color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)', borderRadius: '3px', padding: '1px 5px 1px 4px', flexShrink: 0, opacity: 0.75 } as React.CSSProperties,
   errorRow: {

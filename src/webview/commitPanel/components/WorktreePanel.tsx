@@ -73,7 +73,7 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
   return (
     <div style={row.root}>
       <div
-        style={{ ...row.header, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
+        style={{ ...row.header, background: ctxMenu ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
@@ -86,7 +86,7 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
         <div style={row.info}>
           <span style={row.name}>
             <span style={row.nameText}>{dirName}</span>
-            {entry.isMain && <span style={row.mainBadge}>main</span>}
+            {entry.isMain && <span style={row.mainBadge}>primary</span>}
             {!entry.isMain && entry.isInWorkspace && <span style={row.workspaceBadge}>in workspace</span>}
             {entry.isLocked && (
               <Codicon name="lock" style={{ fontSize: '11px', opacity: 0.6 }} />
@@ -181,9 +181,10 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
 
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
-function RepoSection({ repo, multiRepo, onDelete, onLock, onUnlock, onPrune, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate }: {
+function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, onPrune, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate }: {
   repo: RepoWorktrees;
   multiRepo: boolean;
+  singleRepo?: boolean;
   onDelete: Props['onDelete'];
   onLock: Props['onLock'];
   onUnlock: Props['onUnlock'];
@@ -199,8 +200,11 @@ function RepoSection({ repo, multiRepo, onDelete, onLock, onUnlock, onPrune, onO
   return (
     <div style={css.repoSection}>
       {multiRepo && (
-        <div style={css.repoHeader(repo.repoColor)}>
-          <span style={css.dot(repo.repoColor)} />
+        <div style={css.repoHeader(repo.repoColor, singleRepo)}>
+          {singleRepo
+            ? <Codicon name="repo" style={css.repoIcon} />
+            : <span style={css.dot(repo.repoColor)} />
+          }
           <span style={css.repoName}>{repo.repoName}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
             {hasPrunable && (
@@ -289,6 +293,7 @@ export function WorktreePanel({
             key={repo.repoId}
             repo={repo}
             multiRepo={multiRepo}
+            singleRepo={repos.length === 1}
             onDelete={onDelete}
             onLock={onLock}
             onUnlock={onUnlock}
@@ -309,13 +314,15 @@ export function WorktreePanel({
 
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const },
-  repoSection: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
-  repoHeader: (color: string): React.CSSProperties => ({
+  repoSection: {} as React.CSSProperties,
+  repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: color + '14', borderBottom: '1px solid var(--vscode-panel-border)',
+    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
+  repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
   repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   headerBtn: {
     background: 'transparent', border: 'none', cursor: 'pointer',

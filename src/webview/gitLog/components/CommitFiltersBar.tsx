@@ -122,7 +122,7 @@ function MoreMenu({ onFetchAll }: { onFetchAll: () => void }) {
             onClick={() => { onFetchAll(); setOpen(false); }}
           >
             <Codicon name="sync" style={{ fontSize: '13px', opacity: 0.7 }} />
-            <span>Refresh</span>
+            <span>Fetch and Refresh</span>
           </div>
         </div>
       )}

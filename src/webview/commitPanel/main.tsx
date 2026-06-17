@@ -76,32 +76,40 @@ const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
 ];
 
 const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
-  { id: 'shelve',       label: 'Shelve Changes',       icon: 'archive' },
-  { id: 'stash',        label: 'Stash Changes',        icon: 'git-stash' },
+  { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
+  { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
+  { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
   { separator: true },
-  { id: 'manage-repo',  label: 'Manage Repository',    icon: 'git-branch' },
-  { id: 'view-git-log', label: 'View Git Log',         icon: 'git-commit' },
+  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
+  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
   { separator: true },
-  { id: 'hide-repo',    label: 'Hide Repository',      icon: 'eye-closed' },
+  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
+  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
   { separator: true },
-  { id: 'refresh',      label: 'Refresh',              icon: 'refresh' },
+  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
 ];
 
 const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
-  { id: 'rollback',     label: 'Rollback',             icon: 'discard' },
-  { id: 'shelve',       label: 'Shelve Changes',        icon: 'archive' },
-  { id: 'stash',        label: 'Stash Changes',         icon: 'git-stash' },
+  { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
+  { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
+  { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
   { separator: true },
-  { id: 'add-to-git',   label: 'Add to Git',            icon: 'add' },
-  { id: 'move-to-cl',   label: 'Move to Changelist…',  icon: 'list-unordered' },
+  { id: 'add-to-git',        label: 'Add to Git',             icon: 'add' },
+  { id: 'move-to-cl',        label: 'Move to Changelist…',   icon: 'list-unordered' },
   { separator: true },
-  { id: 'manage-repo',  label: 'Manage Repository',     icon: 'git-branch' },
-  { id: 'view-git-log', label: 'View Git Log',          icon: 'git-commit' },
+  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
+  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
   { separator: true },
-  { id: 'hide-repo',    label: 'Hide Repository',       icon: 'eye-closed' },
+  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
+  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
   { separator: true },
-  { id: 'refresh',      label: 'Refresh',               icon: 'refresh' },
+  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
 ];
 
 const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
@@ -153,28 +161,36 @@ const VSCODE_FOLDER_UNSTAGED_ITEMS: ContextMenuEntry[] = [
 ];
 
 const VSCODE_REPO_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage-all',  label: 'Unstage All',        icon: 'remove' },
+  { id: 'unstage-all',       label: 'Unstage All',           icon: 'remove' },
   { separator: true },
-  { id: 'manage-repo',  label: 'Manage Repository',  icon: 'git-branch' },
-  { id: 'view-git-log', label: 'View Git Log',        icon: 'git-commit' },
+  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
+  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
   { separator: true },
-  { id: 'hide-repo',    label: 'Hide Repository',     icon: 'eye-closed' },
+  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
+  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
   { separator: true },
-  { id: 'refresh',      label: 'Refresh',             icon: 'refresh' },
+  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
 ];
 
 const VSCODE_REPO_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage-all',    label: 'Stage All',           icon: 'add' },
-  { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
-  { id: 'shelve',       label: 'Shelve Changes',       icon: 'archive' },
-  { id: 'stash',        label: 'Stash Changes',        icon: 'git-stash' },
+  { id: 'stage-all',         label: 'Stage All',             icon: 'add' },
+  { id: 'rollback',          label: 'Rollback',               icon: 'discard' },
+  { id: 'shelve',            label: 'Shelve Changes',          icon: 'archive' },
+  { id: 'stash',             label: 'Stash Changes',           icon: 'git-stash' },
   { separator: true },
-  { id: 'manage-repo',  label: 'Manage Repository',   icon: 'git-branch' },
-  { id: 'view-git-log', label: 'View Git Log',         icon: 'git-commit' },
+  { id: 'manage-repo',       label: 'Manage Repository',       icon: 'git-branch' },
+  { id: 'view-git-log',      label: 'View Git Log',            icon: 'git-commit' },
   { separator: true },
-  { id: 'hide-repo',    label: 'Hide Repository',      icon: 'eye-closed' },
+  { id: 'reveal-explorer',   label: 'Reveal in Explorer',      icon: 'list-tree' },
+  { id: 'open-new-window',   label: 'Open in New Window',      icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: REVEAL_OS_LABEL,           icon: 'folder-opened' },
   { separator: true },
-  { id: 'refresh',      label: 'Refresh',             icon: 'refresh' },
+  { id: 'hide-repo',         label: 'Hide Repository',         icon: 'eye-closed' },
+  { separator: true },
+  { id: 'refresh',           label: 'Refresh',                 icon: 'refresh' },
 ];
 
 const SUBMODULE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
@@ -563,6 +579,10 @@ function App() {
     send({ type: 'SHELVE_DROP', requestId: generateId(), repoId, shelveId });
   }, [send]);
 
+  const handleRenameShelve = useCallback((repoId: string, shelveId: string, currentName: string) => {
+    send({ type: 'SHELVE_RENAME', requestId: generateId(), repoId, shelveId, currentName });
+  }, [send]);
+
   const handleOpenFileDiff = useCallback((repoId: string, shelveId: string, filePath: string) => {
     send({ type: 'SHELVE_OPEN_FILE_DIFF', repoId, shelveId, filePath });
   }, [send]);
@@ -584,6 +604,10 @@ function App() {
 
   const handleStashDrop = useCallback((repoId: string, stashRef: string) => {
     send({ type: 'STASH_DROP', requestId: generateId(), repoId, stashRef });
+  }, [send]);
+
+  const handleRenameStash = useCallback((repoId: string, stashRef: string, currentMessage: string) => {
+    send({ type: 'STASH_RENAME', requestId: generateId(), repoId, stashRef, currentMessage });
   }, [send]);
 
   const handleStashShowFileDiff = useCallback((repoId: string, stashRef: string, filePath: string) => {
@@ -658,6 +682,7 @@ function App() {
   const repos = hiddenRepoIds.length > 0 ? allRepos.filter(r => !hiddenRepoIds.includes(r.repoId)) : allRepos;
   const metaMap = new Map(store.repoMetas.map(m => [m.id, m]));
   const multiRepo = repos.length >= 1;
+  const singleRepo = repos.length === 1;
 
   // Keep unpushed-commit counts fresh for repos without upstream so the Push tab badge
   // shows the correct number even before the tab is opened. Upstream repos are live via aheadBehind.ahead.
@@ -792,6 +817,15 @@ function App() {
       case 'view-git-log':
         send({ type: 'COMMIT_VIEW_GIT_LOG', repoId: ctx.repoId });
         break;
+      case 'reveal-explorer':
+        send({ type: 'COMMIT_REVEAL_REPO_IN_EXPLORER', repoId: ctx.repoId });
+        break;
+      case 'open-new-window':
+        send({ type: 'COMMIT_OPEN_REPO_IN_NEW_WINDOW', repoId: ctx.repoId });
+        break;
+      case 'reveal-os':
+        send({ type: 'COMMIT_REVEAL_REPO_IN_OS', repoId: ctx.repoId });
+        break;
       case 'hide-repo':
         send({ type: 'COMMIT_HIDE_REPO', repoId: ctx.repoId });
         break;
@@ -857,6 +891,11 @@ function App() {
     send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId, remote });
   };
 
+  const doForcePush = (repoId: string) => {
+    const remote = useCommitStore.getState().getRepoStatus(repoId)?.branch.remoteName ?? 'origin';
+    send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId, remote, force: true });
+  };
+
   const doSquash = (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => {
     send({ type: 'PUSH_SQUASH_COMMITS', requestId: generateId(), repoId, hashes, oldestHash, message: combinedMessage, commits } satisfies CommitToHostMsg);
   };
@@ -897,6 +936,10 @@ function App() {
         send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId: r.repoId, remote });
       }
     }
+  };
+
+  const doSyncAndPush = (repoId: string) => {
+    send({ type: 'COMMIT_SYNC_AND_PUSH_REPO', requestId: generateId(), repoId, rebase: false });
   };
 
   // ── Autopilot ─────────────────────────────────────────────────────────────
@@ -1150,6 +1193,10 @@ function App() {
           if (r.branch.upstream) return sum + (r.branch.aheadBehind?.ahead ?? 0);
           return sum + (unpushedMap[r.repoId]?.commits?.length ?? 0);
         }, 0);
+        const totalChanges = repos.reduce((sum, r) => {
+          const paths = new Set([...r.stagedFiles.map(f => f.path), ...r.unstagedFiles.map(f => f.path)]);
+          return sum + paths.size;
+        }, 0);
         return (
           <div style={css.tabBar}>
             {(['changes', 'shelf', 'stash', 'worktree', 'push'] as TabId[]).map(tab => {
@@ -1177,6 +1224,9 @@ function App() {
                     <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
                       {label}
                     </span>
+                  )}
+                  {tab === 'changes' && totalChanges > 0 && (
+                    <span style={css.pushBadge}>{totalChanges}</span>
                   )}
                   {tab === 'push' && totalToPush > 0 && (
                     <span style={css.pushBadge}>{totalToPush}</span>
@@ -1340,6 +1390,7 @@ function App() {
                       repoName={repoName}
                       repoColor={repoColor}
                       multiRepo={multiRepo}
+                      singleRepo={singleRepo}
                       isSubmodule={meta?.isSubmodule}
                       submodulePath={meta?.submodulePath}
                       isWorktree={meta?.isWorktree}
@@ -1497,6 +1548,7 @@ function App() {
                   worktreeBranch={worktreeBranch}
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
+                  singleRepo={singleRepo}
                   shelves={shelveMap[repoId] ?? []}
                   loading={shelveLoading[repoId] ?? false}
                   error={shelveError[repoId] ?? null}
@@ -1504,6 +1556,7 @@ function App() {
                   onUnshelve={handleUnshelve}
                   onUnshelveFile={handleUnshelveFile}
                   onDrop={handleDropShelve}
+                  onRename={handleRenameShelve}
                   onRequestList={requestShelveList}
                   onOpenFileDiff={handleOpenFileDiff}
                 />
@@ -1533,6 +1586,7 @@ function App() {
                   worktreeBranch={worktreeBranch}
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
+                  singleRepo={singleRepo}
                   stashes={(stashMap[repoId] ?? []).filter(s => !worktreeBranch || s.branch === worktreeBranch)}
                   loading={stashLoading[repoId] ?? false}
                   error={stashError[repoId] ?? null}
@@ -1540,6 +1594,7 @@ function App() {
                   onApply={handleStashApply}
                   onPop={handleStashPop}
                   onDrop={handleStashDrop}
+                  onRename={handleRenameStash}
                   onRequestList={requestStashList}
                   onOpenFileDiff={handleStashShowFileDiff}
                   expandAll={stashExpandAll}
@@ -1557,7 +1612,9 @@ function App() {
               repoMetas={store.repoMetas}
               unpushedMap={unpushedMap}
               onPush={doPush}
+              onForcePush={doForcePush}
               onPushAll={doPushAll}
+              onSyncAndPush={doSyncAndPush}
               onOpenInLog={doOpenInLog}
               onUndoCommit={doUndoCommit}
               onSquash={doSquash}
@@ -1727,12 +1784,16 @@ function App() {
             ...(!isInDefaultCl ? [{ id: 'add-to-git', label: 'Add to Git', icon: 'add' } as ContextMenuEntry] : []),
             ...(hasCustomCls ? [{ id: 'move-to-cl', label: 'Move to Changelist…', icon: 'list-unordered' } as ContextMenuEntry] : []),
             { separator: true },
-            { id: 'manage-repo',  label: 'Manage Repository',      icon: 'git-branch' },
-            { id: 'view-git-log', label: 'View Git Log',           icon: 'git-commit' },
+            { id: 'manage-repo',      label: 'Manage Repository',   icon: 'git-branch' },
+            { id: 'view-git-log',     label: 'View Git Log',        icon: 'git-commit' },
             { separator: true },
-            { id: 'hide-repo',    label: 'Hide Repository',        icon: 'eye-closed' },
+            { id: 'reveal-explorer',  label: 'Reveal in Explorer',  icon: 'list-tree' },
+            { id: 'open-new-window',  label: 'Open in New Window',  icon: 'multiple-windows' },
+            { id: 'reveal-os',        label: REVEAL_OS_LABEL,       icon: 'folder-opened' },
             { separator: true },
-            { id: 'refresh',      label: 'Refresh',                icon: 'refresh' },
+            { id: 'hide-repo',        label: 'Hide Repository',     icon: 'eye-closed' },
+            { separator: true },
+            { id: 'refresh',          label: 'Refresh',             icon: 'refresh' },
           ];
           repoItems = baseItems;
         }

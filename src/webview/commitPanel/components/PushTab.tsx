@@ -9,7 +9,9 @@ interface Props {
   repoMetas: RepoMeta[];
   unpushedMap: Record<string, { loading: boolean; commits: UnpushedCommit[]; error?: string }>;
   onPush: (repoId: string) => void;
+  onForcePush: (repoId: string) => void;
   onPushAll: () => void;
+  onSyncAndPush: (repoId: string) => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
   onSquash: (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => void;
@@ -20,6 +22,112 @@ interface Props {
   onExplainCommit: (repoId: string, hash: string) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
+}
+
+// ── Split dropdown button (Push / Sync & Push) ────────────────────────────────
+
+interface SplitItem { icon: string; label: string; onSelect: () => void; }
+
+function PushDropdownButton({ enabled, mainLabel, mainIcon, onMainClick, items }: {
+  enabled: boolean;
+  mainLabel: string;
+  mainIcon: string;
+  onMainClick: () => void;
+  items: SplitItem[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [hoverMain, setHoverMain] = useState(false);
+  const [hoverChevron, setHoverChevron] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h, true);
+    return () => document.removeEventListener('mousedown', h, true);
+  }, [open]);
+
+  const bg = 'var(--vscode-button-background)';
+  const bgHover = 'var(--vscode-button-hoverBackground)';
+  const fg = 'var(--vscode-button-foreground)';
+
+  const base: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: bg, color: fg, border: 'none',
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    fontSize: '12px', fontFamily: 'var(--vscode-font-family)',
+    userSelect: 'none', padding: 0, outline: 'none',
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex', width: '100%', opacity: enabled ? 1 : 0.45 }}>
+      <div style={{
+        display: 'flex', flex: 1,
+        border: '1px solid var(--vscode-button-border, transparent)',
+        borderRadius: '3px', overflow: 'hidden', backgroundColor: bg,
+      }}>
+        <button
+          style={{ ...base, flex: 1, gap: '6px', padding: '6px 12px', backgroundColor: hoverMain && enabled ? bgHover : bg }}
+          disabled={!enabled}
+          onClick={() => { if (enabled) onMainClick(); }}
+          onMouseEnter={() => setHoverMain(true)}
+          onMouseLeave={() => setHoverMain(false)}
+        >
+          <Codicon name={mainIcon} style={{ marginRight: '6px' }} />
+          {mainLabel}
+        </button>
+        <div style={{ width: '1px', alignSelf: 'stretch', padding: '4px 0', display: 'flex', backgroundColor: 'inherit' }}>
+          <div style={{ flex: 1, backgroundColor: fg, opacity: 0.3 }} />
+        </div>
+        <button
+          style={{ ...base, padding: '6px 8px', backgroundColor: hoverChevron && enabled ? bgHover : bg }}
+          disabled={!enabled}
+          title="More Actions..."
+          onClick={() => { if (enabled) setOpen(o => !o); }}
+          onMouseEnter={() => setHoverChevron(true)}
+          onMouseLeave={() => setHoverChevron(false)}
+        >
+          <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
+        </button>
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 4px)', left: 0,
+          background: 'var(--vscode-menu-background, var(--vscode-editor-background))',
+          border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+          borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+          zIndex: 9999, minWidth: '160px', padding: '3px 0',
+        }}>
+          {items.map(item => (
+            <PushDropItem key={item.label} icon={item.icon} label={item.label} onSelect={() => { item.onSelect(); setOpen(false); }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PushDropItem({ icon, label, onSelect }: { icon: string; label: string; onSelect: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '5px 12px', fontSize: '12px', cursor: 'pointer',
+        color: 'var(--vscode-menu-foreground)',
+        userSelect: 'none',
+        background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onSelect}
+    >
+      <Codicon name={icon} style={{ fontSize: '13px', flexShrink: 0 }} />
+      {label}
+    </div>
+  );
 }
 
 function formatDate(iso: string): string {
@@ -365,7 +473,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   return (
     <div style={styles.repoRoot}>
       {/* Repo header */}
-      <div style={styles.repoHeader(repoColor)}>
+      <div style={styles.repoHeader(repoColor, singleRepo)}>
         {!singleRepo && (
           <input
             type="checkbox"
@@ -379,7 +487,10 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
         )}
         <div style={styles.headerMain} onClick={singleRepo ? undefined : () => setExpanded(e => !e)}>
           {!singleRepo && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />}
-          <span style={styles.dot(repoColor)} />
+          {singleRepo
+            ? <Codicon name="repo" style={{ fontSize: '13px', opacity: 0.7, flexShrink: 0 }} />
+            : <span style={styles.dot(repoColor)} />
+          }
           <span style={styles.repoName}>{repoName}</span>
           <span
             style={{ ...styles.branchBadge(branchClr), cursor: 'pointer' }}
@@ -483,7 +594,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, onBranchClick, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, onBranchClick, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
@@ -493,6 +604,8 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
     const hasUpstream = !!r.branch.upstream;
     return (hasUpstream && ahead > 0) || !hasUpstream;
   };
+
+  const isBehindRepo = (r: RepoStatus) => (r.branch.aheadBehind?.behind ?? 0) > 0;
 
   // Auto-deselect repos that no longer have commits to push
   useEffect(() => {
@@ -526,6 +639,19 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
   if (isSingleRepo) {
     const solo = repos[0];
     const canPush = canPushRepo(solo);
+    const needsSync = canPush && isBehindRepo(solo);
+    const mainLabel = needsSync ? 'Sync & Push' : pushButtonLabel([solo]);
+    const mainIcon = needsSync ? 'sync' : 'cloud-upload';
+    const mainAction = needsSync ? () => onSyncAndPush(solo.repoId) : () => onPush(solo.repoId);
+    const dropItems: SplitItem[] = needsSync
+      ? [
+          { icon: 'repo-push', label: pushButtonLabel([solo]), onSelect: () => onPush(solo.repoId) },
+          { icon: 'repo-force-push', label: 'Force Push', onSelect: () => onForcePush(solo.repoId) },
+        ]
+      : [
+          { icon: 'sync', label: 'Sync & Push', onSelect: () => onSyncAndPush(solo.repoId) },
+          { icon: 'repo-force-push', label: 'Force Push', onSelect: () => onForcePush(solo.repoId) },
+        ];
     return (
       <div style={css.root}>
         <div style={css.list}>
@@ -551,10 +677,13 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
           />
         </div>
         <div style={css.footer}>
-          <button style={css.pushBtn(canPush)} disabled={!canPush} onClick={() => onPush(solo.repoId)}>
-            <Codicon name="cloud-upload" style={{ marginRight: '6px' }} />
-            {pushButtonLabel([solo])}
-          </button>
+          <PushDropdownButton
+            enabled={canPush}
+            mainLabel={mainLabel}
+            mainIcon={mainIcon}
+            onMainClick={mainAction}
+            items={dropItems}
+          />
         </div>
       </div>
     );
@@ -632,10 +761,32 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onPushAll, onOp
             })}
           </div>
         )}
-        <button style={css.pushBtn(canPush)} disabled={!canPush} onClick={handlePush}>
-          <Codicon name="cloud-upload" style={{ marginRight: '6px' }} />
-          {pushButtonLabel(pushableChecked)}
-        </button>
+        {(() => {
+          const anyBehind = pushableChecked.some(isBehindRepo);
+          const mainLabel = anyBehind ? 'Sync & Push' : pushButtonLabel(pushableChecked);
+          const mainIcon = anyBehind ? 'sync' : 'cloud-upload';
+          const mainAction = anyBehind
+            ? () => pushableChecked.forEach(r => onSyncAndPush(r.repoId))
+            : handlePush;
+          const dropItems: SplitItem[] = anyBehind
+            ? [
+                { icon: 'repo-push', label: pushButtonLabel(pushableChecked), onSelect: handlePush },
+                { icon: 'repo-force-push', label: 'Force Push', onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
+              ]
+            : [
+                { icon: 'sync', label: 'Sync & Push', onSelect: () => pushableChecked.forEach(r => onSyncAndPush(r.repoId)) },
+                { icon: 'repo-force-push', label: 'Force Push', onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
+              ];
+          return (
+            <PushDropdownButton
+              enabled={canPush}
+              mainLabel={mainLabel}
+              mainIcon={mainIcon}
+              onMainClick={mainAction}
+              items={dropItems}
+            />
+          );
+        })()}
       </div>
     </div>
   );
@@ -672,23 +823,15 @@ const css = {
     padding: '0 3px', fontSize: '10px', minWidth: '14px', height: '14px',
     justifyContent: 'center', boxSizing: 'border-box' as const,
   } as React.CSSProperties,
-  pushBtn: (enabled: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'var(--vscode-button-background)',
-    color: 'var(--vscode-button-foreground)',
-    border: 'none', borderRadius: '3px', padding: '6px 12px',
-    cursor: enabled ? 'pointer' : 'default',
-    fontSize: '12px', fontFamily: 'var(--vscode-font-family)',
-    opacity: enabled ? 1 : 0.45, width: '100%',
-  }),
 };
 
 const styles = {
   repoRoot: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
-  repoHeader: (color: string): React.CSSProperties => ({
+  repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center',
     padding: '4px 8px', minHeight: '26px',
-    background: color + '14', borderBottom: '1px solid var(--vscode-panel-border)',
+    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
   }),
   checkbox: {

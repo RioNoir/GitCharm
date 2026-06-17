@@ -31,7 +31,8 @@ function avatarColor(email: string): string {
 }
 
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
+  const parts = name.trim().split(/\s+/).filter(p => /^[a-zA-ZÀ-ÿ]/.test(p));
+  if (parts.length === 0) return '?';
   if (parts.length === 1) { const w = parts[0] ?? ''; return (w.length > 1 ? w[0] + w[1] : w[0] ?? '?').toUpperCase(); }
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
 }

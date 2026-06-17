@@ -91,6 +91,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
           d.dispose();
           this.reinitialize();
           this.scheduleRefresh();
+          this.fetchOnStartupIfEnabled();
         }
       });
       this.globalListeners.push(d);
@@ -103,9 +104,20 @@ export class WorkspaceGitManager implements vscode.Disposable {
           d.dispose();
           this.reinitialize();
           this.scheduleRefresh();
+          this.fetchOnStartupIfEnabled();
         }
       });
       this.globalListeners.push(d);
+    } else {
+      // vscode.git is already initialized — fetch after repos are set up
+      this.fetchOnStartupIfEnabled();
+    }
+  }
+
+  private fetchOnStartupIfEnabled(): void {
+    const enabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchOnStartup', true);
+    if (enabled) {
+      this.fetchAll().catch(console.error);
     }
   }
 
@@ -146,11 +158,6 @@ export class WorkspaceGitManager implements vscode.Disposable {
       folders.forEach((folder) => {
         this.discoverNestedRepositories(folder.uri.fsPath, repositoryScanMaxDepth, colorIdx, customColors);
       });
-    }
-
-    const fetchOnStartup = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchOnStartup', false);
-    if (fetchOnStartup) {
-      this.fetchAll().catch(console.error);
     }
 
     // Notify listeners that the set of known repos has changed (e.g. submodule added/removed)
@@ -780,6 +787,21 @@ export class WorkspaceGitManager implements vscode.Disposable {
       try {
         const message = rebase ? await r.pullRebase() : await r.pull();
         results.push({ repoId: r.repoId, ok: true, message });
+      } catch (e: any) {
+        const detail = e?.stderr?.trim() || e?.gitErrorCode || e?.message || 'Unknown error';
+        results.push({ repoId: r.repoId, ok: false, message: detail });
+      }
+    }
+    return results;
+  }
+
+  async pushAll(): Promise<Array<{ repoId: string; ok: boolean; message: string }>> {
+    const repos = Array.from(this.repos.values());
+    const results: Array<{ repoId: string; ok: boolean; message: string }> = [];
+    for (const r of repos) {
+      try {
+        await r.push();
+        results.push({ repoId: r.repoId, ok: true, message: 'pushed' });
       } catch (e: any) {
         const detail = e?.stderr?.trim() || e?.gitErrorCode || e?.message || 'Unknown error';
         results.push({ repoId: r.repoId, ok: false, message: detail });

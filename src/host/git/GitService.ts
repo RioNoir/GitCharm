@@ -1483,6 +1483,12 @@ export class GitService {
     await this.git.raw(['stash', 'drop', stashRef]);
   }
 
+  async stashRename(stashRef: string, newMessage: string): Promise<void> {
+    const hash = (await this.git.raw(['rev-parse', stashRef])).trim();
+    await this.git.raw(['stash', 'drop', stashRef]);
+    await this.git.raw(['stash', 'store', '-m', newMessage, hash]);
+  }
+
   async getStashFileContent(stashRef: string, filePath: string): Promise<string> {
     try {
       return await this.git.show([`${stashRef}:${filePath}`]);

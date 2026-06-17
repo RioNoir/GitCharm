@@ -208,16 +208,55 @@ export class BranchStatusBar implements vscode.Disposable {
 
     items.push(
       {
-        label: `${this.hasBehind ? '$(arrow-down) ' : '$(cloud-download) '}Update Project…`,
+        label: '$(repo-fetch) Fetch All',
+        description: 'Fetch from all remotes in all repositories',
+        action: () => this.fetchAll(),
+      },
+      {
+        label: `${this.hasBehind ? '$(arrow-down) ' : '$(repo-pull) '}Pull All (Update Project)…`,
         description: this.hasBehind ? `Pull all repositories (${this.totalBehind} incoming commit${this.totalBehind !== 1 ? 's' : ''})` : 'Pull all repositories',
         action: () => this.updateProject(),
       },
       {
-        label: `${this.hasUnpushed ? '$(arrow-up) ' : '$(cloud-upload) '}Push…`,
+        label: `${this.hasUnpushed ? '$(arrow-up) ' : '$(repo-push) '}Push All…`,
         description: this.hasUnpushed
           ? `Push commits to remote (${this.totalAhead} commit${this.totalAhead !== 1 ? 's' : ''} to push${this.hasNoUpstream ? ', some branches have no upstream' : ''})`
-          : this.hasNoUpstream ? 'Some branches have no upstream set' : 'Push current branch to remote',
-        action: () => this.pushMenu(metas),
+          : this.hasNoUpstream ? 'Some branches have no upstream set' : 'Push all repositories to remote',
+        action: async () => { await vscode.commands.executeCommand('gitcharm.push'); },
+      },
+      {
+        label: '$(repo-force-push) Force Push All…',
+        description: 'Force push all repositories',
+        action: async () => {
+          const confirm = await vscode.window.showWarningMessage(
+            'Force push all repositories? This will overwrite remote history.',
+            { modal: true }, 'Force Push'
+          );
+          if (confirm !== 'Force Push') return;
+          const metas = this.manager.getRepoMetas();
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Force pushing all repositories…', cancellable: false },
+            async () => {
+              const errors: string[] = [];
+              for (const meta of metas) {
+                const repo = this.manager.getRepo(meta.id);
+                if (!repo) continue;
+                try { await repo.push(true); } catch (e: unknown) { errors.push(`${meta.name}: ${String(e)}`); }
+              }
+              if (errors.length > 0) {
+                vscode.window.showWarningMessage(`GitCharm: ${errors.length} force push(es) failed: ${errors.join('; ')}`);
+              } else {
+                vscode.window.showInformationMessage(`GitCharm: Force push complete for ${metas.length} ${metas.length === 1 ? 'repository' : 'repositories'}.`);
+              }
+            }
+          );
+          await this.refresh();
+        },
+      },
+      {
+        label: '$(sync) Sync All…',
+        description: 'Pull then push all repositories',
+        action: async () => { await vscode.commands.executeCommand('gitcharm.syncAll'); },
       },
       {
         label: '$(git-commit) Commit',
@@ -895,6 +934,133 @@ export class BranchStatusBar implements vscode.Disposable {
       {
         label: '$(arrow-left) Back',
         action: () => this.showMenu(),
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(repo-fetch) Fetch',
+        description: 'Fetch all remotes',
+        action: async () => {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm [${meta.name}]: Fetching…`, cancellable: false },
+            async () => { await repo.fetchAll(); }
+          );
+          await this.refresh();
+        },
+      },
+      {
+        label: '$(repo-pull) Pull…',
+        description: 'Pull from remote',
+        action: async () => {
+          const pick = await vscode.window.showQuickPick(
+            [
+              { label: '$(git-merge) Merge incoming changes', rebase: false },
+              { label: '$(repo-forked) Rebase onto incoming changes', rebase: true },
+            ],
+            { title: `Pull — ${meta.name}` }
+          ) as { label: string; rebase: boolean } | undefined;
+          if (!pick) return;
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm [${meta.name}]: Pulling…`, cancellable: false },
+            async () => {
+              try {
+                const msg = pick.rebase ? await repo.pullRebase() : await repo.pull();
+                vscode.window.showInformationMessage(`GitCharm [${meta.name}]: ${msg}`);
+              } catch (e: unknown) {
+                vscode.window.showWarningMessage(`GitCharm [${meta.name}]: Pull failed — ${String(e)}`);
+              }
+            }
+          );
+          await this.refresh();
+        },
+      },
+      {
+        label: '$(repo-push) Push',
+        description: 'Push to remote',
+        action: async () => {
+          const remotes = await repo.getRemotes().catch(() => [] as string[]);
+          if (remotes.length === 0) {
+            vscode.window.showWarningMessage(`GitCharm [${meta.name}]: No remotes configured.`);
+            return;
+          }
+          let targetRemote = remotes[0];
+          if (remotes.length > 1) {
+            const picked = await vscode.window.showQuickPick(
+              remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
+              { title: `Push ${meta.name} — select remote` }
+            ) as { label: string; remote: string } | undefined;
+            if (!picked) return;
+            targetRemote = picked.remote;
+          }
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm [${meta.name}]: Pushing to ${targetRemote}…`, cancellable: false },
+            async () => {
+              try {
+                await repo.push(false, targetRemote);
+                vscode.window.showInformationMessage(`GitCharm [${meta.name}]: pushed to "${targetRemote}" successfully.`);
+              } catch (e: unknown) {
+                vscode.window.showErrorMessage(`GitCharm [${meta.name}]: Push failed — ${String(e)}`);
+              }
+            }
+          );
+          await this.refresh();
+        },
+      },
+      {
+        label: '$(repo-force-push) Force Push',
+        description: 'Force push to remote',
+        action: async () => {
+          const confirm = await vscode.window.showWarningMessage(
+            `Force push ${meta.name}? This will overwrite remote history.`,
+            { modal: true }, 'Force Push'
+          );
+          if (confirm !== 'Force Push') return;
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm [${meta.name}]: Force pushing…`, cancellable: false },
+            async () => {
+              try {
+                await repo.push(true);
+                vscode.window.showInformationMessage(`GitCharm [${meta.name}]: force pushed successfully.`);
+              } catch (e: unknown) {
+                vscode.window.showErrorMessage(`GitCharm [${meta.name}]: Force push failed — ${String(e)}`);
+              }
+            }
+          );
+          await this.refresh();
+        },
+      },
+      {
+        label: '$(sync) Sync…',
+        description: 'Pull then push',
+        action: async () => {
+          const pick = await vscode.window.showQuickPick(
+            [
+              { label: '$(git-merge) Merge incoming changes', rebase: false },
+              { label: '$(repo-forked) Rebase onto incoming changes', rebase: true },
+            ],
+            { title: `Sync — ${meta.name}` }
+          ) as { label: string; rebase: boolean } | undefined;
+          if (!pick) return;
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `GitCharm [${meta.name}]: Syncing…`, cancellable: false },
+            async () => {
+              try {
+                const msg = pick.rebase ? await repo.pullRebase() : await repo.pull();
+                vscode.window.showInformationMessage(`GitCharm [${meta.name}]: Pull — ${msg}`);
+              } catch (e: unknown) {
+                vscode.window.showWarningMessage(`GitCharm [${meta.name}]: Pull failed — stopping before push. ${String(e)}`);
+                await this.refresh();
+                return;
+              }
+              try {
+                await repo.push();
+                vscode.window.showInformationMessage(`GitCharm [${meta.name}]: synced successfully.`);
+              } catch (e: unknown) {
+                vscode.window.showErrorMessage(`GitCharm [${meta.name}]: Push failed — ${String(e)}`);
+              }
+            }
+          );
+          await this.refresh();
+        },
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
