@@ -64,8 +64,10 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 
 - Lists unpushed commits for every repository, including branches without an upstream tracking branch.
 - Commit count badge on the tab label, auto-updated after each commit, undo, or push.
+- File count badge on the Changes tab label showing the total number of modified files.
 - Branch info header with sync state: "Up to date", "N commits to pull from `<upstream>`", or "Local branch — not published" with matching badges (↑ ahead, ↓ behind, Unpublished).
 - Per-commit stats showing files changed, additions, and deletions.
+- Push button adapts to context: when the repo is both ahead and behind, it becomes a **Sync & Push** split-button; the dropdown exposes **Push** and **Force Push** options.
 - Push button label adapts to context: "Push", "Publish Branch", "Publish Branches", or "Push & Publish" for mixed upstream/no-upstream selections.
 - **Undo** the HEAD commit (with confirmation) directly from the push list.
 - **Explain with AI** context menu action on commits: opens the detail panel with an auto-generated explanation of the changes.
@@ -76,17 +78,19 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 
 ### 🗄️ Shelve & Stash
 
-- **Shelve** with patch-based shelves: create, apply (full or partial), delete, and inspect per-file diffs.
+- **Shelve** with patch-based shelves: create, apply (full or partial), delete, rename, and inspect per-file diffs.
 - Binary-file handling and conflict detection on unshelve.
-- **Native stash** support: list, apply, pop, drop, and file diff preview.
+- **Native stash** support: list, apply, pop, drop, rename, and file diff preview.
+- Stashes are shown as native nodes directly in the Git Log commit list.
+- Row selection is maintained when the context menu is open, matching the behavior of other tabs.
 
 <img src="media/screenshots/shelf_stash_push.png" alt="GitCharm commit panel">
 
 ### 📜 Git Log Panel
 
 - Commit graph with branch visualization.
-- Branch sidebar: local branches, remote branches, tags; single-repo workspaces hide the repository list.
-- Filters by text, author, branch, date, and repository.
+- Branch sidebar: local branches, remote branches, tags; single-repo workspaces hide the repository list; sidebar is collapsible.
+- Filters by text, author, branch, date, and repository; filter bar redesigned with compact controls.
 - Commit detail with changed-file list and per-file diffs.
 - Smart diff resolution for added, deleted, renamed, copied, merge, and root commits.
 - **Show Combined Diff** context menu entry in the commit file list.
@@ -94,7 +98,8 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Bold commit message for the HEAD commit in the list.
 - Author name shown in commit rows when panel width > 500 px.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
-- Author avatars in commit rows and commit detail: resolves GitHub noreply emails to GitHub avatars, other emails to Gravatar, with a colored-initials fallback.
+- Author avatars in commit rows and commit detail: resolves GitHub noreply emails to GitHub avatars, other emails to Gravatar, with a colored-initials fallback. Initials correctly handle names with parenthesized suffixes (e.g. "Name Surname (Tag)").
+- **Fetch and Refresh** button in the filters bar fetches all remotes before refreshing the log.
 - **Explain with AI** and **Open Full Detail** context menu actions; AI actions hidden when AI is disabled.
 - Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, and create new branch.
 - **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
@@ -108,10 +113,11 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 <br>
 <img src="media/screenshots/log_options.png" alt="GitCharm log panel">
 
-### 🌿 Branch Status Bar
+### 🌿 Branch Status Bar & Git Menu
 
 - Shows the current branch name (truncated with ellipsis if long) with dirty, ahead, behind, and diverged states; shows the short commit hash when in detached HEAD state without a tag, or the tag name when checked out on a tag.
-- **Branch menu** with quick access to: update project, push, commit, branch operations, and log.
+- **Branch menu** with quick access to: **Fetch All**, **Pull**, **Push All**, **Force Push All**, **Sync All** (pull then push, stops on conflicts), branch operations, and log.
+- Same operations available per-repository in the sub-menu, without redundant repo name prefixes in labels.
 - **Tags section** in the per-repository menu: checkout, merge, push to remote, and delete tags; delete dialog offers three options (local, remote, or both).
 - **Per-repository sub-menu** with full remote management: add, rename, change URL, and remove remotes.
 - Tracks the active editor to reflect the correct repository in multi-repo workspaces.
@@ -150,7 +156,15 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Common branch actions applied across all repositories in one step.
 - Activity bar badge showing the total number of changed files across all repositories.
 - Nested repository scanning: automatically discovers Git repositories inside workspace subfolders up to a configurable depth, skipping ignored folders (e.g. `node_modules`). Files belonging to nested repos are filtered out from their parent repository's change list, matching VS Code's built-in behavior.
-- Repository context menu in the Commit Panel header (all view modes): quick access to branch operations, fetch, push, and settings for each repository.
+- Repository context menu in the Commit Panel header (all view modes and all tabs): quick access to branch operations, fetch, push, settings, **Reveal in Explorer**, **Open in New Window**, and **Open in File Manager** for each repository.
+- Hide/show individual repositories from the Commit Panel and Log Panel via the context menu; hidden repos are persisted per workspace.
+
+### 🌳 Worktrees
+
+- Dedicated **Worktrees** tab in the Commit Panel listing all worktrees for each repository.
+- Per-worktree actions: open in Explorer, open in new window, open in File Manager, add to workspace, lock/unlock, remove, and force-remove.
+- Create new worktrees and prune stale ones directly from the tab.
+- Primary worktree clearly labeled with a **primary** badge.
 
 ### ⚔️ Merge Editor
 
@@ -221,17 +235,17 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | Command | Description |
 |:--|:--|
 | `GitCharm: Focus Git Log` | Focuses the Git Log panel. |
-| `GitCharm: Fetch All Remotes` | Fetches and prunes all remotes. |
+| `GitCharm: Fetch All` | Fetches all remotes across all repositories. |
+| `GitCharm: Pull` | Pulls all repositories (prompts for merge or rebase strategy). |
+| `GitCharm: Push` | Pushes all repositories. |
+| `GitCharm: Sync All` | Pulls then pushes all repositories; stops if any pull fails. |
 | `GitCharm: Open Merge Editor` | Opens the merge editor for the active file when conflict markers are present. |
-| `GitCharm: Refresh Commit Panel` | Refreshes the Commit panel state. |
 | `GitCharm: Branch Menu` | Opens the Status Bar branch menu. |
-| `GitCharm: Update Project` | Pulls all repositories using merge or rebase. |
 | `GitCharm: Settings` | Opens GitCharm settings. |
 | `GitCharm: Manage Git Profiles` | Opens the Git profile manager. |
 | `GitCharm: Switch Git Profile` | Switches the active Git profile for the current workspace. |
 | `GitCharm: Open Git Annotations` | Shows inline blame annotations in the active editor. |
 | `GitCharm: Close Git Annotations` | Hides inline blame annotations in the active editor. |
-| `GitCharm: Navigate to Commit` | Navigates to the commit linked from a blame annotation. |
 | `GitCharm: Select AI Provider` | Opens a QuickPick to choose and configure the AI provider and model. |
 | `GitCharm: Generate Commit Message` | Generates an AI commit message from the current staged diff. |
 | `GitCharm: Explain Commit` | Opens the commit detail panel with an AI-generated explanation of the selected commit. |
@@ -248,7 +262,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | Setting | Default | Description |
 |:--|:--|:--|
 | `gitcharm.graphMaxCommits` | `1000` | Maximum number of commits loaded into the Git Log graph. |
-| `gitcharm.fetchOnStartup` | `false` | Fetches all remotes when GitCharm activates. |
+| `gitcharm.fetchOnStartup` | `true` | Fetches all remotes once when GitCharm activates. |
 | `gitcharm.projectColors` | `{}` | Maps workspace folder/repository names to hex colors for multi-repo views. |
 | `gitcharm.repositoryScanMaxDepth` | `1` | Maximum depth of workspace subfolders to scan for Git repositories. `0` only checks workspace folders. |
 | `gitcharm.repositoryScanIgnoredFolders` | `["node_modules"]` | Folder names or workspace-relative paths skipped while scanning for nested Git repositories. |
