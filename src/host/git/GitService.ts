@@ -1390,17 +1390,28 @@ export class GitService {
       const message = branchMatch ? subject.slice(branchMatch[0].length).trim() : subject;
 
       // Get files for this stash entry
-      let files: Array<{ path: string; status: string }> = [];
+      let files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
       try {
+        const stats = new Map<string, { added: number; removed: number }>();
+        const numstatRaw = await this.git.raw(['stash', 'show', '--numstat', ref]).catch(() => '');
+        for (const line of numstatRaw.trim().split('\n')) {
+          const parts = line.split('\t');
+          if (parts.length < 3) continue;
+          const added = parseInt(parts[0], 10);
+          const removed = parseInt(parts[1], 10);
+          const path = parts[2].trim();
+          if (path && !isNaN(added) && !isNaN(removed)) stats.set(path, { added, removed });
+        }
+
         const fileRaw = await this.git.raw(['stash', 'show', '--name-status', ref]);
         for (const fileLine of fileRaw.trim().split('\n')) {
           if (!fileLine.trim()) continue;
           const fileParts = fileLine.split('\t');
           if (fileParts.length < 2) continue;
-          const statusLetter = fileParts[0].trim();
+          const statusLetter = fileParts[0].trim()[0];
           const filePath = fileParts[fileParts.length - 1].trim();
-          const status = STATUS_MAP[statusLetter] ?? 'modified';
-          files.push({ path: filePath, status });
+          const s = stats.get(filePath);
+          files.push({ path: filePath, status: statusLetter, added: s?.added, removed: s?.removed });
         }
       } catch { /* stash might have no files */ }
 
@@ -1411,12 +1422,17 @@ export class GitService {
         for (const f of untrackedRaw.trim().split('\n')) {
           const filePath = f.trim();
           if (filePath && !trackedPaths.has(filePath)) {
-            files.push({ path: filePath, status: 'untracked' });
+            files.push({ path: filePath, status: '?' });
           }
         }
       } catch { /* stash^3 may not exist for tracked-only stashes */ }
 
-      entries.push({ ref, index, message, date, branch, files });
+      let parentHash = '';
+      try {
+        parentHash = (await this.git.raw(['rev-parse', `${ref}^1`])).trim();
+      } catch { /* ignore */ }
+
+      entries.push({ ref, index, message, date, branch, parentHash, files });
     }
     return entries;
   }

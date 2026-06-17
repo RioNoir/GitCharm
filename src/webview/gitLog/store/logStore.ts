@@ -34,6 +34,7 @@ interface LogState {
   error: string | null;
   pendingScrollHash: string | null;
   fileLoadSeq: number;
+  stashes: CommitNode[];
 
   hasWorkspaceFolder: boolean;
   aiEnabled: boolean;
@@ -58,6 +59,7 @@ interface LogState {
   updateBranches: (repoId: string, branches: BranchInfo[]) => void;
   setError: (err: string | null) => void;
   setPendingScrollHash: (hash: string | null) => void;
+  setStashes: (stashes: CommitNode[]) => void;
 }
 
 const defaultCommitFilters: CommitFilters = {
@@ -78,6 +80,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   tags: [],
   iconTheme: null,
   commits: [],
+  stashes: [],
   hasMore: true,
   selectedCommit: null,
   selectedFile: null,
@@ -108,7 +111,7 @@ export const useLogStore = create<LogState>((set, get) => ({
     hasMore: !isLast,
   })),
   setCommits: (commits, hasMore) => set({ commits, hasMore, loadingCommits: false, backgroundLoading: false }),
-  resetCommits: () => set({ commits: [], hasMore: true, backgroundLoading: false, loadingCommits: true, selectedCommit: null, commitFiles: [], currentDiff: null }),
+  resetCommits: () => set({ commits: [], stashes: [], hasMore: true, backgroundLoading: false, loadingCommits: true, selectedCommit: null, commitFiles: [], currentDiff: null }),
   selectCommit: (commit) => set(s => ({ selectedCommit: commit, commitFiles: [], currentDiff: null, selectedFile: null, fileLoadSeq: s.fileLoadSeq + 1 })),
   setCommitFiles: (files) => set({ commitFiles: files, loadingFiles: false }),
   selectFile: (file) => set({ selectedFile: file }),
@@ -125,4 +128,5 @@ export const useLogStore = create<LogState>((set, get) => ({
   })),
   setError: (err) => set({ error: err }),
   setPendingScrollHash: (hash) => set({ pendingScrollHash: hash }),
+  setStashes: (stashes) => set({ stashes }),
 }));

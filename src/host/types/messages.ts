@@ -33,12 +33,13 @@ export interface ShelveEntry {
 // ─── Stash (native git stash) ────────────────────────────────────────────────
 
 export interface StashEntry {
-  ref: string;      // e.g. "stash@{0}"
-  index: number;    // 0, 1, 2...
-  message: string;  // description
-  date: string;     // ISO date
-  branch: string;   // branch name
-  files: Array<{ path: string; status: string }>;
+  ref: string;         // e.g. "stash@{0}"
+  index: number;       // 0, 1, 2...
+  message: string;     // description
+  date: string;        // ISO date
+  branch: string;      // branch name
+  parentHash: string;  // full hash of the commit the stash was created on (stash^1)
+  files: Array<{ path: string; status: string; added?: number; removed?: number }>;
 }
 
 // ─── Push (unpushed commits) ─────────────────────────────────────────────────
@@ -204,7 +205,8 @@ export type HostToLogMsg =
   | { type: 'LOG_COMMIT_BRANCHES_RESULT'; requestId: string; branches: { local: string[]; remote: string[]; tags: string[] } }
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
-  | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null };
+  | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
+  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[] };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 

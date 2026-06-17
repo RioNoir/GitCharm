@@ -445,6 +445,12 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                 );
               })()}
               <div style={styles.info}>
+                {commit.isStash && (
+                  <span style={{ ...styles.refBadge(commit.dotColor, false, false, isSelected), marginRight: '4px' }}>
+                    <Codicon name="archive" style={{ fontSize: '10px', flexShrink: 0, lineHeight: 1 }} />
+                    <span style={styles.refBadgeLabel}>{commit.stashRef}</span>
+                  </span>
+                )}
                 <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message}</span>
               </div>
 
@@ -455,8 +461,8 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
               )}
               <div style={styles.meta}>
-                <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={20} />
-                {containerWidth > 500 && <span style={styles.author}>{formatAuthorName(commit.authorName)}</span>}
+                <AuthorAvatar authorName={commit.isStash ? 'You' : commit.authorName} authorEmail={commit.authorEmail} size={20} isYou={commit.isStash} />
+                {containerWidth > 500 && <span style={styles.author}>{commit.isStash ? 'You' : formatAuthorName(commit.authorName)}</span>}
               </div>
               <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
             </div>

@@ -105,6 +105,9 @@ function App() {
         case 'LOG_FILTER_BY_REPO':
           filterRepoRef.current(msg.repoId, msg.branch ?? null);
           break;
+        case 'LOG_STASHES_BATCH':
+          store.setStashes(msg.stashCommits);
+          break;
         case 'LOG_REMOTES_RESULT':
           break;
       }
@@ -171,6 +174,11 @@ function App() {
   useEffect(() => {
     const { selectedCommit } = store;
     if (!selectedCommit) return;
+    // Stash entries already carry their file list — no network request needed
+    if (selectedCommit.isStash) {
+      store.setCommitFiles(selectedCommit.stashFiles ?? []);
+      return;
+    }
     store.setLoadingFiles(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -199,16 +207,28 @@ function App() {
     store.commitFilters.dateTo
   );
 
+  // Merge stashes into the commit list, filtering by branch if a branch filter is active
+  const commitsWithStashes = useMemo(() => {
+    const branchFilter = store.commitFilters.branch;
+    const visibleStashes = branchFilter
+      ? store.stashes.filter(s => s.stashBranch === branchFilter)
+      : store.stashes;
+    if (visibleStashes.length === 0) return store.commits;
+    const merged = [...store.commits, ...visibleStashes];
+    merged.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
+    return merged;
+  }, [store.commits, store.stashes, store.commitFilters.branch]);
+
   // assignLanes is expensive — run it off the render path via useEffect + rAF
   // so scroll events never block the UI thread waiting for layout recalc.
   const [graphLayout, setGraphLayout] = useState<GraphLayout>(() =>
-    assignLanes(store.commits, isFiltered)
+    assignLanes(commitsWithStashes, isFiltered)
   );
 
   const layoutRafRef = useRef<number | null>(null);
-  const pendingCommitsRef = useRef(store.commits);
+  const pendingCommitsRef = useRef(commitsWithStashes);
   const pendingFilteredRef = useRef(isFiltered);
-  pendingCommitsRef.current = store.commits;
+  pendingCommitsRef.current = commitsWithStashes;
   pendingFilteredRef.current = isFiltered;
 
   useEffect(() => {
@@ -218,7 +238,7 @@ function App() {
       setGraphLayout(assignLanes(pendingCommitsRef.current, pendingFilteredRef.current));
     });
     return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
-  }, [store.commits, isFiltered, themeVersion]);
+  }, [commitsWithStashes, isFiltered, themeVersion]);
 
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};

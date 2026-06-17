@@ -256,6 +256,38 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           filterDateTo: msg.filterDateTo,
         });
         this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast: commits.length < limit, batchIndex: 0, requestId: msg.requestId });
+
+        // Send stashes only on first load (not on pagination)
+        if (msg.skip === 0) {
+          Promise.all(logRepoIds.map(async (repoId) => {
+            const repo = this.manager.getRepo(repoId);
+            if (!repo) return [];
+            try {
+              const stashes = await repo.stashList();
+              return stashes.map(s => ({
+                hash: s.ref,
+                shortHash: s.ref,
+                repoId,
+                message: s.message || `WIP on ${s.branch}`,
+                authorName: '',
+                authorEmail: '',
+                authorDate: s.date,
+                committerDate: s.date,
+                parents: s.parentHash ? [s.parentHash] : [],
+                refs: [],
+                isStash: true as const,
+                stashRef: s.ref,
+                stashBranch: s.branch,
+                stashFiles: s.files,
+              }));
+            } catch { return []; }
+          })).then(all => {
+            const stashCommits = all.flat();
+            if (stashCommits.length > 0) {
+              this.post({ type: 'LOG_STASHES_BATCH', stashCommits });
+            }
+          }).catch(() => {});
+        }
         break;
       }
 

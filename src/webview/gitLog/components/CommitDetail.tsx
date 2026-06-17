@@ -10,6 +10,8 @@ import type { RefGroup } from '../utils/refs';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 import { AuthorAvatar } from './AuthorAvatar';
 
+const STASH_COLOR = '#e07b39';
+
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -362,7 +364,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   }, []);
 
   useEffect(() => {
-    if (!commit) { setContainingBranches({ local: [], remote: [], tags: [] }); return; }
+    if (!commit || commit.isStash) { setContainingBranches({ local: [], remote: [], tags: [] }); setLoadingBranches(false); return; }
     setRefsExpanded(false);
     setLoadingBranches(true);
     const reqId = generateId();
@@ -383,7 +385,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   useEffect(() => {
     setSelectedMergeHash(null);
     setMergeFiles([]);
-    if (!commit || !isMerge) { setMergeCommits([]); return; }
+    if (!commit || !isMerge || commit.isStash) { setMergeCommits([]); return; }
     setLoadingMerge(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -435,7 +437,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   }, [ctxMenu, commit]);
 
   const handleCtxRevertFile = useCallback(() => {
-    if (!ctxMenu || !commit) return;
+    if (!ctxMenu || !commit || commit.isStash) return;
     const reqId = generateId();
     getVsCodeApi().postMessage({
       type: 'LOG_REVERT_FILE',
@@ -503,13 +505,15 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   return (
     <div style={styles.container} onContextMenu={e => e.preventDefault()}>
       <div style={styles.topActions}>
-        <button
-          style={styles.topActionBtn}
-          title="Open extended commit detail"
-          onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
-        >
-          <Codicon name="open-preview" style={{ fontSize: '16px' }} />
-        </button>
+        {!commit.isStash && (
+          <button
+            style={styles.topActionBtn}
+            title="Open extended commit detail"
+            onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+          >
+            <Codicon name="open-preview" style={{ fontSize: '16px' }} />
+          </button>
+        )}
         {onClose && (
           <button style={styles.topActionBtn} title="Close commit detail" onClick={onClose}>
             <Codicon name="layout-sidebar-right" style={{ fontSize: '16px' }} />
@@ -530,16 +534,37 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
             {commit.message}
           </span>
         </div>
-        <div style={styles.authorRow}>
-          <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
-          <div style={styles.meta}>
-            <span>{commit.authorName}</span>
-            <span style={styles.dot}>·</span>
-            <span>{commit.authorEmail}</span>
-            <span style={styles.dot}>·</span>
-            <span>{formatDateTime(commit.authorDate)}</span>
+        {commit.isStash ? (
+          <>
+            <div style={styles.authorRow}>
+              <AuthorAvatar authorName="You" authorEmail="" size={32} isYou />
+              <div style={styles.meta}>
+                <span>You</span>
+                <span style={styles.dot}>·</span>
+                <span>{formatDateTime(commit.authorDate)}</span>
+              </div>
+            </div>
+            {commit.stashBranch && (
+              <div style={styles.refsRow}>
+                <span style={styles.refBadge(branchColor(commit.stashBranch, false))}>
+                  <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                  {commit.stashBranch}
+                </span>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={styles.authorRow}>
+            <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
+            <div style={styles.meta}>
+              <span>{commit.authorName}</span>
+              <span style={styles.dot}>·</span>
+              <span>{commit.authorEmail}</span>
+              <span style={styles.dot}>·</span>
+              <span>{formatDateTime(commit.authorDate)}</span>
+            </div>
           </div>
-        </div>
+        )}
         {(() => {
           const LIMIT = 5;
           const refGroups = groupRefs(commit.refs);

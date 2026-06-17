@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Codicon } from '../../shared/Codicon';
 
 interface Props {
   authorName: string;
   authorEmail: string;
   size?: number;
+  isYou?: boolean;
 }
 
 async function gravatarUrl(email: string, size: number): Promise<string> {
@@ -81,7 +83,7 @@ async function resolveAvatarUrl(email: string, size: number): Promise<string | n
   return blank ? null : gravatar;
 }
 
-export function AuthorAvatar({ authorName, authorEmail, size = 20 }: Props) {
+export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false }: Props) {
   const [url, setUrl] = useState<string | null | 'loading'>('loading');
   const prevEmailRef = useRef(authorEmail);
 
@@ -95,6 +97,29 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20 }: Props) {
     });
     return () => { cancelled = true; };
   }, [authorEmail, size]);
+
+  if (isYou) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--vscode-badge-background)',
+          color: 'var(--vscode-badge-foreground)',
+          border: '1px solid rgba(128,128,128,0.35)',
+          boxSizing: 'border-box' as const,
+        }}
+        title="You"
+      >
+        <Codicon name="person" style={{ fontSize: size * 0.6, lineHeight: 1 }} />
+      </div>
+    );
+  }
 
   const containerStyle: React.CSSProperties = {
     width: size,

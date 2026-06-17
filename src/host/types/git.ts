@@ -53,6 +53,10 @@ export interface CommitNode {
   lane?: number;
   totalLanes?: number;
   graphLines?: GraphLine[];
+  isStash?: boolean;
+  stashRef?: string;    // e.g. "stash@{0}"
+  stashBranch?: string; // branch the stash was created on
+  stashFiles?: Array<{ path: string; status: string; added?: number; removed?: number }>;
 }
 
 export interface GraphLine {

@@ -160,7 +160,7 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth, d
   }
 
   return (
-    <div style={{ ...styles.fieldWrap, ...(width ? { width } : { flex: 1, minWidth: 60 }) }}>
+    <div style={{ ...styles.fieldWrap, ...(width ? { width } : { flex: 1, minWidth: 160 }) }}>
       <Codicon name={icon} style={styles.fieldIcon} />
       <input
         style={styles.fieldInput}
@@ -212,7 +212,7 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
   }, [open]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', ...(width ? { width } : { flex: 1, minWidth: 60 }) }}>
+    <div ref={wrapRef} style={{ position: 'relative', ...(width ? { width } : { flex: 1, minWidth: 160 }) }}>
       <button
         style={{ ...styles.pickerBtn(!!value), width: '100%' }}
         onClick={() => setOpen(o => !o)}
@@ -305,7 +305,7 @@ function RepoPicker({ value, repos, onChange, isLight }: {
   const active = repos.find(r => r.id === value) ?? null;
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 60 }}>
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 160 }}>
       <button
         style={{ ...styles.pickerBtn(!!value), width: '100%' }}
         onClick={() => setOpen(o => !o)}
@@ -474,7 +474,7 @@ function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
   const label = from && to ? `${from}  →  ${to}` : from ? `${from}  →  …` : null;
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 60 }}>
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 160 }}>
       <button style={{ ...styles.pickerBtn(hasRange), width: '100%' }} onClick={() => setOpen(o => !o)}>
         <Codicon name="calendar" style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
         {label
