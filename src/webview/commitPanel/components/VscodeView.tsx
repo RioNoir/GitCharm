@@ -36,6 +36,8 @@ interface Props {
   selectedRepos: Set<string>;
   onToggleRepoSelection: (repoId: string) => void;
   onOpenAllChanges?: (repoId: string) => void;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
 // ── Tree helpers (same logic as FileTree) ─────────────────────────────────
@@ -119,11 +121,14 @@ interface FileRowProps {
   onResolveMerge: (file: FileStatus) => void;
   onStage: (file: FileStatus) => void;
   onUnstage: (file: FileStatus) => void;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
-function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, onSelect, onContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage }: FileRowProps) {
+function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, onSelect, onContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onMultiSelect, multiSelectedFiles }: FileRowProps) {
   const isSelected = selectedFile?.repoId === file.repoId && selectedFile.path === file.path;
   const isCtxActive = !isSelected && ctxFile?.repoId === file.repoId && ctxFile.path === file.path;
+  const isMultiSelected = multiSelectedFiles?.some(f => f.repoId === file.repoId && f.path === file.path) ?? false;
   const color = STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)';
   const letter = STATUS_LETTERS[file.status] ?? 'M';
   const fileName = file.path.split('/').pop() ?? file.path;
@@ -133,8 +138,15 @@ function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, 
 
   return (
     <div
-      style={{ ...rowStyle(isSelected, isCtxActive, hovered), paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px` }}
-      onClick={isSubmodule ? undefined : () => onSelect(file)}
+      style={{ ...rowStyle(isSelected, isCtxActive, hovered), paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
+      onClick={isSubmodule ? undefined : (e) => {
+        if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
+          e.stopPropagation();
+          onMultiSelect(file);
+          return;
+        }
+        onSelect(file);
+      }}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, file); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -206,16 +218,18 @@ interface DirNodeProps {
   onUnstage: (file: FileStatus) => void;
   onStageFolder: (files: FileStatus[]) => void;
   onUnstageFolder: (files: FileStatus[]) => void;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
-function VscodeDirNode({ node, depth, staged, repoId, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelect, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onStageFolder, onUnstageFolder }: DirNodeProps) {
+function VscodeDirNode({ node, depth, staged, repoId, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelect, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onStageFolder, onUnstageFolder, onMultiSelect, multiSelectedFiles }: DirNodeProps) {
   const collapseKey = `vscode-${staged ? 'staged' : 'unstaged'}-${repoId}:${node.path}`;
   const open = !isCollapsed(collapseKey);
   const allFiles = collectFiles(node);
   const [hovered, setHovered] = useState(false);
   const ctxActive = activeFolderPath === node.path;
 
-  const childProps = { depth: depth + 1, staged, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, repoId, onSelect, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onStageFolder, onUnstageFolder };
+  const childProps = { depth: depth + 1, staged, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, repoId, onSelect, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onStageFolder, onUnstageFolder, onMultiSelect, multiSelectedFiles };
 
   return (
     <div>
@@ -256,7 +270,7 @@ function VscodeDirNode({ node, depth, staged, repoId, selectedFile, ctxFile, ico
       {open && node.children.map((child, i) =>
         child.kind === 'dir'
           ? <VscodeDirNode key={i} node={child} {...childProps} />
-          : <VscodeFileRow key={i} file={child.file} depth={depth + 1} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelect} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} />
+          : <VscodeFileRow key={i} file={child.file} depth={depth + 1} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelect} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
       )}
     </div>
   );
@@ -296,9 +310,11 @@ interface RepoSubGroupProps {
   submodulePath?: string;
   isWorktree?: boolean;
   mainWorktreePath?: string;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
-function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath }: RepoSubGroupProps) {
+function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
   const isEmpty = files.length === 0;
@@ -317,12 +333,12 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
       const nodes = buildTree(files);
       return nodes.map((node, i) =>
         node.kind === 'dir'
-          ? <VscodeDirNode key={i} node={node} depth={0} staged={staged} repoId={repoId} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} isCollapsed={isCollapsed} toggleCollapsed={toggleCollapsed} activeFolderPath={activeFolderPath} onSelect={onSelectFile} onContextMenu={onContextMenu} onFolderContextMenu={(e, fp, fs) => onFolderContextMenu(e, repoId, fp, fs)} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onStageFolder={onStageFolder} onUnstageFolder={onUnstageFolder} />
-          : <VscodeFileRow key={i} file={node.file} depth={0} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelectFile} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} />
+          ? <VscodeDirNode key={i} node={node} depth={0} staged={staged} repoId={repoId} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} isCollapsed={isCollapsed} toggleCollapsed={toggleCollapsed} activeFolderPath={activeFolderPath} onSelect={onSelectFile} onContextMenu={onContextMenu} onFolderContextMenu={(e, fp, fs) => onFolderContextMenu(e, repoId, fp, fs)} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onStageFolder={onStageFolder} onUnstageFolder={onUnstageFolder} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
+          : <VscodeFileRow key={i} file={node.file} depth={0} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelectFile} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
       );
     }
     return files.map((file, i) =>
-      <VscodeFileRow key={i} file={file} depth={0} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelectFile} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} />
+      <VscodeFileRow key={i} file={file} depth={0} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelectFile} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
     );
   };
 
@@ -360,7 +376,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
               title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
             >
-              <Codicon name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+              <Codicon name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
               <span style={branchNameStyle}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
             </span>
           </div>
@@ -396,7 +412,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
       {!collapsed && isEmpty && (
         <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
       )}
-      {!collapsed && !isEmpty && <div style={{ paddingBottom: '2px' }}>{renderFiles()}</div>}
+      {!collapsed && !isEmpty && <div>{renderFiles()}</div>}
       <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
     </div>
   );
@@ -483,6 +499,7 @@ export function VscodeView({
   onStageFiles, onUnstageFiles, onStageAll, onUnstageAll,
   onRepoContextMenu, onBranchClick, onOpenStagedChanges, onOpenUnstagedChanges, iconTheme, activeFolderPath,
   selectedRepos, onToggleRepoSelection, onOpenAllChanges,
+  onMultiSelect, multiSelectedFiles,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const STAGED_COLLAPSE_KEY = 'vscode-section:staged';
@@ -567,6 +584,8 @@ export function VscodeView({
             submodulePath={meta?.submodulePath}
             isWorktree={meta?.isWorktree}
             mainWorktreePath={meta?.mainWorktreePath}
+            onMultiSelect={onMultiSelect}
+            multiSelectedFiles={multiSelectedFiles}
           />
         );
       })}
@@ -623,6 +642,8 @@ export function VscodeView({
             submodulePath={meta?.submodulePath}
             isWorktree={meta?.isWorktree}
             mainWorktreePath={meta?.mainWorktreePath}
+            onMultiSelect={onMultiSelect}
+            multiSelectedFiles={multiSelectedFiles}
           />
         );
       })}

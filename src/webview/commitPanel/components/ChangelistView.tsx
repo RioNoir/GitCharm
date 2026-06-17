@@ -30,6 +30,8 @@ interface Props {
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   ctxFile?: { repoId: string; path: string } | null;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
 export function ChangelistView({
@@ -38,6 +40,7 @@ export function ChangelistView({
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
   onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, ctxFile,
+  onMultiSelect, multiSelectedFiles,
 }: Props) {
   // Build a lookup: repoId+path → changelist id
   const fileToChangelist = new Map<string, string>();
@@ -189,6 +192,8 @@ export function ChangelistView({
             iconTheme={iconTheme}
             activeFolderPath={activeFolderPath}
             ctxFile={ctxFile}
+            onMultiSelect={onMultiSelect}
+            multiSelectedFiles={multiSelectedFiles}
           />
         );
       })}

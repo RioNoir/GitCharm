@@ -20,6 +20,23 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// ── Dynamic context menu label helper ─────────────────────────────────────
+
+function dynItems(items: ContextMenuEntry[], n: number): ContextMenuEntry[] {
+  const label = (id: string) => {
+    const count = n === 1 ? 'this file' : `${n} files`;
+    if (id === 'rollback'    || id === 'cl-rollback') return `Rollback ${count}`;
+    if (id === 'shelve'      || id === 'cl-shelve')   return `Silently Shelve ${count}`;
+    if (id === 'stash'       || id === 'cl-stash')    return `Silently Stash ${count}`;
+    return null;
+  };
+  return items.map(i => {
+    if (!('id' in i)) return i;
+    const l = label((i as any).id);
+    return l ? { ...i, label: l } : i;
+  });
+}
+
 // ── Context menu items ────────────────────────────────────────────────────────
 
 const REVEAL_OS_LABEL = 'Reveal in File Manager';
@@ -27,7 +44,7 @@ const REVEAL_OS_LABEL = 'Reveal in File Manager';
 const FILE_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',        label: 'Rollback',            icon: 'discard' },
   { id: 'shelve',          label: 'Shelve',              icon: 'archive' },
-  { id: 'stash',           label: 'Stash',               icon: 'save' },
+  { id: 'stash',           label: 'Stash',               icon: 'git-stash' },
   { id: 'diff',            label: 'Show Diff',           icon: 'diff' },
   { id: 'jump',            label: 'Jump to Source',      icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',  icon: 'list-tree' },
@@ -49,7 +66,7 @@ const FILE_CONTEXT_ITEMS_CONFLICT: ContextMenuEntry[] = [
 const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
   { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
-  { id: 'stash',     label: 'Stash Changes',       icon: 'save' },
+  { id: 'stash',     label: 'Stash Changes',       icon: 'git-stash' },
   { separator: true },
   { id: 'gitignore', label: 'Add to .gitignore',  icon: 'exclude' },
   { separator: true },
@@ -61,7 +78,7 @@ const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
 const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
   { id: 'shelve',       label: 'Shelve Changes',       icon: 'archive' },
-  { id: 'stash',        label: 'Stash Changes',        icon: 'save' },
+  { id: 'stash',        label: 'Stash Changes',        icon: 'git-stash' },
   { separator: true },
   { id: 'manage-repo',  label: 'Manage Repository',    icon: 'git-branch' },
   { id: 'view-git-log', label: 'View Git Log',         icon: 'git-commit' },
@@ -74,7 +91,7 @@ const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
 const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
   { id: 'rollback',     label: 'Rollback',             icon: 'discard' },
   { id: 'shelve',       label: 'Shelve Changes',        icon: 'archive' },
-  { id: 'stash',        label: 'Stash Changes',         icon: 'save' },
+  { id: 'stash',        label: 'Stash Changes',         icon: 'git-stash' },
   { separator: true },
   { id: 'add-to-git',   label: 'Add to Git',            icon: 'add' },
   { id: 'move-to-cl',   label: 'Move to Changelist…',  icon: 'list-unordered' },
@@ -102,7 +119,7 @@ const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'stage',           label: 'Stage',                icon: 'add' },
   { id: 'rollback',        label: 'Rollback',             icon: 'discard' },
   { id: 'shelve',          label: 'Shelve',               icon: 'archive' },
-  { id: 'stash',           label: 'Stash',                icon: 'save' },
+  { id: 'stash',           label: 'Stash',                icon: 'git-stash' },
   { separator: true },
   { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
   { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
@@ -126,7 +143,7 @@ const VSCODE_FOLDER_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'stage',    label: 'Stage Folder',         icon: 'add' },
   { id: 'rollback', label: 'Rollback',             icon: 'discard' },
   { id: 'shelve',   label: 'Shelve Changes',        icon: 'archive' },
-  { id: 'stash',    label: 'Stash Changes',         icon: 'save' },
+  { id: 'stash',    label: 'Stash Changes',         icon: 'git-stash' },
   { separator: true },
   { id: 'gitignore',label: 'Add to .gitignore',    icon: 'exclude' },
   { separator: true },
@@ -150,7 +167,7 @@ const VSCODE_REPO_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'stage-all',    label: 'Stage All',           icon: 'add' },
   { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
   { id: 'shelve',       label: 'Shelve Changes',       icon: 'archive' },
-  { id: 'stash',        label: 'Stash Changes',        icon: 'save' },
+  { id: 'stash',        label: 'Stash Changes',        icon: 'git-stash' },
   { separator: true },
   { id: 'manage-repo',  label: 'Manage Repository',   icon: 'git-branch' },
   { id: 'view-git-log', label: 'View Git Log',         icon: 'git-commit' },
@@ -181,7 +198,7 @@ const CHANGELIST_EMPTY_AREA_ITEMS: ContextMenuEntry[] = [
 const CHANGELIST_HEADER_ITEMS_FIXED: ContextMenuEntry[] = [
   { id: 'cl-rollback', label: 'Rollback',          icon: 'discard' },
   { id: 'cl-shelve',   label: 'Shelve Changes',    icon: 'archive' },
-  { id: 'cl-stash',    label: 'Stash Changes',     icon: 'save' },
+  { id: 'cl-stash',    label: 'Stash Changes',     icon: 'git-stash' },
   { separator: true },
   { id: 'cl-new',      label: 'New Changelist…',   icon: 'add' },
   { separator: true },
@@ -191,7 +208,7 @@ const CHANGELIST_HEADER_ITEMS_FIXED: ContextMenuEntry[] = [
 const CHANGELIST_HEADER_ITEMS_UNVERSIONED: ContextMenuEntry[] = [
   { id: 'cl-rollback',   label: 'Rollback',         icon: 'discard' },
   { id: 'cl-shelve',     label: 'Shelve Changes',   icon: 'archive' },
-  { id: 'cl-stash',      label: 'Stash Changes',    icon: 'save' },
+  { id: 'cl-stash',      label: 'Stash Changes',    icon: 'git-stash' },
   { separator: true },
   { id: 'cl-add-to-git', label: 'Add to Git',       icon: 'add' },
   { separator: true },
@@ -203,7 +220,7 @@ const CHANGELIST_HEADER_ITEMS_UNVERSIONED: ContextMenuEntry[] = [
 const CHANGELIST_HEADER_ITEMS_CUSTOM: ContextMenuEntry[] = [
   { id: 'cl-rollback', label: 'Rollback',          icon: 'discard' },
   { id: 'cl-shelve',   label: 'Shelve Changes',    icon: 'archive' },
-  { id: 'cl-stash',    label: 'Stash Changes',     icon: 'save' },
+  { id: 'cl-stash',    label: 'Stash Changes',     icon: 'git-stash' },
   { separator: true },
   { id: 'cl-new',      label: 'New Changelist…',   icon: 'add' },
   { id: 'cl-rename',   label: 'Rename Changelist…', icon: 'edit' },
@@ -328,6 +345,8 @@ function App() {
   // ── Context menus ─────────────────────────────────────────────────────────
   const [ctxFile, setCtxFile] = useState<{ repoId: string; path: string } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; file: FileStatus } | null>(null);
+  const [multiSelectedFiles, setMultiSelectedFiles] = useState<FileStatus[]>([]);
+  const [multiCtxMenu, setMultiCtxMenu] = useState<{ x: number; y: number; files: FileStatus[] } | null>(null);
   const [activeFolderPath, setActiveFolderPath] = useState<string | null>(null);
   const [folderCtxMenu, setFolderCtxMenu] = useState<{
     x: number; y: number; repoId: string; folderPath: string; files: FileStatus[];
@@ -501,6 +520,17 @@ function App() {
           setActiveTab(msg.tab);
           if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
           break;
+
+        case 'COMMIT_DESELECT_FILE':
+          setSelectedFile(prev => {
+            if (!prev) return null;
+            const repo = useCommitStore.getState().status?.repos.find(r => r.repoId === prev.repoId);
+            if (!repo) return null;
+            const absPath = msg.filePath;
+            const matches = absPath.endsWith('/' + prev.path) || absPath.endsWith('\\' + prev.path) || absPath === prev.path;
+            return matches ? null : prev;
+          });
+          break;
       }
     };
     window.addEventListener('message', handler);
@@ -644,6 +674,14 @@ function App() {
     send({ type: 'STASH_PUSH', requestId: generateId(), repoId, message, paths } satisfies CommitToHostMsg);
   }, [send]);
 
+  const handleMultiSelect = useCallback((file: FileStatus) => {
+    setMultiSelectedFiles(prev =>
+      prev.some(f => f.repoId === file.repoId && f.path === file.path)
+        ? prev.filter(f => !(f.repoId === file.repoId && f.path === file.path))
+        : [...prev, file]
+    );
+  }, []);
+
   const handleContextMenuSelect = useCallback((id: string) => {
     const file = ctxMenu?.file;
     if (!file) return;
@@ -661,10 +699,10 @@ function App() {
         send({ type: 'COMMIT_DISCARD_FILE', requestId: generateId(), repoId: file.repoId, path: file.path });
         break;
       case 'shelve':
-        confirmShelve(file.repoId, 'Changes', [file.path]);
+        send({ type: 'SHELVE_PUSH', requestId: generateId(), repoId: file.repoId, name: 'Changes', paths: [file.path] });
         break;
       case 'stash':
-        doStash(file.repoId, 'WIP stash', [file.path]);
+        doStash(file.repoId, 'Changes', [file.path]);
         break;
       case 'diff':
         openDiff(file.repoId, file.path);
@@ -704,10 +742,10 @@ function App() {
         send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: ctx.files.map(f => ({ repoId: f.repoId, path: f.path })) });
         break;
       case 'shelve':
-        confirmShelve(ctx.repoId, 'Changes', ctx.files.map(f => f.path));
+        send({ type: 'SHELVE_PUSH', requestId: generateId(), repoId: ctx.repoId, name: 'Changes', paths: ctx.files.map(f => f.path) });
         break;
       case 'stash':
-        doStash(ctx.repoId, 'WIP stash', ctx.files.map(f => f.path));
+        doStash(ctx.repoId, 'Changes', ctx.files.map(f => f.path));
         break;
       case 'gitignore':
         send({ type: 'COMMIT_ADD_TO_GITIGNORE', repoId: ctx.repoId, entryPath: ctx.folderPath });
@@ -1064,6 +1102,29 @@ function App() {
             <button style={css.iconBtn} title="Collapse all" onClick={() => setStashExpandAll(false)}>
               <Codicon name="collapse-all" />
             </button>
+            <div ref={shelveViewMenuRef} style={{ position: 'relative' }}>
+              <button style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
+                <Codicon name="eye" />
+              </button>
+              {shelveViewMenuOpen && (
+                <div style={{ ...css.dropdownPanel, left: 0 }}>
+                  <div style={css.dropdownTitle}>View</div>
+                  {(['flat', 'tree'] as const).map(mode => (
+                    <div
+                      key={mode}
+                      style={{ ...css.dropdownItem, fontWeight: store.shelveViewMode === mode ? 'bold' : 'normal' }}
+                      onClick={() => { store.setShelveViewMode(mode); setShelveViewMenuOpen(false); }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <Codicon name={mode === 'flat' ? 'list-unordered' : 'list-tree'} style={{ marginRight: '6px' }} />
+                      {mode === 'flat' ? 'Flat list' : 'Tree view'}
+                      {store.shelveViewMode === mode && <Codicon name="check" style={{ marginLeft: 'auto' }} />}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>)}
           {hiddenRepoIds.length > 0 && (
             <button
@@ -1094,7 +1155,7 @@ function App() {
             {(['changes', 'shelf', 'stash', 'worktree', 'push'] as TabId[]).map(tab => {
               const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
               const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : 'Push';
-              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'save' : tab === 'worktree' ? 'repo-clone' : 'cloud-upload';
+              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : 'cloud-upload';
               return (
                 <button
                   key={tab}
@@ -1145,6 +1206,19 @@ function App() {
                 toggleCollapsed={store.toggleCollapsed}
                 onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
                 onContextMenu={(e, file, staged) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    setMultiSelectedFiles(prev =>
+                      prev.some(f => f.repoId === file.repoId && f.path === file.path)
+                        ? prev.filter(f => !(f.repoId === file.repoId && f.path === file.path))
+                        : [...prev, file]
+                    );
+                    return;
+                  }
+                  if (multiSelectedFiles.length > 1 && multiSelectedFiles.some(f => f.repoId === file.repoId && f.path === file.path)) {
+                    setMultiCtxMenu({ x: e.clientX, y: e.clientY, files: multiSelectedFiles });
+                    return;
+                  }
+                  setMultiSelectedFiles([]);
                   setCtxFile({ repoId: file.repoId, path: file.path });
                   setCtxMenuStaged(staged);
                   setCtxMenu({ x: e.clientX, y: e.clientY, file });
@@ -1176,6 +1250,8 @@ function App() {
                 selectedRepos={vscodeSelectedRepos}
                 onToggleRepoSelection={toggleVscodeRepoSelection}
                 onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
+                onMultiSelect={handleMultiSelect}
+                multiSelectedFiles={multiSelectedFiles}
               />
             ) : store.changesViewMode === 'changelists' ? (
               <ChangelistView
@@ -1190,7 +1266,23 @@ function App() {
                 onToggleFile={store.toggleFileSelection}
                 onSetFiles={store.setFileSelections}
                 onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
-                onContextMenu={(e, file) => { setCtxFile({ repoId: file.repoId, path: file.path }); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
+                onContextMenu={(e, file) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    setMultiSelectedFiles(prev =>
+                      prev.some(f => f.repoId === file.repoId && f.path === file.path)
+                        ? prev.filter(f => !(f.repoId === file.repoId && f.path === file.path))
+                        : [...prev, file]
+                    );
+                    return;
+                  }
+                  if (multiSelectedFiles.length > 1 && multiSelectedFiles.some(f => f.repoId === file.repoId && f.path === file.path)) {
+                    setMultiCtxMenu({ x: e.clientX, y: e.clientY, files: multiSelectedFiles });
+                    return;
+                  }
+                  setMultiSelectedFiles([]);
+                  setCtxFile({ repoId: file.repoId, path: file.path });
+                  setCtxMenu({ x: e.clientX, y: e.clientY, file });
+                }}
                 onFolderContextMenu={(e, rid, folderPath, files) => { setActiveFolderPath(folderPath); setFolderCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, folderPath, files }); }}
                 onOpenFile={f => send({ type: 'COMMIT_OPEN_FILE', repoId: f.repoId, filePath: f.path })}
                 onRollback={files => {
@@ -1208,6 +1300,8 @@ function App() {
                 iconTheme={store.iconTheme}
                 activeFolderPath={activeFolderPath}
                 ctxFile={ctxFile}
+                onMultiSelect={handleMultiSelect}
+                multiSelectedFiles={multiSelectedFiles}
               />
             ) : (
               repos.map((repoStatus, idx) => {
@@ -1258,7 +1352,23 @@ function App() {
                       onToggleFile={store.toggleFileSelection}
                       onSetFiles={store.setFileSelections}
                       onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
-                      onContextMenu={(e, file) => { setCtxFile({ repoId: file.repoId, path: file.path }); setCtxMenu({ x: e.clientX, y: e.clientY, file }); }}
+                      onContextMenu={(e, file) => {
+                        if (e.metaKey || e.ctrlKey) {
+                          setMultiSelectedFiles(prev =>
+                            prev.some(f => f.repoId === file.repoId && f.path === file.path)
+                              ? prev.filter(f => !(f.repoId === file.repoId && f.path === file.path))
+                              : [...prev, file]
+                          );
+                          return;
+                        }
+                        if (multiSelectedFiles.length > 1 && multiSelectedFiles.some(f => f.repoId === file.repoId && f.path === file.path)) {
+                          setMultiCtxMenu({ x: e.clientX, y: e.clientY, files: multiSelectedFiles });
+                          return;
+                        }
+                        setMultiSelectedFiles([]);
+                        setCtxFile({ repoId: file.repoId, path: file.path });
+                        setCtxMenu({ x: e.clientX, y: e.clientY, file });
+                      }}
                       onFolderContextMenu={(e, rid, folderPath, files) => { setActiveFolderPath(folderPath); setFolderCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, folderPath, files }); }}
                       onOpenFile={f => send({ type: 'COMMIT_OPEN_FILE', repoId: f.repoId, filePath: f.path })}
                       onRollback={files => {
@@ -1275,6 +1385,8 @@ function App() {
                       iconTheme={store.iconTheme}
                       activeFolderPath={activeFolderPath}
                       ctxFile={ctxFile}
+                      onMultiSelect={handleMultiSelect}
+                      multiSelectedFiles={multiSelectedFiles}
                     />
                   </React.Fragment>
                 );
@@ -1367,7 +1479,7 @@ function App() {
         {activeTab === 'shelf' && (
           /* Shelf tab */
           <div style={css.repoList}>
-            {repos.map(repoStatus => {
+            {repos.map((repoStatus, i) => {
               const repoId = repoStatus.repoId;
               const meta = metaMap.get(repoId);
               const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
@@ -1403,7 +1515,7 @@ function App() {
         {activeTab === 'stash' && (
           /* Stash tab */
           <div style={css.repoList}>
-            {repos.map(repoStatus => {
+            {repos.map((repoStatus, i) => {
               const repoId = repoStatus.repoId;
               const meta = metaMap.get(repoId);
               const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
@@ -1421,10 +1533,10 @@ function App() {
                   worktreeBranch={worktreeBranch}
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
-                  stashes={stashMap[repoId] ?? []}
+                  stashes={(stashMap[repoId] ?? []).filter(s => !worktreeBranch || s.branch === worktreeBranch)}
                   loading={stashLoading[repoId] ?? false}
                   error={stashError[repoId] ?? null}
-                  viewMode={store.viewMode}
+                  viewMode={store.shelveViewMode}
                   onApply={handleStashApply}
                   onPop={handleStashPop}
                   onDrop={handleStashDrop}
@@ -1495,13 +1607,28 @@ function App() {
           items = ctxMenuStaged ? SUBMODULE_FILE_STAGED_ITEMS : SUBMODULE_FILE_UNSTAGED_ITEMS;
         } else if (store.changesViewMode === 'vscode') {
           items = ctxMenuStaged ? VSCODE_FILE_STAGED_ITEMS : VSCODE_FILE_UNSTAGED_ITEMS;
+        } else if (store.changesViewMode === 'simplified' && isUntracked) {
+          items = [
+            { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
+            { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
+            { id: 'shelve',     label: 'Shelve',             icon: 'archive' },
+            { id: 'stash',      label: 'Stash',              icon: 'git-stash' },
+            { id: 'diff',       label: 'Show Diff',          icon: 'diff' },
+            { id: 'jump',       label: 'Jump to Source',     icon: 'go-to-file' },
+            { separator: true },
+            { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
+            { separator: true },
+            { id: 'delete',     label: 'Delete',             icon: 'trash', danger: true },
+            { separator: true },
+            { id: 'refresh',    label: 'Refresh',            icon: 'refresh' },
+          ];
         } else if (store.changesViewMode === 'changelists') {
           if (isUntracked) {
             items = [
               { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
               { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
               { id: 'shelve',     label: 'Shelve',             icon: 'archive' },
-              { id: 'stash',      label: 'Stash',              icon: 'save' },
+              { id: 'stash',      label: 'Stash',              icon: 'git-stash' },
               { id: 'diff',       label: 'Show Diff',          icon: 'diff' },
               { id: 'jump',       label: 'Jump to Source',     icon: 'go-to-file' },
               { separator: true },
@@ -1520,7 +1647,7 @@ function App() {
         return (
           <ContextMenu
             x={ctxMenu.x} y={ctxMenu.y}
-            items={items}
+            items={dynItems(items, 1)}
             onSelect={id => {
               if (id === 'add-to-git') {
                 send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: file.repoId, paths: [file.path] } satisfies CommitToHostMsg);
@@ -1551,7 +1678,7 @@ function App() {
               { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
               { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
               { id: 'shelve',     label: 'Shelve Changes',     icon: 'archive' },
-              { id: 'stash',      label: 'Stash Changes',      icon: 'save' },
+              { id: 'stash',      label: 'Stash Changes',      icon: 'git-stash' },
               { separator: true },
               { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
               { separator: true },
@@ -1568,7 +1695,7 @@ function App() {
         return (
           <ContextMenu
             x={folderCtxMenu.x} y={folderCtxMenu.y}
-            items={items}
+            items={dynItems(items, folderCtxMenu.files.length)}
             onSelect={id => {
               if (id === 'add-to-git') {
                 send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: folderCtxMenu.repoId, paths: files.map(f => f.path) } satisfies CommitToHostMsg);
@@ -1595,8 +1722,8 @@ function App() {
           const baseItems: ContextMenuEntry[] = [
             { id: 'rollback',     label: 'Rollback',              icon: 'discard' },
             { id: 'shelve',       label: 'Shelve Changes',         icon: 'archive' },
-            { id: 'stash',        label: 'Stash Changes',          icon: 'save' },
-            { separator: true },
+            { id: 'stash',        label: 'Stash Changes',          icon: 'git-stash' },
+            ...( (!isInDefaultCl || hasCustomCls) ? [{ separator: true } as ContextMenuEntry] : []),
             ...(!isInDefaultCl ? [{ id: 'add-to-git', label: 'Add to Git', icon: 'add' } as ContextMenuEntry] : []),
             ...(hasCustomCls ? [{ id: 'move-to-cl', label: 'Move to Changelist…', icon: 'list-unordered' } as ContextMenuEntry] : []),
             { separator: true },
@@ -1612,7 +1739,18 @@ function App() {
         return (
           <ContextMenu
             x={repoCtxMenu.x} y={repoCtxMenu.y}
-            items={repoItems}
+            items={(() => {
+              const rs = repos.find(r => r.repoId === repoCtxMenu.repoId);
+              const totalFiles = new Set([...(rs?.unstagedFiles ?? []).map(f => f.path), ...(rs?.stagedFiles ?? []).map(f => f.path)]).size;
+              const noChanges = totalFiles === 0;
+              let items = noChanges
+                ? repoItems.filter(i => !('id' in i) || !['rollback', 'shelve', 'stash'].includes((i as any).id))
+                : repoItems;
+              if (noChanges) items = items.filter((item, i, arr) =>
+                !('separator' in item) || (i > 0 && !('separator' in arr[i - 1]))
+              );
+              return dynItems(items, totalFiles);
+            })()}
             onSelect={id => {
               if (id === 'move-to-cl') {
                 const ctx = repoCtxMenu;
@@ -1644,22 +1782,80 @@ function App() {
         );
       })()}
 
+      {/* Multi-file context menu */}
+      {multiCtxMenu && (() => {
+        const files = multiCtxMenu.files;
+        const n = files.length;
+        const allSameRepo = files.every(f => f.repoId === files[0].repoId);
+        const noneSubmodule = files.every(f => f.status !== 'submodule');
+        const items: ContextMenuEntry[] = [
+          ...(noneSubmodule && allSameRepo ? [
+            { id: 'multi-rollback', label: `Rollback ${n} files`, icon: 'discard' } as ContextMenuEntry,
+            { id: 'multi-shelve',   label: `Silently Shelve ${n} files`, icon: 'archive' } as ContextMenuEntry,
+            { id: 'multi-stash',    label: `Silently Stash ${n} files`, icon: 'git-stash' } as ContextMenuEntry,
+            { separator: true } as ContextMenuEntry,
+          ] : []),
+          ...(noneSubmodule ? [
+            { id: 'multi-gitignore', label: 'Add to .gitignore', icon: 'exclude' } as ContextMenuEntry,
+            { separator: true } as ContextMenuEntry,
+          ] : []),
+          { id: 'multi-refresh', label: 'Refresh', icon: 'refresh' } as ContextMenuEntry,
+        ];
+        return (
+          <ContextMenu
+            x={multiCtxMenu.x} y={multiCtxMenu.y}
+            items={items}
+            onSelect={id => {
+              const repoId = files[0].repoId;
+              const paths = files.map(f => f.path);
+              switch (id) {
+                case 'multi-rollback':
+                  send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
+                  break;
+                case 'multi-shelve':
+                  send({ type: 'SHELVE_PUSH', requestId: generateId(), repoId, name: 'Changes', paths });
+                  break;
+                case 'multi-stash':
+                  send({ type: 'STASH_PUSH', requestId: generateId(), repoId, message: 'Changes', paths });
+                  break;
+                case 'multi-gitignore':
+                  files.forEach(f => send({ type: 'COMMIT_ADD_TO_GITIGNORE', repoId: f.repoId, entryPath: f.path }));
+                  break;
+                case 'multi-refresh':
+                  send({ type: 'COMMIT_REQUEST_STATUS' });
+                  break;
+              }
+              setMultiCtxMenu(null);
+              setMultiSelectedFiles([]);
+            }}
+            onClose={() => setMultiCtxMenu(null)}
+          />
+        );
+      })()}
+
       {/* Changelist header context menu (also used for empty-space click) */}
       {clHeaderCtxMenu && (() => {
         const isEmpty = clHeaderCtxMenu.changelistId === 'empty';
         const isUnversioned = clHeaderCtxMenu.changelistId === CHANGELIST_UNVERSIONED_ID;
         const isFixed = clHeaderCtxMenu.changelistId === CHANGELIST_DEFAULT_ID || isUnversioned;
-        const items = isEmpty
+        const baseItems = isEmpty
           ? CHANGELIST_EMPTY_AREA_ITEMS
           : isUnversioned
             ? CHANGELIST_HEADER_ITEMS_UNVERSIONED
             : isFixed
               ? CHANGELIST_HEADER_ITEMS_FIXED
               : CHANGELIST_HEADER_ITEMS_CUSTOM;
+        const clFileCount = (() => {
+          if (isEmpty) return 0;
+          if (isUnversioned) return repos.reduce((sum, r) => sum + r.unstagedFiles.filter(f => f.status === 'untracked').length, 0);
+          const cl = store.changelists.find(c => c.id === clHeaderCtxMenu.changelistId);
+          if (!cl) return 0;
+          return Object.values(cl.fileAssignments).reduce((sum, paths) => sum + paths.length, 0);
+        })();
         return (
           <ContextMenu
             x={clHeaderCtxMenu.x} y={clHeaderCtxMenu.y}
-            items={items}
+            items={dynItems(baseItems, clFileCount)}
             onSelect={handleClHeaderContextMenuSelect}
             onClose={() => setClHeaderCtxMenu(null)}
           />

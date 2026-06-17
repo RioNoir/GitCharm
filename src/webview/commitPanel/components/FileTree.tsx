@@ -25,6 +25,8 @@ interface Props {
   basePad?: number;
   activeFolderPath?: string | null;
   ctxFile?: { repoId: string; path: string } | null;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
 const STATUS_COLORS: Record<GitFileStatus, string> = {
@@ -132,7 +134,7 @@ type SharedProps = Pick<Props,
   'repoId' | 'selectedFile' | 'ctxFile' | 'onSelect' | 'onToggleFile' | 'onSetFiles' |
   'isFileSelected' | 'isCollapsed' | 'toggleCollapsed' | 'onContextMenu' |
   'onFolderContextMenu' | 'onOpenFile' | 'onRollback' | 'onResolveMerge' | 'iconTheme' |
-  'activeFolderPath'
+  'activeFolderPath' | 'onMultiSelect' | 'multiSelectedFiles'
 > & { basePad: number };
 
 // ── Directory node ─────────────────────────────────────────────────────────
@@ -193,9 +195,10 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
 // ── Single file row ────────────────────────────────────────────────────────
 
 function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: number } & SharedProps) {
-  const { repoId, selectedFile, ctxFile, onSelect, onToggleFile, isFileSelected, onContextMenu, onOpenFile, onRollback, onResolveMerge, iconTheme, basePad } = shared;
+  const { repoId, selectedFile, ctxFile, onSelect, onToggleFile, isFileSelected, onContextMenu, onOpenFile, onRollback, onResolveMerge, iconTheme, basePad, onMultiSelect, multiSelectedFiles } = shared;
   const isSelected = selectedFile?.repoId === file.repoId && selectedFile.path === file.path;
   const isCtxActive = !isSelected && ctxFile?.repoId === file.repoId && ctxFile.path === file.path;
+  const isMultiSelected = multiSelectedFiles?.some(f => f.repoId === file.repoId && f.path === file.path) ?? false;
   const checked = isFileSelected(repoId, file.path);
   const color = STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)';
   const letter = STATUS_LETTERS[file.status] ?? 'M';
@@ -207,8 +210,15 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
   return (
     <div
-      style={{ ...styles.row(isSelected, isCtxActive, hovered), paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
-      onClick={isSubmodule ? undefined : () => onSelect(file)}
+      style={{ ...styles.row(isSelected, isCtxActive, hovered), paddingLeft: `${basePad + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
+      onClick={isSubmodule ? undefined : (e) => {
+        if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
+          e.stopPropagation();
+          onMultiSelect(file);
+          return;
+        }
+        onSelect(file);
+      }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -261,10 +271,10 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
 // ── Public component ───────────────────────────────────────────────────────
 
-export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, viewMode, basePad = DEFAULT_BASE_PAD, activeFolderPath }: Props) {
+export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, viewMode, basePad = DEFAULT_BASE_PAD, activeFolderPath, onMultiSelect, multiSelectedFiles }: Props) {
   if (files.length === 0) return null;
 
-  const shared: SharedProps = { repoId, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, basePad, activeFolderPath };
+  const shared: SharedProps = { repoId, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, basePad, activeFolderPath, onMultiSelect, multiSelectedFiles };
 
   if (viewMode === 'tree') {
     const nodes = buildTree(files);

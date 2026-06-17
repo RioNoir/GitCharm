@@ -25,8 +25,10 @@ export interface ShelveEntry {
   id: string;           // unique id = filename without extension
   name: string;         // user-provided description
   date: string;         // ISO date string
-  files: Array<{ path: string; status: string }>;
+  files: Array<{ path: string; status: string; added?: number; removed?: number }>;
   patchFile: string;    // relative path inside .gitcharm/shelf/
+  totalAdded?: number;
+  totalRemoved?: number;
   changelistAssignments?: Array<{ path: string; changelistId: string; changelistName: string }>;
 }
 
@@ -84,7 +86,8 @@ export type HostToCommitMsg =
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
   | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
   | { type: 'COMMIT_HIDDEN_REPOS_UPDATE'; hiddenRepoIds: string[] }
-  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' };
+  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' }
+  | { type: 'COMMIT_DESELECT_FILE'; filePath: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 

@@ -48,7 +48,7 @@
         {
           "id": "gitcharm-log",
           "title": "GitCharm Log",
-          "icon": "media/icons/git-branch.svg"
+          "icon": "media/icons/git-merge.svg"
         }
       ]
     },

@@ -749,7 +749,6 @@ const styles = {
     fontSize: '11px',
     opacity: 0.5,
     color: 'var(--vscode-foreground)',
-    fontStyle: 'italic',
   },
   dropdownGroupLabel: {
     padding: '4px 10px 2px',

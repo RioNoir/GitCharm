@@ -332,7 +332,7 @@ const css = {
     color: 'var(--vscode-button-secondaryForeground)',
     border: 'none', borderRadius: '3px', padding: '3px 8px', cursor: 'pointer',
   } as React.CSSProperties,
-  empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, fontStyle: 'italic' as const, textAlign: 'center' as const },
+  empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
   errorRow: {
     display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',

@@ -45,6 +45,8 @@ interface Props {
   iconTheme?: IconThemeData | null;
   activeFolderPath?: string | null;
   ctxFile?: { repoId: string; path: string } | null;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
 export function ChangelistGroup({
@@ -53,6 +55,7 @@ export function ChangelistGroup({
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
   onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, ctxFile,
+  onMultiSelect, multiSelectedFiles,
 }: Props) {
   const collapseKey = `cl:${changelist.id}`;
   const collapsed = isCollapsed(collapseKey);
@@ -76,7 +79,7 @@ export function ChangelistGroup({
 
   const isUnversioned = changelist.id === CHANGELIST_UNVERSIONED_ID;
   const isDefault = changelist.id === CHANGELIST_DEFAULT_ID;
-  const headerIcon = isUnversioned ? 'question' : isDefault ? 'source-control' : 'list-unordered';
+  const headerIcon = isUnversioned ? 'question' : isDefault ? 'git-pull-request' : 'list-unordered';
 
   return (
     <div style={styles.container}>
@@ -149,6 +152,8 @@ export function ChangelistGroup({
                 activeFolderPath={activeFolderPath}
                 changelistId={changelist.id}
                 ctxFile={ctxFile}
+                onMultiSelect={onMultiSelect}
+                multiSelectedFiles={multiSelectedFiles}
               />
             ))}
         </div>
@@ -193,6 +198,8 @@ interface RepoSubGroupProps {
   ctxFile?: { repoId: string; path: string } | null;
   isFirst?: boolean;
   defaultCollapsed?: boolean;
+  onMultiSelect?: (file: FileStatus) => void;
+  multiSelectedFiles?: FileStatus[];
 }
 
 function RepoSubGroup({
@@ -201,6 +208,7 @@ function RepoSubGroup({
   isFileSelected, isCollapsed, toggleCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
   onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, defaultCollapsed = false,
+  onMultiSelect, multiSelectedFiles,
 }: RepoSubGroupProps) {
   const collapseKey = `cl-repo:${changelistId ?? ''}:${repoId}`;
   // When defaultCollapsed, the key's presence means "user explicitly opened it"
@@ -212,7 +220,7 @@ function RepoSubGroup({
 
   const branchClr = repoStatus
     ? (repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, false))
-    : branchColor('main', false);
+    : branchColor('main', true);
   const [hovered, setHovered] = useState(false);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
@@ -260,7 +268,7 @@ function RepoSubGroup({
                 title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
               >
                 <Codicon
-                  name={isWorktree ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'}
+                  name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'}
                   style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }}
                 />
                 <span style={styles.branchName}>
@@ -310,6 +318,8 @@ function RepoSubGroup({
           basePad={multiRepo && !singleRepo ? 36 : 24}
           activeFolderPath={activeFolderPath}
           ctxFile={ctxFile}
+          onMultiSelect={onMultiSelect}
+          multiSelectedFiles={multiSelectedFiles}
         />
       )}
       <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />

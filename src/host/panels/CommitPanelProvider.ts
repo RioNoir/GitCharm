@@ -184,7 +184,21 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
     });
 
-    webviewView.onDidDispose(() => configWatcher.dispose());
+    const tabWatcher = vscode.window.tabGroups.onDidChangeTabs(e => {
+      for (const tab of e.closed) {
+        const input = tab.input;
+        if (!input) continue;
+        let filePath: string | undefined;
+        if (input instanceof vscode.TabInputText) {
+          filePath = input.uri.fsPath;
+        } else if (input instanceof vscode.TabInputTextDiff) {
+          filePath = input.modified.fsPath;
+        }
+        if (filePath) this.post({ type: 'COMMIT_DESELECT_FILE', filePath });
+      }
+    });
+
+    webviewView.onDidDispose(() => { configWatcher.dispose(); tabWatcher.dispose(); });
   }
 
   private post(msg: HostToCommitMsg): void {
@@ -236,9 +250,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   async hideRepo(repoId: string): Promise<void> {
     const current = this.getHiddenRepoIds();
-    if (!current.includes(repoId)) {
-      await this.setHiddenRepoIds([...current, repoId]);
-    }
+    if (current.includes(repoId)) return;
+    const allRepos = this.manager.getRepoMetas();
+    const visibleCount = allRepos.filter(m => !current.includes(m.id)).length;
+    if (visibleCount <= 1) return;
+    await this.setHiddenRepoIds([...current, repoId]);
   }
 
   async unhideRepo(repoId: string): Promise<void> {

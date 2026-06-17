@@ -715,7 +715,6 @@ const styles = {
     padding: '4px 12px',
     color: 'var(--vscode-disabledForeground)',
     whiteSpace: 'nowrap' as const,
-    fontStyle: 'italic',
     fontSize: '11px',
   } as React.CSSProperties,
   separator: {

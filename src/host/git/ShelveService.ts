@@ -142,7 +142,7 @@ export class ShelveService {
     const patchFileName = `${id}.patch`;
     fs.writeFileSync(path.join(this.shelfDir, patchFileName), combinedDiff, 'utf8');
 
-    // ── Build file list with status ───────────────────────────────────────────
+    // ── Build file list with status and stats ─────────────────────────────────
     const statusMap: Record<string, string> = {};
     for (const f of statusOutput.modified) statusMap[f] = 'modified';
     for (const f of statusOutput.created) statusMap[f] = 'added';
@@ -150,8 +150,35 @@ export class ShelveService {
     for (const r of statusOutput.renamed) statusMap[r.to] = 'renamed';
     for (const f of statusOutput.not_added) statusMap[f] = 'untracked';
 
-    const fileList: Array<{ path: string; status: string }> = [];
-    for (const f of filesToShelve) fileList.push({ path: f, status: statusMap[f] ?? 'modified' });
+    const numstatMap = new Map<string, { added: number; removed: number }>();
+    try {
+      const numstatArgs = trackedFiles.length > 0 ? ['diff', 'HEAD', '--numstat', '--', ...trackedFiles] : [];
+      if (numstatArgs.length > 0) {
+        const numstatRaw = await this.git.raw(numstatArgs).catch(() => '');
+        for (const line of numstatRaw.trim().split('\n')) {
+          const parts = line.split('\t');
+          if (parts.length < 3) continue;
+          const a = parseInt(parts[0], 10), r = parseInt(parts[1], 10);
+          if (!isNaN(a) && !isNaN(r)) numstatMap.set(parts[2].trim(), { added: a, removed: r });
+        }
+      }
+    } catch { /* stats optional */ }
+
+    // untracked files: count lines as additions
+    for (const f of untrackedFiles) {
+      try {
+        const content = require('fs').readFileSync(require('path').join(this.rootPath, f), 'utf8') as string;
+        numstatMap.set(f, { added: content.split('\n').length, removed: 0 });
+      } catch { /* skip */ }
+    }
+
+    const fileList: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+    for (const f of filesToShelve) {
+      const s = numstatMap.get(f);
+      fileList.push({ path: f, status: statusMap[f] ?? 'modified', ...(s ? { added: s.added, removed: s.removed } : {}) });
+    }
+    const totalAdded   = fileList.reduce((sum, f) => sum + (f.added   ?? 0), 0);
+    const totalRemoved = fileList.reduce((sum, f) => sum + (f.removed ?? 0), 0);
 
     const entry: ShelveEntryInternal = {
       id,
@@ -159,6 +186,8 @@ export class ShelveService {
       date: new Date().toISOString(),
       files: fileList,
       patchFile: patchFileName,
+      totalAdded:   totalAdded   > 0 ? totalAdded   : undefined,
+      totalRemoved: totalRemoved > 0 ? totalRemoved : undefined,
       binaryFiles: binaryFiles.length > 0 ? binaryFiles : undefined,
       changelistAssignments: changelistAssignments && changelistAssignments.length > 0 ? changelistAssignments : undefined,
     };

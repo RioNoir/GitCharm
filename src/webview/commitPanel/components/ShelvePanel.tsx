@@ -121,7 +121,7 @@ function FileRow({ file, repoId, entry, depth = 0, onOpenFileDiff, onUnshelveFil
     <div
       style={{
         display: 'flex', alignItems: 'center', minHeight: '22px', fontSize: '12px',
-        gap: '3px', paddingLeft, paddingRight: '8px', cursor: 'pointer',
+        gap: '3px', paddingLeft, paddingRight: '8px', cursor: 'pointer', borderRadius: '2px',
         background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
       }}
       onClick={() => onOpenFileDiff(repoId, entry.id, file.path)}
@@ -130,12 +130,14 @@ function FileRow({ file, repoId, entry, depth = 0, onOpenFileDiff, onUnshelveFil
       title={`${file.path} — click to open diff`}
     >
       <FileIcon name={fname} theme={iconTheme} size={ICON_SIZE} />
-      <span style={{ color, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{fname}</span>
-      {depth === 0 && dir && (
-        <span style={{ fontSize: '11px', opacity: 0.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, maxWidth: '80px' }}>{dir}</span>
-      )}
-      {hovered ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginLeft: 'auto', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <span style={{ color, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{fname}</span>
+        {depth === 0 && dir && (
+          <span style={{ fontSize: '11px', opacity: 0.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0 }}>{dir}</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        {hovered && (
           <button
             style={{ background: 'transparent', border: 'none', color: 'var(--vscode-foreground)', cursor: 'pointer', padding: '2px 4px', borderRadius: '3px', fontSize: '12px', display: 'flex', alignItems: 'center', opacity: 0.7 }}
             title="Unshelve this file only"
@@ -143,10 +145,9 @@ function FileRow({ file, repoId, entry, depth = 0, onOpenFileDiff, onUnshelveFil
           >
             <Codicon name="desktop-download" />
           </button>
-        </div>
-      ) : (
-        <span style={{ fontSize: '10px', fontWeight: 'bold', color, flexShrink: 0, width: '12px', textAlign: 'center', opacity: 0.9 }}>{letter}</span>
-      )}
+        )}
+        <span style={{ fontSize: '11px', fontWeight: 'bold', color, width: '14px', textAlign: 'center', opacity: 0.9, marginLeft: '6px' }}>{letter}</span>
+      </div>
     </div>
   );
 }
@@ -182,22 +183,20 @@ function TreeDirNode({ node, depth, repoId, entry, onOpenFileDiff, onUnshelveFil
       <div
         style={{
           display: 'flex', alignItems: 'center', minHeight: '22px', fontSize: '12px',
-          paddingLeft, paddingRight: '8px', gap: '0',
+          paddingLeft, paddingRight: '8px', gap: '0', borderRadius: '2px',
           background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
           color: 'var(--vscode-foreground)',
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onClick={() => toggleShelveCollapsed(key)}
       >
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, cursor: 'pointer', userSelect: 'none', paddingLeft: '2px' }}
-          onClick={() => toggleShelveCollapsed(key)}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, cursor: 'pointer', userSelect: 'none', paddingLeft: '2px' }}>
           <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.7, width: '12px', flexShrink: 0 }} />
           <FileIcon name={node.name} isFolder isOpen={open} theme={iconTheme} size={ICON_SIZE} />
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
-          <span style={{ fontSize: '10px', opacity: 0.45, flexShrink: 0 }}>{fileCount}</span>
         </div>
+        <span style={{ fontSize: '11px', opacity: 0.45, flexShrink: 0, marginLeft: '6px', width: '14px', textAlign: 'center' }}>{fileCount}</span>
       </div>
       {open && node.children.map(child =>
         child.kind === 'dir'
@@ -210,7 +209,7 @@ function TreeDirNode({ node, depth, repoId, entry, onOpenFileDiff, onUnshelveFil
 
 // ── Single shelve row ─────────────────────────────────────────────────────────
 
-function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop, onOpenFileDiff }: {
+function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop, onOpenFileDiff, isLast }: {
   entry: ShelveEntry;
   repoId: string;
   viewMode: ViewMode;
@@ -218,6 +217,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
   onUnshelveFile: Props['onUnshelveFile'];
   onDrop: Props['onDrop'];
   onOpenFileDiff: Props['onOpenFileDiff'];
+  isLast?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -227,7 +227,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
   const treeNodes = viewMode === 'tree' ? buildTree(entry.files) : null;
 
   return (
-    <div style={rowStyle.root}>
+    <div style={{ ...rowStyle.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
       {/* Header */}
       <div
         style={{ ...rowStyle.header, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
@@ -244,8 +244,13 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
         <div style={rowStyle.info}>
           <span style={rowStyle.name}>{entry.name}</span>
           <span style={rowStyle.meta}>
-            <span style={rowStyle.fileCount}>{entry.files.length} {entry.files.length === 1 ? 'file' : 'files'}</span>
-            <span style={rowStyle.date}>{formatDate(entry.date)}</span>
+            {formatDate(entry.date)}
+            {' · '}{entry.files.length} {entry.files.length === 1 ? 'file' : 'files'}
+            {(() => {
+              const a = entry.totalAdded  ?? entry.files.reduce((s, f) => s + (f.added   ?? 0), 0);
+              const r = entry.totalRemoved ?? entry.files.reduce((s, f) => s + (f.removed ?? 0), 0);
+              return (a > 0 || r > 0) ? <>{' '}<span style={rowStyle.statAdd}>+{a}</span>{' '}<span style={rowStyle.statDel}>-{r}</span></> : null;
+            })()}
           </span>
         </div>
         {hovered && (
@@ -305,9 +310,9 @@ const rowStyle = {
   } as React.CSSProperties,
   info: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
   name: { fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
-  meta: { display: 'flex', gap: '8px', marginTop: '2px' } as React.CSSProperties,
-  fileCount: { fontSize: '10px', opacity: 0.5 },
-  date: { fontSize: '10px', opacity: 0.4, whiteSpace: 'nowrap' as const },
+  meta: { fontSize: '10px', opacity: 0.5, marginTop: '2px', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' } as React.CSSProperties,
+  statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)', fontSize: '10px', opacity: 1 },
+  statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)', fontSize: '10px', opacity: 1 },
   actions: { display: 'flex', gap: '2px', flexShrink: 0 } as React.CSSProperties,
   btn: {
     background: 'transparent', border: 'none', cursor: 'pointer',
@@ -335,7 +340,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, worktreeBr
           <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
           {worktreeBranch && (
             <span style={css.worktreeBadge}>
-              <Codicon name="repo-clone" style={{ fontSize: '11px', marginRight: '3px' }} />
+              <Codicon name="worktree" style={{ fontSize: '11px', marginRight: '3px' }} />
               {worktreeBranch}
             </span>
           )}
@@ -354,7 +359,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, worktreeBr
       ) : shelves.length === 0 ? (
         <div style={css.empty}>No shelved changes</div>
       ) : (
-        shelves.map(entry => (
+        shelves.map((entry, i) => (
           <ShelveRow
             key={entry.id}
             entry={entry}
@@ -364,6 +369,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, worktreeBr
             onUnshelveFile={onUnshelveFile}
             onDrop={onDrop}
             onOpenFileDiff={onOpenFileDiff}
+            isLast={i === shelves.length - 1}
           />
         ))
       )}
@@ -385,5 +391,5 @@ const css = {
     display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',
   } as React.CSSProperties,
-  empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, fontStyle: 'italic' as const, textAlign: 'center' as const },
+  empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
 };

@@ -315,7 +315,7 @@ export function UnifiedCommitForm({
             disabledTitle="Enter a commit message first"
             items={[
               { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
-              { icon: 'save',    label: 'Stash Changes',  onSelect: onStash  },
+              { icon: 'git-stash',    label: 'Stash Changes',  onSelect: onStash  },
             ]}
             onMainClick={onShelve}
           />
@@ -368,7 +368,6 @@ const styles = {
   noTargets: {
     fontSize: '11px',
     opacity: 0.5,
-    fontStyle: 'italic' as const,
   },
   targetPill: (color: string): React.CSSProperties => ({
     display: 'inline-flex',

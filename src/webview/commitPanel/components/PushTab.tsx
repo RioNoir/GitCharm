@@ -377,8 +377,8 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             title={!canCheck ? 'Nothing to push' : checked ? 'Exclude from push' : 'Include in push'}
           />
         )}
-        <div style={styles.headerMain} onClick={() => setExpanded(e => !e)}>
-          <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />
+        <div style={styles.headerMain} onClick={singleRepo ? undefined : () => setExpanded(e => !e)}>
+          {!singleRepo && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />}
           <span style={styles.dot(repoColor)} />
           <span style={styles.repoName}>{repoName}</span>
           <span
@@ -386,7 +386,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : branchLabel}
             onClick={e => { e.stopPropagation(); onBranchClick(repoStatus.repoId); }}
           >
-            <Codicon name={worktreeBranch ? 'repo-clone' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
+            <Codicon name={worktreeBranch ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
             <span style={styles.branchName}>{branchLabel}</span>
           </span>
           {commitCount > 0 && (
@@ -750,7 +750,7 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: '12px 8px', fontSize: '12px', opacity: 0.5,
   } as React.CSSProperties,
-  loadingRow: { padding: '8px 12px', fontSize: '12px', opacity: 0.45, fontStyle: 'italic' as const } as React.CSSProperties,
+  loadingRow: { padding: '8px 12px', fontSize: '12px', opacity: 0.45 } as React.CSSProperties,
   errorRow: {
     display: 'flex', alignItems: 'flex-start', padding: '6px 10px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)',
