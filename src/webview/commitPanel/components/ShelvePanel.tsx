@@ -246,7 +246,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
         </button>
         <Codicon name="archive" style={{ fontSize: '13px', opacity: 0.4, flexShrink: 0 }} />
         <div style={rowStyle.info}>
-          <span style={rowStyle.name}>{entry.name}</span>
+          <span style={rowStyle.name}>{entry.name.split('\n')[0]}</span>
           <span style={rowStyle.meta}>
             {formatDate(entry.date)}
             {' · '}{entry.files.length} {entry.files.length === 1 ? 'file' : 'files'}
@@ -314,7 +314,7 @@ const rowStyle = {
     color: 'var(--vscode-foreground)', flexShrink: 0,
   } as React.CSSProperties,
   info: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
-  name: { fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
+  name: { fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, display: 'block' },
   meta: { fontSize: '10px', opacity: 0.5, marginTop: '2px', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' } as React.CSSProperties,
   statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)', fontSize: '10px', opacity: 1 },
   statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)', fontSize: '10px', opacity: 1 },

@@ -8,8 +8,9 @@ export function generateNonce(): string {
 export function getWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
-  appName: 'commitPanel' | 'gitLog' | 'mergeEditor',
-  title: string
+  appName: 'commitPanel' | 'gitLog' | 'mergeEditor' | 'undockedPanel',
+  title: string,
+  initialConfig?: Record<string, unknown>,
 ): string {
   const nonce = generateNonce();
 
@@ -110,7 +111,7 @@ export function getWebviewHtml(
 </head>
 <body>
   <div id="root"></div>
-  <script nonce="${nonce}">if (/Cursor/.test(navigator.userAgent)) document.body.classList.add('cursor-host');</script>
+  <script nonce="${nonce}">if (/Cursor/.test(navigator.userAgent)) document.body.classList.add('cursor-host');${initialConfig ? `\nwindow.__INITIAL_CONFIG__ = ${JSON.stringify(initialConfig)};` : ''}</script>
   <script nonce="${nonce}" type="module" src="${jsUri}"></script>
 </body>
 </html>`;

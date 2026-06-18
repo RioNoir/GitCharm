@@ -6,6 +6,7 @@ import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
 import type { BranchInfo } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
+import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 
@@ -77,18 +78,47 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private readonly managerListeners: vscode.Disposable[] = [];
   private refreshDebounce: ReturnType<typeof setTimeout> | null = null;
   private commitPanel?: CommitPanelProvider;
+  private undockedPanel?: UndockedPanelProvider;
   private hiddenRepoIds: string[] = [];
   private pendingFilterRepoId: string | null = null;
   private pendingFilterBranch: string | null = null;
+  // When set, post() sends to the undocked panel instead of the sidebar
+  private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
 
   setCommitPanel(provider: CommitPanelProvider): void {
     this.commitPanel = provider;
   }
 
+  setUndockedPanel(provider: UndockedPanelProvider): void {
+    this.undockedPanel = provider;
+  }
+
+  async triggerUndockPick(): Promise<void> {
+    if (!this.undockedPanel) return;
+    type Item = vscode.QuickPickItem & { value: 'editorTab' | 'newWindow'; showCommit: boolean };
+    const pick = await vscode.window.showQuickPick<Item>(
+      [
+        { label: '$(editor-layout) Undock in Editor Tab (Log & Commit)', value: 'editorTab', showCommit: true },
+        { label: '$(empty-window) Undock in New Window (Log & Commit)', value: 'newWindow', showCommit: true },
+        { label: '$(editor-layout) Undock in Editor Tab (Only Log)', value: 'editorTab', showCommit: false },
+        { label: '$(empty-window) Undock in New Window (Only Log)', value: 'newWindow', showCommit: false },
+      ],
+      { title: 'GitCharm: Undock', placeHolder: 'Choose where to open the panel' },
+    );
+    if (!pick) return;
+    this.undockedPanel.open(pick.value, pick.showCommit);
+  }
+
+  handleUndockedMessage(msg: LogToHostMsg, _provider: UndockedPanelProvider): void {
+    if (msg.type === 'LOG_UNDOCK') return; // undock from undocked panel is a no-op
+    this.activeReplyTarget = 'undocked';
+    this.handleMessage(msg).finally(() => { this.activeReplyTarget = 'sidebar'; });
+  }
+
   notifyHiddenReposChanged(hiddenRepoIds: string[]): void {
     this.hiddenRepoIds = hiddenRepoIds;
     this.getFilteredBranches().then(branches => {
-      this.post({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches });
+      this.broadcast({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches });
     });
   }
 
@@ -103,16 +133,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       this.manager.onBranchChange(async () => {
         const repos = this.getVisibleRepos();
         const branches = await this.getFilteredBranches();
-        this.post({ type: 'LOG_INIT_DATA', repos, branches });
+        this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
+        this.refreshDebounce = setTimeout(() => this.broadcast({ type: 'LOG_REFRESH' }), 300);
       }),
       this.manager.onReposChange(async () => {
         const repos = this.getVisibleRepos();
         const branches = await this.getFilteredBranches();
-        this.post({ type: 'LOG_INIT_DATA', repos, branches });
+        this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
         if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-        this.refreshDebounce = setTimeout(() => this.post({ type: 'LOG_REFRESH' }), 300);
+        this.refreshDebounce = setTimeout(() => this.broadcast({ type: 'LOG_REFRESH' }), 300);
       })
     );
   }
@@ -197,7 +227,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   /** Trigger a full log refresh — call this after any operation that creates new commits. */
   refresh(): void {
-    this.post({ type: 'LOG_REFRESH' });
+    this.broadcast({ type: 'LOG_REFRESH' });
   }
 
   private post(msg: HostToLogMsg): void {
@@ -206,7 +236,22 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
     }
+    if (this.activeReplyTarget === 'undocked') {
+      this.undockedPanel?.postToLog(msg);
+    } else {
+      this.view?.webview.postMessage(msg);
+    }
+  }
+
+  /** Broadcast a host-initiated message to both the sidebar and the undocked panel. */
+  private broadcast(msg: HostToLogMsg): void {
+    if (msg.type === 'LOG_INIT_DATA') {
+      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean; aiEnabled?: boolean };
+      if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+      if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
+    }
     this.view?.webview.postMessage(msg);
+    this.undockedPanel?.postToLog(msg);
   }
 
   private getNonWorktreeRepos() {
@@ -1328,6 +1373,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_EXPLAIN_COMMIT': {
         const { openCommitDetailPanel } = await import('./CommitDetailPanel');
         await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        break;
+      }
+
+      case 'LOG_UNDOCK': {
+        if (!this.undockedPanel) break;
+        if (msg.target === 'pick') {
+          await this.triggerUndockPick();
+        } else {
+          this.undockedPanel.open(msg.target);
+        }
         break;
       }
     }

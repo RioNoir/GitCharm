@@ -12,6 +12,9 @@ interface Props {
   onRepoChange: (repoId: string | null) => void;
   onClear: () => void;
   onFetchAll: () => void;
+  onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
+  /** When true, hides the Undock menu item (already in undocked mode). */
+  hideUndock?: boolean;
 }
 
 function useIsLightTheme() {
@@ -24,7 +27,7 @@ function useIsLightTheme() {
   return light;
 }
 
-export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll, onUndock, hideUndock }: Props) {
   const isLight = useIsLightTheme();
   const localBranches = branches.filter(b => !b.isRemote);
   const uniqueBranchNames = Array.from(new Set(localBranches.map(b => b.name))).sort();
@@ -87,14 +90,18 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
       )}
 
       {/* More menu — pushed to the right */}
-      <MoreMenu onFetchAll={onFetchAll} />
+      <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
     </div>
   );
 }
 
 /* ─── MoreMenu ────────────────────────────────────────────────────────────── */
 
-function MoreMenu({ onFetchAll }: { onFetchAll: () => void }) {
+function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
+  onFetchAll: () => void;
+  onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
+  hideUndock?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +131,19 @@ function MoreMenu({ onFetchAll }: { onFetchAll: () => void }) {
             <Codicon name="sync" style={{ fontSize: '13px', opacity: 0.7 }} />
             <span>Fetch and Refresh</span>
           </div>
+
+          {!hideUndock && (
+            <>
+              <div style={styles.moreSeparator} />
+              <div
+                style={styles.moreItem}
+                onClick={() => { onUndock?.('pick'); setOpen(false); }}
+              >
+                <Codicon name="multiple-windows" style={{ fontSize: '13px', opacity: 0.7 }} />
+                <span>Undock…</span>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -814,5 +834,11 @@ const styles = {
     cursor: 'pointer',
     color: 'var(--vscode-menu-foreground, var(--vscode-foreground))',
     whiteSpace: 'nowrap' as const,
+    position: 'relative' as const,
+  } as React.CSSProperties,
+  moreSeparator: {
+    height: '1px',
+    background: 'var(--vscode-menu-separatorBackground, var(--vscode-panel-border))',
+    margin: '3px 0',
   } as React.CSSProperties,
 };

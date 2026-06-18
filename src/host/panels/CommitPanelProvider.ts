@@ -13,17 +13,23 @@ import { parseConflictFile } from '../git/ConflictParser';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { MergeEditorProvider } from './MergeEditorProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
+import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import type { GitProfileService } from '../git/GitProfileService';
 import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
+import type { BranchStatusBar } from '../ui/BranchStatusBar';
 
 export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
   private view?: vscode.WebviewView;
   private logProvider?: GitLogPanelProvider;
+  private undockedPanel?: UndockedPanelProvider;
+  private branchStatusBar?: BranchStatusBar;
   private changelistService?: ChangelistService;
   private badgeController?: import('../ui/BadgeController').BadgeController;
+  // When set, post() sends to the undocked panel instead of the sidebar
+  private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -35,6 +41,19 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   setBadgeController(controller: import('../ui/BadgeController').BadgeController): void {
     this.badgeController = controller;
+  }
+
+  setUndockedPanel(provider: UndockedPanelProvider): void {
+    this.undockedPanel = provider;
+  }
+
+  setBranchStatusBar(bar: BranchStatusBar): void {
+    this.branchStatusBar = bar;
+  }
+
+  handleUndockedMessage(msg: CommitToHostMsg, _provider: UndockedPanelProvider): void {
+    this.activeReplyTarget = 'undocked';
+    this.handleMessage(msg, undefined as unknown as vscode.Webview).finally(() => { this.activeReplyTarget = 'sidebar'; });
   }
 
   prefillCommitMessage(message: string): void {
@@ -63,7 +82,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   ) {
     this.manager.onStatusChange((status) => {
       this.postChangelistsUpdate(status);
-      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+      this.broadcastCommit({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
     });
 
     const postAllBranches = async () => {
@@ -71,7 +90,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(meta.id);
         if (!repo) continue;
         const branches = await repo.getBranches();
-        this.post({ type: 'COMMIT_BRANCHES_UPDATE', repoId: meta.id, branches });
+        this.broadcastCommit({ type: 'COMMIT_BRANCHES_UPDATE', repoId: meta.id, branches });
       }
     };
 
@@ -80,13 +99,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.manager.onReposChange(async () => {
       const status = await this.manager.getAllStatusesFresh();
       this.postChangelistsUpdate(status);
-      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
+      this.broadcastCommit({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
       await postAllBranches();
     });
 
     this.manager.onWorktreeChange(async () => {
       const repos = await this.manager.getAllWorktrees();
-      this.post({ type: 'WORKTREE_LIST_RESULT', repos });
+      this.broadcastCommit({ type: 'WORKTREE_LIST_RESULT', repos });
     });
   }
 
@@ -202,7 +221,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     webviewView.onDidDispose(() => { configWatcher.dispose(); tabWatcher.dispose(); });
   }
 
-  private post(msg: HostToCommitMsg): void {
+  private enrichCommitMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
       const m = msg as typeof msg & { fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; hasWorkspaceFolder?: boolean };
       if (m.fileViewMode === undefined) m.fileViewMode = this.getFileViewMode();
@@ -210,7 +229,21 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = this.getAiEnabled();
     }
+  }
+
+  private post(msg: HostToCommitMsg): void {
+    this.enrichCommitMsg(msg);
+    if (this.activeReplyTarget === 'undocked') {
+      this.undockedPanel?.postToCommit(msg);
+    } else {
+      this.view?.webview.postMessage(msg);
+    }
+  }
+
+  private broadcastCommit(msg: HostToCommitMsg): void {
+    this.enrichCommitMsg(msg);
     this.view?.webview.postMessage(msg);
+    this.undockedPanel?.postToCommit(msg);
   }
 
   switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push'): void {
@@ -299,7 +332,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const svc = this.getOrCreateChangelistService();
     if (!svc) return;
     if (status) svc.reconcile(status.repos);
-    this.post({
+    this.broadcastCommit({
       type: 'CHANGELISTS_UPDATE',
       changelists: svc.getAll(),
       viewMode: this.getChangesViewMode(),
@@ -504,18 +537,24 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         this.profileService?.trace(`COMMIT_DO_COMMIT_MULTI received repos=${msg.repos.map(r=>r.repoId).join(',')}`);
         // Check for missing remotes before pushing
         if (msg.andPush) {
-          const noRemoteRepos: string[] = [];
+          const noRemoteRepoIds: string[] = [];
           for (const r of msg.repos) {
             const repo = this.manager.getRepo(r.repoId);
             if (!repo) continue;
             const remotes = await repo.getRemotes().catch(() => []);
-            if (remotes.length === 0) noRemoteRepos.push(r.repoId.split('/').pop() ?? r.repoId);
+            if (remotes.length === 0) noRemoteRepoIds.push(r.repoId);
           }
-          if (noRemoteRepos.length > 0) {
-            vscode.window.showInformationMessage(
-              `GitCharm: Cannot push — no remote configured for: ${noRemoteRepos.join(', ')}. Add a remote first (git remote add <name> <url>).`
-            );
+          if (noRemoteRepoIds.length > 0) {
             this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'No remote configured' });
+            if (noRemoteRepoIds.length === 1) {
+              const meta = this.manager.getRepoMetas().find(m => m.id === noRemoteRepoIds[0]);
+              if (meta && this.branchStatusBar) await this.branchStatusBar.showRepoRemotesMenu(meta);
+            } else {
+              const names = noRemoteRepoIds.map(id => id.split('/').pop() ?? id);
+              vscode.window.showInformationMessage(
+                `GitCharm: Cannot push — no remote configured for: ${names.join(', ')}. Add a remote first (git remote add <name> <url>).`
+              );
+            }
             return;
           }
         }
@@ -604,6 +643,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_PUSH_REPO': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const remotes = await repo.getRemotes().catch(() => [] as string[]);
+        if (remotes.length === 0) {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'No remote configured' });
+          const meta = this.manager.getRepoMetas().find(m => m.id === msg.repoId);
+          if (meta && this.branchStatusBar) {
+            await this.branchStatusBar.showRepoRemotesMenu(meta);
+          }
+          break;
+        }
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pushing', cancellable: false },
           async () => {
@@ -1546,8 +1594,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repo = this.manager.getRepo(repoId);
           if (!repo) continue;
           try {
-            const git = require('simple-git').default(repo.rootPath);
-            await git.stash(['push', '--message', stashName.trim(), '--', ...paths]);
+            await repo.stashPush(stashName.trim(), paths);
           } catch (e: unknown) {
             vscode.window.showErrorMessage(`Stash failed for repo ${repoId}: ${String(e)}`);
           }

@@ -1450,14 +1450,26 @@ export class GitService {
     // git builds the stash commit tree from the current index, so staged files
     // outside the pathspec (especially new 'A' files) appear in the stash even
     // though they weren't requested. Fix: temporarily unstage them, stash, re-stage.
+    //
+    // Additionally, untracked files in the pathspec must be staged before stashing
+    // because `stash push -- <paths>` only works on tracked/staged files. We stage
+    // them temporarily and remove them from the index afterward.
     const status = await this.git.status();
     const pathSet = new Set(paths);
+
     const addedOutside = status.files
       .filter(f => f.index.trim() === 'A' && !pathSet.has(f.path))
       .map(f => f.path);
 
+    const untrackedInside = status.files
+      .filter(f => f.index === '?' && f.working_dir === '?' && pathSet.has(f.path))
+      .map(f => f.path);
+
     if (addedOutside.length > 0) {
       await this.git.raw(['reset', 'HEAD', '--', ...addedOutside]).catch(() => {});
+    }
+    if (untrackedInside.length > 0) {
+      await this.git.add(untrackedInside).catch(() => {});
     }
 
     try {
@@ -1465,6 +1477,11 @@ export class GitService {
     } finally {
       if (addedOutside.length > 0) {
         await this.git.add(addedOutside).catch(() => {});
+      }
+      // If the stash succeeded the files are gone from the working tree — nothing to unstage.
+      // If it failed they are still present, so we remove them from the index to restore state.
+      if (untrackedInside.length > 0) {
+        await this.git.raw(['reset', 'HEAD', '--', ...untrackedInside]).catch(() => {});
       }
     }
   }

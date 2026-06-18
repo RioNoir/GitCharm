@@ -215,7 +215,8 @@ export type HostToLogMsg =
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
-  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[] };
+  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[] }
+  | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
@@ -274,7 +275,8 @@ export type LogToHostMsg =
   | { type: 'LOG_OPEN_FOLDER' }
   | { type: 'LOG_CLONE_REPO' }
   | { type: 'LOG_OPEN_EXTENDED_DETAIL'; repoId: string; hash: string }
-  | { type: 'LOG_EXPLAIN_COMMIT'; repoId: string; hash: string };
+  | { type: 'LOG_EXPLAIN_COMMIT'; repoId: string; hash: string }
+  | { type: 'LOG_UNDOCK'; target: 'editorTab' | 'newWindow' | 'pick' };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 

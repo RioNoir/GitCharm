@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -32,7 +32,8 @@
   },
   "activationEvents": [
     "workspaceContains:**/.git",
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:gitcharm.undocked"
   ],
   "main": "./out/host/extension.js",
   "contributes": {
@@ -212,6 +213,11 @@
       {
         "command": "gitcharm.showBranchOptions",
         "title": "GitCharm: Branch Options"
+      },
+      {
+        "command": "gitcharm.undock",
+        "title": "GitCharm: Undock",
+        "icon": "$(multiple-windows)"
       }
     ],
     "menus": {
@@ -252,6 +258,38 @@
           "group": "navigation@7"
         }
       ],
+      "editor/title": [
+        {
+          "command": "gitcharm.fetchAll",
+          "when": "activeWebviewPanelId == gitcharm.undocked",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.updateProject",
+          "when": "activeWebviewPanelId == gitcharm.undocked",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.push",
+          "when": "activeWebviewPanelId == gitcharm.undocked",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitcharm.syncAll",
+          "when": "activeWebviewPanelId == gitcharm.undocked",
+          "group": "navigation@4"
+        },
+        {
+          "command": "gitcharm.showBranchMenu",
+          "when": "activeWebviewPanelId == gitcharm.undocked",
+          "group": "navigation@5"
+        },
+        {
+          "command": "gitcharm.openSettings",
+          "when": "activeWebviewPanelId == gitcharm.undocked",
+          "group": "navigation@6"
+        }
+      ],
       "scm/sourceControl": [
         {
           "command": "gitcharm.manageHiddenRepos",
@@ -273,6 +311,7 @@
         { "command": "gitcharm.manageProfiles" },
         { "command": "gitcharm.switchProfile" },
         { "command": "gitcharm.selectAiModel" },
+        { "command": "gitcharm.undock" },
         { "command": "gitcharm.submodule.init" },
         { "command": "gitcharm.submodule.update" },
         { "command": "gitcharm.submodule.updateRecursive" },

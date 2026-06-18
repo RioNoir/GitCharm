@@ -3,6 +3,7 @@ import { WorkspaceGitManager } from './git/WorkspaceGitManager';
 import { CommitPanelProvider } from './panels/CommitPanelProvider';
 import { GitLogPanelProvider } from './panels/GitLogPanelProvider';
 import { MergeEditorProvider } from './panels/MergeEditorProvider';
+import { UndockedPanelProvider } from './panels/UndockedPanelProvider';
 import { BranchStatusBar } from './ui/BranchStatusBar';
 import { BadgeController } from './ui/BadgeController';
 import { registerCommands } from './commands/registerCommands';
@@ -220,10 +221,13 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(badgeDisposable);
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager);
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
+  const undockedPanel = new UndockedPanelProvider(context.extensionUri, commitPanel, logPanel);
   commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
   commitPanel.setBadgeController(badge);
+  commitPanel.setUndockedPanel(undockedPanel);
   logPanel.setCommitPanel(commitPanel);
+  logPanel.setUndockedPanel(undockedPanel);
 
   // Apply saved hidden repos to badge immediately (before webview opens)
   const savedHidden = context.workspaceState.get<string[]>('gitcharm.hiddenRepoIds', []);
@@ -232,6 +236,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const branchStatusBar = new BranchStatusBar(manager, () => {
     vscode.commands.executeCommand('gitcharm.commitPanel.focus');
   });
+
+  commitPanel.setBranchStatusBar(branchStatusBar);
 
   const profileStatusBar = new ProfileStatusBar(profileService, manager);
 
@@ -244,10 +250,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(GitLogPanelProvider.viewType, logPanel, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
+    // Discard any stale undocked panel restored from a previous session
+    vscode.window.registerWebviewPanelSerializer(UndockedPanelProvider.viewType, {
+      deserializeWebviewPanel(panel: vscode.WebviewPanel): Thenable<void> {
+        panel.dispose();
+        return Promise.resolve();
+      },
+    }),
     manager,
     badge,
     logPanel,
     mergeEditor,
+    undockedPanel,
     branchStatusBar,
     profileStatusBar,
     profileService,
@@ -255,6 +269,12 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('gitcharm.undock', () => {
+      logPanel.triggerUndockPick();
+    }),
+  );
 }
 
 export function deactivate(): void {}

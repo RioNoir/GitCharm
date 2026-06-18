@@ -1,12 +1,37 @@
+/**
+ * Undocked panel — mounts both the Git Log and Commit Panel side by side.
+ *
+ * Host → Webview messages are wrapped: { target: 'log'|'commit', msg: <payload> }
+ * Webview → Host messages are raw — the host routes them by type prefix (LOG_* vs COMMIT_*).
+ *
+ * acquireVsCodeApi() is called once; all sub-app components share the same API
+ * instance within this bundle. Incoming messages are dispatched to each sub-app
+ * via the central dispatcher below, which fires synthetic MessageEvents.
+ */
+
+// ── Must be the very first import — patches window.addEventListener ───────────
+import './setupDispatch';
+
 import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useLogStore } from './store/logStore';
-import { BranchSidebar } from './components/BranchSidebar';
-import { CommitList } from './components/CommitList';
-import { CommitDetail } from './components/CommitDetail';
-import { CommitFiltersBar } from './components/CommitFiltersBar';
-import { assignLanes } from './utils/graphLayout';
-import type { GraphLayout } from './utils/graphLayout';
+
+// ── Log sub-app components ────────────────────────────────────────────────────
+import { useLogStore } from '../gitLog/store/logStore';
+import { BranchSidebar } from '../gitLog/components/BranchSidebar';
+import { CommitList } from '../gitLog/components/CommitList';
+import { CommitDetail } from '../gitLog/components/CommitDetail';
+import { CommitFiltersBar } from '../gitLog/components/CommitFiltersBar';
+import { assignLanes } from '../gitLog/utils/graphLayout';
+import type { GraphLayout } from '../gitLog/utils/graphLayout';
+
+// ── Commit sub-app — mounts the full commit panel ────────────────────────────
+// The App component from commitPanel is mounted as a self-contained child.
+// It uses window.addEventListener('message', ...) for incoming messages and
+// getVsCodeApi().postMessage for outgoing — both are handled by the shared
+// singleton in this bundle.
+import { CommitApp } from '../commitPanel/main';
+
+// ── Shared utilities ──────────────────────────────────────────────────────────
 import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
 import { Codicon } from '../shared/Codicon';
@@ -19,8 +44,9 @@ function generateId() {
 
 const LOAD_STEP = 150;
 
+// ── Log sub-app ───────────────────────────────────────────────────────────────
 
-function App() {
+function LogApp() {
   const store = useLogStore();
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
   const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 220, 120, 400);
@@ -34,25 +60,15 @@ function App() {
     obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
     return () => obs.disconnect();
   }, []);
+
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadRef = useRef<() => void>(() => {});
   const filterRepoRef = useRef<(repoId: string | null, branch?: string | null) => void>(() => {});
-  // Prevents concurrent requests
   const loadingInFlightRef = useRef(false);
-  // Current requestId — used to discard responses from superseded requests
   const activeRequestIdRef = useRef<string | null>(null);
 
   const send = useCallback((msg: LogToHostMsg) => {
     getVsCodeApi().postMessage(msg);
-  }, []);
-
-  const request = useCallback(<T extends HostToLogMsg>(msg: LogToHostMsg): Promise<T> => {
-    return new Promise((resolve) => {
-      const reqId = generateId();
-      const m = { ...msg, requestId: reqId } as LogToHostMsg & { requestId: string };
-      pendingRef.current.set(reqId, r => resolve(r as T));
-      getVsCodeApi().postMessage(m);
-    });
   }, []);
 
   useEffect(() => {
@@ -74,15 +90,12 @@ function App() {
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           break;
         case 'LOG_COMMITS_BATCH': {
-          const match = msg.requestId === activeRequestIdRef.current;
-          if (!match) break;
+          if (msg.requestId !== activeRequestIdRef.current) break;
           loadingInFlightRef.current = false;
           store.appendCommits(msg.commits, msg.isLast);
           break;
         }
         case 'LOG_COMMIT_FILES':
-          // Only process responses that belong to the selected commit (no requestId = legacy broadcast)
-          // Responses with requestId are handled by pendingRef or the popover's own listener
           if (!msg.requestId) store.setCommitFiles(msg.files);
           break;
         case 'LOG_REFS_UPDATE':
@@ -94,10 +107,8 @@ function App() {
         case 'LOG_REFRESH':
           reloadRef.current();
           break;
-        case 'LOG_BRANCH_OP_RESULT':
-          if (!msg.ok && msg.error) {
-            console.error('Branch operation failed:', msg.error);
-          }
+        case 'LOG_STASHES_BATCH':
+          store.setStashes(msg.stashCommits);
           break;
         case 'LOG_SCROLL_TO_COMMIT':
           store.setPendingScrollHash(msg.hash);
@@ -105,31 +116,19 @@ function App() {
         case 'LOG_FILTER_BY_REPO':
           filterRepoRef.current(msg.repoId, msg.branch ?? null);
           break;
-        case 'LOG_STASHES_BATCH':
-          store.setStashes(msg.stashCommits);
-          break;
-        case 'LOG_REMOTES_RESULT':
-          break;
       }
     };
+
     window.addEventListener('message', handler);
 
-    // Initial load
     const initReqId = generateId();
     activeRequestIdRef.current = initReqId;
-    send({
-      type: 'LOG_REQUEST_COMMITS',
-      repoIds: [],
-      limit: LOAD_STEP,
-      skip: 0,
-      requestId: initReqId,
-    });
+    send({ type: 'LOG_REQUEST_COMMITS', repoIds: [], limit: LOAD_STEP, skip: 0, requestId: initReqId });
 
     return () => window.removeEventListener('message', handler);
   }, []);
 
-
-  const sendAppendRequest = useCallback((f: import('./store/logStore').CommitFilters, skip: number) => {
+  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, skip: number) => {
     if (loadingInFlightRef.current) return;
     loadingInFlightRef.current = true;
     const reqId = generateId();
@@ -144,7 +143,6 @@ function App() {
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
       filterBranch: f.branch || undefined,
-      // git --after and --before are exclusive; use time suffixes to make the range fully inclusive
       filterDateFrom: f.dateFrom ? `${f.dateFrom}T00:00:00` : undefined,
       filterDateTo: f.dateTo ? `${f.dateTo}T23:59:59` : undefined,
     } satisfies LogToHostMsg);
@@ -156,25 +154,18 @@ function App() {
     sendAppendRequest(s.commitFilters, s.commits.length);
   }, [sendAppendRequest]);
 
-  const reloadCommits = useCallback((overrides?: Partial<import('./store/logStore').CommitFilters>) => {
+  const reloadCommits = useCallback((overrides?: Partial<import('../gitLog/store/logStore').CommitFilters>) => {
     loadingInFlightRef.current = false;
     const f = { ...useLogStore.getState().commitFilters, ...overrides };
     useLogStore.getState().resetCommits();
     sendAppendRequest(f, 0);
   }, [sendAppendRequest]);
 
-  // Keep reloadRef current so the message handler (mounted once) always calls the latest version
   reloadRef.current = reloadCommits;
 
-  const handleLoadMore = useCallback(() => {
-    loadMore();
-  }, [loadMore]);
-
-  // When a commit is selected, load its files
   useEffect(() => {
     const { selectedCommit } = store;
     if (!selectedCommit) return;
-    // Stash entries already carry their file list — no network request needed
     if (selectedCommit.isStash) {
       store.setCommitFiles(selectedCommit.stashFiles ?? []);
       return;
@@ -200,31 +191,20 @@ function App() {
   }, [store.repos]);
 
   const isFiltered = !!(
-    store.commitFilters.text ||
-    store.commitFilters.author ||
-    store.commitFilters.branch ||
-    store.commitFilters.dateFrom ||
-    store.commitFilters.dateTo
+    store.commitFilters.text || store.commitFilters.author || store.commitFilters.branch ||
+    store.commitFilters.dateFrom || store.commitFilters.dateTo
   );
 
-  // Merge stashes into the commit list, filtering by branch if a branch filter is active
   const commitsWithStashes = useMemo(() => {
     const branchFilter = store.commitFilters.branch;
-    const visibleStashes = branchFilter
-      ? store.stashes.filter(s => s.stashBranch === branchFilter)
-      : store.stashes;
+    const visibleStashes = branchFilter ? store.stashes.filter(s => s.stashBranch === branchFilter) : store.stashes;
     if (visibleStashes.length === 0) return store.commits;
     const merged = [...store.commits, ...visibleStashes];
     merged.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
     return merged;
   }, [store.commits, store.stashes, store.commitFilters.branch]);
 
-  // assignLanes is expensive — run it off the render path via useEffect + rAF
-  // so scroll events never block the UI thread waiting for layout recalc.
-  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() =>
-    assignLanes(commitsWithStashes, isFiltered)
-  );
-
+  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() => assignLanes(commitsWithStashes, isFiltered));
   const layoutRafRef = useRef<number | null>(null);
   const pendingCommitsRef = useRef(commitsWithStashes);
   const pendingFilteredRef = useRef(isFiltered);
@@ -246,8 +226,6 @@ function App() {
     return map;
   }, [store.branches]);
 
-  // Authoritative HEAD hash per repo — from branch metadata, not commit refs.
-  // Used to show the HEAD badge on exactly the right commit regardless of ref timing.
   const headHashByRepo = useMemo(() => {
     const map: Record<string, string> = {};
     store.branches.forEach(b => {
@@ -259,12 +237,9 @@ function App() {
     return map;
   }, [store.branches]);
 
-  const selectedRepoColor = store.selectedCommit
-    ? repoColors[store.selectedCommit.repoId]
-    : undefined;
+  const selectedRepoColor = store.selectedCommit ? repoColors[store.selectedCommit.repoId] : undefined;
 
-  // text/author are debounced inside DebouncedInput; branch/date/repo fire immediately
-  const handleFilterChange = useCallback((key: keyof import('./store/logStore').CommitFilters, value: string) => {
+  const handleFilterChange = useCallback((key: keyof import('../gitLog/store/logStore').CommitFilters, value: string) => {
     store.setCommitFilters({ [key]: value });
     if (key === 'text' || key === 'author') {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -280,6 +255,7 @@ function App() {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits({ repoId });
   }, [reloadCommits]);
+
   filterRepoRef.current = (repoId: string | null, branch?: string | null) => {
     const filters: { repoId: string | null; branch?: string } = { repoId };
     if (branch) filters.branch = branch;
@@ -297,36 +273,8 @@ function App() {
 
   const hasSelectedCommit = !!store.selectedCommit;
 
-  const showNoRepo = store.repos.length === 0 && store.initialized;
-  const noRepoOverlay = showNoRepo ? (
-    <div style={noRepoOverlayStyle}>
-      {!store.hasWorkspaceFolder ? (
-        <>
-          <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
-            You have not yet opened a folder.
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '200px' }}>
-            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_OPEN_FOLDER' })}>Open Folder</button>
-            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_CLONE_REPO' })}>Clone Repository</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
-            The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.
-          </div>
-          <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_INIT_REPO' })}>
-            Initialize Repository
-          </button>
-        </>
-      )}
-    </div>
-  ) : null;
-
   return (
-    <div style={{ ...appStyle, position: 'relative' }} onContextMenu={e => e.preventDefault()}>
-      {noRepoOverlay}
-      {/* Filters bar (contains Fetch All on the right) */}
+    <div style={logAppStyle} onContextMenu={e => e.preventDefault()}>
       <CommitFiltersBar
         filters={store.commitFilters}
         branches={store.branches}
@@ -336,12 +284,10 @@ function App() {
         onRepoChange={handleRepoChange}
         onClear={handleClearFilters}
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
-        onUndock={(target) => send({ type: 'LOG_UNDOCK', target } as LogToHostMsg)}
+        hideUndock
       />
 
-      {/* Main layout */}
-      <div style={{ ...mainLayout, visibility: showNoRepo ? 'hidden' : 'visible' }}>
-        {/* Branch sidebar */}
+      <div style={logMainLayout}>
         {sidebarCollapsed && (
           <div style={collapsedSidebarStrip}>
             <button style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title="Expand sidebar">
@@ -357,56 +303,23 @@ function App() {
           filter={store.branchFilter}
           selectedBranchFilter={store.commitFilters.branch}
           onFilterChange={store.setBranchFilter}
-          onBranchFilterSelect={useCallback((branchName: string) => {
-            handleFilterChange('branch', branchName);
-          }, [handleFilterChange])}
-          onCheckout={(repoIds, branch) => {
-            repoIds.forEach(repoId => {
-              getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: branch } satisfies LogToHostMsg);
-            });
-          }}
-          onMerge={(repoId, from) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_MERGE', requestId: reqId, repoId, from } satisfies LogToHostMsg);
-          }}
-          onRebase={(repoId, onto) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: reqId, repoId, onto } satisfies LogToHostMsg);
-          }}
-          onDelete={(repoIds, branchName) => {
-            getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds, branchName } satisfies LogToHostMsg);
-          }}
-          onFetchRepo={(repoId) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_FETCH_REPO', requestId: reqId, repoId } satisfies LogToHostMsg);
-          }}
-          onPull={(repoId) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_PULL', requestId: reqId, repoId } satisfies LogToHostMsg);
-          }}
-          onPush={(repoId) => {
-            getVsCodeApi().postMessage({ type: 'LOG_PUSH_PICK', repoId } satisfies LogToHostMsg);
-          }}
-          onCheckoutTag={(repoIds, tagName) => {
-            repoIds.forEach(repoId => {
-              getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT_TAG', requestId: generateId(), repoId, tagName } satisfies LogToHostMsg);
-            });
-          }}
-          onMergeTag={(repoIds, tagName) => {
-            getVsCodeApi().postMessage({ type: 'LOG_MERGE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg);
-          }}
-          onPushTag={(repoId, tagName) => {
-            getVsCodeApi().postMessage({ type: 'LOG_PUSH_TAG_PICK', repoId, tagName } satisfies LogToHostMsg);
-          }}
-          onDeleteTag={(repoIds, tagName) => {
-            getVsCodeApi().postMessage({ type: 'LOG_DELETE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg);
-          }}
+          onBranchFilterSelect={useCallback((b: string) => handleFilterChange('branch', b), [handleFilterChange])}
+          onCheckout={(repoIds, branch) => repoIds.forEach(repoId => getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: branch } satisfies LogToHostMsg))}
+          onMerge={(repoId, from) => getVsCodeApi().postMessage({ type: 'LOG_MERGE', requestId: generateId(), repoId, from } satisfies LogToHostMsg)}
+          onRebase={(repoId, onto) => getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: generateId(), repoId, onto } satisfies LogToHostMsg)}
+          onDelete={(repoIds, branchName) => getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds, branchName } satisfies LogToHostMsg)}
+          onFetchRepo={(repoId) => getVsCodeApi().postMessage({ type: 'LOG_FETCH_REPO', requestId: generateId(), repoId } satisfies LogToHostMsg)}
+          onPull={(repoId) => getVsCodeApi().postMessage({ type: 'LOG_PULL', requestId: generateId(), repoId } satisfies LogToHostMsg)}
+          onPush={(repoId) => getVsCodeApi().postMessage({ type: 'LOG_PUSH_PICK', repoId } satisfies LogToHostMsg)}
+          onCheckoutTag={(repoIds, tagName) => repoIds.forEach(repoId => getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT_TAG', requestId: generateId(), repoId, tagName } satisfies LogToHostMsg))}
+          onMergeTag={(repoIds, tagName) => getVsCodeApi().postMessage({ type: 'LOG_MERGE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg)}
+          onPushTag={(repoId, tagName) => getVsCodeApi().postMessage({ type: 'LOG_PUSH_TAG_PICK', repoId, tagName } satisfies LogToHostMsg)}
+          onDeleteTag={(repoIds, tagName) => getVsCodeApi().postMessage({ type: 'LOG_DELETE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg)}
           onCollapse={() => setSidebarCollapsed(true)}
           hidden={sidebarCollapsed}
         />
         {!sidebarCollapsed && <ResizeHandle onMouseDown={onSidebarResize} />}
 
-        {/* Commit list (center) */}
         <CommitList
           layout={graphLayout}
           selectedHash={store.selectedCommit?.hash ?? null}
@@ -415,7 +328,7 @@ function App() {
           currentBranchByRepo={currentBranchByRepo}
           headHashByRepo={headHashByRepo}
           onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
-          onLoadMore={handleLoadMore}
+          onLoadMore={loadMore}
           hasMore={store.hasMore}
           storeHasMore={store.hasMore}
           loading={store.loadingCommits}
@@ -428,7 +341,6 @@ function App() {
 
         {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
 
-        {/* Commit detail (right) — hidden when no commit selected or closed */}
         {hasSelectedCommit && !detailCollapsed && (
           <div ref={detailRef} style={detailPane}>
             <CommitDetail
@@ -451,38 +363,84 @@ function App() {
   );
 }
 
-const noRepoOverlayStyle: React.CSSProperties = {
-  position: 'absolute', inset: 0, zIndex: 10,
-  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-  gap: '12px', padding: '24px',
-  background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-foreground)',
-  fontFamily: 'var(--vscode-font-family)',
-};
+// ── Root split layout ─────────────────────────────────────────────────────────
 
-const initRepoBtnStyle: React.CSSProperties = {
-  background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)',
-  border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
-  fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
-};
+declare const window: Window & { __INITIAL_CONFIG__?: { showCommit?: boolean } };
 
-const secondaryBtnStyle: React.CSSProperties = {
-  background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)',
-  border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
-  fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
-};
+function UndockedApp() {
+  const { panelRef: commitRef, onMouseDown: onCommitResize } = useResize('right', 420, 280, 700);
+  const showCommit = window.__INITIAL_CONFIG__?.showCommit !== false;
 
-const appStyle: React.CSSProperties = {
+  return (
+    <div style={rootStyle}>
+      {showCommit && (
+        <>
+          <div ref={commitRef} style={commitPane}>
+            <CommitApp />
+          </div>
+          <ResizeHandle onMouseDown={onCommitResize} />
+        </>
+      )}
+      <div style={logPane}>
+        <LogApp />
+      </div>
+    </div>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const rootStyle: React.CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
+  flexDirection: 'row',
   height: '100vh',
+  overflow: 'hidden',
   background: 'var(--vscode-editor-background)',
   color: 'var(--vscode-foreground)',
   fontFamily: 'var(--vscode-font-family)',
   fontSize: 'var(--vscode-font-size)',
+};
+
+const logPane: React.CSSProperties = {
+  flex: 1,
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: 0,
+};
+
+const commitPane: React.CSSProperties = {
+  width: '420px',
+  flexShrink: 0,
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  borderLeft: '1px solid var(--vscode-panel-border)',
+};
+
+const logAppStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
   overflow: 'hidden',
   userSelect: 'none',
 };
 
+const logMainLayout: React.CSSProperties = {
+  display: 'flex',
+  flex: 1,
+  overflow: 'hidden',
+  userSelect: 'none',
+};
+
+const detailPane: React.CSSProperties = {
+  width: '380px',
+  flexShrink: 0,
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  userSelect: 'text',
+};
 
 const collapsedSidebarStrip: React.CSSProperties = {
   width: '24px',
@@ -508,21 +466,4 @@ const expandSidebarBtn: React.CSSProperties = {
   opacity: 0.6,
 };
 
-const mainLayout: React.CSSProperties = {
-  display: 'flex',
-  flex: 1,
-  overflow: 'hidden',
-  userSelect: 'none',
-};
-
-const detailPane: React.CSSProperties = {
-  width: '380px',
-  flexShrink: 0,
-  overflow: 'hidden',
-  display: 'flex',
-  flexDirection: 'column',
-  userSelect: 'text',
-};
-
-
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<UndockedApp />);

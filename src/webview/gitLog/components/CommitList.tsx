@@ -451,7 +451,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                     <span style={styles.refBadgeLabel}>{commit.stashRef}</span>
                   </span>
                 )}
-                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message}</span>
+                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message.split('\n')[0]}</span>
               </div>
 
               {commit.incoming && (

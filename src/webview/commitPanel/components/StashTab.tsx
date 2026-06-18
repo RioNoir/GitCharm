@@ -262,7 +262,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
         <Codicon name="git-stash" style={{ fontSize: '13px', opacity: 0.4, flexShrink: 0 }} />
         <div style={row.info}>
           <span style={row.name}>
-            {entry.message || entry.ref}
+            <span style={row.nameText}>{(entry.message || entry.ref).split('\n')[0]}</span>
             {entry.branch && <span style={row.branchBadge}><Codicon name="git-branch" style={{ fontSize: '9px', opacity: 0.8, flexShrink: 0 }} />{entry.branch}</span>}
           </span>
           <span style={row.meta}>
@@ -419,7 +419,8 @@ const row = {
     color: 'var(--vscode-foreground)', flexShrink: 0,
   } as React.CSSProperties,
   info: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
-  name: { fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, display: 'flex', alignItems: 'center', gap: '6px' } as React.CSSProperties,
+  name: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' } as React.CSSProperties,
+  nameText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 } as React.CSSProperties,
   branchBadge: {
     fontSize: '9px', padding: '1px 5px', borderRadius: '3px', flexShrink: 0,
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',

@@ -1917,7 +1917,7 @@ export class BranchStatusBar implements vscode.Disposable {
     await this.showRepoRemotesMenu(meta);
   }
 
-  private async showRepoRemotesMenu(meta: RepoMeta): Promise<void> {
+  async showRepoRemotesMenu(meta: RepoMeta): Promise<void> {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
 

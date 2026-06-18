@@ -86,6 +86,16 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 
 <img src="media/screenshots/shelf_stash_push.png" alt="GitCharm commit panel">
 
+### 🪟 Undocked Panel
+
+- **Undock…** in the Git Log burger menu (or `GitCharm: Undock` in the Command Palette) opens a native QuickPick with four options:
+  - **Undock in Editor Tab (Log & Commit)** — opens a resizable editor tab with Commit Panel on the left and Git Log on the right.
+  - **Undock in New Window (Log & Commit)** — same layout in a separate VS Code window.
+  - **Undock in Editor Tab** — editor tab with the Git Log only.
+  - **Undock in New Window** — separate window with the Git Log only.
+- State is fully synchronised with the sidebar panels: commits, branches, and status update in real time in both views.
+- The undocked tab shows the same toolbar actions as the Commit Panel (Fetch All, Pull All, Push All, Sync All, Branch Menu, Settings).
+
 ### 📜 Git Log Panel
 
 - Commit graph with branch visualization.
@@ -246,6 +256,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Switch Git Profile` | Switches the active Git profile for the current workspace. |
 | `GitCharm: Open Git Annotations` | Shows inline blame annotations in the active editor. |
 | `GitCharm: Close Git Annotations` | Hides inline blame annotations in the active editor. |
+| `GitCharm: Undock` | Opens a QuickPick to undock the Git Log (with or without the Commit Panel) into an editor tab or a new window. |
 | `GitCharm: Select AI Provider` | Opens a QuickPick to choose and configure the AI provider and model. |
 | `GitCharm: Generate Commit Message` | Generates an AI commit message from the current staged diff. |
 | `GitCharm: Explain Commit` | Opens the commit detail panel with an AI-generated explanation of the selected commit. |
@@ -300,11 +311,12 @@ Example:
 ```text
 src/host/                 VS Code extension host code
 src/host/git/             Git, diff, conflict, blame, workspace, and shelve services
-src/host/panels/          Webview providers for Commit, Log, and Merge Editor
+src/host/panels/          Webview providers for Commit, Log, Merge Editor, and Undocked Panel
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
 src/webview/gitLog/       React Git Log panel
 src/webview/mergeEditor/  React 3-way merge editor
+src/webview/undockedPanel/ React undocked panel (Commit + Log side by side)
 src/webview/shared/       Shared webview components, hooks, and message types
 media/                    Extension icons, codicons, and assets
 out/                      Built extension and webview bundles
