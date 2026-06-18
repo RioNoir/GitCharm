@@ -118,6 +118,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    this.badgeController?.setWebviewView(webviewView);
 
     webviewView.webview.options = {
       enableScripts: true,

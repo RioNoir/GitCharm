@@ -117,6 +117,8 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
   if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
   if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnIncomingCommits', true)) return;
 
+  await manager.startupFetchPromise;
+
   const metas = manager.getRepoMetas().filter(m => !m.isWorktree);
   const branchResults = await Promise.allSettled(
     metas.map(async m => {
@@ -184,6 +186,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // DEV ONLY: uncomment to reset the support notification
   //context.globalState.update('doNotShowSupportNotification', false);
   //context.globalState.update('supportNotificationLastShown', 0);
+  // DEV ONLY: uncomment to reset the incoming commits notification flag
+  //context.globalState.update('doNotShowIncomingCommitsNotification', false);
   showViewModeQuickpick(context.globalState);
   setTimeout(() => maybeShowSupportNotification(context.globalState), 5 * 60 * 1000); // DEV: use 5 * 60 * 1000 for production
 

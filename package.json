@@ -79,6 +79,7 @@
       {
         "command": "gitcharm.openLog",
         "title": "GitCharm: Focus Git Log",
+        "shortTitle": "Focus Git Log",
         "icon": "$(history)"
       },
       {
@@ -96,16 +97,19 @@
       {
         "command": "gitcharm.push",
         "title": "GitCharm: Push All",
+        "shortTitle": "Push All",
         "icon": "$(repo-push)"
       },
       {
         "command": "gitcharm.fetchAll",
         "title": "GitCharm: Fetch All Remotes",
+        "shortTitle": "Fetch All Remotes",
         "icon": "$(repo-fetch)"
       },
       {
         "command": "gitcharm.syncAll",
         "title": "GitCharm: Sync All (Pull + Push)",
+        "shortTitle": "Sync All",
         "icon": "$(sync)"
       },
       {
@@ -125,16 +129,19 @@
       {
         "command": "gitcharm.showBranchMenu",
         "title": "GitCharm: Branch Menu",
+        "shortTitle": "Branch Menu",
         "icon": "$(git-branch)"
       },
       {
         "command": "gitcharm.updateProject",
         "title": "GitCharm: Pull All (Update Project)",
+        "shortTitle": "Pull All",
         "icon": "$(repo-pull)"
       },
       {
         "command": "gitcharm.openSettings",
         "title": "GitCharm: Settings",
+        "shortTitle": "Settings",
         "icon": "$(settings-gear)"
       },
       {

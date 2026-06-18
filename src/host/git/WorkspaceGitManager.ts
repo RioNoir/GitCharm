@@ -37,8 +37,12 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private prevCommits = new Map<string, string>();    // repoId → commit hash
   private prevUntracked = new Map<string, Set<string>>(); // repoId → known untracked paths
   private initialStatusDone = false;
+  /** Resolves when the startup fetch (if enabled) has completed, or immediately if disabled. */
+  readonly startupFetchPromise: Promise<void>;
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    let resolveStartupFetch!: () => void;
+    this.startupFetchPromise = new Promise<void>(r => { resolveStartupFetch = r; });
     this.globalListeners.push(
       // Workspace folder changes → rebuild everything and push fresh status to listeners
       vscode.workspace.onDidChangeWorkspaceFolders(() => { this.reinitialize(); this.scheduleRefresh(); }),
@@ -91,33 +95,45 @@ export class WorkspaceGitManager implements vscode.Disposable {
           d.dispose();
           this.reinitialize();
           this.scheduleRefresh();
-          this.fetchOnStartupIfEnabled();
+          this.fetchOnStartupIfEnabled(resolveStartupFetch);
         }
       });
       this.globalListeners.push(d);
     } else if (!gitApi) {
-      // vscode.git extension is not yet active (activates after us) — watch for it.
-      // When it activates, reinitialize so proper vsRepo watchers replace the
-      // FileSystemWatcher fallback.
-      const d = vscode.extensions.onDidChange(() => {
-        if (getVscodeGitApi()) {
-          d.dispose();
+      // vscode.git is not yet active — poll until the API becomes available.
+      // onDidChange does not fire for startup extensions, so polling is required.
+      const poll = setInterval(() => {
+        const api = getVscodeGitApi();
+        if (!api) return;
+        clearInterval(poll);
+        if (api.state === 'initialized') {
           this.reinitialize();
           this.scheduleRefresh();
-          this.fetchOnStartupIfEnabled();
+          this.fetchOnStartupIfEnabled(resolveStartupFetch);
+        } else {
+          const d = api.onDidChangeState((state) => {
+            if (state === 'initialized') {
+              d.dispose();
+              this.reinitialize();
+              this.scheduleRefresh();
+              this.fetchOnStartupIfEnabled(resolveStartupFetch);
+            }
+          });
+          this.globalListeners.push(d);
         }
-      });
-      this.globalListeners.push(d);
+      }, 500);
     } else {
       // vscode.git is already initialized — fetch after repos are set up
-      this.fetchOnStartupIfEnabled();
+      this.fetchOnStartupIfEnabled(resolveStartupFetch);
     }
   }
 
-  private fetchOnStartupIfEnabled(): void {
+  private fetchOnStartupIfEnabled(onDone: () => void): void {
     const enabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchOnStartup', true);
     if (enabled) {
-      this.fetchAll().catch(console.error);
+      this.fetchAll().catch(console.error).finally(onDone);
+    } else {
+      onDone();
     }
   }
 
