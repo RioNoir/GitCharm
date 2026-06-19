@@ -275,6 +275,11 @@ export function activate(context: vscode.ExtensionContext): void {
       logPanel.triggerUndockPick();
     }),
   );
+
+  if (vscode.workspace.getConfiguration('gitcharm').get<boolean>('resetViewLocationsOnStartup', false)) {
+    void vscode.commands.executeCommand('workbench.action.resetViewLocations')
+      .then(() => commitPanel.refresh(), () => undefined);
+  }
 }
 
 export function deactivate(): void {}

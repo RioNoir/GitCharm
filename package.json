@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -144,6 +144,11 @@
         "title": "GitCharm: Settings",
         "shortTitle": "Settings",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "gitcharm.resetViewLocations",
+        "title": "GitCharm: Reset View Locations",
+        "icon": "$(discard)"
       },
       {
         "command": "gitcharm.openGitAnnotations",
@@ -518,6 +523,20 @@
           "default": "commit",
           "description": "Default action for the commit button in the Commit Panel."
         },
+        "gitcharm.defaultSaveAction": {
+          "order": 21,
+          "type": "string",
+          "enum": [
+            "stash",
+            "shelve"
+          ],
+          "enumDescriptions": [
+            "The main Save button stashes selected changes",
+            "The main Save button shelves selected changes"
+          ],
+          "default": "stash",
+          "description": "Default action for the Save button in the Commit Panel."
+        },
         "gitcharm.suppressDivergedBranchWarning": {
           "order": 35,
           "type": "boolean",
@@ -656,6 +675,17 @@
           "minimum": 1000,
           "maximum": 100000,
           "description": "Maximum characters of git diff to send to the AI model. Larger values give more context but consume more tokens."
+        }
+      }
+    },
+    {
+      "title": "Experimental",
+      "properties": {
+        "gitcharm.resetViewLocationsOnStartup": {
+          "order": 1,
+          "type": "boolean",
+          "default": false,
+          "description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally."
         }
       }
     }

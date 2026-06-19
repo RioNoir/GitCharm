@@ -195,7 +195,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         });
       }
-      if (e.affectsConfiguration('gitcharm.changesViewMode') || e.affectsConfiguration('gitcharm.defaultCommitAction')) {
+      if (e.affectsConfiguration('gitcharm.changesViewMode') || e.affectsConfiguration('gitcharm.defaultCommitAction') || e.affectsConfiguration('gitcharm.defaultSaveAction')) {
         this.changelistService?.setChangelistMode(this.getChangesViewMode() === 'changelists');
         this.manager.getAllStatuses().then(status => {
           this.postChangelistsUpdate(status);
@@ -223,9 +223,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private enrichCommitMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
-      const m = msg as typeof msg & { fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; hasWorkspaceFolder?: boolean };
+      const m = msg as typeof msg & { fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean };
       if (m.fileViewMode === undefined) m.fileViewMode = this.getFileViewMode();
       if (m.defaultCommitAction === undefined) m.defaultCommitAction = this.getDefaultCommitAction();
+      if (m.defaultSaveAction === undefined) m.defaultSaveAction = this.getDefaultSaveAction();
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = this.getAiEnabled();
     }
@@ -233,6 +234,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private post(msg: HostToCommitMsg): void {
     this.enrichCommitMsg(msg);
+    this.syncBadgeFromMsg(msg);
     if (this.activeReplyTarget === 'undocked') {
       this.undockedPanel?.postToCommit(msg);
     } else {
@@ -242,8 +244,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private broadcastCommit(msg: HostToCommitMsg): void {
     this.enrichCommitMsg(msg);
+    this.syncBadgeFromMsg(msg);
     this.view?.webview.postMessage(msg);
     this.undockedPanel?.postToCommit(msg);
+  }
+
+  private syncBadgeFromMsg(msg: HostToCommitMsg): void {
+    if (msg.type === 'COMMIT_STATUS_UPDATE') {
+      this.badgeController?.update(msg.status);
+    }
   }
 
   switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push'): void {
@@ -265,6 +274,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
     return vscode.workspace.getConfiguration('gitcharm').get<'commit' | 'commitAndPush'>('defaultCommitAction', 'commit');
+  }
+
+  private getDefaultSaveAction(): 'stash' | 'shelve' {
+    return vscode.workspace.getConfiguration('gitcharm').get<'stash' | 'shelve'>('defaultSaveAction', 'stash');
   }
 
   private getAiEnabled(): boolean {
@@ -2052,4 +2065,3 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 }
-

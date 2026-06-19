@@ -2,16 +2,14 @@ import * as vscode from 'vscode';
 import type { WorkspaceStatus } from '../types/git';
 
 /**
- * Controls the numeric badge on the GitCharm activity-bar icon and commit panel.
+ * Controls the numeric badge on the GitCharm activity-bar icon.
  *
- * Uses two mechanisms in parallel:
- * - A hidden TreeView (when: "false") in the same container for the activity-bar icon.
- * - WebviewView.badge directly on the commit panel, so the badge follows the panel
- *   when the user moves it to a different container (e.g. secondary sidebar).
+ * VSCode propagates TreeView.badge to the activity-bar container icon reliably,
+ * whereas WebviewView.badge has timing issues. We register a hidden TreeView
+ * (when: "false") in the same container and set its badge instead.
  */
 export class BadgeController implements vscode.Disposable {
   private readonly treeView: vscode.TreeView<never>;
-  private webviewView?: vscode.WebviewView;
   private progressResolve: (() => void) | undefined;
   private hiddenRepoIds: string[] = [];
   private lastStatus: WorkspaceStatus | undefined;
@@ -26,10 +24,9 @@ export class BadgeController implements vscode.Disposable {
     });
   }
 
-  setWebviewView(view: vscode.WebviewView): void {
-    this.webviewView = view;
-    if (this.lastStatus) this.update(this.lastStatus);
-  }
+  // Kept for compatibility with the webview provider flow. In the v0.3.6-style
+  // badge implementation the badge is driven only by the hidden TreeView.
+  setWebviewView(_view: vscode.WebviewView): void {}
 
   /** Show a spinner in the status bar while the initial git status is loading. */
   startLoading(): void {
@@ -56,11 +53,9 @@ export class BadgeController implements vscode.Disposable {
     const total = status.repos
       .filter(r => !this.hiddenRepoIds.includes(r.repoId))
       .reduce((sum, r) => sum + r.stagedFiles.length + r.unstagedFiles.length, 0);
-    const badge = total > 0
+    this.treeView.badge = total > 0
       ? { value: total, tooltip: `${total} changed file${total === 1 ? '' : 's'}` }
       : undefined;
-    this.treeView.badge = badge;
-    if (this.webviewView) this.webviewView.badge = badge;
   }
 
   dispose(): void {

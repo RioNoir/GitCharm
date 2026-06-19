@@ -409,7 +409,7 @@ function App() {
 
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.hasWorkspaceFolder, msg.aiEnabled);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
             let hasNewChanges = false;
@@ -1483,6 +1483,7 @@ function App() {
             loading={store.loading}
             changesViewMode={store.changesViewMode}
             defaultCommitAction={store.defaultCommitAction}
+            defaultSaveAction={store.defaultSaveAction}
             vscodeSelectedRepos={store.changesViewMode === 'vscode' ? vscodeSelectedRepos : undefined}
             getSelectedFilesForRepo={store.getSelectedFilesForRepo}
             onDeselectRepo={repoId => {

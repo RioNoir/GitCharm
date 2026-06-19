@@ -10,6 +10,7 @@ interface Props {
   loading: boolean;
   changesViewMode?: 'simplified' | 'changelists' | 'vscode';
   defaultCommitAction?: 'commit' | 'commitAndPush';
+  defaultSaveAction?: 'stash' | 'shelve';
   vscodeSelectedRepos?: Set<string>;
   getSelectedFilesForRepo: (repoId: string) => string[];
   onDeselectRepo: (repoId: string) => void;
@@ -65,6 +66,9 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
   const fg = variant === 'primary'
     ? 'var(--vscode-button-foreground)'
     : 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))';
+  const borderColor = variant === 'primary'
+    ? 'var(--vscode-button-border, transparent)'
+    : 'var(--vscode-extensionButton-border, rgba(128,128,128,0.35))';
 
   const childStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -91,7 +95,7 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
     <div ref={ref} style={{ position: 'relative', display: 'flex', ...(fullWidth ? { width: '100%' } : {}), opacity: enabled ? 1 : 0.4 }}>
       <div style={{
         display: 'flex', flex: fullWidth ? 1 : undefined,
-        border: '1px solid var(--vscode-button-border)',
+        border: `1px solid ${borderColor}`,
         borderRadius: '4px',
         overflow: 'hidden',
         backgroundColor: bg,
@@ -156,10 +160,11 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
 
 export function UnifiedCommitForm({
   message, repoStatuses, repoMetas, amendFlags,
-  loading, changesViewMode, defaultCommitAction = 'commit', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
+  loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
+  const [textareaFocused, setTextareaFocused] = useState(false);
 
   // In vscode mode count staged files; otherwise count selected files
   const commitTargets = repoStatuses.map(r => ({
@@ -274,12 +279,14 @@ export function UnifiedCommitForm({
           ref={textareaRef}
           className="gs-commit-textarea"
           style={{
-            ...styles.textarea(generatingMessage),
+            ...styles.textarea(generatingMessage, textareaFocused),
             scrollbarWidth: 'thin',
             scrollbarColor: `var(--vscode-scrollbarSlider-background) transparent`,
           } as React.CSSProperties}
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
+          onFocus={() => setTextareaFocused(true)}
+          onBlur={() => setTextareaFocused(false)}
           placeholder={generatingMessage ? 'Generating commit message…' : 'Commit message (Cmd+Enter to commit)'}
           readOnly={generatingMessage}
           rows={2}
@@ -309,15 +316,15 @@ export function UnifiedCommitForm({
           <DropdownButton
             variant="secondary"
             enabled={!!message.trim() && commitTargets.length > 0}
-            icon="archive"
-            label="Save"
+            icon={defaultSaveAction === 'stash' ? 'git-stash' : 'archive'}
+            label={defaultSaveAction === 'stash' ? 'Stash' : 'Shelve'}
             title="Shelve or stash changes"
             disabledTitle="Enter a commit message first"
             items={[
               { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
               { icon: 'git-stash',    label: 'Stash Changes',  onSelect: onStash  },
             ]}
-            onMainClick={onShelve}
+            onMainClick={defaultSaveAction === 'stash' ? onStash : onShelve}
           />
         </div>
 
@@ -410,7 +417,7 @@ const styles = {
   textareaWrap: {
     position: 'relative' as const,
   },
-  textarea: (generating: boolean): React.CSSProperties => ({
+  textarea: (generating: boolean, focused: boolean): React.CSSProperties => ({
     width: '100%',
     resize: 'none' as const,
     overflow: 'hidden',   // overridden dynamically by resizeTextarea
@@ -419,6 +426,8 @@ const styles = {
     color: 'var(--vscode-input-foreground)',
     border: generating
       ? '1px solid var(--vscode-focusBorder)'
+      : focused
+        ? '1px solid var(--vscode-focusBorder)'
       : '1px solid var(--vscode-input-border, transparent)',
     borderRadius: '3px',
     padding: '5px 28px 5px 7px',
@@ -430,6 +439,8 @@ const styles = {
     opacity: generating ? 0.6 : 1,
     cursor: generating ? 'default' : 'text',
     animation: generating ? 'gs-textarea-pulse 1.2s ease-in-out infinite' : 'none',
+    boxShadow: focused && !generating ? '0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent)' : 'none',
+    transition: 'border-color 0.12s ease, box-shadow 0.12s ease',
   }),
   autopilotBtn: (spinning: boolean): React.CSSProperties => ({
     position: 'absolute' as const,

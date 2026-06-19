@@ -84,6 +84,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
     this.reinitialize();
     this.setupGitInitWatchers();
+    this.scheduleRefresh();
 
     // If vscode.git is not yet initialized at startup, re-run setup once it is.
     // This ensures watchers use the VS Code git API rather than the filesystem fallback,

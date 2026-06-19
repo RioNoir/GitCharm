@@ -145,6 +145,11 @@ export function registerCommands(
       vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm');
     }),
 
+    vscode.commands.registerCommand('gitcharm.resetViewLocations', async () => {
+      await vscode.commands.executeCommand('workbench.action.resetViewLocations');
+      commitPanel.refresh();
+    }),
+
     vscode.commands.registerCommand('gitcharm.openGitAnnotations', async () => {
       const editor = vscode.window.activeTextEditor;
       if (editor) await annotationController.openAnnotations(editor);
