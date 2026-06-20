@@ -141,6 +141,16 @@ export async function openCommitDetailPanel(
       }
       return;
     }
+    if (msg.type === 'showFileHistory' && msg.filePath) {
+      try {
+        const { join } = await import('path');
+        const absUri = vscode.Uri.file(join(repo.rootPath, msg.filePath));
+        await vscode.commands.executeCommand('gitcharm.showFileHistory', absUri);
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(`GitCharm: Cannot open file history: ${String(e)}`);
+      }
+      return;
+    }
     if (msg.type === 'openDiff' && msg.filePath) {
       try {
         const pathMod = await import('path');
@@ -612,6 +622,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
 
   <div class="ctx-menu hidden" id="ctxMenu">
     <div class="ctx-item" id="ctxDiff"><span class="codicon codicon-diff"></span>Show Diff</div>
+    <div class="ctx-item" id="ctxHistory"><span class="codicon codicon-history"></span>Show File History</div>
     <div class="ctx-item" id="ctxEdit"><span class="codicon codicon-go-to-file"></span>Edit Source</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item danger" id="ctxRevert"><span class="codicon codicon-discard"></span>Revert Selected Changes</div>
@@ -727,6 +738,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     window.addEventListener('blur', hideCtx);
 
     document.getElementById('ctxDiff').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openDiff',         filePath: ctxPath, fileStatus: ctxStatus }); hideCtx(); });
+    document.getElementById('ctxHistory').addEventListener('click',   () => { if (ctxPath) vscode.postMessage({ type: 'showFileHistory',   filePath: ctxPath }); hideCtx(); });
     document.getElementById('ctxEdit').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openFile',         filePath: ctxPath }); hideCtx(); });
     document.getElementById('ctxRevert').addEventListener('click',    () => { if (ctxPath) vscode.postMessage({ type: 'revertFile',       filePath: ctxPath, fileStatus: ctxStatus }); hideCtx(); });
     document.getElementById('ctxRevealExp').addEventListener('click', () => { if (ctxPath) vscode.postMessage({ type: 'revealInExplorer', filePath: ctxPath }); hideCtx(); });

@@ -803,6 +803,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_SHOW_FILE_HISTORY': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        const absUri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
+        await vscode.commands.executeCommand('gitcharm.showFileHistory', absUri);
+        break;
+      }
+
       case 'COMMIT_DELETE_FILE': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }

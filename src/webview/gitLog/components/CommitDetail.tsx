@@ -27,13 +27,14 @@ interface FileContextMenuProps {
   onShowDiff: () => void;
   onShowCombinedDiff: () => void;
   onEditSource: () => void;
+  onFileHistory: () => void;
   onRevertFile: () => void;
   onRevealExplorer: () => void;
   onRevealOS: () => void;
   onClose: () => void;
 }
 
-function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onRevertFile, onRevealExplorer, onRevealOS, onClose }: FileContextMenuProps) {
+function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onRevertFile, onRevealExplorer, onRevealOS, onClose }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -107,6 +108,7 @@ function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, o
     <div ref={menuRef} style={menuStyle} onContextMenu={e => e.preventDefault()}>
       <Item icon="diff" label="Show Diff" onClick={onShowDiff} />
       <Item icon="diff-multiple" label="Show Combined Diff" onClick={onShowCombinedDiff} />
+      <Item icon="history" label="Show File History" onClick={onFileHistory} />
       <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
       <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
       <Item icon="list-tree" label="Reveal in Explorer" onClick={onRevealExplorer} />
@@ -462,6 +464,12 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     setCtxMenu(null);
   }, [ctxMenu, commit]);
 
+  const handleCtxFileHistory = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    getVsCodeApi().postMessage({ type: 'LOG_SHOW_FILE_HISTORY', repoId: commit.repoId, filePath: ctxMenu.file.path } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit]);
+
   function selectMergeCommit(c: MergeParentCommit) {
     if (selectedMergeHash === c.hash) {
       setSelectedMergeHash(null);
@@ -807,6 +815,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           file={ctxMenu.file}
           onShowDiff={handleCtxShowDiff}
           onShowCombinedDiff={handleCtxShowCombinedDiff}
+          onFileHistory={handleCtxFileHistory}
           onEditSource={handleCtxEditSource}
           onRevertFile={handleCtxRevertFile}
           onRevealExplorer={handleCtxRevealExplorer}

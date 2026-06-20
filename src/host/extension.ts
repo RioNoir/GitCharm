@@ -268,7 +268,7 @@ export function activate(context: vscode.ExtensionContext): void {
     annotationController,
   );
 
-  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager);
+  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gitcharm.undock', () => {

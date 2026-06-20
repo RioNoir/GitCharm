@@ -164,6 +164,7 @@ export type CommitToHostMsg =
   | { type: 'NOTIFY_INFO'; message: string }
   | { type: 'COMMIT_REVEAL_IN_EXPLORER'; repoId: string; filePath: string }
   | { type: 'COMMIT_REVEAL_IN_OS'; repoId: string; filePath: string }
+  | { type: 'COMMIT_SHOW_FILE_HISTORY'; repoId: string; filePath: string }
   | { type: 'WORKTREE_REQUEST_LIST' }
   | { type: 'WORKTREE_CREATE_PROMPT'; repoId: string }
   | { type: 'WORKTREE_CREATE'; requestId: string; repoId: string; worktreePath: string; branch?: string; newBranch?: string; commitish?: string; noTrack?: boolean }
@@ -271,6 +272,7 @@ export type LogToHostMsg =
   | { type: 'LOG_CHECKOUT_COMMIT'; requestId: string; repoId: string; hash: string; branchName?: string }
   | { type: 'LOG_REVEAL_IN_EXPLORER'; repoId: string; filePath: string }
   | { type: 'LOG_REVEAL_IN_OS'; repoId: string; filePath: string }
+  | { type: 'LOG_SHOW_FILE_HISTORY'; repoId: string; filePath: string }
   | { type: 'LOG_INIT_REPO' }
   | { type: 'LOG_OPEN_FOLDER' }
   | { type: 'LOG_CLONE_REPO' }

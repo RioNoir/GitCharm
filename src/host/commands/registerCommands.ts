@@ -6,6 +6,7 @@ import { BranchStatusBar } from '../ui/BranchStatusBar';
 import { FileAnnotationController } from '../ui/FileAnnotationController';
 import { ProfileStatusBar } from '../ui/ProfileStatusBar';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
+import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -16,6 +17,7 @@ export function registerCommands(
   annotationController: FileAnnotationController,
   profileStatusBar: ProfileStatusBar,
   manager?: WorkspaceGitManager,
+  extensionUri?: vscode.Uri,
 ): void {
   context.subscriptions.push(
     // Focus the Git Log panel in the bottom bar
@@ -582,6 +584,19 @@ export function registerCommands(
       }
       if (!repoId) return;
       commitPanel.handleSubmoduleCommand({ type: 'WORKTREE_PRUNE', requestId: Math.random().toString(36).slice(2), repoId });
+    }),
+
+    // ── File History ──────────────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.showFileHistory', async (uri?: vscode.Uri) => {
+      if (!manager || !extensionUri) return;
+      // uri comes from explorer/context or editor/context; fall back to active editor
+      const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!fileUri || fileUri.scheme !== 'file') {
+        vscode.window.showInformationMessage('GitCharm: Open a file to view its history.');
+        return;
+      }
+      await openFileHistoryPanel(extensionUri, manager, fileUri, logPanel);
     }),
   );
 

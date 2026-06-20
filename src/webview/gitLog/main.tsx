@@ -100,6 +100,7 @@ function App() {
           }
           break;
         case 'LOG_SCROLL_TO_COMMIT':
+          filterRepoRef.current(msg.repoId, null);
           store.setPendingScrollHash(msg.hash);
           break;
         case 'LOG_FILTER_BY_REPO':

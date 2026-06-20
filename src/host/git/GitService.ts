@@ -660,6 +660,48 @@ export class GitService {
     return files;
   }
 
+  async getFileHistory(filePath: string, limit = 2000): Promise<Array<{
+    hash: string; shortHash: string; message: string;
+    authorName: string; authorEmail: string; authorDate: string;
+    status: string; oldPath?: string;
+  }>> {
+    const args = [
+      'log', '--follow', `--max-count=${limit}`,
+      '--format=%H%x00%h%x00%an%x00%ae%x00%ai%x00%s',
+      '--name-status', '--diff-filter=ACDMRT', '--abbrev=8',
+      '--', filePath,
+    ];
+    const raw = await this.git.raw(args).catch(() => '');
+    const results: Array<{
+      hash: string; shortHash: string; message: string;
+      authorName: string; authorEmail: string; authorDate: string;
+      status: string; oldPath?: string;
+    }> = [];
+    let current: { hash: string; shortHash: string; message: string; authorName: string; authorEmail: string; authorDate: string } | null = null;
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      if (line.includes('\x00')) {
+        const parts = line.split('\x00');
+        if (parts.length >= 6) {
+          current = { hash: parts[0], shortHash: parts[1], authorName: parts[2], authorEmail: parts[3], authorDate: parts[4], message: parts[5] };
+        }
+        continue;
+      }
+      if (current && /^[ACDMRT]/.test(line)) {
+        const cols = line.split('\t');
+        const statusCode = cols[0][0];
+        const isRename = (statusCode === 'R' || statusCode === 'C') && cols.length >= 3;
+        results.push({
+          ...current,
+          status: statusCode,
+          ...(isRename ? { oldPath: cols[1] } : {}),
+        });
+        current = null;
+      }
+    }
+    return results;
+  }
+
   async gitObjectExists(ref: string, filePath: string): Promise<boolean> {
     try {
       await this.git.raw(['cat-file', '-e', `${ref}:${filePath}`]);

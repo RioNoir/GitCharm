@@ -46,6 +46,7 @@ const FILE_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'shelve',          label: 'Shelve',              icon: 'archive' },
   { id: 'stash',           label: 'Stash',               icon: 'git-stash' },
   { id: 'diff',            label: 'Show Diff',           icon: 'diff' },
+  { id: 'file-history',    label: 'Show File History',   icon: 'history' },
   { id: 'jump',            label: 'Jump to Source',      icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',  icon: 'list-tree' },
   { id: 'reveal-os',       label: REVEAL_OS_LABEL,       icon: 'folder-opened' },
@@ -116,6 +117,7 @@ const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'unstage',         label: 'Unstage',              icon: 'remove' },
   { separator: true },
   { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
+  { id: 'file-history',    label: 'Show File History',    icon: 'history' },
   { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
   { id: 'reveal-os',       label: REVEAL_OS_LABEL,        icon: 'folder-opened' },
@@ -130,6 +132,7 @@ const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'stash',           label: 'Stash',                icon: 'git-stash' },
   { separator: true },
   { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
+  { id: 'file-history',    label: 'Show File History',    icon: 'history' },
   { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
   { id: 'reveal-os',       label: REVEAL_OS_LABEL,        icon: 'folder-opened' },
@@ -731,6 +734,9 @@ function App() {
         break;
       case 'diff':
         openDiff(file.repoId, file.path);
+        break;
+      case 'file-history':
+        send({ type: 'COMMIT_SHOW_FILE_HISTORY', repoId: file.repoId, filePath: file.path });
         break;
       case 'jump':
         send({ type: 'COMMIT_OPEN_FILE', repoId: file.repoId, filePath: file.path });
@@ -1667,34 +1673,36 @@ function App() {
           items = ctxMenuStaged ? VSCODE_FILE_STAGED_ITEMS : VSCODE_FILE_UNSTAGED_ITEMS;
         } else if (store.changesViewMode === 'simplified' && isUntracked) {
           items = [
-            { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
-            { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
-            { id: 'shelve',     label: 'Shelve',             icon: 'archive' },
-            { id: 'stash',      label: 'Stash',              icon: 'git-stash' },
-            { id: 'diff',       label: 'Show Diff',          icon: 'diff' },
-            { id: 'jump',       label: 'Jump to Source',     icon: 'go-to-file' },
+            { id: 'add-to-git',    label: 'Add to Git',          icon: 'add' },
+            { id: 'rollback',      label: 'Rollback',             icon: 'discard' },
+            { id: 'shelve',        label: 'Shelve',               icon: 'archive' },
+            { id: 'stash',         label: 'Stash',                icon: 'git-stash' },
+            { id: 'diff',          label: 'Show Diff',            icon: 'diff' },
+            { id: 'file-history',  label: 'Show File History',    icon: 'history' },
+            { id: 'jump',          label: 'Jump to Source',       icon: 'go-to-file' },
             { separator: true },
-            { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
+            { id: 'gitignore',     label: 'Add to .gitignore',    icon: 'exclude' },
             { separator: true },
-            { id: 'delete',     label: 'Delete',             icon: 'trash', danger: true },
+            { id: 'delete',        label: 'Delete',               icon: 'trash', danger: true },
             { separator: true },
-            { id: 'refresh',    label: 'Refresh',            icon: 'refresh' },
+            { id: 'refresh',       label: 'Refresh',              icon: 'refresh' },
           ];
         } else if (store.changesViewMode === 'changelists') {
           if (isUntracked) {
             items = [
-              { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
-              { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
-              { id: 'shelve',     label: 'Shelve',             icon: 'archive' },
-              { id: 'stash',      label: 'Stash',              icon: 'git-stash' },
-              { id: 'diff',       label: 'Show Diff',          icon: 'diff' },
-              { id: 'jump',       label: 'Jump to Source',     icon: 'go-to-file' },
+              { id: 'add-to-git',   label: 'Add to Git',         icon: 'add' },
+              { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
+              { id: 'shelve',       label: 'Shelve',              icon: 'archive' },
+              { id: 'stash',        label: 'Stash',               icon: 'git-stash' },
+              { id: 'diff',         label: 'Show Diff',           icon: 'diff' },
+              { id: 'file-history', label: 'Show File History',   icon: 'history' },
+              { id: 'jump',         label: 'Jump to Source',      icon: 'go-to-file' },
               { separator: true },
-              { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
+              { id: 'gitignore',    label: 'Add to .gitignore',   icon: 'exclude' },
               { separator: true },
-              { id: 'delete',     label: 'Delete',             icon: 'trash', danger: true },
+              { id: 'delete',       label: 'Delete',              icon: 'trash', danger: true },
               { separator: true },
-              { id: 'refresh',    label: 'Refresh',            icon: 'refresh' },
+              { id: 'refresh',      label: 'Refresh',             icon: 'refresh' },
             ];
           } else {
             items = hasCustomCls

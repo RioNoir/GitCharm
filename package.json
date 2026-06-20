@@ -37,6 +37,12 @@
   ],
   "main": "./out/host/extension.js",
   "contributes": {
+    "submenus": [
+      {
+        "id": "gitcharm/explorer",
+        "label": "GitCharm"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -79,150 +85,180 @@
     "commands": [
       {
         "command": "gitcharm.openLog",
-        "title": "GitCharm: Focus Git Log",
-        "shortTitle": "Focus Git Log",
+        "title": "Focus Git Log",
+        "category": "GitCharm",
         "icon": "$(history)"
       },
       {
         "command": "gitcharm.commit",
-        "title": "GitCharm: Commit"
+        "title": "Commit",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.commitAndPush",
-        "title": "GitCharm: Commit & Push"
+        "title": "Commit & Push",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.pull",
-        "title": "GitCharm: Pull"
+        "title": "Pull",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.push",
-        "title": "GitCharm: Push All",
-        "shortTitle": "Push All",
+        "title": "Push All",
+        "category": "GitCharm",
         "icon": "$(repo-push)"
       },
       {
         "command": "gitcharm.fetchAll",
-        "title": "GitCharm: Fetch All Remotes",
-        "shortTitle": "Fetch All Remotes",
+        "title": "Fetch All Remotes",
+        "category": "GitCharm",
         "icon": "$(repo-fetch)"
       },
       {
         "command": "gitcharm.syncAll",
-        "title": "GitCharm: Sync All (Pull + Push)",
-        "shortTitle": "Sync All",
+        "title": "Sync All (Pull + Push)",
+        "category": "GitCharm",
         "icon": "$(sync)"
       },
       {
         "command": "gitcharm.openMergeEditor",
-        "title": "GitCharm: Open Merge Editor"
+        "title": "Open Merge Editor",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.refreshCommitPanel",
-        "title": "GitCharm: Refresh Commit Panel",
+        "title": "Refresh Commit Panel",
+        "category": "GitCharm",
         "icon": "$(refresh)"
       },
       {
         "command": "gitcharm.reloadRepositories",
-        "title": "GitCharm: Reload Repositories",
+        "title": "Reload Repositories",
+        "category": "GitCharm",
         "icon": "$(sync)"
       },
       {
         "command": "gitcharm.showBranchMenu",
-        "title": "GitCharm: Branch Menu",
-        "shortTitle": "Branch Menu",
+        "title": "Branch Menu",
+        "category": "GitCharm",
         "icon": "$(git-branch)"
       },
       {
         "command": "gitcharm.updateProject",
-        "title": "GitCharm: Pull All (Update Project)",
-        "shortTitle": "Pull All",
+        "title": "Pull All (Update Project)",
+        "category": "GitCharm",
         "icon": "$(repo-pull)"
       },
       {
         "command": "gitcharm.openSettings",
-        "title": "GitCharm: Settings",
-        "shortTitle": "Settings",
+        "title": "Settings",
+        "category": "GitCharm",
         "icon": "$(settings-gear)"
       },
       {
         "command": "gitcharm.resetViewLocations",
-        "title": "GitCharm: Reset View Locations",
+        "title": "Reset View Locations",
+        "category": "GitCharm",
         "icon": "$(discard)"
       },
       {
         "command": "gitcharm.openGitAnnotations",
-        "title": "GitCharm: Open Git Annotations",
+        "title": "Open Git Annotations",
+        "category": "GitCharm",
         "icon": "$(git-commit)"
       },
       {
         "command": "gitcharm.closeGitAnnotations",
-        "title": "GitCharm: Close Git Annotations",
+        "title": "Close Git Annotations",
+        "category": "GitCharm",
         "icon": "$(git-commit)"
       },
       {
         "command": "gitcharm.navigateToAnnotationCommit",
-        "title": "GitCharm: Navigate to Commit"
+        "title": "Navigate to Commit",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.manageHiddenRepos",
-        "title": "GitCharm: Manage Hidden Repositories",
+        "title": "Manage Hidden Repositories",
+        "category": "GitCharm",
         "icon": "$(eye-closed)"
       },
       {
         "command": "gitcharm.manageProfiles",
-        "title": "GitCharm: Manage Git Profiles",
+        "title": "Manage Git Profiles",
+        "category": "GitCharm",
         "icon": "$(account)"
       },
       {
         "command": "gitcharm.switchProfile",
-        "title": "GitCharm: Switch Git Profile",
+        "title": "Switch Git Profile",
+        "category": "GitCharm",
         "icon": "$(account)"
       },
       {
         "command": "gitcharm.submodule.init",
-        "title": "GitCharm: Initialize Submodule"
+        "title": "Initialize Submodule",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.update",
-        "title": "GitCharm: Update Submodule"
+        "title": "Update Submodule",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.updateRecursive",
-        "title": "GitCharm: Update Submodule (Recursive)"
+        "title": "Update Submodule (Recursive)",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.deinit",
-        "title": "GitCharm: Deinit Submodule"
+        "title": "Deinit Submodule",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.deinitForce",
-        "title": "GitCharm: Force Deinit Submodule"
+        "title": "Force Deinit Submodule",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.openInNewWindow",
-        "title": "GitCharm: Open Submodule in New Window"
+        "title": "Open Submodule in New Window",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.worktree.add",
-        "title": "GitCharm: Add Worktree"
+        "title": "Add Worktree",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.worktree.prune",
-        "title": "GitCharm: Prune Worktrees"
+        "title": "Prune Worktrees",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.selectAiModel",
-        "title": "GitCharm: Select AI Model"
+        "title": "Select AI Model",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.showBranchOptions",
-        "title": "GitCharm: Branch Options"
+        "title": "Branch Options",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.undock",
-        "title": "GitCharm: Undock",
+        "title": "Undock",
+        "category": "GitCharm",
         "icon": "$(multiple-windows)"
+      },
+      {
+        "command": "gitcharm.showFileHistory",
+        "title": "Show File History",
+        "category": "GitCharm",
+        "icon": "$(history)"
       }
     ],
     "menus": {
@@ -334,6 +370,10 @@
           "when": "resourceScheme == file && gitcharm.annotationsVisible"
         },
         { "command": "gitcharm.navigateToAnnotationCommit", "when": "false" },
+        {
+          "command": "gitcharm.showFileHistory",
+          "when": "resourceScheme == file"
+        },
         { "command": "gitcharm.commitAndPush", "when": "false" },
         { "command": "gitcharm.pull", "when": "false" },
         { "command": "gitcharm.openSettings", "when": "false" },
@@ -351,21 +391,40 @@
           "group": "gitcharm@1"
         }
       ],
+      "explorer/context": [
+        {
+          "submenu": "gitcharm/explorer",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "gitcharm@1"
+        }
+      ],
+      "gitcharm/explorer": [
+        {
+          "command": "gitcharm.showFileHistory",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "navigation@1"
+        }
+      ],
       "editor/context": [
+        {
+          "command": "gitcharm.showFileHistory",
+          "when": "resourceScheme == file",
+          "group": "gitcharm@1"
+        },
         {
           "command": "gitcharm.openMergeEditor",
           "when": "resourceScheme == file",
-          "group": "gitcharm"
+          "group": "gitcharm@2"
         },
         {
           "command": "gitcharm.openGitAnnotations",
           "when": "resourceScheme == file && config.gitcharm.gitAnnotations.enabled && !gitcharm.annotationsVisible",
-          "group": "gitcharm@1"
+          "group": "gitcharm@3"
         },
         {
           "command": "gitcharm.closeGitAnnotations",
           "when": "resourceScheme == file && gitcharm.annotationsVisible",
-          "group": "gitcharm@1"
+          "group": "gitcharm@3"
         }
       ]
     },

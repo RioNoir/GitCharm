@@ -82,6 +82,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private hiddenRepoIds: string[] = [];
   private pendingFilterRepoId: string | null = null;
   private pendingFilterBranch: string | null = null;
+  private pendingScrollHash: string | null = null;
+  private pendingScrollRepoId: string | null = null;
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
 
@@ -185,13 +187,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     );
 
     webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible && this.pendingFilterRepoId !== null) {
+      if (!webviewView.visible) return;
+      if (this.pendingFilterRepoId !== null) {
         const repoId = this.pendingFilterRepoId;
         const branch = this.pendingFilterBranch;
         this.pendingFilterRepoId = null;
         this.pendingFilterBranch = null;
         // Small delay to let the webview finish its initial LOG_REQUEST_COMMITS round-trip
         setTimeout(() => this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch }), 150);
+      }
+      if (this.pendingScrollHash !== null) {
+        const hash = this.pendingScrollHash;
+        const repoId = this.pendingScrollRepoId!;
+        this.pendingScrollHash = null;
+        this.pendingScrollRepoId = null;
+        setTimeout(() => this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
       }
     });
 
@@ -209,8 +219,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   /** Focus the panel and scroll to a specific commit. */
   selectCommit(hash: string, repoId: string): void {
+    this.pendingScrollHash = hash;
+    this.pendingScrollRepoId = repoId;
     this.focus();
-    this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId });
+    if (this.view?.visible) {
+      this.pendingScrollHash = null;
+      this.pendingScrollRepoId = null;
+      setTimeout(() => this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
+    }
   }
 
   /** Focus the panel and filter the log to a specific repository (and optionally branch). */
@@ -406,6 +422,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(path.join(repo.rootPath, msg.filePath)));
+        break;
+      }
+
+      case 'LOG_SHOW_FILE_HISTORY': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        await vscode.commands.executeCommand('gitcharm.showFileHistory', vscode.Uri.file(path.join(repo.rootPath, msg.filePath)));
         break;
       }
 
