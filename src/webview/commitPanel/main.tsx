@@ -926,6 +926,10 @@ function App() {
     send({ type: 'PUSH_OPEN_DETAIL', repoId, hash } satisfies CommitToHostMsg);
   };
 
+  const doPushOpenChanges = (repoId: string, hash: string) => {
+    send({ type: 'PUSH_OPEN_COMMIT_CHANGES', repoId, hash } satisfies CommitToHostMsg);
+  };
+
   const doPushExplainCommit = (repoId: string, hash: string) => {
     send({ type: 'PUSH_EXPLAIN_COMMIT', repoId, hash } satisfies CommitToHostMsg);
   };
@@ -1066,18 +1070,18 @@ function App() {
       {/* ── Toolbar ── */}
       <div style={css.toolbar}>
         <div style={css.toolbarLeft}>
-          <button style={css.iconBtn} title="Refresh" onClick={() => send({ type: 'COMMIT_REQUEST_STATUS' })}>
+          <button data-action-btn="" style={css.iconBtn} title="Refresh" onClick={() => send({ type: 'COMMIT_REQUEST_STATUS' })}>
             <Codicon name="refresh" />
           </button>
           {activeTab === 'changes' && (<>
-            <button style={css.iconBtn} title="Expand all" onClick={() => store.expandAll()}>
+            <button data-action-btn="" style={css.iconBtn} title="Expand all" onClick={() => store.expandAll()}>
               <Codicon name="expand-all" />
             </button>
-            <button style={css.iconBtn} title="Collapse all" onClick={() => store.collapseAll()}>
+            <button data-action-btn="" style={css.iconBtn} title="Collapse all" onClick={() => store.collapseAll()}>
               <Codicon name="collapse-all" />
             </button>
             <div ref={viewMenuRef} style={{ position: 'relative' }}>
-              <button style={css.iconBtn} title="View options" onClick={() => setViewMenuOpen(o => !o)}>
+              <button data-action-btn="" style={css.iconBtn} title="View options" onClick={() => setViewMenuOpen(o => !o)}>
                 <Codicon name="eye" />
               </button>
               {viewMenuOpen && (
@@ -1101,7 +1105,7 @@ function App() {
             </div>
           </>)}
           {activeTab === 'shelf' && (<>
-            <button style={css.iconBtn} title="Expand all" onClick={() => {
+            <button data-action-btn="" style={css.iconBtn} title="Expand all" onClick={() => {
               const allShelves = Object.values(shelveMap).flat();
               const shelveIds = allShelves.map(s => s.id);
               const dirPaths = new Set<string>();
@@ -1115,13 +1119,13 @@ function App() {
             }}>
               <Codicon name="expand-all" />
             </button>
-            <button style={css.iconBtn} title="Collapse all" onClick={() => {
+            <button data-action-btn="" style={css.iconBtn} title="Collapse all" onClick={() => {
               store.shelveCollapseAll([], []);
             }}>
               <Codicon name="collapse-all" />
             </button>
             <div ref={shelveViewMenuRef} style={{ position: 'relative' }}>
-              <button style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
+              <button data-action-btn="" style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
                 <Codicon name="eye" />
               </button>
               {shelveViewMenuOpen && (
@@ -1145,14 +1149,14 @@ function App() {
             </div>
           </>)}
           {activeTab === 'stash' && (<>
-            <button style={css.iconBtn} title="Expand all" onClick={() => setStashExpandAll(true)}>
+            <button data-action-btn="" style={css.iconBtn} title="Expand all" onClick={() => setStashExpandAll(true)}>
               <Codicon name="expand-all" />
             </button>
-            <button style={css.iconBtn} title="Collapse all" onClick={() => setStashExpandAll(false)}>
+            <button data-action-btn="" style={css.iconBtn} title="Collapse all" onClick={() => setStashExpandAll(false)}>
               <Codicon name="collapse-all" />
             </button>
             <div ref={shelveViewMenuRef} style={{ position: 'relative' }}>
-              <button style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
+              <button data-action-btn="" style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
                 <Codicon name="eye" />
               </button>
               {shelveViewMenuOpen && (
@@ -1629,6 +1633,7 @@ function App() {
               onRevertCommits={doRevertCommits}
               onEditCommitMsg={doEditCommitMsg}
               onOpenDetail={doPushOpenDetail}
+              onOpenChanges={doPushOpenChanges}
               onExplainCommit={doPushExplainCommit}
               onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
               aiEnabled={store.aiEnabled}

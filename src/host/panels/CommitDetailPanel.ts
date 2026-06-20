@@ -192,6 +192,24 @@ export async function openCommitDetailPanel(
     } else if (msg.type === 'revealInOS' && msg.filePath) {
       const fileUri = vscode.Uri.joinPath(vscode.Uri.file(repo.rootPath), msg.filePath);
       vscode.commands.executeCommand('revealFileInOS', fileUri);
+    } else if (msg.type === 'openChanges') {
+      const files = await repo.getCommitFiles(hash);
+      const { join } = await import('path');
+      const EMPTY = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+      const parents = await repo.getParents(hash);
+      const parentHash = parents[0] ?? EMPTY;
+      const gitUri = (ref: string, filePath: string): vscode.Uri => {
+        const fileUri = vscode.Uri.file(join(repo.rootPath, filePath));
+        return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+      };
+      const resources = files
+        .filter((f: { status: string }) => f.status !== 'U')
+        .map((f: { path: string; status: string; oldPath?: string }) => [
+          vscode.Uri.file(join(repo.rootPath, f.path)),
+          gitUri(f.status === 'A' ? EMPTY : parentHash, f.oldPath ?? f.path),
+          gitUri(f.status === 'D' ? EMPTY : hash, f.path),
+        ]);
+      await vscode.commands.executeCommand('vscode.changes', `Changes in ${hash.slice(0, 8)}`, resources);
     } else if (msg.type === 'revertFile' && msg.filePath) {
       const confirmed = await vscode.window.showWarningMessage(
         `Revert changes to "${msg.filePath}" from commit ${commitInfo!.shortHash}?`,
@@ -611,6 +629,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
       </div>` : ''}
       <div class="file-toolbar">
         <span class="file-count" id="fileCount">${data.files.length} file${data.files.length !== 1 ? 's' : ''} changed</span>
+        <button class="tb-btn" id="btnOpenChanges" title="Open Changes"><span class="codicon codicon-diff-multiple"></span></button>
         <button class="tb-btn" id="btnExpandAll" title="Expand all" style="display:none"><span class="codicon codicon-expand-all"></span></button>
         <button class="tb-btn" id="btnCollapseAll" title="Collapse all" style="display:none"><span class="codicon codicon-collapse-all"></span></button>
         <button class="tb-btn active" id="btnTree" title="Tree view"><span class="codicon codicon-list-tree"></span></button>
@@ -737,6 +756,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     document.addEventListener('mousedown', e => { if (!ctxMenu.contains(e.target)) hideCtx(); }, true);
     window.addEventListener('blur', hideCtx);
 
+    document.getElementById('btnOpenChanges').addEventListener('click', () => { vscode.postMessage({ type: 'openChanges' }); });
     document.getElementById('ctxDiff').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openDiff',         filePath: ctxPath, fileStatus: ctxStatus }); hideCtx(); });
     document.getElementById('ctxHistory').addEventListener('click',   () => { if (ctxPath) vscode.postMessage({ type: 'showFileHistory',   filePath: ctxPath }); hideCtx(); });
     document.getElementById('ctxEdit').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openFile',         filePath: ctxPath }); hideCtx(); });
@@ -1036,7 +1056,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
           const label = b.type === 'remote' && b.remote ? b.remote + '/' + b.name : b.name;
           const sp = document.createElement('span');
           sp.title = (b.type==='tag'?'Tag: ':b.type==='remote'?'Remote: ':'Branch: ') + label;
-          sp.style.cssText = 'font-size:10px;padding:0 6px;height:16px;line-height:16px;border-radius:3px;display:inline-flex;align-items:center;gap:3px;background:' + color + '33;color:' + color + ';border:1px solid ' + color + '88;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;box-sizing:border-box;font-weight:500;margin:2px;';
+          sp.style.cssText = 'font-size:10px;padding:0 6px;height:16px;line-height:16px;border-radius:3px;display:inline-flex;align-items:center;gap:3px;background:' + color + '33;color:' + color + ';border:1px solid ' + color + '88;white-space:nowrap;flex-shrink:0;box-sizing:border-box;font-weight:500;margin:2px;';
           sp.innerHTML = '<span class="codicon codicon-' + icon + '" style="font-size:10px;flex-shrink:0;line-height:1"></span>' + escText(label);
           refsRow.appendChild(sp);
         }

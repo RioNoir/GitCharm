@@ -513,17 +513,24 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   return (
     <div style={styles.container} onContextMenu={e => e.preventDefault()}>
       <div style={styles.topActions}>
-        {!commit.isStash && (
-          <button
-            style={styles.topActionBtn}
-            title="Open extended commit detail"
-            onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
-          >
-            <Codicon name="open-preview" style={{ fontSize: '16px' }} />
-          </button>
-        )}
+        <button
+          data-top-action-btn=""
+          style={styles.topActionBtn}
+          title="Open Changes"
+          onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+        >
+          <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
+        </button>
+        <button
+          data-top-action-btn=""
+          style={styles.topActionBtn}
+          title="Open extended commit detail"
+          onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+        >
+          <Codicon name="open-preview" style={{ fontSize: '16px' }} />
+        </button>
         {onClose && (
-          <button style={styles.topActionBtn} title="Close commit detail" onClick={onClose}>
+          <button data-top-action-btn="" style={styles.topActionBtn} title="Close commit detail" onClick={onClose}>
             <Codicon name="layout-sidebar-right" style={{ fontSize: '16px' }} />
           </button>
         )}
@@ -774,35 +781,39 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
         {viewMode === 'tree' && (
           <div style={styles.expandBtns}>
             <button
+              data-top-action-btn=""
               style={styles.toggleBtn(false)}
               onClick={() => setAllExpanded(true)}
               title="Expand all"
             >
-              <Codicon name="expand-all" style={{ fontSize: '13px' }} />
+              <Codicon name="expand-all" style={{ fontSize: '14px' }} />
             </button>
             <button
+              data-top-action-btn=""
               style={styles.toggleBtn(false)}
               onClick={() => setAllExpanded(false)}
               title="Collapse all"
             >
-              <Codicon name="collapse-all" style={{ fontSize: '13px' }} />
+              <Codicon name="collapse-all" style={{ fontSize: '14px' }} />
             </button>
           </div>
         )}
         <div style={styles.viewToggle}>
           <button
+            data-top-action-btn=""
             style={styles.toggleBtn(viewMode === 'tree')}
             onClick={() => { setViewMode('tree'); setAllExpanded(null); }}
             title="Tree view"
           >
-            <Codicon name="list-tree" style={{ fontSize: '13px' }} />
+            <Codicon name="list-tree" style={{ fontSize: '14px' }} />
           </button>
           <button
+            data-top-action-btn=""
             style={styles.toggleBtn(viewMode === 'flat')}
             onClick={() => { setViewMode('flat'); setAllExpanded(null); }}
             title="Flat view"
           >
-            <Codicon name="list-flat" style={{ fontSize: '13px' }} />
+            <Codicon name="list-flat" style={{ fontSize: '14px' }} />
           </button>
         </div>
       </div>
@@ -1030,9 +1041,6 @@ const styles = {
     background: `${color}33`,
     color,
     border: `1px solid ${color}88`,
-    maxWidth: '200px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
     flexShrink: 0,
     boxSizing: 'border-box' as const,

@@ -29,6 +29,14 @@ function useIsLightTheme() {
 
 export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll, onUndock, hideUndock }: Props) {
   const isLight = useIsLightTheme();
+  useEffect(() => {
+    const id = 'gitcharm-filter-field-focus';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `[data-filter-field]:focus-within { border-color: var(--vscode-focusBorder) !important; outline: none; }`;
+    document.head.appendChild(s);
+  }, []);
   const localBranches = branches.filter(b => !b.isRemote);
   const uniqueBranchNames = Array.from(new Set(localBranches.map(b => b.name))).sort();
   const uniqueTagNames = Array.from(new Set(tags.map(t => t.name))).sort();
@@ -84,8 +92,8 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
       />
 
       {hasFilters && (
-        <button style={styles.clearBtn} onClick={onClear} title="Clear all filters">
-          <Codicon name="close" style={{ fontSize: '11px' }} />
+        <button data-top-action-btn="" style={styles.clearBtn} onClick={onClear} title="Clear all filters">
+          <Codicon name="clear-all" style={{ fontSize: '15px' }} />
         </button>
       )}
 
@@ -109,13 +117,21 @@ function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
     function onOut(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     }
-    if (open) document.addEventListener('mousedown', onOut);
-    return () => document.removeEventListener('mousedown', onOut);
+    const onBlur = () => setOpen(false);
+    if (open) {
+      document.addEventListener('mousedown', onOut);
+      window.addEventListener('blur', onBlur);
+    }
+    return () => {
+      document.removeEventListener('mousedown', onOut);
+      window.removeEventListener('blur', onBlur);
+    };
   }, [open]);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 'auto' }}>
       <button
+        data-top-action-btn=""
         style={styles.moreBtn}
         onClick={() => setOpen(o => !o)}
         title="More actions"
@@ -180,7 +196,7 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth, d
   }
 
   return (
-    <div style={{ ...styles.fieldWrap, ...(width ? { width } : { flex: 1, minWidth: 160 }) }}>
+    <div data-filter-field="" style={{ ...styles.fieldWrap, ...(width ? { width } : { flex: 1, minWidth: 160 }) }}>
       <Codicon name={icon} style={styles.fieldIcon} />
       <input
         style={styles.fieldInput}
@@ -227,14 +243,21 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
     function onOut(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     }
-    if (open) document.addEventListener('mousedown', onOut);
-    return () => document.removeEventListener('mousedown', onOut);
+    const onBlur = () => setOpen(false);
+    if (open) {
+      document.addEventListener('mousedown', onOut);
+      window.addEventListener('blur', onBlur);
+    }
+    return () => {
+      document.removeEventListener('mousedown', onOut);
+      window.removeEventListener('blur', onBlur);
+    };
   }, [open]);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', ...(width ? { width } : { flex: 1, minWidth: 160 }) }}>
       <button
-        style={{ ...styles.pickerBtn(!!value), width: '100%' }}
+        style={{ ...styles.pickerBtn(!!value, open), width: '100%' }}
         onClick={() => setOpen(o => !o)}
         title={value || 'Filter by branch or tag'}
       >
@@ -318,8 +341,15 @@ function RepoPicker({ value, repos, onChange, isLight }: {
     function onOut(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     }
-    if (open) document.addEventListener('mousedown', onOut);
-    return () => document.removeEventListener('mousedown', onOut);
+    const onBlur = () => setOpen(false);
+    if (open) {
+      document.addEventListener('mousedown', onOut);
+      window.addEventListener('blur', onBlur);
+    }
+    return () => {
+      document.removeEventListener('mousedown', onOut);
+      window.removeEventListener('blur', onBlur);
+    };
   }, [open]);
 
   const active = repos.find(r => r.id === value) ?? null;
@@ -327,7 +357,7 @@ function RepoPicker({ value, repos, onChange, isLight }: {
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 160 }}>
       <button
-        style={{ ...styles.pickerBtn(!!value), width: '100%' }}
+        style={{ ...styles.pickerBtn(!!value, open), width: '100%' }}
         onClick={() => setOpen(o => !o)}
         title={active?.name ?? 'Filter by repository'}
       >
@@ -450,14 +480,19 @@ function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
   const [leftYM, setLeftYM] = useState({ y: initLeft.getFullYear(), m: initLeft.getMonth() });
   const [rightYM, setRightYM] = useState({ y: initRight.getFullYear(), m: initRight.getMonth() });
 
-  // Close on outside click
+  // Close on outside click or window blur
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
+    const onBlur = () => setOpen(false);
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      window.removeEventListener('blur', onBlur);
+    };
   }, [open]);
 
   function handleDay(date: Date) {
@@ -495,7 +530,7 @@ function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 160 }}>
-      <button style={{ ...styles.pickerBtn(hasRange), width: '100%' }} onClick={() => setOpen(o => !o)}>
+      <button style={{ ...styles.pickerBtn(hasRange, open), width: '100%' }} onClick={() => setOpen(o => !o)}>
         <Codicon name="calendar" style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
         {label
           ? <span style={styles.pickerLabelActive}>{label}</span>
@@ -546,7 +581,7 @@ const calStyles = {
     right: 0,
     zIndex: 300,
     background: 'var(--vscode-dropdown-background, var(--vscode-editor-background))',
-    border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border))',
+    border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border, rgba(128,128,128,0.35)))',
     borderRadius: '6px',
     boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
     display: 'flex',
@@ -645,7 +680,7 @@ const styles = {
     alignItems: 'center',
     gap: '5px',
     background: 'var(--vscode-input-background)',
-    border: '1px solid var(--vscode-input-border)',
+    border: '1px solid var(--vscode-input-border, rgba(128,128,128,0.35))',
     borderRadius: '4px',
     padding: '0 6px',
     height: '26px',
@@ -679,7 +714,7 @@ const styles = {
     lineHeight: 1,
     flexShrink: 0,
   } as React.CSSProperties,
-  pickerBtn: (active: boolean): React.CSSProperties => ({
+  pickerBtn: (active: boolean, open = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
@@ -687,7 +722,7 @@ const styles = {
     padding: '0 8px',
     background: active ? 'var(--vscode-list-activeSelectionBackground)' : 'var(--vscode-input-background)',
     color: active ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-input-foreground)',
-    border: '1px solid var(--vscode-input-border)',
+    border: `1px solid ${open ? 'var(--vscode-focusBorder)' : 'var(--vscode-input-border, rgba(128,128,128,0.35))'}`,
     borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '12px',
@@ -720,7 +755,7 @@ const styles = {
     marginTop: '2px',
     zIndex: 200,
     background: 'var(--vscode-dropdown-background, var(--vscode-input-background))',
-    border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border))',
+    border: '1px solid var(--vscode-dropdown-border, var(--vscode-input-border, rgba(128,128,128,0.35)))',
     borderRadius: '4px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     width: '100%',
@@ -788,15 +823,18 @@ const styles = {
   } as React.CSSProperties,
   clearBtn: {
     height: '26px',
-    padding: '0 7px',
+    width: '26px',
+    padding: '0',
     background: 'transparent',
     color: 'var(--vscode-errorForeground)',
-    border: '1px solid var(--vscode-errorForeground)',
+    border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
     opacity: 0.8,
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   } as React.CSSProperties,
   moreBtn: {
     display: 'flex',

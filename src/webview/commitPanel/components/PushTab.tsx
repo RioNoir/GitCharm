@@ -19,6 +19,7 @@ interface Props {
   onRevertCommits: (repoId: string, hashes: string[]) => void;
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
+  onOpenChanges: (repoId: string, hash: string) => void;
   onExplainCommit: (repoId: string, hash: string) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
@@ -171,7 +172,7 @@ function MenuItem({ icon, label, danger, onClick }: { icon: string; label: strin
   );
 }
 
-function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onExplain, aiEnabled, onClose }: {
+function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onOpenChanges, onExplain, aiEnabled, onClose }: {
   state: CommitCtxMenuState;
   onSquash: () => void;
   onDropCommits: () => void;
@@ -182,6 +183,7 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
   onDropSingle: () => void;
   onViewInLog: () => void;
   onOpenDetail: () => void;
+  onOpenChanges: () => void;
   onExplain: () => void;
   aiEnabled: boolean;
   onClose: () => void;
@@ -197,26 +199,37 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  const [pos, setPos] = useState({ x: state.x, y: state.y });
+  const [pos, setPos] = useState<{ x: number; y: number; maxHeight?: number }>({ x: state.x, y: state.y });
   useEffect(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    setPos({
-      x: state.x + rect.width > vw ? Math.max(0, vw - rect.width - 4) : state.x,
-      y: state.y + rect.height > vh ? Math.max(0, vh - rect.height - 4) : state.y,
-    });
+    const margin = 4;
+    const x = state.x + rect.width > vw ? Math.max(margin, vw - rect.width - margin) : state.x;
+    let y = state.y;
+    let maxHeight: number | undefined;
+    if (state.y + rect.height + margin > vh) {
+      const topIfUp = state.y - rect.height;
+      if (topIfUp >= margin) {
+        y = topIfUp;
+      } else {
+        y = margin;
+        maxHeight = vh - margin * 2;
+      }
+    }
+    setPos({ x, y, maxHeight });
   }, [state.x, state.y]);
 
   const wrap = (fn: () => void) => () => { fn(); onClose(); };
 
   return (
-    <div ref={ref} style={{ ...ctxStyles.menu, left: pos.x, top: pos.y }} onContextMenu={e => e.preventDefault()}>
+    <div ref={ref} style={{ ...ctxStyles.menu, left: pos.x, top: pos.y, ...(pos.maxHeight ? { maxHeight: pos.maxHeight, overflowY: 'auto' } : {}) }} onContextMenu={e => e.preventDefault()}>
       {n === 1 && (
         <>
           <MenuItem icon="go-to-file" label="View in Git Log" onClick={wrap(onViewInLog)} />
           <MenuItem icon="open-preview" label="Open Full Detail" onClick={wrap(onOpenDetail)} />
+          <MenuItem icon="diff-multiple" label="Open Changes" onClick={wrap(onOpenChanges)} />
           {aiEnabled && <MenuItem icon="sparkle" label="Explain with AI" onClick={wrap(onExplain)} />}
           <div style={ctxStyles.separator} />
           {state.isHead && <MenuItem icon="edit" label="Edit Commit Message…" onClick={wrap(onEditMsg)} />}
@@ -271,13 +284,14 @@ const ctxStyles = {
 
 // ── Single commit row ─────────────────────────────────────────────────────────
 
-function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoCommit, onClick, onContextMenu }: {
+function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoCommit, onOpenChanges, onClick, onContextMenu }: {
   commit: UnpushedCommit;
   repoId: string;
   isHead: boolean;
   isSelected: boolean;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
+  onOpenChanges: (repoId: string, hash: string) => void;
   onClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
@@ -319,6 +333,13 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
         )}
         <button
           style={styles.actionBtn}
+          title="Open Changes"
+          onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }}
+        >
+          <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
+        </button>
+        <button
+          style={styles.actionBtn}
           title="Open in Log"
           onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }}
         >
@@ -332,7 +353,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, onBranchClick, aiEnabled, singleRepo }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onBranchClick, aiEnabled, singleRepo }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -346,6 +367,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onRevertCommits: (repoId: string, hashes: string[]) => void;
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
+  onOpenChanges: (repoId: string, hash: string) => void;
   onExplainCommit: (repoId: string, hash: string) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
@@ -427,6 +449,11 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   const handleOpenDetail = () => {
     if (!ctxMenu?.singleHash) return;
     onOpenDetail(repoStatus.repoId, ctxMenu.singleHash);
+  };
+
+  const handleOpenChanges = () => {
+    if (!ctxMenu?.singleHash) return;
+    onOpenChanges(repoStatus.repoId, ctxMenu.singleHash);
   };
 
   const handleExplain = () => {
@@ -554,6 +581,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
                     isSelected={multiSelectHashes.has(c.hash)}
                     onOpenInLog={onOpenInLog}
                     onUndoCommit={onUndoCommit}
+                    onOpenChanges={onOpenChanges}
                     onClick={e => handleCommitClick(e, c.hash)}
                     onContextMenu={e => handleCommitContextMenu(e, c, i === 0)}
                   />
@@ -583,6 +611,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           onDropSingle={handleDropSingle}
           onViewInLog={handleViewInLog}
           onOpenDetail={handleOpenDetail}
+          onOpenChanges={handleOpenChanges}
           onExplain={handleExplain}
           aiEnabled={aiEnabled}
           onClose={() => { setCtxMenu(null); setMultiSelectHashes(new Set()); }}
@@ -594,7 +623,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onExplainCommit, onBranchClick, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onBranchClick, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
@@ -670,6 +699,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             onRevertCommits={onRevertCommits}
             onEditCommitMsg={onEditCommitMsg}
             onOpenDetail={onOpenDetail}
+            onOpenChanges={onOpenChanges}
             onExplainCommit={onExplainCommit}
             onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
@@ -722,6 +752,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             onRevertCommits={onRevertCommits}
             onEditCommitMsg={onEditCommitMsg}
             onOpenDetail={onOpenDetail}
+            onOpenChanges={onOpenChanges}
             onExplainCommit={onExplainCommit}
             onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}

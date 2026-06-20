@@ -98,6 +98,15 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
   const [tagContextMenu, setTagContextMenu] = useState<{ mergedTag: MergedTag; x: number; y: number } | null>(null);
 
+  useEffect(() => {
+    const id = 'gitcharm-branch-ctx-hover';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `[data-ctx-item]:hover { background: var(--vscode-menu-selectionBackground) !important; color: var(--vscode-menu-selectionForeground) !important; }`;
+    document.head.appendChild(s);
+  }, []);
+
   function toggle(key: SectionKey) {
     setCollapsed(prev => {
       const next = new Set(prev);
@@ -144,14 +153,19 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       {/* Sticky header: search + repo list */}
       <div style={styles.stickyHeader}>
         <div style={styles.searchBox}>
-          <input
-            style={styles.searchInput}
-            value={filter}
-            onChange={e => onFilterChange(e.target.value)}
-            placeholder="Filter branches & tags..."
-          />
+          <div style={styles.searchInputWrap}>
+            <Codicon name="filter" style={styles.searchIcon} />
+            <input
+              style={styles.searchInput}
+              value={filter}
+              onChange={e => onFilterChange(e.target.value)}
+              placeholder="Filter branches & tags..."
+            />
+          </div>
           <button style={styles.collapseBtn} onClick={onCollapse} title="Collapse sidebar">
-            <Codicon name="layout-sidebar-left" style={{ fontSize: '14px' }} />
+            <div data-top-action-btn="" style={styles.collapseBtnInner}>
+              <Codicon name="layout-sidebar-left" style={{ fontSize: '14px' }} />
+            </div>
           </button>
         </div>
 
@@ -385,15 +399,26 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
 
 function useClampedPosition(x: number, y: number) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: x, top: y });
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight?: number }>({ left: x, top: y });
   useLayoutEffect(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const left = rect.right > vw ? Math.max(0, x - (rect.right - vw) - 4) : x;
-    const top = rect.bottom > vh ? Math.max(0, y - (rect.bottom - vh) - 4) : y;
-    if (left !== x || top !== y) setPos({ left, top });
+    const margin = 4;
+    const left = rect.right > vw ? Math.max(margin, x - (rect.right - vw) - margin) : x;
+    let top = y;
+    let maxHeight: number | undefined;
+    if (y + rect.height + margin > vh) {
+      const topIfUp = y - rect.height;
+      if (topIfUp >= margin) {
+        top = topIfUp;
+      } else {
+        top = margin;
+        maxHeight = vh - margin * 2;
+      }
+    }
+    setPos({ left, top, maxHeight });
   }, []);
   return { ref, pos };
 }
@@ -403,7 +428,7 @@ type MenuItem = { icon: string; label: string; action: () => void; danger?: bool
 function MenuItemRow({ item }: { item: MenuItem }) {
   if ('sep' in item) return <div style={styles.separator} />;
   return (
-    <div style={styles.menuItem(item.danger)} onClick={item.action}>
+    <div data-ctx-item="" style={styles.menuItem(item.danger)} onClick={item.action}>
       <Codicon name={item.icon} style={styles.menuIcon} />
       {item.label}
     </div>
@@ -422,8 +447,17 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
 }) {
   const { ref, pos } = useClampedPosition(x, y);
   useEffect(() => {
-    window.addEventListener('blur', onClose);
-    return () => window.removeEventListener('blur', onClose);
+    const onBlur = () => onClose();
+    const onMouseDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('mousedown', onMouseDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('mousedown', onMouseDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [onClose]);
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: `Checkout "${mergedTag.name}"`, action: onCheckout },
@@ -436,7 +470,7 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   return (
     <>
       <div style={styles.backdrop} onClick={onClose} />
-      <div ref={ref} style={styles.contextMenu(pos.left, pos.top)}>
+      <div ref={ref} style={styles.contextMenu(pos.left, pos.top, pos.maxHeight)}>
         {items.map((item, i) => <MenuItemRow key={i} item={item} />)}
       </div>
     </>
@@ -457,8 +491,17 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
 }) {
   const { ref, pos } = useClampedPosition(x, y);
   useEffect(() => {
-    window.addEventListener('blur', onClose);
-    return () => window.removeEventListener('blur', onClose);
+    const onBlur = () => onClose();
+    const onMouseDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('mousedown', onMouseDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('mousedown', onMouseDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [onClose]);
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: `Checkout "${merged.baseName}"`, action: onCheckout },
@@ -474,7 +517,7 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
   return (
     <>
       <div style={styles.backdrop} onClick={onClose} />
-      <div ref={ref} style={styles.contextMenu(pos.left, pos.top)}>
+      <div ref={ref} style={styles.contextMenu(pos.left, pos.top, pos.maxHeight)}>
         {items.map((item, i) => <MenuItemRow key={i} item={item} />)}
       </div>
     </>
@@ -504,22 +547,36 @@ const styles = {
     background: 'var(--vscode-sideBar-background)',
   },
   searchBox: {
-    padding: '6px',
     borderBottom: '1px solid var(--vscode-panel-border)',
     display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
+    alignItems: 'stretch',
+    height: '35px',
   },
+  searchInputWrap: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    background: 'var(--vscode-input-background)',
+    paddingLeft: '8px',
+    gap: '5px',
+  } as React.CSSProperties,
+  searchIcon: {
+    fontSize: '13px',
+    opacity: 0.5,
+    flexShrink: 0,
+    color: 'var(--vscode-input-foreground)',
+  } as React.CSSProperties,
   searchInput: {
     flex: 1,
     minWidth: 0,
-    padding: '4px 6px',
-    background: 'var(--vscode-input-background)',
+    padding: '0 6px 0 0',
+    background: 'transparent',
     color: 'var(--vscode-input-foreground)',
-    border: '1px solid var(--vscode-input-border)',
-    borderRadius: '3px',
-    fontSize: '11px',
+    border: 'none',
+    fontSize: '12px',
     outline: 'none',
+    height: '100%',
     boxSizing: 'border-box' as const,
   },
   collapseBtn: {
@@ -529,11 +586,19 @@ const styles = {
     justifyContent: 'center',
     background: 'none',
     border: 'none',
+    borderLeft: '1px solid var(--vscode-panel-border)',
     cursor: 'pointer',
-    padding: '3px',
-    borderRadius: '3px',
+    padding: '0 5px',
+    borderRadius: 0,
     color: 'var(--vscode-foreground)',
     opacity: 0.6,
+  } as React.CSSProperties,
+  collapseBtnInner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '3px 3px',
+    borderRadius: '3px',
   } as React.CSSProperties,
   repoList: {
     borderBottom: '1px solid var(--vscode-panel-border)',
@@ -684,8 +749,8 @@ const styles = {
     inset: 0,
     zIndex: 100,
   },
-  contextMenu: (x: number, y: number) => ({
-    position: 'fixed' as const,
+  contextMenu: (x: number, y: number, maxHeight?: number): React.CSSProperties => ({
+    position: 'fixed',
     left: x,
     top: y,
     zIndex: 101,
@@ -696,6 +761,7 @@ const styles = {
     minWidth: '180px',
     padding: '4px 0',
     fontSize: '12px',
+    ...(maxHeight ? { maxHeight, overflowY: 'auto' as const } : {}),
   }),
   menuItem: (danger?: boolean): React.CSSProperties => ({
     padding: '4px 12px',

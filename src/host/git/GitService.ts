@@ -473,20 +473,21 @@ export class GitService {
 
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
   async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
+    const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
     const args: string[] = [
       'log',
       '--topo-order',
-      `--max-count=${limit}`, `--skip=${skip}`,
+      // Hash search scans the full history without pagination — result is always a single commit
+      ...(isHashSearch ? ['--max-count=50000'] : [`--max-count=${limit}`, `--skip=${skip}`]),
       '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full',
       '--date=iso-strict', '--abbrev=8',
     ];
-    const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
     if (opts?.filterText && !isHashSearch) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');
     if (opts?.filterAuthor) args.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
     if (opts?.filterDateFrom) args.push(`--after=${opts.filterDateFrom}`);
     if (opts?.filterDateTo) args.push(`--before=${opts.filterDateTo}`);
     if (isHashSearch) {
-      // Hash search: use --all and filter results by prefix match after fetching
+      // Hash search: scan full history, filter by prefix match after fetching
       args.push('--exclude=refs/stash', '--all');
     } else if (opts?.filterBranch) {
       args.push(opts.filterBranch);

@@ -1441,6 +1441,29 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'PUSH_OPEN_COMMIT_CHANGES': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        const files = await repo.getCommitFiles(msg.hash);
+        const rootPath = repo.rootPath;
+        const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+        const parentHash = (await repo.getParents(msg.hash))[0] ?? EMPTY_TREE;
+        const gitUri = (ref: string, filePath: string): vscode.Uri => {
+          const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+          return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+        };
+        const resources = files
+          .filter(f => f.status !== 'U')
+          .map(f => {
+            const label = vscode.Uri.file(path.join(rootPath, f.path));
+            const original = gitUri(f.status === 'A' ? EMPTY_TREE : parentHash, f.oldPath ?? f.path);
+            const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
+            return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
+          });
+        await vscode.commands.executeCommand('vscode.changes', `Changes in ${msg.hash.slice(0, 8)}`, resources);
+        break;
+      }
+
       case 'PUSH_EXPLAIN_COMMIT': {
         const { openCommitDetailPanel } = await import('./CommitDetailPanel');
         await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });

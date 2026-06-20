@@ -183,6 +183,65 @@ export function UnifiedCommitForm({
   const amend = amendFlags[amendRepoId ?? ''] ?? false;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const id = 'gs-ctx-menu-hover';
+    if (!document.getElementById(id)) {
+      const s = document.createElement('style');
+      s.id = id;
+      s.textContent = `.gs-ctx-item:hover { background: var(--vscode-menu-selectionBackground) !important; color: var(--vscode-menu-selectionForeground) !important; }
+[data-autopilot-btn]:not([disabled]):hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; border-radius: 3px; }`;
+      document.head.appendChild(s);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) setCtxMenu(null);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [ctxMenu]);
+
+  function handleCtxMenu(e: React.MouseEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  async function ctxCopy() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const text = el.value.slice(el.selectionStart, el.selectionEnd) || el.value;
+    await navigator.clipboard.writeText(text);
+    setCtxMenu(null);
+  }
+
+  async function ctxCut() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart, end = el.selectionEnd;
+    const text = el.value.slice(start, end);
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    const next = el.value.slice(0, start) + el.value.slice(end);
+    onMessageChange(next);
+    setCtxMenu(null);
+    requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start; });
+  }
+
+  async function ctxPaste() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const text = await navigator.clipboard.readText();
+    const start = el.selectionStart, end = el.selectionEnd;
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+    onMessageChange(next);
+    setCtxMenu(null);
+    requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + text.length; });
+  }
 
   const resizeTextarea = () => {
     const el = textareaRef.current;
@@ -290,6 +349,7 @@ export function UnifiedCommitForm({
           placeholder={generatingMessage ? 'Generating commit message…' : 'Commit message (Cmd+Enter to commit)'}
           readOnly={generatingMessage}
           rows={2}
+          onContextMenu={handleCtxMenu}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canCommit) {
               e.preventDefault();
@@ -299,6 +359,7 @@ export function UnifiedCommitForm({
         />
         {aiEnabled && (
           <button
+            data-autopilot-btn=""
             style={styles.autopilotBtn(generatingMessage)}
             onClick={onAutopilot}
             onContextMenu={onAutopilotContextMenu}
@@ -309,6 +370,20 @@ export function UnifiedCommitForm({
           </button>
         )}
       </div>
+
+      {ctxMenu && (
+        <div ref={ctxMenuRef} style={{ ...styles.ctxMenu, top: ctxMenu.y, left: ctxMenu.x, transform: 'translateY(-100%)' }}>
+          <div className="gs-ctx-item" style={styles.ctxItem} onMouseDown={e => { e.preventDefault(); ctxCut(); }}>
+            <Codicon name="screen-cut" style={styles.ctxItemIcon} />Cut
+          </div>
+          <div className="gs-ctx-item" style={styles.ctxItem} onMouseDown={e => { e.preventDefault(); ctxCopy(); }}>
+            <Codicon name="copy" style={styles.ctxItemIcon} />Copy
+          </div>
+          <div className="gs-ctx-item" style={styles.ctxItem} onMouseDown={e => { e.preventDefault(); ctxPaste(); }}>
+            <Codicon name="clippy" style={styles.ctxItemIcon} />Paste
+          </div>
+        </div>
+      )}
 
       {/* Amend + actions row */}
       <div style={styles.actionsRow}>
@@ -428,7 +503,7 @@ const styles = {
       ? '1px solid var(--vscode-focusBorder)'
       : focused
         ? '1px solid var(--vscode-focusBorder)'
-      : '1px solid var(--vscode-input-border, transparent)',
+      : '1px solid var(--vscode-input-border, rgba(128,128,128,0.35))',
     borderRadius: '3px',
     padding: '5px 28px 5px 7px',
     fontSize: '12px',
@@ -456,6 +531,30 @@ const styles = {
     alignItems: 'center',
     lineHeight: 1,
   }),
+  ctxMenu: {
+    position: 'fixed' as const,
+    zIndex: 9999,
+    background: 'var(--vscode-menu-background)',
+    border: '1px solid var(--vscode-menu-border)',
+    borderRadius: '4px',
+    padding: '2px 0',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    minWidth: '120px',
+  } as React.CSSProperties,
+  ctxItem: {
+    padding: '5px 12px',
+    fontSize: '13px',
+    color: 'var(--vscode-menu-foreground)',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  } as React.CSSProperties,
+  ctxItemIcon: {
+    fontSize: '14px',
+    flexShrink: 0,
+    opacity: 0.85,
+  } as React.CSSProperties,
   actionsRow: {
     display: 'flex',
     alignItems: 'center',

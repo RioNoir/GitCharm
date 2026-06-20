@@ -23,17 +23,28 @@ interface Props {
 
 export function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; maxHeight?: number } | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const { offsetWidth: w, offsetHeight: h } = el;
     const margin = 4;
-    setPos({
-      x: Math.max(margin, Math.min(x, window.innerWidth  - w - margin)),
-      y: Math.max(margin, Math.min(y, window.innerHeight - h - margin)),
-    });
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const px = Math.max(margin, Math.min(x, vw - w - margin));
+    let py = y;
+    let maxHeight: number | undefined;
+    if (y + h + margin > vh) {
+      const topIfUp = y - h;
+      if (topIfUp >= margin) {
+        py = topIfUp;
+      } else {
+        py = margin;
+        maxHeight = vh - margin * 2;
+      }
+    }
+    setPos({ x: px, y: py, maxHeight });
   }, [x, y]);
 
   useEffect(() => {
@@ -57,6 +68,7 @@ export function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
     left: pos?.x ?? x,
     zIndex: 9999,
     visibility: pos ? 'visible' : 'hidden',
+    ...(pos?.maxHeight ? { maxHeight: pos.maxHeight, overflowY: 'auto' as const } : {}),
   };
 
   return (
@@ -71,8 +83,8 @@ export function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
             key={it.id}
             style={styles.item(!!it.danger)}
             onClick={() => { onSelect(it.id); onClose(); }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--vscode-menu-selectionBackground)'; e.currentTarget.style.color = it.danger ? 'var(--vscode-errorForeground)' : 'var(--vscode-menu-selectionForeground)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = it.danger ? 'var(--vscode-errorForeground)' : 'var(--vscode-menu-foreground, var(--vscode-foreground))'; }}
           >
             <Codicon name={it.icon} style={styles.icon} />
             <span>{it.label}</span>

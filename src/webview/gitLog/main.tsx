@@ -111,6 +111,13 @@ function App() {
           break;
         case 'LOG_REMOTES_RESULT':
           break;
+        case 'LOG_DESELECT_FILE': {
+          const cur = store.selectedFile;
+          if (cur && (msg.filePath.endsWith('/' + cur.path) || msg.filePath.endsWith('\\' + cur.path) || msg.filePath === cur.path)) {
+            store.selectFile(null);
+          }
+          break;
+        }
       }
     };
     window.addEventListener('message', handler);
@@ -345,7 +352,7 @@ function App() {
         {/* Branch sidebar */}
         {sidebarCollapsed && (
           <div style={collapsedSidebarStrip}>
-            <button style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title="Expand sidebar">
+            <button data-top-action-btn="" style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title="Expand sidebar">
               <Codicon name="layout-sidebar-left-off" style={{ fontSize: '14px' }} />
             </button>
           </div>
@@ -410,7 +417,7 @@ function App() {
         {/* Commit list (center) */}
         <CommitList
           layout={graphLayout}
-          selectedHash={store.selectedCommit?.hash ?? null}
+          selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
           repoColors={repoColors}
           repos={store.repos}
           currentBranchByRepo={currentBranchByRepo}

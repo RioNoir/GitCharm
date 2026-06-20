@@ -205,8 +205,29 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
     });
 
+    const tabWatcher = vscode.window.tabGroups.onDidChangeTabs(e => {
+      for (const tab of e.closed) {
+        const input = tab.input;
+        if (!input) continue;
+        let filePath: string | undefined;
+        if (input instanceof vscode.TabInputText) {
+          filePath = input.uri.fsPath;
+        } else if (input instanceof vscode.TabInputTextDiff) {
+          // For git scheme URIs, the real fsPath is encoded in the query JSON
+          const uri = input.modified;
+          if (uri.scheme === 'git') {
+            try { filePath = JSON.parse(uri.query).path; } catch { filePath = uri.fsPath; }
+          } else {
+            filePath = uri.fsPath;
+          }
+        }
+        if (filePath) this.post({ type: 'LOG_DESELECT_FILE', filePath });
+      }
+    });
+
     webviewView.onDidDispose(() => {
       this.view = undefined;
+      tabWatcher.dispose();
       this.disposables.forEach(d => d.dispose());
       this.disposables = [];
     });
@@ -1390,6 +1411,28 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_OPEN_EXTENDED_DETAIL': {
         const { openCommitDetailPanel } = await import('./CommitDetailPanel');
         await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        break;
+      }
+
+      case 'LOG_OPEN_COMMIT_CHANGES': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        const files = await repo.getCommitFiles(msg.hash);
+        const rootPath = repo.rootPath;
+        const parentHash = (await repo.getParents(msg.hash))[0] ?? EMPTY_TREE;
+        const gitUri = (ref: string, filePath: string): vscode.Uri => {
+          const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+          return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+        };
+        const resources = files
+          .filter(f => f.status !== 'U')
+          .map(f => {
+            const label = vscode.Uri.file(path.join(rootPath, f.path));
+            const original = gitUri(f.status === 'A' ? EMPTY_TREE : parentHash, f.oldPath ?? f.path);
+            const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
+            return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
+          });
+        await vscode.commands.executeCommand('vscode.changes', `Changes in ${msg.hash.slice(0, 8)}`, resources);
         break;
       }
 

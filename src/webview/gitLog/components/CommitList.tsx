@@ -116,6 +116,17 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
     return () => { if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current); };
   }, [commits.length, repos.length, storeHasMore]);
 
+  useEffect(() => {
+    const id = 'gitcharm-log-action-btn-hover';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `[data-log-action-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; }
+[data-top-action-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; }
+[data-ctx-item]:hover { background: var(--vscode-menu-selectionBackground) !important; color: var(--vscode-menu-selectionForeground) !important; }`;
+    document.head.appendChild(s);
+  }, []);
+
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
@@ -298,7 +309,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
         {items.map((vrow) => {
           const commit = commits[vrow.index];
           if (!commit) return null;
-          const isSelected = commit.hash === selectedHash;
+          const isSelected = `${commit.hash}:${commit.repoId}` === selectedHash;
           const isCurrentHead = headHashByRepo[commit.repoId] === commit.hash;
           const isMultiSelected = multiSelectHashes.has(commit.hash);
           const rowMaxX = Math.max(getRowMaxX(vrow.index, segments), laneX(commit.lane ?? 0));
@@ -339,8 +350,8 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                   setMultiSelectHashes(prev => {
                     const next = new Set(prev);
                     // If starting a new multi-select, auto-include the currently single-selected commit
-                    if (next.size === 0 && selectedHash && selectedHash !== commit.hash) {
-                      next.add(selectedHash);
+                    if (next.size === 0 && selectedHash && selectedHash !== `${commit.hash}:${commit.repoId}`) {
+                      next.add(commit.hash);
                     }
                     if (next.has(commit.hash)) next.delete(commit.hash); else next.add(commit.hash);
                     return next;
@@ -454,6 +465,26 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                 <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message.split('\n')[0]}</span>
               </div>
 
+              {hoveredIndex === vrow.index && (
+                <div style={styles.inlineActions}>
+                  <button
+                    data-log-action-btn=""
+                    style={styles.inlineActionBtn}
+                    title="Open Commit Detail"
+                    onClick={e => { e.stopPropagation(); getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg); }}
+                  >
+                    <Codicon name="open-preview" style={{ fontSize: '16px', lineHeight: 1 }} />
+                  </button>
+                  <button
+                    data-log-action-btn=""
+                    style={styles.inlineActionBtn}
+                    title="Open Changes"
+                    onClick={e => { e.stopPropagation(); getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg); }}
+                  >
+                    <Codicon name="diff-multiple" style={{ fontSize: '16px', lineHeight: 1 }} />
+                  </button>
+                </div>
+              )}
               {commit.incoming && (
                 <Codicon name="arrow-down" style={styles.incomingIcon} title="Not pulled" />
               )}
@@ -618,8 +649,8 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
 
       {/* Author + date */}
       <div style={popoverStyles.row}>
-        <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={16} />
-        <span style={popoverStyles.author}>{commit.authorName}</span>
+        <AuthorAvatar authorName={commit.isStash ? 'You' : commit.authorName} authorEmail={commit.authorEmail} size={16} isYou={commit.isStash} />
+        <span style={popoverStyles.author}>{commit.isStash ? 'You' : commit.authorName}</span>
         <span style={popoverStyles.dot}>·</span>
         <span style={popoverStyles.date}>{formatDateTime(commit.authorDate)}</span>
       </div>
@@ -806,20 +837,42 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   const primaryBranch = branchesFromRefs[0] ?? null;
 
   useEffect(() => {
-    window.addEventListener('blur', onClose);
-    return () => window.removeEventListener('blur', onClose);
+    const onBlur = () => onClose();
+    const onMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('mousedown', onMouseDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('mousedown', onMouseDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [onClose]);
 
-  // Clamp menu position so it stays within the viewport (useLayoutEffect avoids flash)
-  const [menuPos, setMenuPos] = useState({ left: x, top: y });
+  // Smart repositioning: open upward if not enough space below; scroll as last resort
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number; maxHeight?: number }>({ left: x, top: y });
   useLayoutEffect(() => {
     if (!menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const left = rect.right > vw ? Math.max(0, x - (rect.right - vw) - 4) : x;
-    const top = rect.bottom > vh ? Math.max(0, y - (rect.bottom - vh) - 4) : y;
-    if (left !== x || top !== y) setMenuPos({ left, top });
+    const margin = 4;
+    const left = rect.right > vw ? Math.max(margin, x - (rect.right - vw) - margin) : x;
+    let top = y;
+    let maxHeight: number | undefined;
+    if (y + rect.height + margin > vh) {
+      const topIfUp = y - rect.height;
+      if (topIfUp >= margin) {
+        top = topIfUp;
+      } else {
+        top = margin;
+        maxHeight = vh - margin * 2;
+      }
+    }
+    setMenuPos({ left, top, maxHeight });
   }, []);
 
   const isMulti = multiSelected.length > 1 && multiSelected.every(c => c.repoId === multiSelected[0].repoId);
@@ -849,14 +902,14 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
     return (
       <>
         <div style={ctxStyles.backdrop} onClick={onClose} />
-        <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top)}>
+        <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top, menuPos.maxHeight)}>
           <div style={ctxStyles.header}>{multiSelected.length} commits selected</div>
           <div style={ctxStyles.separator} />
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH_MULTI', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH_MULTI', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}>
             <Codicon name="diff" style={ctxStyles.icon} />
             <span>Create Patch...</span>
           </div>
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK_MULTI', requestId: generateId(), repoId, hashes: sortedOldestFirst.map(c => c.hash) })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK_MULTI', requestId: generateId(), repoId, hashes: sortedOldestFirst.map(c => c.hash) })}>
             <Codicon name="git-commit" style={ctxStyles.icon} />
             <span>Cherry-Pick All</span>
           </div>
@@ -865,7 +918,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
             <Codicon name="history" style={ctxStyles.icon} />
             <span>Reset Current Branch to Here</span>
           </div>
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMITS', requestId: generateId(), repoId, hashes: sortedNewestFirst.map(c => c.hash) })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMITS', requestId: generateId(), repoId, hashes: sortedNewestFirst.map(c => c.hash) })}>
             <Codicon name="discard" style={ctxStyles.icon} />
             <span>Revert Commits</span>
           </div>
@@ -873,13 +926,13 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
             <>
               <div style={ctxStyles.separator} />
               <div
-                style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
+                data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
                 onClick={() => send({ type: 'LOG_DROP_COMMITS', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash), oldestHash })}
               >
                 <Codicon name="trash" style={ctxStyles.icon} />
                 <span>Drop Commits</span>
               </div>
-              <div style={ctxStyles.item} onClick={() => onSquash(multiSelected)}>
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => onSquash(multiSelected)}>
                 <Codicon name="fold-down" style={ctxStyles.icon} />
                 <span>Squash {multiSelected.length} Commits...</span>
               </div>
@@ -893,34 +946,39 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   return (
     <>
       <div style={ctxStyles.backdrop} onClick={onClose} />
-      <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top)}>
-        <div style={ctxStyles.item} onClick={copyHash}>
+      <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top, menuPos.maxHeight)}>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={copyHash}>
           <Codicon name="copy" style={ctxStyles.icon} />
           <span>Copy Revision Number</span>
         </div>
         <div style={ctxStyles.separator} />
-        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash })}>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="open-preview" style={ctxStyles.icon} />
           <span>Open Full Detail</span>
         </div>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash })}>
+          <Codicon name="diff-multiple" style={ctxStyles.icon} />
+          <span>Open Changes</span>
+        </div>
         {aiEnabled && (
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_EXPLAIN_COMMIT', repoId: commit.repoId, hash: commit.hash })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_EXPLAIN_COMMIT', repoId: commit.repoId, hash: commit.hash })}>
             <Codicon name="sparkle" style={ctxStyles.icon} />
             <span>Explain with AI</span>
           </div>
         )}
         <div style={ctxStyles.separator} />
-        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_NEW_BRANCH_FROM_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_NEW_BRANCH_FROM_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="git-branch" style={ctxStyles.icon} />
           <span>New Branch...</span>
         </div>
         {tagsFromRefs.length === 0 ? (
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_TAG', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_TAG', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
             <Codicon name="tag" style={ctxStyles.icon} />
             <span>New Tag...</span>
           </div>
         ) : (
           <div
+            data-ctx-item=""
             style={ctxStyles.item}
             onClick={() => {
               const currentBranch = currentBranchByRepo[commit.repoId] ?? '';
@@ -933,51 +991,52 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
         )}
         <div style={ctxStyles.separator} />
         {primaryBranch ? (
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, branchName: primaryBranch })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, branchName: primaryBranch })}>
             <Codicon name="arrow-right" style={ctxStyles.icon} />
             <span>Checkout...</span>
           </div>
         ) : (
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
             <Codicon name="arrow-right" style={ctxStyles.icon} />
             <span>Checkout Revision</span>
           </div>
         )}
         {primaryBranch && (
-          <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_SHOW_BRANCH_OPTIONS', repoId: commit.repoId, branchName: primaryBranch })}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_SHOW_BRANCH_OPTIONS', repoId: commit.repoId, branchName: primaryBranch })}>
             <Codicon name="git-branch" style={ctxStyles.icon} />
             <span>Branch options...</span>
           </div>
         )}
         <div style={ctxStyles.separator} />
-        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="diff" style={ctxStyles.icon} />
           <span>Create Patch...</span>
         </div>
-        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="git-commit" style={ctxStyles.icon} />
           <span>Cherry-Pick</span>
         </div>
         <div style={ctxStyles.separator} />
         <div
+          data-ctx-item=""
           style={ctxStyles.item}
           onClick={() => send({ type: 'LOG_RESET_TO_PICK', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
         >
           <Codicon name="history" style={ctxStyles.icon} />
           <span>Reset Current Branch to Here...</span>
         </div>
-        <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
           <Codicon name="discard" style={ctxStyles.icon} />
           <span>Revert Commit</span>
         </div>
         {commit.unpushed && isHead && (
           <>
             <div style={ctxStyles.separator} />
-            <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_EDIT_COMMIT_MESSAGE', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, currentMessage: commit.message })}>
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_EDIT_COMMIT_MESSAGE', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, currentMessage: commit.message })}>
               <Codicon name="edit" style={ctxStyles.icon} />
               <span>Edit Commit Message</span>
             </div>
-            <div style={ctxStyles.item} onClick={() => send({ type: 'LOG_UNDO_COMMIT', requestId: generateId(), repoId: commit.repoId })}>
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_UNDO_COMMIT', requestId: generateId(), repoId: commit.repoId })}>
               <Codicon name="arrow-left" style={ctxStyles.icon} />
               <span>Undo Commit</span>
             </div>
@@ -987,7 +1046,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
           <>
             <div style={ctxStyles.separator} />
             <div
-              style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
+              data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
               onClick={() => send({ type: 'LOG_DROP_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}
             >
               <Codicon name="trash" style={ctxStyles.icon} />
@@ -1006,7 +1065,7 @@ const ctxStyles = {
     inset: 0,
     zIndex: 200,
   },
-  menu: (x: number, y: number): React.CSSProperties => ({
+  menu: (x: number, y: number, maxHeight?: number): React.CSSProperties => ({
     position: 'fixed' as const,
     left: x,
     top: y,
@@ -1019,6 +1078,7 @@ const ctxStyles = {
     padding: '4px 0',
     fontSize: '12px',
     userSelect: 'none' as const,
+    ...(maxHeight ? { maxHeight, overflowY: 'auto' as const } : {}),
   }),
   header: {
     padding: '4px 12px',
@@ -1403,6 +1463,24 @@ const styles = {
     opacity: 0.65,
     marginLeft: '8px',
   },
+  inlineActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
+    marginLeft: '4px',
+  } as React.CSSProperties,
+  inlineActionBtn: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.7,
+    padding: '2px 3px',
+    borderRadius: '3px',
+    display: 'flex',
+    alignItems: 'center',
+  } as React.CSSProperties,
   bgLoadingBar: {
     flexShrink: 0,
     height: 3,
