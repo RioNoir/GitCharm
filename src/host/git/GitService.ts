@@ -735,6 +735,83 @@ export class GitService {
     } catch { return ''; }
   }
 
+  async getCombinedFiles(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
+    const ordered = await this._sortHashesOldestFirst(hashes);
+    const oldest = ordered[0];
+    const newest = ordered[ordered.length - 1];
+    if (!oldest || !newest) return [];
+    try {
+      const [nameStatus, numStat] = await Promise.all([
+        this.git.raw(['diff', '--name-status', `${oldest}~1`, newest]),
+        this.git.raw(['diff', '--numstat', `${oldest}~1`, newest]),
+      ]);
+      const stats = new Map<string, { added: number; removed: number }>();
+      for (const line of numStat.trim().split('\n')) {
+        if (!line.trim()) continue;
+        const parts = line.split('\t');
+        if (parts.length < 3) continue;
+        const added = parseInt(parts[0], 10);
+        const removed = parseInt(parts[1], 10);
+        const p = parts[parts.length - 1];
+        if (!isNaN(added) && !isNaN(removed)) stats.set(p, { added, removed });
+      }
+      const files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+      for (const line of nameStatus.trim().split('\n')) {
+        if (!line.trim()) continue;
+        const parts = line.split('\t');
+        if (parts.length < 2) continue;
+        const statusCode = parts[0][0];
+        const filePath = parts[parts.length - 1];
+        const s = stats.get(filePath);
+        files.push({ status: statusCode, path: filePath, added: s?.added, removed: s?.removed });
+      }
+      return files;
+    } catch { return []; }
+  }
+
+  async getCombinedFileDiff(repoId: string, hashes: string[], filePath: string): Promise<FileDiff | null> {
+    const ordered = await this._sortHashesOldestFirst(hashes);
+    const oldest = ordered[0];
+    const newest = ordered[ordered.length - 1];
+    if (!oldest || !newest) return null;
+    try {
+      const vsRepo = this.vsRepo();
+      const rawDiff = await this.git.raw(['diff', `${oldest}~1`, newest, '--', filePath, '--no-renames']);
+      const diffs = parseDiff(rawDiff || `diff --git a/${filePath} b/${filePath}\n`, repoId);
+      const diff = diffs[0] ?? { repoId, oldPath: filePath, newPath: filePath, isBinary: false, isNew: false, isDeleted: false, hunks: [] };
+      if (vsRepo) {
+        diff.originalContent = await vsRepo.show(`${oldest}~1`, filePath).catch(() => '');
+        diff.modifiedContent = await vsRepo.show(newest, filePath).catch(() => '');
+      } else {
+        diff.originalContent = await this.git.raw(['show', `${oldest}~1:${filePath}`]).catch(() => '');
+        diff.modifiedContent = await this.git.raw(['show', `${newest}:${filePath}`]).catch(() => '');
+      }
+      return diff;
+    } catch { return null; }
+  }
+
+  async getCombinedFilesOrder(hashes: string[]): Promise<string[]> {
+    return this._sortHashesOldestFirst(hashes);
+  }
+
+  private async _sortHashesOldestFirst(hashes: string[]): Promise<string[]> {
+    if (hashes.length <= 1) return [...hashes];
+    try {
+      // --no-walk prints each given commit exactly once, in reverse-chronological order
+      const raw = await this.git.raw(['log', '--no-walk', '--format=%H', ...hashes]);
+      const ordered = raw.trim().split('\n').map(l => l.trim()).filter(h => hashes.includes(h));
+      // ordered is newest-first; reverse for oldest-first
+      const result = ordered.reverse();
+      // Safety: ensure every hash is present
+      for (const h of hashes) {
+        if (!result.includes(h)) result.push(h);
+      }
+      return result;
+    } catch {
+      return [...hashes];
+    }
+  }
+
   async getFullStagedDiff(maxChars = 8000): Promise<string> {
     try {
       const vsRepo = this.vsRepo();
@@ -1315,6 +1392,10 @@ export class GitService {
 
   async createTag(name: string, hash: string): Promise<void> {
     await this.git.raw(['tag', name, hash]);
+  }
+
+  async resolveRef(ref: string): Promise<string> {
+    return (await this.git.revparse(['--verify', ref])).trim();
   }
 
   async getTags(): Promise<Array<{ name: string; hash: string; date: string }>> {

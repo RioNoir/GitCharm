@@ -311,7 +311,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
           if (!commit) return null;
           const isSelected = `${commit.hash}:${commit.repoId}` === selectedHash;
           const isCurrentHead = headHashByRepo[commit.repoId] === commit.hash;
-          const isMultiSelected = multiSelectHashes.has(commit.hash);
+          const isMultiSelected = multiSelectHashes.has(`${commit.hash}:${commit.repoId}`);
           const rowMaxX = Math.max(getRowMaxX(vrow.index, segments), laneX(commit.lane ?? 0));
           const rawTextStart = rowMaxX + LANE_WIDTH / 2 + 10;
           // Snap to the nearest LANE_WIDTH boundary so adjacent rows with near-identical
@@ -321,7 +321,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
           return (
             <div
               key={commit.hash}
-              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash), paddingLeft: textStart }}
+              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash && contextMenu?.commit.repoId === commit.repoId), paddingLeft: textStart }}
               onMouseEnter={(e) => {
                 setHoveredIndex(vrow.index);
                 if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
@@ -349,11 +349,23 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                 if (e.ctrlKey || e.metaKey) {
                   setMultiSelectHashes(prev => {
                     const next = new Set(prev);
+                    const key = `${commit.hash}:${commit.repoId}`;
                     // If starting a new multi-select, auto-include the currently single-selected commit
-                    if (next.size === 0 && selectedHash && selectedHash !== `${commit.hash}:${commit.repoId}`) {
-                      next.add(commit.hash);
+                    if (next.size === 0 && selectedHash && selectedHash !== key) {
+                      // Find selected commit to check stash type and repo compatibility
+                      const selectedCommit = commits.find(c => `${c.hash}:${c.repoId}` === selectedHash);
+                      if (selectedCommit && selectedCommit.isStash !== commit.isStash) return prev;
+                      if (selectedCommit && selectedCommit.repoId !== commit.repoId) return prev;
+                      next.add(selectedHash);
                     }
-                    if (next.has(commit.hash)) next.delete(commit.hash); else next.add(commit.hash);
+                    // Block mixing stashes and commits, or commits from different repos
+                    if (next.size > 0) {
+                      const existingCommit = commits.find(c => next.has(`${c.hash}:${c.repoId}`));
+                      const existingIsStash = existingCommit?.isStash ?? false;
+                      if (existingIsStash !== !!commit.isStash) return prev;
+                      if (existingCommit && existingCommit.repoId !== commit.repoId) return prev;
+                    }
+                    if (next.has(key)) next.delete(key); else next.add(key);
                     return next;
                   });
                 } else {
@@ -366,10 +378,12 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
                 e.stopPropagation();
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
                 setPopover(null);
-                const isInMulti = multiSelectHashes.has(commit.hash) && multiSelectHashes.size > 1;
+                const key = `${commit.hash}:${commit.repoId}`;
+                const isInMulti = multiSelectHashes.has(key) && multiSelectHashes.size > 1;
                 const multiSelected = isInMulti
-                  ? commits.filter(c => multiSelectHashes.has(c.hash))
+                  ? commits.filter(c => multiSelectHashes.has(`${c.hash}:${c.repoId}`))
                   : [];
+                if (!isInMulti) setMultiSelectHashes(new Set());
                 setContextMenu({ commit, x: e.clientX, y: e.clientY, multiSelected });
               }}
             >
@@ -898,6 +912,9 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   const repoId = isMulti ? multiSelected[0].repoId : commit.repoId;
   const oldestHash = sortedOldestFirst[0]?.hash ?? commit.hash;
 
+  const hasStashInMulti = isMulti && multiSelected.some(c => c.isStash);
+  const allStashInMulti = isMulti && multiSelected.every(c => c.isStash);
+
   if (isMulti) {
     return (
       <>
@@ -905,38 +922,52 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
         <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top, menuPos.maxHeight)}>
           <div style={ctxStyles.header}>{multiSelected.length} commits selected</div>
           <div style={ctxStyles.separator} />
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH_MULTI', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}>
-            <Codicon name="diff" style={ctxStyles.icon} />
-            <span>Create Patch...</span>
-          </div>
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK_MULTI', requestId: generateId(), repoId, hashes: sortedOldestFirst.map(c => c.hash) })}>
-            <Codicon name="git-commit" style={ctxStyles.icon} />
-            <span>Cherry-Pick All</span>
-          </div>
-          <div style={ctxStyles.separator} />
-          <div style={ctxStyles.itemDisabled}>
-            <Codicon name="history" style={ctxStyles.icon} />
-            <span>Reset Current Branch to Here</span>
-          </div>
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMITS', requestId: generateId(), repoId, hashes: sortedNewestFirst.map(c => c.hash) })}>
-            <Codicon name="discard" style={ctxStyles.icon} />
-            <span>Revert Commits</span>
-          </div>
-          {allUnpushed && (
+          {!hasStashInMulti && (
             <>
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_VIEW_COMBINED_DIFF', repoId, hashes: multiSelected.map(c => c.hash) })}>
+                <Codicon name="diff-multiple" style={ctxStyles.icon} />
+                <span>View Combined Diff</span>
+              </div>
               <div style={ctxStyles.separator} />
-              <div
-                data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
-                onClick={() => send({ type: 'LOG_DROP_COMMITS', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash), oldestHash })}
-              >
-                <Codicon name="trash" style={ctxStyles.icon} />
-                <span>Drop Commits</span>
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH_MULTI', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}>
+                <Codicon name="diff" style={ctxStyles.icon} />
+                <span>Create Patch...</span>
               </div>
-              <div data-ctx-item="" style={ctxStyles.item} onClick={() => onSquash(multiSelected)}>
-                <Codicon name="fold-down" style={ctxStyles.icon} />
-                <span>Squash {multiSelected.length} Commits...</span>
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK_MULTI', requestId: generateId(), repoId, hashes: sortedOldestFirst.map(c => c.hash) })}>
+                <Codicon name="git-commit" style={ctxStyles.icon} />
+                <span>Cherry-Pick All</span>
               </div>
+              <div style={ctxStyles.separator} />
+              <div style={ctxStyles.itemDisabled}>
+                <Codicon name="history" style={ctxStyles.icon} />
+                <span>Reset Current Branch to Here</span>
+              </div>
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMITS', requestId: generateId(), repoId, hashes: sortedNewestFirst.map(c => c.hash) })}>
+                <Codicon name="discard" style={ctxStyles.icon} />
+                <span>Revert Commits</span>
+              </div>
+              {allUnpushed && (
+                <>
+                  <div style={ctxStyles.separator} />
+                  <div
+                    data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
+                    onClick={() => send({ type: 'LOG_DROP_COMMITS', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash), oldestHash })}
+                  >
+                    <Codicon name="trash" style={ctxStyles.icon} />
+                    <span>Drop Commits</span>
+                  </div>
+                  <div data-ctx-item="" style={ctxStyles.item} onClick={() => onSquash(multiSelected)}>
+                    <Codicon name="fold-down" style={ctxStyles.icon} />
+                    <span>Squash {multiSelected.length} Commits...</span>
+                  </div>
+                </>
+              )}
             </>
+          )}
+          {hasStashInMulti && (
+            <div style={{ ...ctxStyles.header, opacity: 0.45, fontSize: '11px' }}>
+              Mixed selection — no actions available
+            </div>
           )}
         </div>
       </>
@@ -960,98 +991,128 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
           <Codicon name="diff-multiple" style={ctxStyles.icon} />
           <span>Open Changes</span>
         </div>
+        {!commit.isStash && (
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_COMPARE_COMMIT_WITH', repoId: commit.repoId, hash: commit.hash })}>
+            <Codicon name="git-compare" style={ctxStyles.icon} />
+            <span>Compare with…</span>
+          </div>
+        )}
         {aiEnabled && (
           <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_EXPLAIN_COMMIT', repoId: commit.repoId, hash: commit.hash })}>
             <Codicon name="sparkle" style={ctxStyles.icon} />
             <span>Explain with AI</span>
           </div>
         )}
-        <div style={ctxStyles.separator} />
-        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_NEW_BRANCH_FROM_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-          <Codicon name="git-branch" style={ctxStyles.icon} />
-          <span>New Branch...</span>
-        </div>
-        {tagsFromRefs.length === 0 ? (
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_TAG', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-            <Codicon name="tag" style={ctxStyles.icon} />
-            <span>New Tag...</span>
-          </div>
-        ) : (
-          <div
-            data-ctx-item=""
-            style={ctxStyles.item}
-            onClick={() => {
-              const currentBranch = currentBranchByRepo[commit.repoId] ?? '';
-              send({ type: 'LOG_MANAGE_COMMIT_TAGS', repoId: commit.repoId, hash: commit.hash, currentBranch } satisfies LogToHostMsg);
-            }}
-          >
-            <Codicon name="tag" style={ctxStyles.icon} />
-            <span>Manage Tags...</span>
-          </div>
-        )}
-        <div style={ctxStyles.separator} />
-        {primaryBranch ? (
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, branchName: primaryBranch })}>
-            <Codicon name="arrow-right" style={ctxStyles.icon} />
-            <span>Checkout...</span>
-          </div>
-        ) : (
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-            <Codicon name="arrow-right" style={ctxStyles.icon} />
-            <span>Checkout Revision</span>
-          </div>
-        )}
-        {primaryBranch && (
-          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_SHOW_BRANCH_OPTIONS', repoId: commit.repoId, branchName: primaryBranch })}>
-            <Codicon name="git-branch" style={ctxStyles.icon} />
-            <span>Branch options...</span>
-          </div>
-        )}
-        <div style={ctxStyles.separator} />
-        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-          <Codicon name="diff" style={ctxStyles.icon} />
-          <span>Create Patch...</span>
-        </div>
-        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-          <Codicon name="git-commit" style={ctxStyles.icon} />
-          <span>Cherry-Pick</span>
-        </div>
-        <div style={ctxStyles.separator} />
-        <div
-          data-ctx-item=""
-          style={ctxStyles.item}
-          onClick={() => send({ type: 'LOG_RESET_TO_PICK', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
-        >
-          <Codicon name="history" style={ctxStyles.icon} />
-          <span>Reset Current Branch to Here...</span>
-        </div>
-        <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
-          <Codicon name="discard" style={ctxStyles.icon} />
-          <span>Revert Commit</span>
-        </div>
-        {commit.unpushed && isHead && (
+        {commit.isStash ? (
           <>
             <div style={ctxStyles.separator} />
-            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_EDIT_COMMIT_MESSAGE', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, currentMessage: commit.message })}>
-              <Codicon name="edit" style={ctxStyles.icon} />
-              <span>Edit Commit Message</span>
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_STASH_POP', requestId: generateId(), repoId: commit.repoId, stashRef: commit.hash })}>
+              <Codicon name="git-stash-pop" style={ctxStyles.icon} />
+              <span>Pop Stash</span>
             </div>
-            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_UNDO_COMMIT', requestId: generateId(), repoId: commit.repoId })}>
-              <Codicon name="arrow-left" style={ctxStyles.icon} />
-              <span>Undo Commit</span>
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_STASH_APPLY', requestId: generateId(), repoId: commit.repoId, stashRef: commit.hash })}>
+              <Codicon name="git-stash-apply" style={ctxStyles.icon} />
+              <span>Apply Stash</span>
             </div>
-          </>
-        )}
-        {commit.unpushed && (
-          <>
             <div style={ctxStyles.separator} />
             <div
               data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
-              onClick={() => send({ type: 'LOG_DROP_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}
+              onClick={() => send({ type: 'LOG_STASH_DROP', requestId: generateId(), repoId: commit.repoId, stashRef: commit.hash })}
             >
               <Codicon name="trash" style={ctxStyles.icon} />
-              <span>Drop Commit</span>
+              <span>Delete Stash</span>
             </div>
+          </>
+        ) : (
+          <>
+            <div style={ctxStyles.separator} />
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_NEW_BRANCH_FROM_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+              <Codicon name="git-branch" style={ctxStyles.icon} />
+              <span>New Branch...</span>
+            </div>
+            {tagsFromRefs.length === 0 ? (
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_TAG', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+                <Codicon name="tag" style={ctxStyles.icon} />
+                <span>New Tag...</span>
+              </div>
+            ) : (
+              <div
+                data-ctx-item=""
+                style={ctxStyles.item}
+                onClick={() => {
+                  const currentBranch = currentBranchByRepo[commit.repoId] ?? '';
+                  send({ type: 'LOG_MANAGE_COMMIT_TAGS', repoId: commit.repoId, hash: commit.hash, currentBranch } satisfies LogToHostMsg);
+                }}
+              >
+                <Codicon name="tag" style={ctxStyles.icon} />
+                <span>Manage Tags...</span>
+              </div>
+            )}
+            <div style={ctxStyles.separator} />
+            {primaryBranch ? (
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, branchName: primaryBranch })}>
+                <Codicon name="arrow-right" style={ctxStyles.icon} />
+                <span>Checkout...</span>
+              </div>
+            ) : (
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHECKOUT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+                <Codicon name="arrow-right" style={ctxStyles.icon} />
+                <span>Checkout Revision</span>
+              </div>
+            )}
+            {primaryBranch && (
+              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_SHOW_BRANCH_OPTIONS', repoId: commit.repoId, branchName: primaryBranch })}>
+                <Codicon name="git-branch" style={ctxStyles.icon} />
+                <span>Branch options...</span>
+              </div>
+            )}
+            <div style={ctxStyles.separator} />
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+              <Codicon name="diff" style={ctxStyles.icon} />
+              <span>Create Patch...</span>
+            </div>
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CHERRY_PICK', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+              <Codicon name="git-commit" style={ctxStyles.icon} />
+              <span>Cherry-Pick</span>
+            </div>
+            <div style={ctxStyles.separator} />
+            <div
+              data-ctx-item=""
+              style={ctxStyles.item}
+              onClick={() => send({ type: 'LOG_RESET_TO_PICK', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+            >
+              <Codicon name="history" style={ctxStyles.icon} />
+              <span>Reset Current Branch to Here...</span>
+            </div>
+            <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_REVERT_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}>
+              <Codicon name="discard" style={ctxStyles.icon} />
+              <span>Revert Commit</span>
+            </div>
+            {commit.unpushed && isHead && (
+              <>
+                <div style={ctxStyles.separator} />
+                <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_EDIT_COMMIT_MESSAGE', requestId: generateId(), repoId: commit.repoId, hash: commit.hash, currentMessage: commit.message })}>
+                  <Codicon name="edit" style={ctxStyles.icon} />
+                  <span>Edit Commit Message</span>
+                </div>
+                <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_UNDO_COMMIT', requestId: generateId(), repoId: commit.repoId })}>
+                  <Codicon name="arrow-left" style={ctxStyles.icon} />
+                  <span>Undo Commit</span>
+                </div>
+              </>
+            )}
+            {commit.unpushed && (
+              <>
+                <div style={ctxStyles.separator} />
+                <div
+                  data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
+                  onClick={() => send({ type: 'LOG_DROP_COMMIT', requestId: generateId(), repoId: commit.repoId, hash: commit.hash })}
+                >
+                  <Codicon name="trash" style={ctxStyles.icon} />
+                  <span>Drop Commit</span>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

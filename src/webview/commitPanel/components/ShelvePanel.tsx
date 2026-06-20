@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { ShelveEntry } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { FileIcon } from '../../shared/FileIcon';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import type { ViewMode } from '../store/commitStore';
@@ -140,15 +141,7 @@ function FileRow({ file, repoId, entry, depth = 0, onOpenFileDiff, onUnshelveFil
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-        {hovered && (
-          <button
-            style={{ background: 'transparent', border: 'none', color: 'var(--vscode-foreground)', cursor: 'pointer', padding: '2px 4px', borderRadius: '3px', fontSize: '12px', display: 'flex', alignItems: 'center', opacity: 0.7 }}
-            title="Unshelve this file only"
-            onClick={e => { e.stopPropagation(); onUnshelveFile(repoId, entry.id, file.path); }}
-          >
-            <Codicon name="desktop-download" />
-          </button>
-        )}
+        <InlineIconBtn icon="desktop-download" title="Unshelve this file only" visible={hovered} onClick={e => { e.stopPropagation(); onUnshelveFile(repoId, entry.id, file.path); }} />
         <span style={{ fontSize: '11px', fontWeight: 'bold', color, width: '14px', textAlign: 'center', opacity: 0.9, marginLeft: '6px' }}>{letter}</span>
       </div>
     </div>
@@ -257,16 +250,10 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
             })()}
           </span>
         </div>
-        {hovered && (
-          <div style={rowStyle.actions}>
-            <button style={rowStyle.btn} title="Unshelve (apply and keep)" onClick={e => { e.stopPropagation(); onUnshelve(repoId, entry.id); }}>
-              <Codicon name="desktop-download" />
-            </button>
-            <button style={{ ...rowStyle.btn, color: 'var(--vscode-errorForeground)' }} title="Delete shelve" onClick={e => { e.stopPropagation(); onDrop(repoId, entry.id); }}>
-              <Codicon name="trash" />
-            </button>
-          </div>
-        )}
+        <div style={rowStyle.actions}>
+          <InlineIconBtn icon="desktop-download" title="Unshelve (apply and keep)" visible={hovered} onClick={e => { e.stopPropagation(); onUnshelve(repoId, entry.id); }} />
+          <InlineIconBtn icon="trash" title="Delete shelve" visible={hovered} danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.id); }} />
+        </div>
       </div>
 
       {/* Expanded body: file list (flat or tree) */}
@@ -319,12 +306,6 @@ const rowStyle = {
   statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)', fontSize: '10px', opacity: 1 },
   statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)', fontSize: '10px', opacity: 1 },
   actions: { display: 'flex', gap: '2px', flexShrink: 0 } as React.CSSProperties,
-  btn: {
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    padding: '2px 4px', borderRadius: '3px', fontSize: '13px',
-    display: 'flex', alignItems: 'center', opacity: 0.65,
-    color: 'var(--vscode-foreground)',
-  } as React.CSSProperties,
   fileList: {
     display: 'flex', flexDirection: 'column' as const,
     borderTop: '1px solid var(--vscode-panel-border)',

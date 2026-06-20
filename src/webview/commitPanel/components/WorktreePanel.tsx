@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { WorktreeEntry } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 
 interface RepoWorktrees {
@@ -102,57 +103,21 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
             )}
           </span>
         </div>
-        {hovered && !entry.isMain && (
+        {!entry.isMain && (
           <div style={row.actions}>
             {!entry.isInWorkspace && (
-              <button
-                style={row.btn}
-                title="Add Folder to Workspace"
-                onClick={e => { e.stopPropagation(); onAddToWorkspace(entry.path); }}
-              >
-                <Codicon name="add" />
-              </button>
+              <InlineIconBtn icon="add" title="Add Folder to Workspace" visible={hovered} onClick={e => { e.stopPropagation(); onAddToWorkspace(entry.path); }} />
             )}
             {entry.isInWorkspace && (
-              <button
-                style={row.btn}
-                title="Reveal in Explorer"
-                onClick={e => { e.stopPropagation(); onOpenInExplorer(repoId, entry.path); }}
-              >
-                <Codicon name="folder-opened" />
-              </button>
+              <InlineIconBtn icon="folder-opened" title="Reveal in Explorer" visible={hovered} onClick={e => { e.stopPropagation(); onOpenInExplorer(repoId, entry.path); }} />
             )}
-            <button
-              style={row.btn}
-              title="Open in New Window"
-              onClick={e => { e.stopPropagation(); onOpenInNewWindow(entry.path); }}
-            >
-              <Codicon name="link-external" />
-            </button>
+            <InlineIconBtn icon="link-external" title="Open in New Window" visible={hovered} onClick={e => { e.stopPropagation(); onOpenInNewWindow(entry.path); }} />
             {entry.isLocked ? (
-              <button
-                style={row.btn}
-                title="Unlock worktree"
-                onClick={e => { e.stopPropagation(); onUnlock(repoId, entry.path); }}
-              >
-                <Codicon name="unlock" />
-              </button>
+              <InlineIconBtn icon="unlock" title="Unlock worktree" visible={hovered} onClick={e => { e.stopPropagation(); onUnlock(repoId, entry.path); }} />
             ) : (
-              <button
-                style={row.btn}
-                title="Lock worktree"
-                onClick={e => { e.stopPropagation(); onLock(repoId, entry.path); }}
-              >
-                <Codicon name="lock" />
-              </button>
+              <InlineIconBtn icon="lock" title="Lock worktree" visible={hovered} onClick={e => { e.stopPropagation(); onLock(repoId, entry.path); }} />
             )}
-            <button
-              style={{ ...row.btn, color: 'var(--vscode-errorForeground)' }}
-              title="Remove worktree"
-              onClick={e => { e.stopPropagation(); onDelete(repoId, entry.path, false); }}
-            >
-              <Codicon name="trash" />
-            </button>
+            <InlineIconBtn icon="trash" title="Remove worktree" visible={hovered} danger onClick={e => { e.stopPropagation(); onDelete(repoId, entry.path, false); }} />
           </div>
         )}
       </div>
@@ -208,22 +173,10 @@ function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, 
           <span style={css.repoName}>{repo.repoName}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
             {hasPrunable && (
-              <button
-                style={css.headerBtn}
-                title="Prune stale worktrees"
-                onClick={() => onPrune(repo.repoId)}
-              >
-                <Codicon name="git-compare" style={{ fontSize: '12px' }} />
-              </button>
+              <InlineIconBtn icon="git-compare" title="Prune stale worktrees" onClick={() => onPrune(repo.repoId)} />
             )}
             {!repo.isLinkedWorktree && (
-              <button
-                style={css.headerBtn}
-                title="Add worktree"
-                onClick={() => onRequestCreate(repo.repoId)}
-              >
-                <Codicon name="add" style={{ fontSize: '12px' }} />
-              </button>
+              <InlineIconBtn icon="add" title="Add worktree" onClick={() => onRequestCreate(repo.repoId)} />
             )}
           </div>
         </div>
@@ -316,7 +269,7 @@ const css = {
   root: { display: 'flex', flexDirection: 'column' as const },
   repoSection: {} as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
+    display: 'flex', alignItems: 'center', gap: '6px', padding: '0 8px', height: '26px',
     background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
     borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
@@ -324,11 +277,6 @@ const css = {
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
   repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
   repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
-  headerBtn: {
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    padding: '2px 4px', borderRadius: '3px', display: 'flex', alignItems: 'center',
-    color: 'var(--vscode-foreground)', opacity: 0.7,
-  } as React.CSSProperties,
   singleRepoActions: {
     display: 'flex', gap: '4px', padding: '6px 8px',
     borderTop: '1px solid var(--vscode-panel-border)',
@@ -380,10 +328,4 @@ const row = {
     color: 'var(--vscode-inputValidation-warningForeground)',
   } as React.CSSProperties,
   actions: { display: 'flex', gap: '2px', flexShrink: 0 } as React.CSSProperties,
-  btn: {
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    padding: '2px 4px', borderRadius: '3px', fontSize: '13px',
-    display: 'flex', alignItems: 'center', opacity: 0.65,
-    color: 'var(--vscode-foreground)',
-  } as React.CSSProperties,
 };

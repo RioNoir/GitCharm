@@ -1414,6 +1414,71 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_VIEW_COMBINED_DIFF': {
+        const { openCombinedDiffPanel } = await import('./CombinedDiffPanel');
+        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.repoId, msg.hashes);
+        break;
+      }
+
+      case 'LOG_COMPARE_COMMIT_WITH': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        const [branches, tags, commitMeta] = await Promise.all([
+          repo.getBranches(),
+          repo.getTags(),
+          repo.getCommitMeta(msg.hash),
+        ]);
+        const shortHash = commitMeta?.shortHash ?? msg.hash.slice(0, 7);
+        type RefItem = vscode.QuickPickItem & { ref: string };
+        const items: RefItem[] = [
+          { label: 'LOCAL BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+          ...branches.filter(b => !b.isRemote).map(b => ({
+            label: `$(git-branch) ${b.name}`,
+            description: b.isHead ? '(current)' : undefined,
+            ref: b.name,
+          })),
+          { label: 'REMOTE BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+          ...branches.filter(b => b.isRemote).map(b => ({
+            label: `$(cloud) ${b.name}`,
+            ref: b.name,
+          })),
+          ...(tags.length ? [
+            { label: 'TAGS', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+            ...tags.map(t => ({ label: `$(tag) ${t.name}`, ref: t.name })),
+          ] : []),
+        ];
+        const picked = await vscode.window.showQuickPick(items, {
+          placeHolder: `Compare ${shortHash} with…`,
+          title: 'GitCharm - Compare Commit With',
+          matchOnDescription: true,
+        });
+        if (!picked?.ref) break;
+        let refHash: string;
+        try {
+          refHash = await repo.resolveRef(picked.ref);
+        } catch {
+          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${picked.ref}"`);
+          break;
+        }
+        const rootPath = repo.rootPath;
+        const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+        const gitUri = (ref: string, filePath: string): vscode.Uri => {
+          const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+          return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+        };
+        const files = await repo.getCombinedFiles([refHash, msg.hash]);
+        const resources = files
+          .filter(f => f.status !== 'U')
+          .map(f => {
+            const label = vscode.Uri.file(path.join(rootPath, f.path));
+            const original = gitUri(f.status === 'A' ? EMPTY_TREE : refHash, f.path);
+            const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
+            return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
+          });
+        await vscode.commands.executeCommand('vscode.changes', `${shortHash} vs ${picked.ref}`, resources);
+        break;
+      }
+
       case 'LOG_OPEN_COMMIT_CHANGES': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) break;
@@ -1439,6 +1504,47 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_EXPLAIN_COMMIT': {
         const { openCommitDetailPanel } = await import('./CommitDetailPanel');
         await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        break;
+      }
+
+      case 'LOG_STASH_APPLY': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        try {
+          await repo.stashApply(msg.stashRef);
+          this.refresh();
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`Failed to apply stash: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_STASH_POP': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        try {
+          await repo.stashPop(msg.stashRef);
+          this.refresh();
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`Failed to pop stash: ${String(e)}`);
+        }
+        break;
+      }
+
+      case 'LOG_STASH_DROP': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        const confirm = await vscode.window.showWarningMessage(
+          'Drop this stash? This cannot be undone.',
+          { modal: true }, 'Drop'
+        );
+        if (confirm !== 'Drop') break;
+        try {
+          await repo.stashDrop(msg.stashRef);
+          this.refresh();
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`Failed to drop stash: ${String(e)}`);
+        }
         break;
       }
 

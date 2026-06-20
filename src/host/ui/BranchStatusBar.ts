@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { RepoMeta } from '../types/git';
 import { isPrimaryBranch } from '../utils/branchUtils';
@@ -668,8 +669,8 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push(
         { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
         {
-          label: `$(git-compare) Compare '${currentBranchName}' with '${branchName}'`,
-          action: () => this.compareBranchAllRepos(branchName, metas),
+          label: `$(git-compare) Compare with '${branchName}'…`,
+          action: () => this.compareBranchAllRepos(branchName, metas, currentBranchName),
         },
         {
           label: `$(repo-forked) Rebase '${currentBranchName}' onto '${branchName}'`,
@@ -1298,8 +1299,8 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push(
         { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
         {
-          label: `$(git-compare) Compare '${currentBranchName}' with '${branchName}'`,
-          action: () => this.compareSingleRepo(branchName, meta),
+          label: `$(git-compare) Compare with '${branchName}'…`,
+          action: () => this.compareSingleRepo(branchName, meta, currentBranchName),
         },
         {
           label: `$(repo-forked) Rebase '${currentBranchName}' onto '${branchName}'`,
@@ -1605,12 +1606,40 @@ export class BranchStatusBar implements vscode.Disposable {
     await this.refresh();
   }
 
-  private async compareSingleRepo(branchName: string, meta: RepoMeta): Promise<void> {
-    await vscode.commands.executeCommand(
-      'git.compareWithBranch',
-      vscode.Uri.file(meta.rootPath),
-      branchName,
-    );
+  private async compareSingleRepo(branchName: string, meta: RepoMeta, currentBranchName: string): Promise<void> {
+    const repo = this.manager.getRepo(meta.id);
+    if (!repo) return;
+    let branchHash: string;
+    let headHash: string;
+    try {
+      [branchHash, headHash] = await Promise.all([
+        repo.resolveRef(branchName),
+        repo.resolveRef('HEAD'),
+      ]);
+    } catch {
+      vscode.window.showErrorMessage(`GitCharm: Cannot resolve refs for comparison in "${meta.name}".`);
+      return;
+    }
+    const files = await repo.getCombinedFiles([branchHash, headHash]);
+    if (files.length === 0) {
+      vscode.window.showInformationMessage(`GitCharm [${meta.name}]: No differences between '${currentBranchName}' and '${branchName}'.`);
+      return;
+    }
+    const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    const rootPath = repo.rootPath;
+    const gitUri = (ref: string, filePath: string): vscode.Uri => {
+      const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+      return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+    };
+    const resources = files
+      .filter(f => f.status !== 'U')
+      .map(f => {
+        const label = vscode.Uri.file(path.join(rootPath, f.path));
+        const original = gitUri(f.status === 'A' ? EMPTY_TREE : branchHash, f.path);
+        const modified = gitUri(f.status === 'D' ? EMPTY_TREE : headHash, f.path);
+        return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
+      });
+    await vscode.commands.executeCommand('vscode.changes', `${currentBranchName} vs ${branchName} [${meta.name}]`, resources);
   }
 
   private async rebaseSingleRepo(onto: string, meta: RepoMeta): Promise<void> {
@@ -1777,13 +1806,9 @@ export class BranchStatusBar implements vscode.Disposable {
     await this.refresh();
   }
 
-  private async compareBranchAllRepos(branchName: string, metas: RepoMeta[]): Promise<void> {
+  private async compareBranchAllRepos(branchName: string, metas: RepoMeta[], currentBranchName: string): Promise<void> {
     for (const meta of metas) {
-      await vscode.commands.executeCommand(
-        'git.compareWithBranch',
-        vscode.Uri.file(meta.rootPath),
-        branchName,
-      );
+      await this.compareSingleRepo(branchName, meta, currentBranchName);
     }
   }
 

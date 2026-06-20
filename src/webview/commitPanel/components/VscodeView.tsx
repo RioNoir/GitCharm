@@ -4,6 +4,7 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { SingleRepoHeader } from './ProjectGroup';
 import { branchColor, tagColor } from '../../shared/branchColors';
 
@@ -158,35 +159,18 @@ function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, 
         {depth === 0 && dir && <span style={dirPathStyle} title={dir}>{dir}</span>}
       </div>
       <div style={rowActionsStyle}>
-        {hovered && <>
-          {!isSubmodule && file.status === 'conflicted' && (
-            <button data-action-btn="" style={actionBtnStyle} title="Resolve Conflicts"
-              onClick={e => { e.stopPropagation(); onResolveMerge(file); }}>
-              <Codicon name="git-merge" />
-            </button>
+        {!isSubmodule && <>
+          {file.status === 'conflicted' && (
+            <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
           )}
-          {!isSubmodule && (
-            <button style={actionBtnStyle} title="Open file"
-              onClick={e => { e.stopPropagation(); onOpenFile(file); }}>
-              <Codicon name="go-to-file" />
-            </button>
-          )}
-          {!isSubmodule && !staged && (
-            <button data-action-btn="" style={actionBtnStyle} title="Rollback"
-              onClick={e => { e.stopPropagation(); onRollback([file]); }}>
-              <Codicon name="discard" />
-            </button>
+          <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
+          {!staged && (
+            <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
           )}
           {staged ? (
-            <button data-action-btn="" style={actionBtnStyle} title="Unstage"
-              onClick={e => { e.stopPropagation(); onUnstage(file); }}>
-              <Codicon name="remove" />
-            </button>
+            <InlineIconBtn icon="remove" title="Unstage" visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
           ) : (
-            <button data-action-btn="" style={actionBtnStyle} title="Stage"
-              onClick={e => { e.stopPropagation(); onStage(file); }}>
-              <Codicon name="add" />
-            </button>
+            <InlineIconBtn icon="add" title="Stage" visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
           )}
         </>}
         <span style={statusLetterStyle(color)}>{letter}</span>
@@ -245,25 +229,14 @@ function VscodeDirNode({ node, depth, staged, repoId, selectedFile, ctxFile, ico
           <span style={folderNameStyle}>{node.name}</span>
         </div>
         <div style={rowActionsStyle}>
-          {hovered && <>
-            {!staged && (
-              <button data-action-btn="" style={actionBtnStyle} title="Rollback folder"
-                onClick={e => { e.stopPropagation(); onRollback(allFiles); }}>
-                <Codicon name="discard" />
-              </button>
-            )}
-            {staged ? (
-              <button data-action-btn="" style={actionBtnStyle} title="Unstage folder"
-                onClick={e => { e.stopPropagation(); onUnstageFolder(allFiles); }}>
-                <Codicon name="remove" />
-              </button>
-            ) : (
-              <button data-action-btn="" style={actionBtnStyle} title="Stage folder"
-                onClick={e => { e.stopPropagation(); onStageFolder(allFiles); }}>
-                <Codicon name="add" />
-              </button>
-            )}
-          </>}
+          {!staged && (
+            <InlineIconBtn icon="discard" title="Rollback folder" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(allFiles); }} />
+          )}
+          {staged ? (
+            <InlineIconBtn icon="remove" title="Unstage folder" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(allFiles); }} />
+          ) : (
+            <InlineIconBtn icon="add" title="Stage folder" visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(allFiles); }} />
+          )}
           <span style={dirCountStyle}>{allFiles.length}</span>
         </div>
       </div>
@@ -382,27 +355,14 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           </div>
           {!isEmpty && (
             <div style={repoActionsStyle}>
-              <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-                title={staged ? 'Open Staged Changes' : 'Open Changes'}
-                onClick={e => { e.stopPropagation(); onOpenChanges(); }}>
-                <Codicon name="diff-multiple" />
-              </button>
+              <InlineIconBtn icon="diff-multiple" title={staged ? 'Open Staged Changes' : 'Open Changes'} visible={hovered} onClick={e => { e.stopPropagation(); onOpenChanges(); }} />
               {!staged && (
-                <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Rollback All"
-                  onClick={e => { e.stopPropagation(); onRollback(files); }}>
-                  <Codicon name="discard" />
-                </button>
+                <InlineIconBtn icon="discard" title="Rollback All" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(files); }} />
               )}
               {staged ? (
-                <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Unstage All"
-                  onClick={e => { e.stopPropagation(); onUnstageFiles(files.map(f => f.path)); }}>
-                  <Codicon name="remove" />
-                </button>
+                <InlineIconBtn icon="remove" title="Unstage All" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFiles(files.map(f => f.path)); }} />
               ) : (
-                <button data-action-btn="" style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }} title="Stage All"
-                  onClick={e => { e.stopPropagation(); onStageFiles(files.map(f => f.path)); }}>
-                  <Codicon name="add" />
-                </button>
+                <InlineIconBtn icon="add" title="Stage All" visible={hovered} onClick={e => { e.stopPropagation(); onStageFiles(files.map(f => f.path)); }} />
               )}
               <span style={repoCountStyle}>{files.length}</span>
             </div>
@@ -455,34 +415,13 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
       {/* Right side always rendered to avoid layout shift */}
       <div style={repoActionsStyle}>
         {onOpenChanges && openChangesIcon && (
-          <button
-            data-action-btn=""
-            style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-            title={openChangesTitle}
-            onClick={e => { e.stopPropagation(); onOpenChanges(); }}
-          >
-            <Codicon name={openChangesIcon} />
-          </button>
+          <InlineIconBtn icon={openChangesIcon} title={openChangesTitle ?? ''} visible={hovered} onClick={e => { e.stopPropagation(); onOpenChanges(); }} />
         )}
         {onSecondAction && secondActionIcon && (
-          <button
-            data-action-btn=""
-            style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-            title={secondActionTitle}
-            onClick={e => { e.stopPropagation(); onSecondAction(); }}
-          >
-            <Codicon name={secondActionIcon} />
-          </button>
+          <InlineIconBtn icon={secondActionIcon} title={secondActionTitle ?? ''} visible={hovered} onClick={e => { e.stopPropagation(); onSecondAction(); }} />
         )}
         {onAction && actionIcon && (
-          <button
-            data-action-btn=""
-            style={{ ...actionBtnStyle, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-            title={actionTitle}
-            onClick={e => { e.stopPropagation(); onAction(); }}
-          >
-            <Codicon name={actionIcon} />
-          </button>
+          <InlineIconBtn icon={actionIcon} title={actionTitle ?? ''} visible={hovered} onClick={e => { e.stopPropagation(); onAction(); }} />
         )}
         <span style={sectionCountStyle}>{count}</span>
       </div>
@@ -794,11 +733,6 @@ const repoActionsStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '0', flexShrink: 0, paddingRight: '8px',
 };
 
-const actionBtnStyle: React.CSSProperties = {
-  background: 'transparent', border: 'none', cursor: 'pointer',
-  color: 'var(--vscode-foreground)', opacity: 0.7,
-  padding: '2px 2px', borderRadius: '3px', display: 'flex', alignItems: 'center',
-};
 
 const treeDirStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', minHeight: '22px',

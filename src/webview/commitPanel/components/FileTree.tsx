@@ -4,6 +4,7 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 
 interface Props {
   repoId: string;
@@ -170,16 +171,7 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
           <span style={styles.folderName}>{node.name}</span>
         </div>
         <div style={styles.rowActions}>
-          {hovered && (
-            <button
-              data-action-btn=""
-              style={styles.actionBtn}
-              title="Rollback all files in folder"
-              onClick={(e) => { e.stopPropagation(); onRollback(allFiles); }}
-            >
-              <Codicon name="discard" />
-            </button>
-          )}
+          <InlineIconBtn icon="discard" title="Rollback all files in folder" visible={hovered} onClick={(e) => { e.stopPropagation(); onRollback(allFiles); }} />
           <span style={styles.dirCount}>{allFiles.length}</span>
         </div>
       </div>
@@ -235,33 +227,12 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
         {depth === 0 && dir && <span style={styles.dirPath} title={dir}>{dir}</span>}
       </div>
       <div style={styles.rowActions}>
-        {hovered && !isSubmodule && <>
+        {!isSubmodule && <>
           {file.status === 'conflicted' && (
-            <button
-              data-action-btn=""
-              style={{ ...styles.actionBtn, color: 'var(--vscode-gitDecoration-conflictingResourceForeground)' }}
-              title="Resolve Conflicts"
-              onClick={(e) => { e.stopPropagation(); onResolveMerge(file); }}
-            >
-              <Codicon name="git-merge" />
-            </button>
+            <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={(e) => { e.stopPropagation(); onResolveMerge(file); }} />
           )}
-          <button
-            data-action-btn=""
-            style={styles.actionBtn}
-            title="Open file"
-            onClick={(e) => { e.stopPropagation(); onOpenFile(file); }}
-          >
-            <Codicon name="go-to-file" />
-          </button>
-          <button
-            data-action-btn=""
-            style={styles.actionBtn}
-            title="Rollback"
-            onClick={(e) => { e.stopPropagation(); onRollback([file]); }}
-          >
-            <Codicon name="discard" />
-          </button>
+          <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={(e) => { e.stopPropagation(); onOpenFile(file); }} />
+          <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={(e) => { e.stopPropagation(); onRollback([file]); }} />
         </>}
         <span style={styles.statusLetter(color)}>{letter}</span>
       </div>
@@ -397,17 +368,5 @@ const styles = {
     marginLeft: 'auto',
     marginRight: '0',
     flexShrink: 0,
-  } as React.CSSProperties,
-  actionBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: 'var(--vscode-foreground)',
-    cursor: 'pointer',
-    padding: '2px 2px',
-    borderRadius: '3px',
-    fontSize: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    opacity: 0.7,
   } as React.CSSProperties,
 };

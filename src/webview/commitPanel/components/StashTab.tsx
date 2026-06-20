@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { StashEntry } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { FileIcon } from '../../shared/FileIcon';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import type { ViewMode } from '../store/commitStore';
@@ -275,19 +276,11 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
             })()}
           </span>
         </div>
-        {hovered && (
-          <div style={row.actions}>
-            <button style={row.btn} title="Pop (apply and drop)" onClick={e => { e.stopPropagation(); onPop(repoId, entry.ref); }}>
-              <Codicon name="git-stash-pop" />
-            </button>
-            <button style={{ ...row.btn, opacity: 0.5 }} title="Apply (keep stash)" onClick={e => { e.stopPropagation(); onApply(repoId, entry.ref); }}>
-              <Codicon name="git-stash-apply" />
-            </button>
-            <button style={{ ...row.btn, color: 'var(--vscode-errorForeground)' }} title="Drop stash" onClick={e => { e.stopPropagation(); onDrop(repoId, entry.ref); }}>
-              <Codicon name="trash" />
-            </button>
-          </div>
-        )}
+        <div style={row.actions}>
+          <InlineIconBtn icon="git-stash-pop" title="Pop (apply and drop)" visible={hovered} onClick={e => { e.stopPropagation(); onPop(repoId, entry.ref); }} />
+          <InlineIconBtn icon="git-stash-apply" title="Apply (keep stash)" visible={hovered} onClick={e => { e.stopPropagation(); onApply(repoId, entry.ref); }} />
+          <InlineIconBtn icon="trash" title="Drop stash" visible={hovered} danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.ref); }} />
+        </div>
       </div>
 
       {/* Expanded body */}
@@ -431,12 +424,6 @@ const row = {
   statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)', fontSize: '10px', opacity: 1 },
   statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)', fontSize: '10px', opacity: 1 },
   actions: { display: 'flex', gap: '2px', flexShrink: 0 } as React.CSSProperties,
-  btn: {
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    padding: '2px 4px', borderRadius: '3px', fontSize: '13px',
-    display: 'flex', alignItems: 'center', opacity: 0.65,
-    color: 'var(--vscode-foreground)',
-  } as React.CSSProperties,
   fileList: {
     display: 'flex', flexDirection: 'column' as const,
     borderTop: '1px solid var(--vscode-panel-border)',

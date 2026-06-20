@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { UnpushedCommit } from '../../shared/msgTypes';
 import type { RepoStatus, RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   onOpenDetail: (repoId: string, hash: string) => void;
   onOpenChanges: (repoId: string, hash: string) => void;
   onExplainCommit: (repoId: string, hash: string) => void;
+  onViewCombinedDiff: (repoId: string, hashes: string[]) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
 }
@@ -172,7 +174,7 @@ function MenuItem({ icon, label, danger, onClick }: { icon: string; label: strin
   );
 }
 
-function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onOpenChanges, onExplain, aiEnabled, onClose }: {
+function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onOpenChanges, onViewCombinedDiff, onExplain, aiEnabled, onClose }: {
   state: CommitCtxMenuState;
   onSquash: () => void;
   onDropCommits: () => void;
@@ -184,6 +186,7 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
   onViewInLog: () => void;
   onOpenDetail: () => void;
   onOpenChanges: () => void;
+  onViewCombinedDiff: () => void;
   onExplain: () => void;
   aiEnabled: boolean;
   onClose: () => void;
@@ -245,6 +248,8 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
       )}
       {n >= 2 && (
         <>
+          <MenuItem icon="diff-multiple" label={`View Combined Diff`} onClick={wrap(onViewCombinedDiff)} />
+          <div style={ctxStyles.separator} />
           <MenuItem icon="discard" label={`Revert ${n} commits`} onClick={wrap(onRevertCommits)} />
           <div style={ctxStyles.separator} />
           <MenuItem icon="trash" label={`Drop ${n} commits`} danger onClick={wrap(onDropCommits)} />
@@ -323,28 +328,10 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
       </span>
       <div style={styles.commitActions(hovered || isSelected)}>
         {isHead && (
-          <button
-            style={styles.actionBtn}
-            title="Undo this commit (keeps changes as unstaged)"
-            onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }}
-          >
-            <Codicon name="arrow-left" style={{ fontSize: '16px' }} />
-          </button>
+          <InlineIconBtn icon="arrow-left" title="Undo this commit (keeps changes as unstaged)" visible={hovered || isSelected} onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }} />
         )}
-        <button
-          style={styles.actionBtn}
-          title="Open Changes"
-          onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }}
-        >
-          <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
-        </button>
-        <button
-          style={styles.actionBtn}
-          title="Open in Log"
-          onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }}
-        >
-          <Codicon name="go-to-file" style={{ fontSize: '16px' }} />
-        </button>
+        <InlineIconBtn icon="diff-multiple" title="Open Changes" visible={hovered || isSelected} onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }} />
+        <InlineIconBtn icon="go-to-file" title="Open in Log" visible={hovered || isSelected} onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }} />
       </div>
     </div>
   );
@@ -353,7 +340,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onBranchClick, aiEnabled, singleRepo }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -369,6 +356,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onOpenDetail: (repoId: string, hash: string) => void;
   onOpenChanges: (repoId: string, hash: string) => void;
   onExplainCommit: (repoId: string, hash: string) => void;
+  onViewCombinedDiff: (repoId: string, hashes: string[]) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
   singleRepo?: boolean;
@@ -376,6 +364,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   const [expanded, setExpanded] = useState(true);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<CommitCtxMenuState | null>(null);
+  const [headerHovered, setHeaderHovered] = useState(false);
 
   const rawName = repoMeta?.name ?? repoStatus.repoId.split('/').pop() ?? repoStatus.repoId;
   const isWorktree = repoMeta?.isWorktree;
@@ -490,6 +479,12 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
     setMultiSelectHashes(new Set());
   };
 
+  const handleViewCombinedDiff = () => {
+    if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
+    const { hashes } = getOrderedSelection();
+    onViewCombinedDiff(repoStatus.repoId, hashes);
+  };
+
   // Clear selection when clicking outside commit list
   const handleBodyClick = (e: React.MouseEvent) => {
     if (!(e.target as HTMLElement).closest('[data-commit-row]')) {
@@ -500,7 +495,11 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   return (
     <div style={styles.repoRoot}>
       {/* Repo header */}
-      <div style={styles.repoHeader(repoColor, singleRepo)}>
+      <div
+        style={styles.repoHeader(repoColor, singleRepo)}
+        onMouseEnter={() => setHeaderHovered(true)}
+        onMouseLeave={() => setHeaderHovered(false)}
+      >
         {!singleRepo && (
           <input
             type="checkbox"
@@ -527,24 +526,34 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             <Codicon name={worktreeBranch ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
             <span style={styles.branchName}>{branchLabel}</span>
           </span>
-          {commitCount > 0 && (
-            <span style={styles.aheadBadge}>
-              <Codicon name="arrow-up" style={{ fontSize: '10px', marginRight: '2px' }} />
-              {commitCount}
-            </span>
-          )}
-          {behind > 0 && commitCount === 0 && (
-            <span style={styles.behindBadge}>
-              <Codicon name="arrow-down" style={{ fontSize: '10px', marginRight: '2px' }} />
-              {behind}
-            </span>
-          )}
-          {!hasUpstream && commitCount === 0 && (
-            <span style={styles.publishBadge}>
-              <Codicon name="cloud-upload" style={{ fontSize: '10px', marginRight: '3px' }} />
-              Unpublished
-            </span>
-          )}
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+            {commits.length >= 2 && (
+              <InlineIconBtn
+                visible={headerHovered}
+                icon="diff-multiple"
+                title="View Combined Diff"
+                onClick={e => { e.stopPropagation(); onViewCombinedDiff(repoStatus.repoId, commits.map(c => c.hash)); }}
+              />
+            )}
+            {commitCount > 0 && (
+              <span style={styles.aheadBadge}>
+                <Codicon name="arrow-up" style={{ fontSize: '10px', marginRight: '2px' }} />
+                {commitCount}
+              </span>
+            )}
+            {behind > 0 && commitCount === 0 && (
+              <span style={styles.behindBadge}>
+                <Codicon name="arrow-down" style={{ fontSize: '10px', marginRight: '2px' }} />
+                {behind}
+              </span>
+            )}
+            {!hasUpstream && commitCount === 0 && (
+              <span style={styles.publishBadge}>
+                <Codicon name="cloud-upload" style={{ fontSize: '10px', marginRight: '3px' }} />
+                Unpublished
+              </span>
+            )}
+          </span>
         </div>
       </div>
 
@@ -612,6 +621,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           onViewInLog={handleViewInLog}
           onOpenDetail={handleOpenDetail}
           onOpenChanges={handleOpenChanges}
+          onViewCombinedDiff={handleViewCombinedDiff}
           onExplain={handleExplain}
           aiEnabled={aiEnabled}
           onClose={() => { setCtxMenu(null); setMultiSelectHashes(new Set()); }}
@@ -623,7 +633,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onBranchClick, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
@@ -701,6 +711,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             onOpenDetail={onOpenDetail}
             onOpenChanges={onOpenChanges}
             onExplainCommit={onExplainCommit}
+            onViewCombinedDiff={onViewCombinedDiff}
             onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
             singleRepo
@@ -754,6 +765,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             onOpenDetail={onOpenDetail}
             onOpenChanges={onOpenChanges}
             onExplainCommit={onExplainCommit}
+            onViewCombinedDiff={onViewCombinedDiff}
             onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
           />
@@ -860,7 +872,7 @@ const styles = {
   repoRoot: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center',
-    padding: '4px 8px', minHeight: '26px',
+    padding: '0 8px', height: '26px',
     background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
     borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
@@ -885,19 +897,19 @@ const styles = {
     display: 'inline-flex', alignItems: 'center',
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
     borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 'bold' as const,
-    flexShrink: 0, marginLeft: 'auto',
+    flexShrink: 0,
   } as React.CSSProperties,
   behindBadge: {
     display: 'inline-flex', alignItems: 'center',
     background: 'var(--vscode-inputValidation-warningBackground, #6b4f00)', color: 'var(--vscode-inputValidation-warningForeground, #cca700)',
     borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 'bold' as const,
-    flexShrink: 0, marginLeft: 'auto',
+    flexShrink: 0,
   } as React.CSSProperties,
   publishBadge: {
     display: 'inline-flex', alignItems: 'center',
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
     borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 500 as const,
-    flexShrink: 0, marginLeft: 'auto',
+    flexShrink: 0,
   } as React.CSSProperties,
   branchBadge: (color: string): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: '3px',
@@ -968,10 +980,4 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: '4px', alignSelf: 'center',
     opacity: visible ? 1 : 0, transition: 'opacity 0.1s',
   }),
-  actionBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'transparent', border: 'none',
-    color: 'var(--vscode-foreground)',
-    cursor: 'pointer', padding: '2px', borderRadius: '3px', opacity: 0.65,
-  } as React.CSSProperties,
 };

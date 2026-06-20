@@ -934,6 +934,10 @@ function App() {
     send({ type: 'PUSH_EXPLAIN_COMMIT', repoId, hash } satisfies CommitToHostMsg);
   };
 
+  const doPushViewCombinedDiff = (repoId: string, hashes: string[]) => {
+    send({ type: 'PUSH_VIEW_COMBINED_DIFF', repoId, hashes } satisfies CommitToHostMsg);
+  };
+
   const doUndoCommit = (repoId: string) => {
     send({ type: 'COMMIT_UNDO_COMMIT', requestId: generateId(), repoId });
   };
@@ -1635,6 +1639,7 @@ function App() {
               onOpenDetail={doPushOpenDetail}
               onOpenChanges={doPushOpenChanges}
               onExplainCommit={doPushExplainCommit}
+              onViewCombinedDiff={doPushViewCombinedDiff}
               onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
               aiEnabled={store.aiEnabled}
             />

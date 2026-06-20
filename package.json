@@ -338,29 +338,75 @@
         }
       ],
       "commandPalette": [
-        { "command": "gitcharm.openLog" },
-        { "command": "gitcharm.showBranchMenu" },
-        { "command": "gitcharm.commit" },
-        { "command": "gitcharm.fetchAll" },
-        { "command": "gitcharm.updateProject" },
-        { "command": "gitcharm.push" },
-        { "command": "gitcharm.syncAll" },
-        { "command": "gitcharm.refreshCommitPanel" },
-        { "command": "gitcharm.reloadRepositories" },
-        { "command": "gitcharm.openMergeEditor" },
-        { "command": "gitcharm.manageHiddenRepos" },
-        { "command": "gitcharm.manageProfiles" },
-        { "command": "gitcharm.switchProfile" },
-        { "command": "gitcharm.selectAiModel" },
-        { "command": "gitcharm.undock" },
-        { "command": "gitcharm.submodule.init" },
-        { "command": "gitcharm.submodule.update" },
-        { "command": "gitcharm.submodule.updateRecursive" },
-        { "command": "gitcharm.submodule.deinit" },
-        { "command": "gitcharm.submodule.deinitForce" },
-        { "command": "gitcharm.submodule.openInNewWindow" },
-        { "command": "gitcharm.worktree.add" },
-        { "command": "gitcharm.worktree.prune" },
+        {
+          "command": "gitcharm.openLog"
+        },
+        {
+          "command": "gitcharm.showBranchMenu"
+        },
+        {
+          "command": "gitcharm.commit"
+        },
+        {
+          "command": "gitcharm.fetchAll"
+        },
+        {
+          "command": "gitcharm.updateProject"
+        },
+        {
+          "command": "gitcharm.push"
+        },
+        {
+          "command": "gitcharm.syncAll"
+        },
+        {
+          "command": "gitcharm.refreshCommitPanel"
+        },
+        {
+          "command": "gitcharm.reloadRepositories"
+        },
+        {
+          "command": "gitcharm.openMergeEditor"
+        },
+        {
+          "command": "gitcharm.manageHiddenRepos"
+        },
+        {
+          "command": "gitcharm.manageProfiles"
+        },
+        {
+          "command": "gitcharm.switchProfile"
+        },
+        {
+          "command": "gitcharm.selectAiModel"
+        },
+        {
+          "command": "gitcharm.undock"
+        },
+        {
+          "command": "gitcharm.submodule.init"
+        },
+        {
+          "command": "gitcharm.submodule.update"
+        },
+        {
+          "command": "gitcharm.submodule.updateRecursive"
+        },
+        {
+          "command": "gitcharm.submodule.deinit"
+        },
+        {
+          "command": "gitcharm.submodule.deinitForce"
+        },
+        {
+          "command": "gitcharm.submodule.openInNewWindow"
+        },
+        {
+          "command": "gitcharm.worktree.add"
+        },
+        {
+          "command": "gitcharm.worktree.prune"
+        },
         {
           "command": "gitcharm.openGitAnnotations",
           "when": "resourceScheme == file && config.gitcharm.gitAnnotations.enabled"
@@ -369,15 +415,30 @@
           "command": "gitcharm.closeGitAnnotations",
           "when": "resourceScheme == file && gitcharm.annotationsVisible"
         },
-        { "command": "gitcharm.navigateToAnnotationCommit", "when": "false" },
+        {
+          "command": "gitcharm.navigateToAnnotationCommit",
+          "when": "false"
+        },
         {
           "command": "gitcharm.showFileHistory",
           "when": "resourceScheme == file"
         },
-        { "command": "gitcharm.commitAndPush", "when": "false" },
-        { "command": "gitcharm.pull", "when": "false" },
-        { "command": "gitcharm.openSettings", "when": "false" },
-        { "command": "gitcharm.showBranchOptions", "when": "false" }
+        {
+          "command": "gitcharm.commitAndPush",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.pull",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.openSettings",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.showBranchOptions",
+          "when": "false"
+        }
       ],
       "editor/lineNumber/context": [
         {
@@ -474,280 +535,290 @@
     ],
     "configuration": [
       {
-      "title": "Basic Settings",
-      "properties": {
-        "gitcharm.graphMaxCommits": {
-          "order": 80,
-          "type": "number",
-          "default": 1000,
-          "minimum": 100,
-          "maximum": 10000,
-          "description": "Maximum commits to load in the Git Log graph"
-        },
-        "gitcharm.repositoryScanMaxDepth": {
-          "order": 60,
-          "type": "number",
-          "default": 1,
-          "minimum": 0,
-          "maximum": 10,
-          "description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders)."
-        },
-        "gitcharm.repositoryScanIgnoredFolders": {
-          "order": 70,
-          "type": "array",
-          "default": [
-            "node_modules"
-          ],
-          "items": {
-            "type": "string"
+        "title": "Basic Settings",
+        "properties": {
+          "gitcharm.graphMaxCommits": {
+            "order": 80,
+            "type": "number",
+            "default": 1000,
+            "minimum": 100,
+            "maximum": 10000,
+            "description": "Maximum commits to load in the Git Log graph"
           },
-          "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
-        },
-        "gitcharm.fetchOnStartup": {
-          "order": 40,
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically fetch all remotes when the extension activates"
-        },
-        "gitcharm.notifyOnIncomingCommits": {
-          "order": 50,
-          "type": "boolean",
-          "default": true,
-          "description": "Show a notification on startup when there are incoming commits available to pull"
-        },
-        "gitcharm.notifyOnUnpushedCommits": {
-          "order": 55,
-          "type": "boolean",
-          "default": true,
-          "description": "Show a notification on startup when there are unpushed commits ready to push"
-        },
-        "gitcharm.projectColors": {
-          "order": 110,
-          "type": "object",
-          "default": {},
-          "description": "Map of workspace folder/repository name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
-        },
-        "gitcharm.autoRefreshInterval": {
-          "order": 30,
-          "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "description": "Auto-refresh interval in seconds (0 = disabled, use file watchers only)"
-        },
-        "gitcharm.gitAnnotations.enabled": {
-          "order": 90,
-          "type": "boolean",
-          "default": true,
-          "description": "Enable Git Annotations in the editor."
-        },
-        "gitcharm.gitGhostText.enabled": {
-          "order": 100,
-          "type": "boolean",
-          "default": true,
-          "description": "Enable inline Git ghost text in the editor."
-        },
-        "gitcharm.changesViewMode": {
-          "order": 10,
-          "type": "string",
-          "enum": [
-            "simplified",
-            "changelists",
-            "vscode"
-          ],
-          "enumDescriptions": [
-            "Show Staged and Unstaged sections per repository (default behavior)",
-            "Show files grouped by Changelists, similar to PhpStorm",
-            "Show Staged Changes / Changes sections like native VS Code, with inline stage/unstage buttons"
-          ],
-          "default": "simplified",
-          "description": "How to display changed files in the Changes tab."
-        },
-        "gitcharm.promptAddUntrackedToGit": {
-          "order": 25,
-          "type": "boolean",
-          "default": true,
-          "description": "Show a prompt when new untracked files are detected, offering to add them to Git."
-        },
-        "gitcharm.defaultCommitAction": {
-          "order": 20,
-          "type": "string",
-          "enum": [
-            "commit",
-            "commitAndPush"
-          ],
-          "enumDescriptions": [
-            "The main button commits without pushing",
-            "The main button commits and pushes immediately"
-          ],
-          "default": "commit",
-          "description": "Default action for the commit button in the Commit Panel."
-        },
-        "gitcharm.defaultSaveAction": {
-          "order": 21,
-          "type": "string",
-          "enum": [
-            "stash",
-            "shelve"
-          ],
-          "enumDescriptions": [
-            "The main Save button stashes selected changes",
-            "The main Save button shelves selected changes"
-          ],
-          "default": "stash",
-          "description": "Default action for the Save button in the Commit Panel."
-        },
-        "gitcharm.suppressDivergedBranchWarning": {
-          "order": 35,
-          "type": "boolean",
-          "default": false,
-          "description": "Suppress the 'Branches have diverged' warning in the Git Menu and status bar."
+          "gitcharm.repositoryScanMaxDepth": {
+            "order": 60,
+            "type": "number",
+            "default": 1,
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders)."
+          },
+          "gitcharm.repositoryScanIgnoredFolders": {
+            "order": 70,
+            "type": "array",
+            "default": [
+              "node_modules"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
+          },
+          "gitcharm.fetchOnStartup": {
+            "order": 40,
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically fetch all remotes when the extension activates"
+          },
+          "gitcharm.notifyOnIncomingCommits": {
+            "order": 50,
+            "type": "boolean",
+            "default": true,
+            "description": "Show a notification on startup when there are incoming commits available to pull"
+          },
+          "gitcharm.notifyOnUnpushedCommits": {
+            "order": 55,
+            "type": "boolean",
+            "default": true,
+            "description": "Show a notification on startup when there are unpushed commits ready to push"
+          },
+          "gitcharm.projectColors": {
+            "order": 110,
+            "type": "object",
+            "default": {},
+            "description": "Map of workspace folder/repository name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
+          },
+          "gitcharm.autoRefreshInterval": {
+            "order": 30,
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "description": "Auto-refresh interval in seconds (0 = disabled, use file watchers only)"
+          },
+          "gitcharm.gitAnnotations.enabled": {
+            "order": 90,
+            "type": "boolean",
+            "default": true,
+            "description": "Enable Git Annotations in the editor."
+          },
+          "gitcharm.gitGhostText.enabled": {
+            "order": 100,
+            "type": "boolean",
+            "default": true,
+            "description": "Enable inline Git ghost text in the editor."
+          },
+          "gitcharm.changesViewMode": {
+            "order": 10,
+            "type": "string",
+            "enum": [
+              "simplified",
+              "changelists",
+              "vscode"
+            ],
+            "enumDescriptions": [
+              "Show Staged and Unstaged sections per repository (default behavior)",
+              "Show files grouped by Changelists, similar to PhpStorm",
+              "Show Staged Changes / Changes sections like native VS Code, with inline stage/unstage buttons"
+            ],
+            "default": "simplified",
+            "description": "How to display changed files in the Changes tab."
+          },
+          "gitcharm.promptAddUntrackedToGit": {
+            "order": 25,
+            "type": "boolean",
+            "default": true,
+            "description": "Show a prompt when new untracked files are detected, offering to add them to Git."
+          },
+          "gitcharm.defaultCommitAction": {
+            "order": 20,
+            "type": "string",
+            "enum": [
+              "commit",
+              "commitAndPush"
+            ],
+            "enumDescriptions": [
+              "The main button commits without pushing",
+              "The main button commits and pushes immediately"
+            ],
+            "default": "commit",
+            "description": "Default action for the commit button in the Commit Panel."
+          },
+          "gitcharm.defaultSaveAction": {
+            "order": 21,
+            "type": "string",
+            "enum": [
+              "stash",
+              "shelve"
+            ],
+            "enumDescriptions": [
+              "The main Save button stashes selected changes",
+              "The main Save button shelves selected changes"
+            ],
+            "default": "stash",
+            "description": "Default action for the Save button in the Commit Panel."
+          },
+          "gitcharm.suppressDivergedBranchWarning": {
+            "order": 35,
+            "type": "boolean",
+            "default": false,
+            "description": "Suppress the 'Branches have diverged' warning in the Git Menu and status bar."
+          }
+        }
+      },
+      {
+        "title": "AI Settings",
+        "properties": {
+          "gitcharm.ai.enabled": {
+            "order": 0,
+            "type": "boolean",
+            "default": true,
+            "description": "Enable AI features in GitCharm (commit message generation, commit explanation). When disabled, all AI actions are hidden."
+          },
+          "gitcharm.ai.language": {
+            "order": 1,
+            "type": "string",
+            "default": "",
+            "markdownDescription": "Language for AI-generated text (e.g. `en`, `it`, `fr`, `de`). Leave empty to use the VS Code display language."
+          },
+          "gitcharm.ai.provider": {
+            "order": 2,
+            "type": "string",
+            "enum": [
+              "vscode-lm",
+              "claude-api",
+              "openai-api",
+              "gemini-api",
+              "claude-cli",
+              "codex-cli",
+              "gemini-cli",
+              "ollama",
+              "lmstudio"
+            ],
+            "enumDescriptions": [
+              "Use VS Code Language Model API (GitHub Copilot or any registered LM extension)",
+              "Use Anthropic API directly (requires API key)",
+              "Use OpenAI API directly (requires API key)",
+              "Use Google Gemini API directly (requires API key)",
+              "Use Claude CLI (claude --print)",
+              "Use Codex CLI (codex exec)",
+              "Use Gemini CLI (gemini -p)",
+              "Use a local Ollama model via HTTP API",
+              "Use a local LM Studio model via HTTP API"
+            ],
+            "default": "vscode-lm",
+            "description": "AI provider to use for all AI features."
+          },
+          "gitcharm.ai.modelId": {
+            "order": 2,
+            "type": "string",
+            "default": "",
+            "description": "VS Code LM model ID (e.g. 'copilot:gpt-4o'). Only used when provider is 'vscode-lm'. Leave empty to auto-select. Use the 'GitCharm: Select AI Model' command to pick interactively."
+          },
+          "gitcharm.ai.claudeApiKey": {
+            "order": 3,
+            "type": "string",
+            "default": "",
+            "description": "Anthropic API key. Only used when provider is 'claude-api'. Get your key at console.anthropic.com."
+          },
+          "gitcharm.ai.claudeModel": {
+            "order": 4,
+            "type": "string",
+            "default": "",
+            "description": "Claude model ID (e.g. 'claude-opus-4-7', 'claude-sonnet-4-6'). Used when provider is 'claude-api' or 'claude-cli'. Leave empty to use the default. Use the 'GitCharm: Select AI Model' command to pick interactively."
+          },
+          "gitcharm.ai.claudePath": {
+            "order": 5,
+            "type": "string",
+            "default": "claude",
+            "description": "Path to the Claude CLI binary. Only used when provider is 'claude-cli'. Defaults to 'claude' (must be on PATH)."
+          },
+          "gitcharm.ai.openaiApiKey": {
+            "order": 6,
+            "type": "string",
+            "default": "",
+            "description": "OpenAI API key. Only used when provider is 'openai-api'. Get your key at platform.openai.com."
+          },
+          "gitcharm.ai.openaiModel": {
+            "order": 7,
+            "type": "string",
+            "default": "gpt-4o",
+            "description": "OpenAI model ID (e.g. 'gpt-4o', 'gpt-4o-mini', 'o3'). Only used when provider is 'openai-api'."
+          },
+          "gitcharm.ai.geminiApiKey": {
+            "order": 8,
+            "type": "string",
+            "default": "",
+            "description": "Google Gemini API key. Only used when provider is 'gemini-api'. Get your key at aistudio.google.com."
+          },
+          "gitcharm.ai.geminiModel": {
+            "order": 9,
+            "type": "string",
+            "default": "gemini-2.0-flash",
+            "description": "Gemini model ID (e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'). Used when provider is 'gemini-api' or 'gemini-cli'."
+          },
+          "gitcharm.ai.geminiPath": {
+            "order": 10,
+            "type": "string",
+            "default": "gemini",
+            "description": "Path to the Gemini CLI binary. Only used when provider is 'gemini-cli'. Defaults to 'gemini' (must be on PATH)."
+          },
+          "gitcharm.ai.codexModel": {
+            "order": 11,
+            "type": "string",
+            "default": "",
+            "description": "Codex model ID to use (e.g. 'o3', 'o4-mini'). Only used when provider is 'codex-cli'. Leave empty to use the CLI default. Use the 'GitCharm: Select AI Model' command to pick interactively."
+          },
+          "gitcharm.ai.codexPath": {
+            "order": 9,
+            "type": "string",
+            "default": "codex",
+            "description": "Path to the Codex CLI binary. Only used when provider is 'codex-cli'. Defaults to 'codex' (must be on PATH)."
+          },
+          "gitcharm.ai.lmStudioModel": {
+            "order": 7,
+            "type": "string",
+            "default": "",
+            "description": "LM Studio model identifier. Only used when provider is 'lmstudio'. Leave empty to use the currently loaded model. Use the 'GitCharm: Select AI Model' command to pick interactively."
+          },
+          "gitcharm.ai.lmStudioUrl": {
+            "order": 8,
+            "type": "string",
+            "default": "http://localhost:1234",
+            "description": "Base URL of the LM Studio local server. Only used when provider is 'lmstudio'."
+          },
+          "gitcharm.ai.ollamaModel": {
+            "order": 11,
+            "type": "string",
+            "default": "llama3",
+            "description": "Ollama model name (e.g. 'llama3', 'mistral', 'qwen3.5:9b'). Only used when provider is 'ollama'."
+          },
+          "gitcharm.ai.ollamaUrl": {
+            "order": 12,
+            "type": "string",
+            "default": "http://localhost:11434",
+            "description": "Base URL of the Ollama API. Only used when provider is 'ollama'."
+          },
+          "gitcharm.ai.maxDiffChars": {
+            "order": 13,
+            "type": "number",
+            "default": 8000,
+            "minimum": 1000,
+            "maximum": 100000,
+            "description": "Maximum characters of git diff to send to the AI model. Larger values give more context but consume more tokens."
+          }
+        }
+      },
+      {
+        "title": "Experimental",
+        "properties": {
+          "gitcharm.resetViewLocationsOnStartup": {
+            "order": 1,
+            "type": "boolean",
+            "default": false,
+            "description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally."
+          }
         }
       }
-    },
-    {
-      "title": "AI Settings",
-      "properties": {
-        "gitcharm.ai.enabled": {
-          "order": 0,
-          "type": "boolean",
-          "default": true,
-          "description": "Enable AI features in GitCharm (commit message generation, commit explanation). When disabled, all AI actions are hidden."
-        },
-        "gitcharm.ai.language": {
-          "order": 1,
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Language for AI-generated text (e.g. `en`, `it`, `fr`, `de`). Leave empty to use the VS Code display language."
-        },
-        "gitcharm.ai.provider": {
-          "order": 2,
-          "type": "string",
-          "enum": ["vscode-lm", "claude-api", "openai-api", "gemini-api", "claude-cli", "codex-cli", "gemini-cli", "ollama", "lmstudio"],
-          "enumDescriptions": [
-            "Use VS Code Language Model API (GitHub Copilot or any registered LM extension)",
-            "Use Anthropic API directly (requires API key)",
-            "Use OpenAI API directly (requires API key)",
-            "Use Google Gemini API directly (requires API key)",
-            "Use Claude CLI (claude --print)",
-            "Use Codex CLI (codex exec)",
-            "Use Gemini CLI (gemini -p)",
-            "Use a local Ollama model via HTTP API",
-            "Use a local LM Studio model via HTTP API"
-          ],
-          "default": "vscode-lm",
-          "description": "AI provider to use for all AI features."
-        },
-        "gitcharm.ai.modelId": {
-          "order": 2,
-          "type": "string",
-          "default": "",
-          "description": "VS Code LM model ID (e.g. 'copilot:gpt-4o'). Only used when provider is 'vscode-lm'. Leave empty to auto-select. Use the 'GitCharm: Select AI Model' command to pick interactively."
-        },
-        "gitcharm.ai.claudeApiKey": {
-          "order": 3,
-          "type": "string",
-          "default": "",
-          "description": "Anthropic API key. Only used when provider is 'claude-api'. Get your key at console.anthropic.com."
-        },
-        "gitcharm.ai.claudeModel": {
-          "order": 4,
-          "type": "string",
-          "default": "",
-          "description": "Claude model ID (e.g. 'claude-opus-4-7', 'claude-sonnet-4-6'). Used when provider is 'claude-api' or 'claude-cli'. Leave empty to use the default. Use the 'GitCharm: Select AI Model' command to pick interactively."
-        },
-        "gitcharm.ai.claudePath": {
-          "order": 5,
-          "type": "string",
-          "default": "claude",
-          "description": "Path to the Claude CLI binary. Only used when provider is 'claude-cli'. Defaults to 'claude' (must be on PATH)."
-        },
-        "gitcharm.ai.openaiApiKey": {
-          "order": 6,
-          "type": "string",
-          "default": "",
-          "description": "OpenAI API key. Only used when provider is 'openai-api'. Get your key at platform.openai.com."
-        },
-        "gitcharm.ai.openaiModel": {
-          "order": 7,
-          "type": "string",
-          "default": "gpt-4o",
-          "description": "OpenAI model ID (e.g. 'gpt-4o', 'gpt-4o-mini', 'o3'). Only used when provider is 'openai-api'."
-        },
-        "gitcharm.ai.geminiApiKey": {
-          "order": 8,
-          "type": "string",
-          "default": "",
-          "description": "Google Gemini API key. Only used when provider is 'gemini-api'. Get your key at aistudio.google.com."
-        },
-        "gitcharm.ai.geminiModel": {
-          "order": 9,
-          "type": "string",
-          "default": "gemini-2.0-flash",
-          "description": "Gemini model ID (e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'). Used when provider is 'gemini-api' or 'gemini-cli'."
-        },
-        "gitcharm.ai.geminiPath": {
-          "order": 10,
-          "type": "string",
-          "default": "gemini",
-          "description": "Path to the Gemini CLI binary. Only used when provider is 'gemini-cli'. Defaults to 'gemini' (must be on PATH)."
-        },
-        "gitcharm.ai.codexModel": {
-          "order": 11,
-          "type": "string",
-          "default": "",
-          "description": "Codex model ID to use (e.g. 'o3', 'o4-mini'). Only used when provider is 'codex-cli'. Leave empty to use the CLI default. Use the 'GitCharm: Select AI Model' command to pick interactively."
-        },
-        "gitcharm.ai.codexPath": {
-          "order": 9,
-          "type": "string",
-          "default": "codex",
-          "description": "Path to the Codex CLI binary. Only used when provider is 'codex-cli'. Defaults to 'codex' (must be on PATH)."
-        },
-        "gitcharm.ai.lmStudioModel": {
-          "order": 7,
-          "type": "string",
-          "default": "",
-          "description": "LM Studio model identifier. Only used when provider is 'lmstudio'. Leave empty to use the currently loaded model. Use the 'GitCharm: Select AI Model' command to pick interactively."
-        },
-        "gitcharm.ai.lmStudioUrl": {
-          "order": 8,
-          "type": "string",
-          "default": "http://localhost:1234",
-          "description": "Base URL of the LM Studio local server. Only used when provider is 'lmstudio'."
-        },
-        "gitcharm.ai.ollamaModel": {
-          "order": 11,
-          "type": "string",
-          "default": "llama3",
-          "description": "Ollama model name (e.g. 'llama3', 'mistral', 'qwen3.5:9b'). Only used when provider is 'ollama'."
-        },
-        "gitcharm.ai.ollamaUrl": {
-          "order": 12,
-          "type": "string",
-          "default": "http://localhost:11434",
-          "description": "Base URL of the Ollama API. Only used when provider is 'ollama'."
-        },
-        "gitcharm.ai.maxDiffChars": {
-          "order": 13,
-          "type": "number",
-          "default": 8000,
-          "minimum": 1000,
-          "maximum": 100000,
-          "description": "Maximum characters of git diff to send to the AI model. Larger values give more context but consume more tokens."
-        }
-      }
-    },
-    {
-      "title": "Experimental",
-      "properties": {
-        "gitcharm.resetViewLocationsOnStartup": {
-          "order": 1,
-          "type": "boolean",
-          "default": false,
-          "description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally."
-        }
-      }
-    }
     ]
   },
   "scripts": {
@@ -765,6 +836,7 @@
     "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json"
   },
   "dependencies": {
+    "prismjs": "^1.30.0",
     "simple-git": "^3.22.0"
   },
   "devDependencies": {

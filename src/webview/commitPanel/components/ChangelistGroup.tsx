@@ -5,6 +5,7 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
 import { Codicon } from '../../shared/Codicon';
+import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 
 export interface RepoFileGroup {
@@ -277,14 +278,7 @@ function RepoSubGroup({
               </span>
             )}
             <div style={styles.repoRightGroup}>
-              <button
-                data-action-btn=""
-                style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-                title="Open all changes"
-                onClick={e => { e.stopPropagation(); onOpenChanges(repoId); }}
-              >
-                <Codicon name="diff-multiple" />
-              </button>
+              <OpenChangesBtn visible={hovered && totalFiles > 0} onClick={e => { e.stopPropagation(); onOpenChanges(repoId); }} />
               {totalFiles > 0 && (
                 <span style={styles.repoCountBadge(selectedCount > 0)}>
                   {selectedCount}/{totalFiles}
@@ -498,18 +492,6 @@ const styles = {
     gap: '1px',
     marginLeft: 'auto',
     flexShrink: 0,
-  } as React.CSSProperties,
-  openChangesBtn: {
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    color: 'var(--vscode-foreground)',
-    opacity: 0.7,
-    padding: '2px 2px',
-    display: 'flex',
-    alignItems: 'center',
-    flexShrink: 0,
-    borderRadius: '3px',
   } as React.CSSProperties,
   repoCountBadge: (hasSelected: boolean): React.CSSProperties => ({
     background: 'transparent',

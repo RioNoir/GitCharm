@@ -4,6 +4,7 @@ import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
 import { Codicon } from '../../shared/Codicon';
+import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 
 interface Props {
@@ -119,14 +120,7 @@ export function ProjectGroup({
           </span>
           {totalFiles > 0 && (
             <div style={styles.rightGroup}>
-              <button
-                data-action-btn=""
-                style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-                onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
-                title="Open all changes"
-              >
-                <Codicon name="diff-multiple" />
-              </button>
+              <OpenChangesBtn visible={hovered} onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }} />
               <span style={styles.countBadge(selectedCount > 0)}>
                 {selectedCount}/{totalFiles}
               </span>
@@ -218,14 +212,7 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
         </span>
         {!hideOpenChanges && (
           <div style={styles.rightGroup}>
-            <button
-              data-action-btn=""
-              style={{ ...styles.openChangesBtn, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none' }}
-              onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }}
-              title="Open all changes"
-            >
-              <Codicon name="diff-multiple" />
-            </button>
+            <OpenChangesBtn visible={hovered} onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }} />
           </div>
         )}
       </div>
@@ -344,18 +331,6 @@ const styles = {
     minWidth: '18px',
     textAlign: 'center',
   }),
-  openChangesBtn: {
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    color: 'var(--vscode-foreground)',
-    opacity: 0.45,
-    padding: '2px 4px',
-    display: 'flex',
-    alignItems: 'center',
-    flexShrink: 0,
-    borderRadius: '3px',
-  } as React.CSSProperties,
   body: {
     display: 'flex',
     flexDirection: 'column' as const,

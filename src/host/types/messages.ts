@@ -143,6 +143,7 @@ export type CommitToHostMsg =
   | { type: 'PUSH_OPEN_DETAIL'; repoId: string; hash: string }
   | { type: 'PUSH_OPEN_COMMIT_CHANGES'; repoId: string; hash: string }
   | { type: 'PUSH_EXPLAIN_COMMIT'; repoId: string; hash: string }
+  | { type: 'PUSH_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string; section?: 'staged' | 'unstaged' }
   | { type: 'COMMIT_OPEN_LOG'; hash: string; repoId: string }
   | { type: 'COMMIT_UNDO_COMMIT'; requestId: string; repoId: string }
@@ -281,7 +282,12 @@ export type LogToHostMsg =
   | { type: 'LOG_OPEN_EXTENDED_DETAIL'; repoId: string; hash: string }
   | { type: 'LOG_OPEN_COMMIT_CHANGES'; repoId: string; hash: string }
   | { type: 'LOG_EXPLAIN_COMMIT'; repoId: string; hash: string }
-  | { type: 'LOG_UNDOCK'; target: 'editorTab' | 'newWindow' | 'pick' };
+  | { type: 'LOG_STASH_POP'; requestId: string; repoId: string; stashRef: string }
+  | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
+  | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
+  | { type: 'LOG_UNDOCK'; target: 'editorTab' | 'newWindow' | 'pick' }
+  | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
+  | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string };
 
 // ─── Merge Editor: Host → WebView ────────────────────────────────────────────
 
