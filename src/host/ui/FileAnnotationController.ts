@@ -560,8 +560,11 @@ export class FileAnnotationController implements vscode.Disposable {
     const commandUri = `command:gitcharm.navigateToAnnotationCommit?${args}`;
 
     const md = new vscode.MarkdownString(
-      `**${escapeMarkdown(line.author)}** — ${formatDateFull(line.date)}\n\n` +
-      `\`${line.hash.slice(0, 8)}\` ${escapeMarkdown(line.summary)}\n\n` +
+      `$(git-commit) \`${line.hash.slice(0, 8)}\`\n\n` +
+      `---\n\n` +
+      `$(account) **${escapeMarkdown(line.author)}** &nbsp;·&nbsp; $(calendar) ${formatDateFull(line.date)}\n\n` +
+      `${escapeMarkdown(line.summary)}\n\n` +
+      `---\n\n` +
       `[$(history) Open in Git Log](${commandUri})`
     );
     md.isTrusted = true;
