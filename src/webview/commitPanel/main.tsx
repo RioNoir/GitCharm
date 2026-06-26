@@ -412,7 +412,7 @@ function App() {
 
       switch (msg.type) {
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
             let hasNewChanges = false;
@@ -1531,6 +1531,8 @@ function App() {
             onAutopilot={doAutopilot}
             onAutopilotContextMenu={doAutopilotContextMenu}
             generatingMessage={generatingMessage}
+            activeProfile={store.activeProfile}
+            onOpenProfiles={() => send({ type: 'OPEN_PROFILES_MENU' } satisfies CommitToHostMsg)}
             onShelve={() => {
               const name = store.commitMessage.trim();
               if (!name) return;

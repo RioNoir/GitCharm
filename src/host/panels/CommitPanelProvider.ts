@@ -30,6 +30,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private badgeController?: import('../ui/BadgeController').BadgeController;
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
+  private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -80,7 +81,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private readonly globalState?: vscode.Memento,
     private readonly workspaceState?: vscode.Memento
   ) {
-    this.manager.onStatusChange((status) => {
+    this.manager.onStatusChange(async (status) => {
+      await this.refreshActiveProfile();
       this.postChangelistsUpdate(status);
       this.broadcastCommit({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
     });
@@ -106,6 +108,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.manager.onWorktreeChange(async () => {
       const repos = await this.manager.getAllWorktrees();
       this.broadcastCommit({ type: 'WORKTREE_LIST_RESULT', repos });
+    });
+
+    this.profileService?.onProfileChange(async () => {
+      await this.refreshActiveProfile();
+      const status = await this.manager.getAllStatuses();
+      this.broadcastCommit({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
     });
   }
 
@@ -170,7 +178,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     });
 
     // Sync current state — send changelists first so setStatus can read the correct viewMode
-    this.manager.getAllStatuses().then(status => {
+    this.manager.getAllStatuses().then(async status => {
+      await this.refreshActiveProfile();
       this.postChangelistsUpdate(status);
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, fileViewMode: this.getFileViewMode() });
       this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: this.getHiddenRepoIds() });
@@ -221,6 +230,17 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     webviewView.onDidDispose(() => { configWatcher.dispose(); tabWatcher.dispose(); });
   }
 
+  private async refreshActiveProfile(): Promise<void> {
+    if (!this.profileService) return;
+    const repos = this.manager.getRepoMetas();
+    const repoPath = repos.find(m => !m.isSubmodule)?.rootPath ?? repos[0]?.rootPath;
+    if (!repoPath) return;
+    const result = await this.profileService.getEffectiveProfile(repoPath);
+    if (!result) { this.cachedActiveProfile = undefined; return; }
+    const { profile } = result;
+    this.cachedActiveProfile = { name: profile.name, gitName: profile.gitName, gitEmail: profile.gitEmail, ...(profile.builtIn ? { builtIn: profile.builtIn } : {}) };
+  }
+
   private enrichCommitMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
       const m = msg as typeof msg & { fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean };
@@ -229,6 +249,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       if (m.defaultSaveAction === undefined) m.defaultSaveAction = this.getDefaultSaveAction();
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = this.getAiEnabled();
+      if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
     }
   }
 
@@ -610,6 +631,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             this.postChangelistsUpdate(status);
           }
         );
+        break;
+      }
+
+      case 'OPEN_PROFILES_MENU': {
+        vscode.commands.executeCommand('gitcharm.manageProfiles');
         break;
       }
 

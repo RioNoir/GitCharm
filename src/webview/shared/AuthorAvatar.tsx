@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Codicon } from '../../shared/Codicon';
+import { Codicon } from './Codicon';
 
 interface Props {
   authorName: string;

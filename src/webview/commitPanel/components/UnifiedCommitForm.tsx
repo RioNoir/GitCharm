@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { RepoMeta, RepoStatus } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
+import { AuthorAvatar } from '../../shared/AuthorAvatar';
 
 interface Props {
   message: string;
@@ -26,6 +27,8 @@ interface Props {
   onAutopilot: () => void;
   onAutopilotContextMenu: (e: React.MouseEvent) => void;
   generatingMessage: boolean;
+  activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  onOpenProfiles: () => void;
 }
 
 interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; }
@@ -162,6 +165,7 @@ export function UnifiedCommitForm({
   message, repoStatuses, repoMetas, amendFlags,
   loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
+  activeProfile, onOpenProfiles,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const [textareaFocused, setTextareaFocused] = useState(false);
@@ -288,7 +292,7 @@ export function UnifiedCommitForm({
       {multiRepo && (
         <div style={styles.targets}>
           {commitTargets.length === 0 ? (
-            <span style={styles.noTargets}>No files selected</span>
+            <span style={styles.noTargets}>{changesViewMode === 'vscode' ? 'No files staged' : 'No files selected'}</span>
           ) : (
             commitTargets.map(r => {
               const meta = metaMap.get(r.repoId);
@@ -326,10 +330,26 @@ export function UnifiedCommitForm({
             type="checkbox"
             checked={amend}
             onChange={() => onAmendToggle(amendRepoId!)}
-            style={{ marginRight: '4px' }}
+            style={{ margin: '0 4px 0 0' }}
           />
           Amend last commit
         </label>
+      )}
+
+      {/* Active Git profile */}
+      {activeProfile && (
+        <div style={styles.profileBar}>
+          <button
+            style={styles.profileIcon}
+            title="Manage Git profiles"
+            onClick={onOpenProfiles}
+          >
+            <AuthorAvatar authorName={activeProfile.gitName} authorEmail={activeProfile.gitEmail} size={16} />
+          </button>
+          <span style={styles.profileName}>{activeProfile.gitName}</span>
+          <span style={{ flexShrink: 0 }}>·</span>
+          <span style={styles.profileEmail}>{activeProfile.gitEmail}</span>
+        </div>
       )}
 
       {/* Message textarea — auto-height */}
@@ -590,5 +610,35 @@ const styles = {
     color: 'var(--vscode-foreground)',
     opacity: 0.75,
     userSelect: 'none' as const,
+  } as React.CSSProperties,
+  profileBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '11px',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.75,
+    overflow: 'hidden',
+    marginTop: '4px',
+  } as React.CSSProperties,
+  profileIcon: {
+    background: 'transparent',
+    border: 'none',
+    padding: '0',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  profileName: {
+    fontWeight: 600,
+    flexShrink: 0,
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+  profileEmail: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    opacity: 0.75,
   } as React.CSSProperties,
 };

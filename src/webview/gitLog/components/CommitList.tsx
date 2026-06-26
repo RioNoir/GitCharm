@@ -10,7 +10,7 @@ import type { RefGroup } from '../utils/refs';
 import { Codicon } from '../../shared/Codicon';
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg } from '../../../host/types/messages';
-import { AuthorAvatar } from './AuthorAvatar';
+import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { formatDateTime } from '../../shared/dateUtils';
 
 

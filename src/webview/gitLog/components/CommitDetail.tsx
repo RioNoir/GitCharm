@@ -8,7 +8,7 @@ import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import { formatDateTime } from '../../shared/dateUtils';
 import type { RefGroup } from '../utils/refs';
 import { isPrimaryBranch } from '../../shared/branchUtils';
-import { AuthorAvatar } from './AuthorAvatar';
+import { AuthorAvatar } from '../../shared/AuthorAvatar';
 
 const STASH_COLOR = '#e07b39';
 
