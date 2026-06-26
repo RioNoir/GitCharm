@@ -198,7 +198,6 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
   const scrollListenerRef = useRef<(() => void) | null>(null);
   const containerRefCb = useCallback((el: HTMLDivElement | null) => {
     if (containerRoRef.current) { containerRoRef.current.disconnect(); containerRoRef.current = null; }
-    // Remove old scroll listener
     if (scrollListenerRef.current && (parentRef as React.MutableRefObject<HTMLDivElement | null>).current) {
       (parentRef as React.MutableRefObject<HTMLDivElement | null>).current!.removeEventListener('scroll', scrollListenerRef.current);
       scrollListenerRef.current = null;
@@ -211,7 +210,6 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
     });
     ro.observe(el);
     containerRoRef.current = ro;
-    // Attach scroll listener directly on the element
     const listener = () => {
       if (scrollRafRef.current !== null) return;
       scrollRafRef.current = requestAnimationFrame(() => {

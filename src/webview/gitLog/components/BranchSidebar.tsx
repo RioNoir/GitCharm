@@ -1,4 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, forwardRef } from 'react';
+import { ScrollArea } from '../../shared/ScrollArea';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 import { primaryBranchColor } from '../../shared/branchColors';
@@ -197,6 +198,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
         )}
       </div>
 
+      <ScrollArea style={{ flex: 1, minHeight: 0 }}>
       {/* LOCAL section */}
       <div style={styles.sectionHeader} onClick={() => toggle('local')}>
         <span style={styles.chevron}>{collapsed.has('local') ? '▶' : '▼'}</span>
@@ -278,6 +280,8 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
           ))}
         </>
       )}
+
+      </ScrollArea>
 
       {/* Branch context menu */}
       {contextMenu && (() => {
@@ -530,8 +534,7 @@ const styles = {
     width: '220px',
     flexShrink: 0,
     borderRight: '1px solid var(--vscode-panel-border)',
-    overflowY: 'auto' as const,
-    overflowX: 'hidden' as const,
+    overflow: 'hidden' as const,
     background: 'var(--vscode-sideBar-background)',
     display: 'flex',
     flexDirection: 'column' as const,

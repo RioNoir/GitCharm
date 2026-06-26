@@ -278,11 +278,6 @@ export function UnifiedCommitForm({
     }
     s.textContent = `
       @keyframes gs-textarea-pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 0.35; } }
-      .gs-commit-textarea::-webkit-scrollbar { width: 4px; background: transparent; }
-      .gs-commit-textarea::-webkit-scrollbar-track { background: transparent; }
-      .gs-commit-textarea::-webkit-scrollbar-corner { background: transparent; }
-      .gs-commit-textarea::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 2px; }
-      .gs-commit-textarea::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground); }
     `;
   }, []);
 
@@ -357,11 +352,7 @@ export function UnifiedCommitForm({
         <textarea
           ref={textareaRef}
           className="gs-commit-textarea"
-          style={{
-            ...styles.textarea(generatingMessage, textareaFocused),
-            scrollbarWidth: 'thin',
-            scrollbarColor: `var(--vscode-scrollbarSlider-background) transparent`,
-          } as React.CSSProperties}
+          style={styles.textarea(generatingMessage, textareaFocused)}
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => setTextareaFocused(true)}

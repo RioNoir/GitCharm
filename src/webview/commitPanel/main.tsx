@@ -12,6 +12,7 @@ import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
+import { ScrollArea } from '../shared/ScrollArea';
 import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
@@ -1263,7 +1264,7 @@ function App() {
         {activeTab === 'changes' && (<>
 
           {/* File list */}
-          <div style={css.repoList}>
+          <ScrollArea style={css.repoList}>
             {store.changesViewMode === 'vscode' ? (
               <VscodeView
                 repos={repos}
@@ -1462,7 +1463,7 @@ function App() {
                 );
               })
             )}
-          </div>
+          </ScrollArea>
 
           {/* Shelve name prompt — appears above commit form */}
           {shelvePrompt && (
@@ -1557,7 +1558,7 @@ function App() {
 
         {activeTab === 'shelf' && (
           /* Shelf tab */
-          <div style={css.repoList}>
+          <ScrollArea style={css.repoList}>
             {repos.map((repoStatus, i) => {
               const repoId = repoStatus.repoId;
               const meta = metaMap.get(repoId);
@@ -1590,12 +1591,12 @@ function App() {
                 />
               );
             })}
-          </div>
+          </ScrollArea>
         )}
 
         {activeTab === 'stash' && (
           /* Stash tab */
-          <div style={css.repoList}>
+          <ScrollArea style={css.repoList}>
             {repos.map((repoStatus, i) => {
               const repoId = repoStatus.repoId;
               const meta = metaMap.get(repoId);
@@ -1629,7 +1630,7 @@ function App() {
                 />
               );
             })}
-          </div>
+          </ScrollArea>
         )}
 
         {activeTab === 'push' && (
@@ -1661,7 +1662,7 @@ function App() {
 
         {activeTab === 'worktree' && (
           /* Worktree tab */
-          <div style={css.repoList}>
+          <ScrollArea style={css.repoList}>
             <WorktreePanel
               repos={worktreeRepos}
               loading={worktreeLoading}
@@ -1677,7 +1678,7 @@ function App() {
               onAddToWorkspace={handleWorktreeAddToWorkspace}
               onRequestCreate={handleWorktreeRequestCreate}
             />
-          </div>
+          </ScrollArea>
         )}
 
       </div>
@@ -2036,7 +2037,7 @@ const css = {
     flexShrink: 0,
   } as React.CSSProperties,
   main: { display: 'flex', flexDirection: 'column' as const, flex: 1, overflow: 'hidden' },
-  repoList: { flex: 1, overflowY: 'auto' as const },
+  repoList: { flex: 1, minHeight: 0 },
   // Shelve name prompt bar (above commit form)
   detachedBanner: {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px',

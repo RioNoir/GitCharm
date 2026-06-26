@@ -104,6 +104,14 @@ export function getWebviewHtml(
       cursor: not-allowed;
     }
 
+    /* ── Scrollbars (native, used outside ScrollArea component) ─────────────── */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+    ::-webkit-scrollbar-thumb { background-color: var(--vscode-scrollbarSlider-background); }
+    ::-webkit-scrollbar-thumb:hover { background-color: var(--vscode-scrollbarSlider-hoverBackground); }
+    ::-webkit-scrollbar-thumb:active { background-color: var(--vscode-scrollbarSlider-activeBackground); }
+    * { scrollbar-width: thin; scrollbar-color: var(--vscode-scrollbarSlider-background) transparent; }
+
     /* ── Hover actions in file rows ─────────────────────────────────────────── */
     .file-row:hover .file-actions { opacity: 1 !important; }
     .file-row .file-actions { opacity: 0; transition: opacity 0.1s; }
