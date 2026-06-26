@@ -450,6 +450,11 @@ function App() {
           if (msg.message) store.setCommitMessage(msg.message);
           else if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
+        case 'COMMIT_LAST_COMMIT_MESSAGE_RESULT':
+          if (msg.message && !useCommitStore.getState().commitMessage.trim()) {
+            store.setCommitMessage(msg.message);
+          }
+          break;
         case 'COMMIT_SET_MESSAGE':
           store.setCommitMessage(msg.message);
           break;
@@ -1511,7 +1516,13 @@ function App() {
               }
             }}
             onMessageChange={msg => store.setCommitMessage(msg)}
-            onAmendToggle={repoId => store.setAmend(repoId, !(store.amendFlags[repoId] ?? false))}
+            onAmendToggle={repoId => {
+              const newValue = !(store.amendFlags[repoId] ?? false);
+              store.setAmend(repoId, newValue);
+              if (newValue) {
+                send({ type: 'COMMIT_GET_LAST_COMMIT_MESSAGE', requestId: generateId(), repoId } satisfies CommitToHostMsg);
+              }
+            }}
             onCommit={() => doCommit(false)}
             onCommitAndPush={() => doCommit(true)}
             onPush={doPush}

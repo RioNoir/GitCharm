@@ -390,11 +390,11 @@ export function UnifiedCommitForm({
         <div style={styles.leftActions}>
           <DropdownButton
             variant="secondary"
-            enabled={!!message.trim() && commitTargets.length > 0}
+            enabled={!!message.trim() && commitTargets.length > 0 && !amend}
             icon={defaultSaveAction === 'stash' ? 'git-stash' : 'archive'}
             label={defaultSaveAction === 'stash' ? 'Stash' : 'Shelve'}
             title="Shelve or stash changes"
-            disabledTitle="Enter a commit message first"
+            disabledTitle={amend ? 'Not available while amending' : 'Enter a commit message first'}
             items={[
               { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
               { icon: 'git-stash',    label: 'Stash Changes',  onSelect: onStash  },
