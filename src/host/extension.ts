@@ -238,6 +238,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   commitPanel.setBranchStatusBar(branchStatusBar);
+  branchStatusBar.setLogPanel(logPanel);
 
   const profileStatusBar = new ProfileStatusBar(profileService, manager);
 

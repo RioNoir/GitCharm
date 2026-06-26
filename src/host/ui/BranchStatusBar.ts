@@ -3,6 +3,7 @@ import * as path from 'path';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { RepoMeta } from '../types/git';
 import { isPrimaryBranch } from '../utils/branchUtils';
+import type { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
 
 export class BranchStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -16,6 +17,10 @@ export class BranchStatusBar implements vscode.Disposable {
   private hasUncommitted = false;
   private totalAhead = 0;
   private totalBehind = 0;
+
+  private logPanel?: GitLogPanelProvider;
+
+  setLogPanel(logPanel: GitLogPanelProvider): void { this.logPanel = logPanel; }
 
   constructor(
     private readonly manager: WorkspaceGitManager,
@@ -268,6 +273,11 @@ export class BranchStatusBar implements vscode.Disposable {
         label: '$(add) New Branch…',
         description: 'Create a new branch',
         action: () => this.newBranch(metas),
+      },
+      {
+        label: '$(tag) New Tag…',
+        description: 'Create a new tag on HEAD of all repositories',
+        action: () => this.newTagAllRepos(metas),
       },
       {
         label: '$(history) Log',
@@ -616,6 +626,7 @@ export class BranchStatusBar implements vscode.Disposable {
               }
               if (errors.length > 0) vscode.window.showWarningMessage(`GitCharm: ${errors.length} error(s): ${errors.join('; ')}`);
               else vscode.window.showInformationMessage(`GitCharm: deleted tag "${tagName}" in ${metas.length} repos.`);
+              for (const meta of metas) void this.logPanel?.refreshTagsForRepo(meta.id);
             }
           );
           await this.refresh();
@@ -1070,6 +1081,11 @@ export class BranchStatusBar implements vscode.Disposable {
         action: () => this.newBranchSingleRepo(meta),
       },
       {
+        label: '$(tag) New Tag…',
+        description: `Create a new tag on HEAD in ${meta.name}`,
+        action: () => this.newTagSingleRepo(meta),
+      },
+      {
         label: '$(remote-explorer) Manage Remotes…',
         description: 'Add, remove, or edit remote repositories',
         action: () => this.showRepoRemotesMenu(meta),
@@ -1238,6 +1254,7 @@ export class BranchStatusBar implements vscode.Disposable {
               }
             }
             vscode.window.showInformationMessage(`GitCharm [${meta.name}]: tag "${tagName}" deleted.`);
+            void this.logPanel?.refreshTagsForRepo(meta.id);
           } catch (e: unknown) {
             vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
           }
@@ -1390,6 +1407,95 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showErrorMessage(`GitCharm [${meta.name}]: ${String(e)}`);
     }
     await this.refresh();
+  }
+
+  private async newTagSingleRepo(meta: RepoMeta): Promise<void> {
+    const repo = this.manager.getRepo(meta.id);
+    if (!repo) return;
+    const tagName = await vscode.window.showInputBox({
+      title: `New Tag in ${meta.name}`,
+      prompt: 'Enter the tag name (will be created on HEAD)',
+      placeHolder: 'v1.0.0',
+      validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
+    });
+    if (!tagName) return;
+    try {
+      await repo.createTag(tagName.trim(), 'HEAD');
+      void this.logPanel?.refreshTagsForRepo(meta.id);
+      vscode.window.showInformationMessage(
+        `GitCharm [${meta.name}]: tag "${tagName.trim()}" created on HEAD.`,
+        'Push'
+      ).then(async pick => {
+        if (pick !== 'Push') return;
+        const remotes = await repo.getRemotes().catch(() => [] as string[]);
+        if (remotes.length === 0) { vscode.window.showWarningMessage('GitCharm: No remotes configured.'); return; }
+        const remote = remotes.length === 1
+          ? remotes[0]
+          : (await vscode.window.showQuickPick(remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })), { title: `Push tag "${tagName.trim()}" — Select remote` }) as { label: string; remote: string } | undefined)?.remote;
+        if (!remote) return;
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${tagName.trim()}" to ${remote}…`, cancellable: false },
+          async () => {
+            try {
+              await repo.pushTag(tagName.trim(), remote);
+              vscode.window.showInformationMessage(`GitCharm: Tag "${tagName.trim()}" pushed to "${remote}".`);
+            } catch (e: unknown) {
+              vscode.window.showErrorMessage(`GitCharm: Push tag failed: ${String(e)}`);
+            }
+          }
+        );
+      });
+    } catch (e: unknown) {
+      vscode.window.showErrorMessage(`GitCharm [${meta.name}]: Create tag failed: ${String(e)}`);
+    }
+  }
+
+  private async newTagAllRepos(metas: RepoMeta[]): Promise<void> {
+    if (metas.length === 1) { await this.newTagSingleRepo(metas[0]!); return; }
+    const tagName = await vscode.window.showInputBox({
+      title: 'New Tag',
+      prompt: 'Enter the tag name (will be created on HEAD of each repository)',
+      placeHolder: 'v1.0.0',
+      validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
+    });
+    if (!tagName) return;
+    const trimmed = tagName.trim();
+    const errors: string[] = [];
+    for (const meta of metas) {
+      const repo = this.manager.getRepo(meta.id);
+      if (!repo) continue;
+      try {
+        await repo.createTag(trimmed, 'HEAD');
+        void this.logPanel?.refreshTagsForRepo(meta.id);
+      } catch (e: unknown) { errors.push(`${meta.name}: ${String(e)}`); }
+    }
+    if (errors.length > 0) { vscode.window.showWarningMessage(`GitCharm: Some tags failed:\n${errors.join('\n')}`); return; }
+    vscode.window.showInformationMessage(`GitCharm: Tag "${trimmed}" created on HEAD in all repositories.`, 'Push').then(async pick => {
+      if (pick !== 'Push') return;
+      const repoWithRemotes = await Promise.all(metas.map(async meta => {
+        const repo = this.manager.getRepo(meta.id);
+        const remotes = repo ? await repo.getRemotes().catch(() => [] as string[]) : [];
+        return { meta, repo, remotes };
+      }));
+      const allRemotes = [...new Set(repoWithRemotes.flatMap(r => r.remotes))];
+      if (allRemotes.length === 0) { vscode.window.showWarningMessage('GitCharm: No remotes configured.'); return; }
+      const remote = allRemotes.length === 1
+        ? allRemotes[0]!
+        : (await vscode.window.showQuickPick(allRemotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })), { title: `Push tag "${trimmed}" — Select remote` }) as { label: string; remote: string } | undefined)?.remote;
+      if (!remote) return;
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${trimmed}" to ${remote}…`, cancellable: false },
+        async () => {
+          const pushErrors: string[] = [];
+          for (const { meta, repo: r } of repoWithRemotes) {
+            if (!r) continue;
+            try { await r.pushTag(trimmed, remote); } catch (e: unknown) { pushErrors.push(`${meta.name}: ${String(e)}`); }
+          }
+          if (pushErrors.length > 0) vscode.window.showWarningMessage(`GitCharm: Some pushes failed:\n${pushErrors.join('\n')}`);
+          else vscode.window.showInformationMessage(`GitCharm: Tag "${trimmed}" pushed to "${remote}" in all repositories.`);
+        }
+      );
+    });
   }
 
   private async checkoutSingleRepo(branchName: string, meta: RepoMeta): Promise<void> {

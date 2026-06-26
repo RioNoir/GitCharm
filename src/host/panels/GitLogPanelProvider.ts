@@ -291,6 +291,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.undockedPanel?.postToLog(msg);
   }
 
+  async refreshTagsForRepo(repoId: string): Promise<void> {
+    const repo = this.manager.getRepo(repoId);
+    if (!repo) return;
+    const rawTags = await repo.getTags().catch(() => []);
+    this.broadcast({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
+    this.broadcast({ type: 'LOG_REFRESH' });
+  }
+
   private getNonWorktreeRepos() {
     return this.manager.getRepoMetas().filter(m => !m.isWorktree);
   }
@@ -1063,11 +1071,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           return;
         }
         try {
-          await repo.createTag(tagName.trim(), msg.hash);
+          const trimmed = tagName.trim();
+          await repo.createTag(trimmed, msg.hash);
           const rawTags = await repo.getTags();
           this.post({ type: 'LOG_TAGS_UPDATE', repoId: msg.repoId, tags: rawTags.map(t => ({ ...t, repoId: msg.repoId })) });
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           this.post({ type: 'LOG_REFRESH' });
+          const push = await vscode.window.showInformationMessage(
+            `Tag "${trimmed}" created. Push to remote?`,
+            { modal: false },
+            'Push'
+          );
+          if (push === 'Push') await this.pushTagWithRemotePicker(repo, trimmed);
         } catch (e: unknown) {
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
           vscode.window.showErrorMessage(`GitCharm: Create tag failed: ${String(e)}`);
@@ -1331,26 +1346,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_PUSH_TAG_PICK': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        const remotes = await repo.getRemotes().catch(() => [] as string[]);
-        if (remotes.length === 0) { vscode.window.showWarningMessage('GitCharm: No remotes configured.'); return; }
-        const remotePick = remotes.length === 1
-          ? remotes[0]
-          : (await vscode.window.showQuickPick(
-              remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
-              { title: `Push tag "${msg.tagName}" — Select remote` }
-            ) as { label: string; remote: string } | undefined)?.remote;
-        if (!remotePick) return;
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${msg.tagName}" to ${remotePick}…`, cancellable: false },
-          async () => {
-            try {
-              await repo.pushTag(msg.tagName, remotePick);
-              vscode.window.showInformationMessage(`GitCharm: Tag "${msg.tagName}" pushed to "${remotePick}".`);
-            } catch (e: unknown) {
-              vscode.window.showErrorMessage(`GitCharm: Push tag failed: ${String(e)}`);
-            }
-          }
-        );
+        await this.pushTagWithRemotePicker(repo, msg.tagName);
         break;
       }
 
@@ -1560,6 +1556,29 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
   }
 
+  private async pushTagWithRemotePicker(repo: import('../git/GitService').GitService, tagName: string): Promise<void> {
+    const remotes = await repo.getRemotes().catch(() => [] as string[]);
+    if (remotes.length === 0) { vscode.window.showWarningMessage('GitCharm: No remotes configured.'); return; }
+    const remotePick = remotes.length === 1
+      ? remotes[0]
+      : (await vscode.window.showQuickPick(
+          remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
+          { title: `Push tag "${tagName}" — Select remote` }
+        ) as { label: string; remote: string } | undefined)?.remote;
+    if (!remotePick) return;
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing tag "${tagName}" to ${remotePick}…`, cancellable: false },
+      async () => {
+        try {
+          await repo.pushTag(tagName, remotePick);
+          vscode.window.showInformationMessage(`GitCharm: Tag "${tagName}" pushed to "${remotePick}".`);
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(`GitCharm: Push tag failed: ${String(e)}`);
+        }
+      }
+    );
+  }
+
   private async showManageCommitTagsMenu(
     repo: import('../git/GitService').GitService,
     repoId: string,
@@ -1591,10 +1610,17 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       });
       if (!newName) return;
       try {
-        await repo.createTag(newName.trim(), hash);
+        const trimmed = newName.trim();
+        await repo.createTag(trimmed, hash);
         const rawTags = await repo.getTags();
         this.post({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
         this.post({ type: 'LOG_REFRESH' });
+        const push = await vscode.window.showInformationMessage(
+          `Tag "${trimmed}" created. Push to remote?`,
+          { modal: false },
+          'Push'
+        );
+        if (push === 'Push') await this.pushTagWithRemotePicker(repo, trimmed);
       } catch (e: unknown) {
         vscode.window.showErrorMessage(`GitCharm: Create tag failed: ${String(e)}`);
       }
@@ -1621,6 +1647,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             vscode.window.showErrorMessage(`GitCharm: Merge tag failed: ${String(e)}`);
           }
         },
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: `$(cloud-upload) Push "${tagName}" to remote…`,
+        action: () => this.pushTagWithRemotePicker(repo, tagName),
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
