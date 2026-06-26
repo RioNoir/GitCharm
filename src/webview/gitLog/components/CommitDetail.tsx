@@ -593,7 +593,13 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           //   5. Primary remote branches — from refs first, then containing
           //   6. Other remote branches — from refs first, then containing
           //   7. Tags from --contains (not directly on commit)
-          const refLabels = new Set(refGroups.map(g => g.label));
+          // Collect remote names from refGroups (e.g. "origin") to filter out bare
+          // remote-pointer refs that git sometimes emits as short-form locals (e.g. "origin").
+          const remoteNames = new Set(refGroups.filter(g => g.isRemote).map(g => g.remoteName).filter(Boolean));
+          // Also collect remote names from containingBranches (e.g. "origin" from "origin/main").
+          containingBranches.remote.forEach(b => { const r = b.includes('/') ? b.slice(0, b.indexOf('/')) : ''; if (r) remoteNames.add(r); });
+
+          const refLabels = new Set(refGroups.filter(g => !remoteNames.has(g.label)).map(g => g.label));
           type Badge =
             | { kind: 'ref'; group: RefGroup }
             | { kind: 'local'; name: string }
@@ -602,8 +608,9 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
 
           const headBadges    = refGroups.filter(g => g.isHead).map(g => ({ kind: 'ref' as const, group: g }));
           const refTagBadges  = refGroups.filter(g => g.isTag).map(g => ({ kind: 'ref' as const, group: g }));
-          const refLocalPrim  = refGroups.filter(g => !g.isHead && !g.isTag && g.isLocal && isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
-          const refLocalOther = refGroups.filter(g => !g.isHead && !g.isTag && g.isLocal && !isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
+          // Exclude bare remote-pointer refs parsed as locals (e.g. "origin" when "origin/main" is also present).
+          const refLocalPrim  = refGroups.filter(g => !g.isHead && !g.isTag && g.isLocal && !remoteNames.has(g.label) && isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
+          const refLocalOther = refGroups.filter(g => !g.isHead && !g.isTag && g.isLocal && !remoteNames.has(g.label) && !isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
           const refRemPrim    = refGroups.filter(g => !g.isHead && !g.isTag && g.isRemote && isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
           const refRemOther   = refGroups.filter(g => !g.isHead && !g.isTag && g.isRemote && !isPrimaryBranch(g.label)).map(g => ({ kind: 'ref' as const, group: g }));
 

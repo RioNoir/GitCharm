@@ -303,14 +303,13 @@ function getAiModelLabel(cfg: vscode.WorkspaceConfiguration): string {
 }
 
 function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData): string {
-  // remote entries come in as "origin/feat" — split into remote + name
+  // remote entries come in as "origin/feat" — split into remote + name.
+  // Skip bare remote pointers with no slash (e.g. "origin" without a branch).
   const allBranches = [
     ...data.branches.local.map(b => ({ type: 'local',  name: b, remote: '' })),
-    ...data.branches.remote.map(b => {
+    ...data.branches.remote.filter(b => b.includes('/')).map(b => {
       const slash = b.indexOf('/');
-      return slash >= 0
-        ? { type: 'remote', name: b.slice(slash + 1), remote: b.slice(0, slash) }
-        : { type: 'remote', name: b, remote: '' };
+      return { type: 'remote', name: b.slice(slash + 1), remote: b.slice(0, slash) };
     }),
     ...data.branches.tags.map(b => ({ type: 'tag', name: b, remote: '' })),
   ];

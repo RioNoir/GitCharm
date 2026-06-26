@@ -1454,7 +1454,7 @@ export class GitService {
     // origin/HEAD is a symbolic alias, not a real branch — skip it here.
     const remote = parse(remoteOut)
       .map(b => b.replace(/^remotes\//, ''))
-      .filter(b => !b.endsWith('/HEAD'));
+      .filter(b => !b.endsWith('/HEAD') && b.includes('/'));
     const tags = parse(tagOut);
     return { local, remote, tags };
   }

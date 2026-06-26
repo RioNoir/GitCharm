@@ -839,14 +839,24 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
     .filter(r => r.startsWith('tag: '))
     .map(r => r.replace('tag: ', ''));
 
+  // Normalise a raw ref token to a display name (strips refs/heads/, refs/remotes/, remotes/).
+  const normaliseRefName = (r: string): string => {
+    if (r.startsWith('refs/heads/')) return r.slice('refs/heads/'.length);
+    if (r.startsWith('refs/remotes/')) return r.slice('refs/remotes/'.length);
+    if (r.startsWith('remotes/')) return r.slice('remotes/'.length);
+    if (r.startsWith('HEAD -> ')) return r.slice('HEAD -> '.length);
+    return r;
+  };
   // Local branch names from commit refs (exclude tags, HEAD marker, remote refs)
   const localBranchesFromRefs = commit.refs
-    .filter(r => !r.startsWith('tag: ') && r !== 'HEAD' && !r.includes('/'))
-    .map(r => r.startsWith('HEAD -> ') ? r.slice('HEAD -> '.length) : r);
-  // Remote-only branch names (origin/branchname → branchname), used as fallback
+    .filter(r => !r.startsWith('tag: ') && r !== 'HEAD' && !r.startsWith('refs/remotes/') && !r.startsWith('remotes/'))
+    .map(normaliseRefName)
+    .filter(r => !r.includes('/'));
+  // Remote-only branch names (origin/branch), used as fallback when no local branch is on this commit.
   const remoteBranchesFromRefs = commit.refs
-    .filter(r => r.includes('/') && !r.startsWith('tag: '))
-    .map(r => r.slice(r.indexOf('/') + 1));
+    .filter(r => r.startsWith('refs/remotes/') || r.startsWith('remotes/') || (r.includes('/') && !r.startsWith('tag: ') && !r.startsWith('refs/heads/')))
+    .map(normaliseRefName)
+    .filter(r => !r.toUpperCase().endsWith('/HEAD'));
   const branchesFromRefs = localBranchesFromRefs.length > 0 ? localBranchesFromRefs : remoteBranchesFromRefs;
   const primaryBranch = branchesFromRefs[0] ?? null;
 

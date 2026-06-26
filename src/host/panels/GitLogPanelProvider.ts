@@ -1386,7 +1386,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           type CheckoutItem = vscode.QuickPickItem & { value: 'branch' | 'revision' };
           const pick = await vscode.window.showQuickPick<CheckoutItem>(
             [
-              { label: `$(arrow-right) Checkout branch '${msg.branchName}'`, description: msg.branchName, value: 'branch' },
+              { label: `$(arrow-right) Checkout branch '${msg.branchName.replace(/^remotes\//, '')}'`, description: msg.branchName.replace(/^remotes\//, ''), value: 'branch' },
               { label: '$(git-commit) Checkout revision (detached HEAD)', description: msg.hash.slice(0, 8), value: 'revision' },
             ],
             { title: 'Checkout' }
