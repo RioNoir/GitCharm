@@ -4,6 +4,8 @@ import * as path from 'path';
 
 export interface IconThemeData {
   type: 'svg' | 'font' | 'none';
+  // The extension root path — used by callers to add to localResourceRoots
+  extensionUri?: vscode.Uri;
   // SVG mode: maps icon definition name → webview URI string for the SVG file
   svgMap?: Record<string, string>;
   fileExtensions?: Record<string, string>;   // ext (lower) → icon name
@@ -52,6 +54,124 @@ function parseCharacter(raw: string): string {
   return raw.replace(/\\([0-9A-Fa-f]{4})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
 }
 
+const EXT_TO_LANG: Record<string, string> = {
+  ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', jsx: 'javascriptreact',
+  mjs: 'javascript', cjs: 'javascript', py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
+  java: 'java', kt: 'kotlin', swift: 'swift', cs: 'csharp', cpp: 'cpp', c: 'c', h: 'c',
+  php: 'php', lua: 'lua', dart: 'dart', html: 'html', htm: 'html', css: 'css',
+  scss: 'scss', less: 'less', sass: 'sass', json: 'json', jsonc: 'jsonc', xml: 'xml',
+  yaml: 'yaml', yml: 'yaml', md: 'markdown', markdown: 'markdown',
+  sh: 'shellscript', bash: 'shellscript', zsh: 'shellscript', fish: 'fish',
+  sql: 'sql', graphql: 'graphql', vue: 'vue', svelte: 'svelte',
+  toml: 'toml', ini: 'ini', dockerfile: 'dockerfile', tf: 'terraform', hcl: 'terraform',
+  ex: 'elixir', exs: 'elixir', clj: 'clojure', cljs: 'clojure', hs: 'haskell',
+  erl: 'erlang', pl: 'perl', scala: 'scala', groovy: 'groovy', proto: 'proto3',
+  ps1: 'powershell', psm1: 'powershell', bat: 'bat', cmd: 'bat',
+};
+
+function resolveIconName(theme: IconThemeData, name: string, isFolder: boolean, isOpen: boolean): string | null {
+  const lower = name.toLowerCase();
+  if (isFolder) {
+    if (isOpen) return theme.folderNamesExpanded?.[lower] ?? theme.folderExpanded ?? null;
+    return theme.folderNames?.[lower] ?? theme.folder ?? null;
+  }
+  if (theme.fileNames?.[lower]) return theme.fileNames[lower];
+  const parts = lower.split('.');
+  if (parts.length > 1) {
+    for (let i = 1; i < parts.length; i++) {
+      const suffix = parts.slice(i).join('.');
+      if (theme.fileExtensions?.[suffix]) return theme.fileExtensions[suffix];
+    }
+    const ext = parts[parts.length - 1];
+    const langId = EXT_TO_LANG[ext];
+    if (langId && theme.languageIds?.[langId]) return theme.languageIds[langId];
+  }
+  return theme.file ?? null;
+}
+
+export interface ResolvedIconMap {
+  type: 'svg' | 'font' | 'none';
+  // SVG: filename/folderKey → webview URI
+  uriMap?: Record<string, string>;
+  // Font: filename/folderKey → { char, color }
+  charMap?: Record<string, { char: string; color?: string }>;
+  fontFaceUri?: string;
+  fontId?: string;
+  fontFormat?: string;
+}
+
+export function resolveIconsForFiles(
+  theme: IconThemeData,
+  filePaths: string[],
+): ResolvedIconMap {
+  if (theme.type === 'none') return { type: 'none' };
+
+  // Collect all unique file basenames + folder names from paths
+  const names = new Set<string>();
+  const folderNames = new Set<string>();
+  for (const p of filePaths) {
+    const parts = p.split('/');
+    names.add(parts[parts.length - 1]);
+    for (let i = 0; i < parts.length - 1; i++) folderNames.add(parts[i]);
+  }
+
+  if (theme.type === 'svg') {
+    const uriMap: Record<string, string> = {};
+    // Default file/folder icons
+    const fileIcon = resolveIconName(theme, '', false, false);
+    if (fileIcon && theme.svgMap?.[fileIcon]) uriMap['__file__'] = theme.svgMap[fileIcon];
+    const folderIcon = resolveIconName(theme, '', true, false);
+    if (folderIcon && theme.svgMap?.[folderIcon]) uriMap['__folder__'] = theme.svgMap[folderIcon];
+    const folderOpenIcon = resolveIconName(theme, '', true, true);
+    if (folderOpenIcon && theme.svgMap?.[folderOpenIcon]) uriMap['__folder_open__'] = theme.svgMap[folderOpenIcon];
+
+    for (const name of names) {
+      const iconName = resolveIconName(theme, name, false, false);
+      if (iconName && theme.svgMap?.[iconName]) uriMap[name] = theme.svgMap[iconName];
+    }
+    for (const name of folderNames) {
+      const iconName = resolveIconName(theme, name, true, false);
+      if (iconName && theme.svgMap?.[iconName]) uriMap[`dir:${name}`] = theme.svgMap[iconName];
+      const openName = resolveIconName(theme, name, true, true);
+      if (openName && theme.svgMap?.[openName]) uriMap[`dir_open:${name}`] = theme.svgMap[openName];
+    }
+    return { type: 'svg', uriMap };
+  }
+
+  if (theme.type === 'font') {
+    const charMap: Record<string, { char: string; color?: string }> = {};
+    const addFont = (key: string, iconName: string | null) => {
+      if (!iconName || !theme.charMap?.[iconName]) return;
+      charMap[key] = { char: theme.charMap[iconName], color: theme.colorMap?.[iconName] };
+    };
+    addFont('__file__', resolveIconName(theme, '', false, false));
+    addFont('__folder__', resolveIconName(theme, '', true, false));
+    addFont('__folder_open__', resolveIconName(theme, '', true, true));
+    for (const name of names) addFont(name, resolveIconName(theme, name, false, false));
+    for (const name of folderNames) {
+      addFont(`dir:${name}`, resolveIconName(theme, name, true, false));
+      addFont(`dir_open:${name}`, resolveIconName(theme, name, true, true));
+    }
+    return { type: 'font', charMap, fontFaceUri: theme.fontFaceUri, fontId: theme.fontId, fontFormat: theme.fontFormat };
+  }
+
+  return { type: 'none' };
+}
+
+export function getIconThemeExtensionUri(): vscode.Uri | undefined {
+  try {
+    const themeId = vscode.workspace.getConfiguration('workbench').get<string>('iconTheme');
+    if (!themeId) return undefined;
+    const themeExt = vscode.extensions.all.find(ext => {
+      const themes: Array<{ id: string }> = ext.packageJSON?.contributes?.iconThemes ?? [];
+      return themes.some((t: { id: string }) => t.id === themeId);
+    });
+    return themeExt ? vscode.Uri.file(themeExt.extensionPath) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function loadIconTheme(webview: vscode.Webview): Promise<IconThemeData> {
   try {
     const themeId = vscode.workspace.getConfiguration('workbench').get<string>('iconTheme');
@@ -62,6 +182,8 @@ export async function loadIconTheme(webview: vscode.Webview): Promise<IconThemeD
       return themes.some(t => t.id === themeId);
     });
     if (!themeExt) return { type: 'none' };
+
+    const extensionUri = vscode.Uri.file(themeExt.extensionPath);
 
     const themes: Array<{ id: string; path: string }> = themeExt.packageJSON?.contributes?.iconThemes ?? [];
     const themeDef = themes.find(t => t.id === themeId);
@@ -98,6 +220,7 @@ export async function loadIconTheme(webview: vscode.Webview): Promise<IconThemeD
 
       return {
         type: 'svg',
+        extensionUri,
         svgMap,
         fileExtensions: variant.fileExtensions ?? {},
         fileNames: variant.fileNames ?? {},
@@ -131,6 +254,7 @@ export async function loadIconTheme(webview: vscode.Webview): Promise<IconThemeD
 
       return {
         type: 'font',
+        extensionUri,
         fontFaceUri: fontUri,
         fontId: primaryFont.id,
         fontFormat: fontSrc.format,

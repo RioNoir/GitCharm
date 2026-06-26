@@ -48,14 +48,17 @@ const EXT_CODICONS: Record<string, string> = {
   txt: 'file-text', log: 'output',
 };
 
-let injectedFontId: string | null = null;
+let injectedFontKey: string | null = null;
 
 function ensureFontInjected(theme: IconThemeData) {
   if (theme.type !== 'font' || !theme.fontFaceUri || !theme.fontId) return;
-  if (injectedFontId === theme.fontId) return;
-  injectedFontId = theme.fontId;
+  // Key on both fontId and URI so a theme change with same fontId still re-injects
+  const key = `${theme.fontId}::${theme.fontFaceUri}`;
+  if (injectedFontKey === key) return;
+  injectedFontKey = key;
   const styleId = `gitcharm-icon-font-${theme.fontId}`;
-  if (document.getElementById(styleId)) return;
+  // Remove existing style so the new @font-face replaces it
+  document.getElementById(styleId)?.remove();
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `@font-face { font-family: "${theme.fontId}"; src: url("${theme.fontFaceUri}") format("${theme.fontFormat ?? 'woff'}"); font-weight: normal; font-style: normal; }`;
@@ -107,7 +110,7 @@ interface FileIconProps {
 export function FileIcon({ name, isFolder = false, isOpen = false, theme, size = 14, style }: FileIconProps) {
   useEffect(() => {
     if (theme) ensureFontInjected(theme);
-  }, [theme?.fontId]);
+  }, [theme?.fontId, theme?.fontFaceUri]);
 
   const base: React.CSSProperties = { flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style };
 
@@ -120,7 +123,7 @@ export function FileIcon({ name, isFolder = false, isOpen = false, theme, size =
   if (theme.type === 'svg' && iconName) {
     const uri = theme.svgMap?.[iconName];
     if (uri) {
-      return <img src={uri} width={size} height={size} style={{ ...base, objectFit: 'contain' }} aria-hidden />;
+      return <img key={uri} src={uri} width={size} height={size} style={{ ...base, objectFit: 'contain' }} aria-hidden />;
     }
   }
 

@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { generateNonce } from '../utils/webviewHtml';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
+import { loadIconTheme, resolveIconsForFiles } from '../utils/IconThemeService';
+import type { ResolvedIconMap } from '../utils/IconThemeService';
 
 export async function openCommitDetailPanel(
   extensionUri: vscode.Uri,
@@ -40,6 +42,13 @@ export async function openCommitDetailPanel(
 
   const nonce = generateNonce();
 
+  const localResourceRoots: vscode.Uri[] = [vscode.Uri.joinPath(extensionUri, 'media')];
+  // Add all icon theme extension roots so switching themes live doesn't break CSP
+  for (const ext of vscode.extensions.all) {
+    const themes: Array<{ id: string }> = ext.packageJSON?.contributes?.iconThemes ?? [];
+    if (themes.length > 0) localResourceRoots.push(vscode.Uri.file(ext.extensionPath));
+  }
+
   const panel = vscode.window.createWebviewPanel(
     'gitcharmCommitDetail',
     `Commit ${commitInfo.shortHash}`,
@@ -47,7 +56,7 @@ export async function openCommitDetailPanel(
     {
       enableScripts: true,
       retainContextWhenHidden: false,
-      localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
+      localResourceRoots,
     }
   );
   panel.iconPath = new vscode.ThemeIcon('git-commit');
@@ -56,12 +65,15 @@ export async function openCommitDetailPanel(
     vscode.Uri.joinPath(extensionUri, 'media', 'codicons', 'codicon.css')
   ).toString();
 
+  const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
+  const iconIcons = resolveIconsForFiles(iconTheme, files.map(f => f.path));
+
   const csp = [
     `default-src 'none'`,
     `style-src ${panel.webview.cspSource} 'unsafe-inline'`,
     `script-src 'nonce-${nonce}'`,
     `font-src ${panel.webview.cspSource}`,
-    `img-src https://gravatar.com https://avatars.githubusercontent.com data:`,
+    `img-src ${panel.webview.cspSource} https://gravatar.com https://avatars.githubusercontent.com data:`,
   ].join('; ');
 
   panel.webview.html = getHtml(nonce, csp, codiconUri, {
@@ -79,7 +91,16 @@ export async function openCommitDetailPanel(
     autoExplain: opts.autoExplain ?? false,
     aiEnabled: vscode.workspace.getConfiguration('gitcharm').get('ai.enabled', true),
     aiModelLabel: getAiModelLabel(vscode.workspace.getConfiguration('gitcharm')),
+    iconIcons,
   });
+
+  const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
+    if (!e.affectsConfiguration('workbench.iconTheme')) return;
+    const newTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
+    const newIcons = resolveIconsForFiles(newTheme, files.map(f => f.path));
+    panel.webview.postMessage({ type: 'updateIcons', iconIcons: newIcons });
+  });
+  panel.onDidDispose(() => iconThemeWatcher.dispose());
 
   panel.webview.onDidReceiveMessage(async (msg: { type: string; filePath?: string; fileStatus?: string; hash?: string; parents?: string[]; requestId?: string }) => {
     if (msg.type === 'explainCommit') {
@@ -258,6 +279,7 @@ interface PanelData {
   autoExplain: boolean;
   aiEnabled: boolean;
   aiModelLabel: string;
+  iconIcons: ResolvedIconMap;
 }
 
 function getAiModelLabel(cfg: vscode.WorkspaceConfiguration): string {
@@ -660,6 +682,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     authorName: data.authorName,
     branches: allBranches,
     autoExplain: data.autoExplain,
+    iconIcons: data.iconIcons,
   })}</script>
 
   <script nonce="${nonce}">
@@ -702,7 +725,8 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     };
     function statusColor(s) { return STATUS_COLOR[s] || 'var(--vscode-foreground)'; }
 
-    // ── Codicon icon helpers ──
+    // ── Icon theme helpers ──
+    const ICONS = __d.iconIcons || { type: 'none' };
     const EXT_CODICONS = {
       ts:'symbol-variable', tsx:'symbol-variable', js:'symbol-variable', jsx:'symbol-variable',
       json:'json', jsonc:'json', md:'markdown', mdx:'markdown',
@@ -717,13 +741,40 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
       lock:'lock', sql:'database', xml:'symbol-structure', proto:'symbol-structure',
       txt:'file-text', log:'output',
     };
-    function fileIconHtml(name) {
-      const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-      const icon = EXT_CODICONS[ext] || 'file';
-      return '<span class="codicon codicon-' + icon + '" style="font-size:14px;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>';
+
+    if (ICONS.type === 'font' && ICONS.fontFaceUri && ICONS.fontId) {
+      const style = document.createElement('style');
+      style.textContent = '@font-face { font-family: "' + ICONS.fontId + '"; src: url("' + ICONS.fontFaceUri + '") format("' + (ICONS.fontFormat || 'woff') + '"); font-weight: normal; font-style: normal; }';
+      document.head.appendChild(style);
     }
-    function folderIconHtml(open) {
-      return '<span class="codicon codicon-' + (open ? 'folder-opened' : 'folder') + '" style="font-size:14px;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>';
+
+    function fileIconHtml(name) {
+      const sz = 16;
+      if (ICONS.type === 'svg') {
+        const uri = (ICONS.uriMap && (ICONS.uriMap[name] || ICONS.uriMap['__file__']));
+        if (uri) return '<img src="' + escAttr(uri) + '" width="' + sz + '" height="' + sz + '" style="flex-shrink:0;object-fit:contain;vertical-align:middle;" aria-hidden="true">';
+      }
+      if (ICONS.type === 'font') {
+        const entry = ICONS.charMap && (ICONS.charMap[name] || ICONS.charMap['__file__']);
+        if (entry) return '<span style="font-family:&quot;' + ICONS.fontId + '&quot;;font-size:' + sz + 'px;color:' + (entry.color || 'inherit') + ';line-height:1;flex-shrink:0;user-select:none;" aria-hidden="true">' + entry.char + '</span>';
+      }
+      const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+      return '<span class="codicon codicon-' + (EXT_CODICONS[ext] || 'file') + '" style="font-size:' + sz + 'px;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>';
+    }
+
+    function folderIconHtml(open, name) {
+      const sz = 16;
+      const namedKey = name ? (open ? 'dir_open:' + name : 'dir:' + name) : null;
+      const defKey = open ? '__folder_open__' : '__folder__';
+      if (ICONS.type === 'svg') {
+        const uri = ICONS.uriMap && ((namedKey && ICONS.uriMap[namedKey]) || ICONS.uriMap[defKey]);
+        if (uri) return '<img src="' + escAttr(uri) + '" width="' + sz + '" height="' + sz + '" style="flex-shrink:0;object-fit:contain;vertical-align:middle;" aria-hidden="true">';
+      }
+      if (ICONS.type === 'font') {
+        const entry = ICONS.charMap && ((namedKey && ICONS.charMap[namedKey]) || ICONS.charMap[defKey]);
+        if (entry) return '<span style="font-family:&quot;' + ICONS.fontId + '&quot;;font-size:' + sz + 'px;color:' + (entry.color || 'inherit') + ';line-height:1;flex-shrink:0;user-select:none;" aria-hidden="true">' + entry.char + '</span>';
+      }
+      return '<span class="codicon codicon-' + (open ? 'folder-opened' : 'folder') + '" style="font-size:' + sz + 'px;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>';
     }
 
     // ── Stats HTML helper ──
@@ -787,18 +838,18 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
       node.fileCount = n;
       return n;
     }
-    function collapseDirs(node) {
+    function collapseDirs(node, isRoot) {
       if (node.file) return node;
-      if (node.children.size === 1) {
+      if (!isRoot && node.children.size === 1) {
         const [, child] = node.children.entries().next().value;
         if (!child.file) {
-          const col = collapseDirs(child);
+          const col = collapseDirs(child, false);
           const joined = node.name ? node.name + '/' + col.name : col.name;
           return { ...col, name: joined };
         }
       }
       const nc = new Map();
-      for (const [k, v] of node.children) nc.set(k, collapseDirs(v));
+      for (const [k, v] of node.children) nc.set(k, collapseDirs(v, false));
       return { ...node, children: nc };
     }
 
@@ -843,7 +894,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         '<div class="dir-row" data-dir="' + escAttr(node.fullPath) + '">' +
         '<div class="row-indent" style="width:' + (depth * 14 + 2) + 'px"></div>' +
         '<span class="codicon ' + (open ? 'codicon-chevron-down' : 'codicon-chevron-right') + '" style="font-size:12px;opacity:0.6;flex-shrink:0;"></span>' +
-        folderIconHtml(open) +
+        folderIconHtml(open, folderBase) +
         '<span class="dir-name">' + escText(node.name) + '</span>' +
         '<span class="dir-badge">' + node.fileCount + '</span>' +
         '</div>'
@@ -888,7 +939,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         btnCollapseAll.style.display = 'none';
       } else {
         const tree = buildTree(FILES);
-        const root = collapseDirs(tree);
+        const root = collapseDirs(tree, true);
         const buf = [];
         const sorted = Array.from(root.children.values()).sort((a, b) => {
           if (!a.file && b.file) return -1;
@@ -1049,7 +1100,10 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
           return (dark() ? PAL_D : PAL_L)[hashB(n)];
         }
         const tColor = () => dark() ? '#909090' : '#707070';
-        for (const b of BRANCHES) {
+        const REFS_LIMIT = 10;
+        let refsExpanded = false;
+
+        function makeBadge(b) {
           const color = b.type === 'tag' ? tColor() : bColor(b.name);
           const icon  = b.type === 'tag' ? 'tag' : b.type === 'remote' ? 'cloud' : 'git-branch';
           const label = b.type === 'remote' && b.remote ? b.remote + '/' + b.name : b.name;
@@ -1057,8 +1111,32 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
           sp.title = (b.type==='tag'?'Tag: ':b.type==='remote'?'Remote: ':'Branch: ') + label;
           sp.style.cssText = 'font-size:10px;padding:0 6px;height:16px;line-height:16px;border-radius:3px;display:inline-flex;align-items:center;gap:3px;background:' + color + '33;color:' + color + ';border:1px solid ' + color + '88;white-space:nowrap;flex-shrink:0;box-sizing:border-box;font-weight:500;margin:2px;';
           sp.innerHTML = '<span class="codicon codicon-' + icon + '" style="font-size:10px;flex-shrink:0;line-height:1"></span>' + escText(label);
-          refsRow.appendChild(sp);
+          return sp;
         }
+
+        function renderRefs() {
+          refsRow.innerHTML = '';
+          const visible = refsExpanded ? BRANCHES : BRANCHES.slice(0, REFS_LIMIT);
+          for (const b of visible) refsRow.appendChild(makeBadge(b));
+          const hidden = BRANCHES.length - REFS_LIMIT;
+          if (!refsExpanded && hidden > 0) {
+            const more = document.createElement('span');
+            more.textContent = '+' + hidden + ' more';
+            more.title = 'Show ' + hidden + ' more';
+            more.style.cssText = 'font-size:10px;padding:0 6px;height:16px;line-height:16px;border-radius:3px;display:inline-flex;align-items:center;cursor:pointer;opacity:0.6;margin:2px;border:1px solid currentColor;white-space:nowrap;flex-shrink:0;box-sizing:border-box;';
+            more.addEventListener('click', () => { refsExpanded = true; renderRefs(); });
+            refsRow.appendChild(more);
+          }
+          if (refsExpanded && BRANCHES.length > REFS_LIMIT) {
+            const less = document.createElement('span');
+            less.textContent = 'Show less';
+            less.style.cssText = 'font-size:10px;padding:0 6px;height:16px;line-height:16px;border-radius:3px;display:inline-flex;align-items:center;cursor:pointer;opacity:0.6;margin:2px;border:1px solid currentColor;white-space:nowrap;flex-shrink:0;box-sizing:border-box;';
+            less.addEventListener('click', () => { refsExpanded = false; renderRefs(); });
+            refsRow.appendChild(less);
+          }
+        }
+
+        renderRefs();
       }
     } catch(e) { /* badges are optional */ }
 
@@ -1175,6 +1253,22 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         vscode.postMessage({ type: 'getMergeCommits', hash: __d.hash, parents: __d.parents, requestId: rid });
       }
     } catch(e) { /* merge section is optional */ }
+
+    // ── Icon theme live update ──
+    window.addEventListener('message', e => {
+      if (e.data?.type !== 'updateIcons') return;
+      Object.assign(ICONS, e.data.iconIcons);
+      // Re-inject font face if needed
+      if (ICONS.type === 'font' && ICONS.fontFaceUri && ICONS.fontId) {
+        const existing = document.getElementById('gitcharm-icon-font');
+        if (existing) existing.remove();
+        const style = document.createElement('style');
+        style.id = 'gitcharm-icon-font';
+        style.textContent = '@font-face { font-family: "' + ICONS.fontId + '"; src: url("' + ICONS.fontFaceUri + '") format("' + (ICONS.fontFormat || 'woff') + '"); font-weight: normal; font-style: normal; }';
+        document.head.appendChild(style);
+      }
+      render();
+    });
 
     // ── Revert feedback ──
     window.addEventListener('message', e => {
