@@ -1,5 +1,6 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type {
   BranchInfo,
@@ -1301,6 +1302,37 @@ export class GitService {
 
   async cherryPick(hash: string): Promise<void> {
     await this.git.raw(['cherry-pick', hash]);
+  }
+
+  async cherryPickFile(hash: string, filePath: string, oldPath?: string): Promise<void> {
+    const parentsRaw = await this.git.raw(['log', '-1', '--format=%P', hash]).catch(() => '');
+    const parents = parentsRaw.trim().split(' ').filter(Boolean);
+    const base = parents[0] ?? '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    const paths = [...new Set([oldPath, filePath].filter((p): p is string => Boolean(p)))];
+    const patch = await this.git.raw(['diff', '--binary', '--find-renames', base, hash, '--', ...paths]);
+    if (!patch.trim()) {
+      throw new Error(`No changes found for ${filePath} in ${hash.slice(0, 8)}`);
+    }
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitcharm-cherry-pick-file-'));
+    const patchPath = path.join(tmpDir, 'changes.patch');
+    fs.writeFileSync(patchPath, patch, 'utf8');
+
+    try {
+      try {
+        await this.git.raw(['apply', '--binary', '--3way', '--whitespace=fix', patchPath]);
+      } catch (e) {
+        const conflicts = await this.git.raw(['diff', '--name-only', '--diff-filter=U']).catch(() => '');
+        if (conflicts.trim()) {
+          throw new Error(`FILE_CHERRY_PICK_CONFLICT:${conflicts.trim()}`);
+        }
+        await this.git.raw(['apply', '--binary', '--whitespace=fix', patchPath]).catch(() => {
+          throw new Error(`Failed to cherry-pick selected changes: ${e}`);
+        });
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   }
 
   async cherryPickContinue(): Promise<void> {

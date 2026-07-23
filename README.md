@@ -104,6 +104,7 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Commit detail with changed-file list and per-file diffs.
 - Smart diff resolution for added, deleted, renamed, copied, merge, and root commits.
 - **Show Combined Diff** context menu entry in the commit file list.
+- **Cherry-Pick Selected Changes** from a file in a commit directly into the current working tree.
 - Close button in the commit detail panel; clicking any commit re-opens it.
 - Bold commit message for the HEAD commit in the list.
 - Author name shown in commit rows when panel width > 500 px.
