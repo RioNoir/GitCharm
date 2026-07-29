@@ -43,63 +43,91 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
 
   const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo || filters.repoId);
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.altKey && (event.ctrlKey || event.metaKey))) return;
+
+      let nextRepoId: string | null | undefined;
+      if (event.key === '0') {
+        nextRepoId = null;
+      } else if (/^[1-9]$/.test(event.key)) {
+        nextRepoId = repos[Number(event.key) - 1]?.id;
+      } else if (event.key === '[' || event.key === ']') {
+        const currentIndex = filters.repoId
+          ? repos.findIndex(repo => repo.id === filters.repoId)
+          : -1;
+        const options: Array<string | null> = [null, ...repos.map(repo => repo.id)];
+        const optionIndex = currentIndex + 1;
+        const delta = event.key === '[' ? -1 : 1;
+        nextRepoId = options[(optionIndex + delta + options.length) % options.length];
+      }
+
+      if (nextRepoId === undefined || nextRepoId === filters.repoId) return;
+      event.preventDefault();
+      onRepoChange(nextRepoId);
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [filters.repoId, onRepoChange, repos]);
+
   return (
-    <div style={styles.bar}>
-      {/* Search */}
-      <DebouncedInput
-        value={filters.text}
-        placeholder="Search commits…"
-        icon="search"
-        onChange={v => onFilterChange('text', v)}
-        debounceMs={600}
-      />
-
-      {/* Author */}
-      <DebouncedInput
-        value={filters.author}
-        placeholder="Author…"
-        icon="person"
-        onChange={v => onFilterChange('author', v)}
-        debounceMs={600}
-      />
-
-      {/* Repo picker — only when multiple repos */}
+    <>
       {repos.length > 1 && (
-        <RepoPicker
+        <RepoTabs
           value={filters.repoId}
           repos={repos}
           onChange={onRepoChange}
-          isLight={isLight}
         />
       )}
 
-      {/* Branch / Tag — custom dropdown */}
-      <BranchTagPicker
-        value={filters.branch}
-        branches={uniqueBranchNames}
-        tags={uniqueTagNames}
-        onChange={v => onFilterChange('branch', v)}
-        isLight={isLight}
-      />
+      <div style={styles.bar}>
+        {/* Search */}
+        <DebouncedInput
+          value={filters.text}
+          placeholder="Search commits…"
+          icon="search"
+          onChange={v => onFilterChange('text', v)}
+          debounceMs={600}
+        />
 
-      {/* Date range */}
-      <DateRangePicker
-        from={filters.dateFrom}
-        to={filters.dateTo}
-        isLight={isLight}
-        onFromChange={v => onFilterChange('dateFrom', v)}
-        onToChange={v => onFilterChange('dateTo', v)}
-      />
+        {/* Author */}
+        <DebouncedInput
+          value={filters.author}
+          placeholder="Author…"
+          icon="person"
+          onChange={v => onFilterChange('author', v)}
+          debounceMs={600}
+        />
 
-      {hasFilters && (
-        <button data-top-action-btn="" style={styles.clearBtn} onClick={onClear} title="Clear all filters">
-          <Codicon name="clear-all" style={{ fontSize: '15px' }} />
-        </button>
-      )}
+        {/* Branch / Tag — custom dropdown */}
+        <BranchTagPicker
+          value={filters.branch}
+          branches={uniqueBranchNames}
+          tags={uniqueTagNames}
+          onChange={v => onFilterChange('branch', v)}
+          isLight={isLight}
+        />
 
-      {/* More menu — pushed to the right */}
-      <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
-    </div>
+        {/* Date range */}
+        <DateRangePicker
+          from={filters.dateFrom}
+          to={filters.dateTo}
+          isLight={isLight}
+          onFromChange={v => onFilterChange('dateFrom', v)}
+          onToChange={v => onFilterChange('dateTo', v)}
+        />
+
+        {hasFilters && (
+          <button data-top-action-btn="" style={styles.clearBtn} onClick={onClear} title="Clear all filters">
+            <Codicon name="clear-all" style={{ fontSize: '15px' }} />
+          </button>
+        )}
+
+        {/* More menu — pushed to the right */}
+        <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
+      </div>
+    </>
   );
 }
 
@@ -326,75 +354,41 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
   );
 }
 
-/* ─── RepoPicker ──────────────────────────────────────────────────────────── */
+/* ─── RepoTabs ────────────────────────────────────────────────────────────── */
 
-function RepoPicker({ value, repos, onChange, isLight }: {
+function RepoTabs({ value, repos, onChange }: {
   value: string | null;
   repos: RepoMeta[];
   onChange: (repoId: string | null) => void;
-  isLight: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onOut(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    const onBlur = () => setOpen(false);
-    if (open) {
-      document.addEventListener('mousedown', onOut);
-      window.addEventListener('blur', onBlur);
-    }
-    return () => {
-      document.removeEventListener('mousedown', onOut);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [open]);
-
-  const active = repos.find(r => r.id === value) ?? null;
-
   return (
-    <div ref={wrapRef} style={{ position: 'relative', flex: 1, minWidth: 160 }}>
+    <div style={styles.repoTabs} role="tablist" aria-label="Repositories">
       <button
-        style={{ ...styles.pickerBtn(!!value, open), width: '100%' }}
-        onClick={() => setOpen(o => !o)}
-        title={active?.name ?? 'Filter by repository'}
+        type="button"
+        role="tab"
+        aria-selected={value === null}
+        style={styles.repoTab(value === null)}
+        onClick={() => onChange(null)}
+        title="All repositories (Ctrl/Cmd+Alt+0)"
       >
-        {active
-          ? <span style={{ ...styles.repoDot, background: active.color }} />
-          : <Codicon name="repo" style={styles.fieldIcon} />
-        }
-        <span style={value ? styles.pickerLabelActive : { ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>
-          {active?.name ?? 'Repository…'}
-        </span>
-        <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
+        <Codicon name="repo" style={{ fontSize: '12px', opacity: 0.65 }} />
+        <span>All</span>
       </button>
 
-      {open && (
-        <div style={styles.dropdown}>
-          <div style={styles.dropdownList}>
-            <div
-              style={styles.dropdownItem(!value)}
-              onClick={() => { onChange(null); setOpen(false); }}
-            >
-              <span style={{ opacity: 0.5, fontSize: '12px' }}>All repositories</span>
-              {!value && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, marginLeft: 'auto', flexShrink: 0 }} />}
-            </div>
-            {repos.map(repo => (
-              <div
-                key={repo.id}
-                style={styles.dropdownItem(value === repo.id)}
-                onClick={() => { onChange(repo.id); setOpen(false); }}
-              >
-                <span style={{ ...styles.repoDot, background: repo.color }} />
-                <span style={styles.dropdownItemLabel}>{repo.name}</span>
-                {value === repo.id && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, marginLeft: 'auto', flexShrink: 0 }} />}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {repos.map((repo, index) => (
+        <button
+          key={repo.id}
+          type="button"
+          role="tab"
+          aria-selected={value === repo.id}
+          style={styles.repoTab(value === repo.id)}
+          onClick={() => onChange(repo.id)}
+          title={`${repo.name}${index < 9 ? ` (Ctrl/Cmd+Alt+${index + 1})` : ''}`}
+        >
+          <span style={{ ...styles.repoDot, background: repo.color }} />
+          <span style={styles.repoTabLabel}>{repo.name}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -665,6 +659,48 @@ const calStyles = {
 /* ─── Styles ──────────────────────────────────────────────────────────────── */
 
 const styles = {
+  repoTabs: {
+    display: 'flex',
+    alignItems: 'stretch',
+    gap: '2px',
+    minHeight: '32px',
+    padding: '4px 10px 0',
+    overflowX: 'auto' as const,
+    overflowY: 'hidden' as const,
+    borderBottom: '1px solid var(--vscode-panel-border)',
+    background: 'var(--vscode-editor-background)',
+    flexShrink: 0,
+  },
+  repoTab: (active: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    maxWidth: '180px',
+    padding: '4px 10px 5px',
+    color: active
+      ? 'var(--vscode-tab-activeForeground, var(--vscode-foreground))'
+      : 'var(--vscode-tab-inactiveForeground, var(--vscode-foreground))',
+    background: active
+      ? 'var(--vscode-tab-activeBackground, var(--vscode-editor-background))'
+      : 'var(--vscode-tab-inactiveBackground, transparent)',
+    border: 'none',
+    borderBottom: active
+      ? '2px solid var(--vscode-focusBorder)'
+      : '2px solid transparent',
+    borderRadius: '3px 3px 0 0',
+    cursor: 'pointer',
+    fontFamily: 'var(--vscode-font-family)',
+    fontSize: '12px',
+    fontWeight: active ? 600 : 400,
+    whiteSpace: 'nowrap',
+    opacity: active ? 1 : 0.75,
+    flexShrink: 0,
+  }),
+  repoTabLabel: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
   bar: {
     display: 'flex',
     alignItems: 'center',
