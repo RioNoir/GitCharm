@@ -162,6 +162,11 @@ export function registerCommands(
       if (editor) annotationController.closeAnnotations(editor);
     }),
 
+    vscode.commands.registerCommand('gitcharm.toggleGitAnnotations', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) await annotationController.toggleAnnotations(editor);
+    }),
+
     vscode.commands.registerCommand('gitcharm.navigateToAnnotationCommit', (hash: string, repoId: string) => {
       annotationController.navigateToCommit(hash, repoId);
     }),

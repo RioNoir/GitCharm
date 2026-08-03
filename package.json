@@ -176,6 +176,12 @@
         "icon": "$(git-commit)"
       },
       {
+        "command": "gitcharm.toggleGitAnnotations",
+        "title": "Toggle Git Annotations",
+        "category": "GitCharm",
+        "icon": "$(git-commit)"
+      },
+      {
         "command": "gitcharm.navigateToAnnotationCommit",
         "title": "Navigate to Commit",
         "category": "GitCharm"

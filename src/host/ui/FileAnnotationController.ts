@@ -310,6 +310,18 @@ export class FileAnnotationController implements vscode.Disposable {
     this.updateContextKey(editor);
   }
 
+  isAnnotated(editor: vscode.TextEditor): boolean {
+    return this.annotatedUris.has(editor.document.uri.toString());
+  }
+
+  async toggleAnnotations(editor: vscode.TextEditor): Promise<void> {
+    if (this.isAnnotated(editor)) {
+      this.closeAnnotations(editor);
+    } else {
+      await this.openAnnotations(editor);
+    }
+  }
+
   private clearAnnotationDecorations(editor: vscode.TextEditor): void {
     editor.setDecorations(this.uncommittedType, []);
     editor.setDecorations(this.codeLensUncommittedType, []);
