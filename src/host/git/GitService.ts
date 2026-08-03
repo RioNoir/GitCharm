@@ -1322,13 +1322,15 @@ export class GitService {
       try {
         await this.git.raw(['apply', '--binary', '--3way', '--whitespace=fix', patchPath]);
       } catch (e) {
-        const conflicts = await this.git.raw(['diff', '--name-only', '--diff-filter=U']).catch(() => '');
+        const conflicts = await this.git.raw(['diff', '--name-only', '--diff-filter=U', '--', ...paths]).catch(() => '');
         if (conflicts.trim()) {
           throw new Error(`FILE_CHERRY_PICK_CONFLICT:${conflicts.trim()}`);
         }
-        await this.git.raw(['apply', '--binary', '--whitespace=fix', patchPath]).catch(() => {
-          throw new Error(`Failed to cherry-pick selected changes: ${e}`);
-        });
+        try {
+          await this.git.raw(['apply', '--binary', '--whitespace=fix', patchPath]);
+        } catch (fallbackErr) {
+          throw new Error(`Failed to cherry-pick selected changes: ${fallbackErr}`);
+        }
       }
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

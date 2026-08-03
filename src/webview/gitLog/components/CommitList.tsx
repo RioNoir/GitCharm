@@ -1232,7 +1232,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
               style={ctxStyles.item}
               onClick={() =>
                 send({
-                  type: "/a",
+                  type: "LOG_CHERRY_PICK",
                   requestId: generateId(),
                   repoId: commit.repoId,
                   hash: commit.hash,
