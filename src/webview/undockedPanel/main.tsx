@@ -20,7 +20,7 @@ import { useLogStore } from '../gitLog/store/logStore';
 import { BranchSidebar } from '../gitLog/components/BranchSidebar';
 import { CommitList } from '../gitLog/components/CommitList';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
-import { CommitFiltersBar } from '../gitLog/components/CommitFiltersBar';
+import { CommitFiltersBar, RepoTabs } from '../gitLog/components/CommitFiltersBar';
 import { assignLanes } from '../gitLog/utils/graphLayout';
 import type { GraphLayout } from '../gitLog/utils/graphLayout';
 
@@ -320,24 +320,31 @@ function LogApp() {
         />
         {!sidebarCollapsed && <ResizeHandle onMouseDown={onSidebarResize} />}
 
-        <CommitList
-          layout={graphLayout}
-          selectedHash={store.selectedCommit?.hash ?? null}
-          repoColors={repoColors}
-          repos={store.repos}
-          currentBranchByRepo={currentBranchByRepo}
-          headHashByRepo={headHashByRepo}
-          onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
-          onLoadMore={loadMore}
-          hasMore={store.hasMore}
-          storeHasMore={store.hasMore}
-          loading={store.loadingCommits}
-          backgroundLoading={store.backgroundLoading}
-          scrollToHash={store.pendingScrollHash}
-          onScrolledToHash={() => store.setPendingScrollHash(null)}
-          aiEnabled={store.aiEnabled}
-          themeVersion={themeVersion}
-        />
+        <div style={commitColumn}>
+          <RepoTabs
+            value={store.commitFilters.repoId}
+            repos={store.repos}
+            onChange={handleRepoChange}
+          />
+          <CommitList
+            layout={graphLayout}
+            selectedHash={store.selectedCommit?.hash ?? null}
+            repoColors={repoColors}
+            repos={store.repos}
+            currentBranchByRepo={currentBranchByRepo}
+            headHashByRepo={headHashByRepo}
+            onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
+            onLoadMore={loadMore}
+            hasMore={store.hasMore}
+            storeHasMore={store.hasMore}
+            loading={store.loadingCommits}
+            backgroundLoading={store.backgroundLoading}
+            scrollToHash={store.pendingScrollHash}
+            onScrolledToHash={() => store.setPendingScrollHash(null)}
+            aiEnabled={store.aiEnabled}
+            themeVersion={themeVersion}
+          />
+        </div>
 
         {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
 
@@ -431,6 +438,14 @@ const logMainLayout: React.CSSProperties = {
   flex: 1,
   overflow: 'hidden',
   userSelect: 'none',
+};
+
+const commitColumn: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
 };
 
 const detailPane: React.CSSProperties = {

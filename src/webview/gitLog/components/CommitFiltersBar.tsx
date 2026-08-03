@@ -38,12 +38,14 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
     document.head.appendChild(s);
   }, []);
   const localBranches = branches.filter(b => !b.isRemote);
-  const uniqueBranchNames = Array.from(new Set(localBranches.map(b => b.name))).sort();
-  const uniqueTagNames = Array.from(new Set(tags.map(t => t.name))).sort();
+  const groupedBranches = groupByName(localBranches);
+  const groupedTags = groupByName(tags);
 
-  const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo || filters.repoId);
+  const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo);
 
   useEffect(() => {
+    if (repos.length <= 1) return;
+
     function onKeyDown(event: KeyboardEvent) {
       if (!(event.altKey && (event.ctrlKey || event.metaKey))) return;
 
@@ -72,16 +74,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
   }, [filters.repoId, onRepoChange, repos]);
 
   return (
-    <>
-      {repos.length > 1 && (
-        <RepoTabs
-          value={filters.repoId}
-          repos={repos}
-          onChange={onRepoChange}
-        />
-      )}
-
-      <div style={styles.bar}>
+    <div style={styles.bar}>
         {/* Search */}
         <DebouncedInput
           value={filters.text}
@@ -103,8 +96,9 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         {/* Branch / Tag — custom dropdown */}
         <BranchTagPicker
           value={filters.branch}
-          branches={uniqueBranchNames}
-          tags={uniqueTagNames}
+          branches={groupedBranches}
+          tags={groupedTags}
+          repos={repos}
           onChange={v => onFilterChange('branch', v)}
           isLight={isLight}
         />
@@ -127,7 +121,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         {/* More menu — pushed to the right */}
         <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
       </div>
-    </>
   );
 }
 
@@ -243,12 +236,31 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth, d
   );
 }
 
+interface NamedRef {
+  name: string;
+  repoIds: string[];
+}
+
+function groupByName(items: Array<{ name: string; repoId: string }>): NamedRef[] {
+  const map = new Map<string, NamedRef>();
+  for (const item of items) {
+    const existing = map.get(item.name);
+    if (existing) {
+      if (!existing.repoIds.includes(item.repoId)) existing.repoIds.push(item.repoId);
+    } else {
+      map.set(item.name, { name: item.name, repoIds: [item.repoId] });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /* ─── BranchTagPicker ─────────────────────────────────────────────────────── */
 
-function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
+function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLight }: {
   value: string;
-  branches: string[];
-  tags: string[];
+  branches: NamedRef[];
+  tags: NamedRef[];
+  repos: RepoMeta[];
   onChange: (v: string) => void;
   width?: number;
   isLight: boolean;
@@ -256,13 +268,15 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
+  const repoColorMap = Object.fromEntries(repos.map(r => [r.id, r.color]));
+  const multiRepo = repos.length > 1;
 
   const q = query.toLowerCase();
-  const displayedBranches = q ? branches.filter(o => o.toLowerCase().includes(q)) : branches;
-  const displayedTags = q ? tags.filter(o => o.toLowerCase().includes(q)) : tags;
+  const displayedBranches = q ? branches.filter(o => o.name.toLowerCase().includes(q)) : branches;
+  const displayedTags = q ? tags.filter(o => o.name.toLowerCase().includes(q)) : tags;
   const isEmpty = displayedBranches.length === 0 && displayedTags.length === 0;
 
-  const isTag = value ? tags.includes(value) : false;
+  const isTag = value ? tags.some(t => t.name === value) : false;
   const buttonIcon = isTag ? 'tag' : 'git-branch';
 
   useEffect(() => { if (!open) setQuery(''); }, [open]);
@@ -319,7 +333,7 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
             {displayedBranches.length > 0 && (
               <div style={styles.dropdownGroupLabel}>Branches</div>
             )}
-            {displayedBranches.map(name => (
+            {displayedBranches.map(({ name, repoIds }) => (
               <div
                 key={`b:${name}`}
                 style={styles.dropdownItem(value === name)}
@@ -327,13 +341,20 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
               >
                 <Codicon name="git-branch" style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
                 <span style={styles.dropdownItemLabel}>{name}</span>
-                {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, marginLeft: 'auto', flexShrink: 0 }} />}
+                {multiRepo && (
+                  <span style={styles.dotGroup}>
+                    {repoIds.map(id => (
+                      <span key={id} style={styles.repoDotSmall(repoColorMap[id] ?? '#888')} />
+                    ))}
+                  </span>
+                )}
+                {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, flexShrink: 0 }} />}
               </div>
             ))}
             {displayedTags.length > 0 && (
               <div style={styles.dropdownGroupLabel}>Tags</div>
             )}
-            {displayedTags.map(name => (
+            {displayedTags.map(({ name, repoIds }) => (
               <div
                 key={`t:${name}`}
                 style={styles.dropdownItem(value === name)}
@@ -341,7 +362,14 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
               >
                 <Codicon name="tag" style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
                 <span style={styles.dropdownItemLabel}>{name}</span>
-                {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, marginLeft: 'auto', flexShrink: 0 }} />}
+                {multiRepo && (
+                  <span style={styles.dotGroup}>
+                    {repoIds.map(id => (
+                      <span key={id} style={styles.repoDotSmall(repoColorMap[id] ?? '#888')} />
+                    ))}
+                  </span>
+                )}
+                {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, flexShrink: 0 }} />}
               </div>
             ))}
             {isEmpty && (
@@ -356,11 +384,13 @@ function BranchTagPicker({ value, branches, tags, onChange, width, isLight }: {
 
 /* ─── RepoTabs ────────────────────────────────────────────────────────────── */
 
-function RepoTabs({ value, repos, onChange }: {
+export function RepoTabs({ value, repos, onChange }: {
   value: string | null;
   repos: RepoMeta[];
   onChange: (repoId: string | null) => void;
 }) {
+  if (repos.length <= 1) return null;
+
   return (
     <div style={styles.repoTabs} role="tablist" aria-label="Repositories">
       <button
@@ -661,10 +691,7 @@ const calStyles = {
 const styles = {
   repoTabs: {
     display: 'flex',
-    alignItems: 'stretch',
     gap: '2px',
-    minHeight: '32px',
-    padding: '4px 10px 0',
     overflowX: 'auto' as const,
     overflowY: 'hidden' as const,
     borderBottom: '1px solid var(--vscode-panel-border)',
@@ -676,25 +703,21 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     maxWidth: '180px',
-    padding: '4px 10px 5px',
-    color: active
-      ? 'var(--vscode-tab-activeForeground, var(--vscode-foreground))'
-      : 'var(--vscode-tab-inactiveForeground, var(--vscode-foreground))',
-    background: active
-      ? 'var(--vscode-tab-activeBackground, var(--vscode-editor-background))'
-      : 'var(--vscode-tab-inactiveBackground, transparent)',
+    padding: active ? '5px 12px' : '5px 10px',
+    background: 'transparent',
     border: 'none',
     borderBottom: active
       ? '2px solid var(--vscode-focusBorder)'
       : '2px solid transparent',
-    borderRadius: '3px 3px 0 0',
     cursor: 'pointer',
     fontFamily: 'var(--vscode-font-family)',
     fontSize: '12px',
     fontWeight: active ? 600 : 400,
     whiteSpace: 'nowrap',
-    opacity: active ? 1 : 0.75,
+    opacity: active ? 1 : 0.6,
+    color: 'var(--vscode-foreground)',
     flexShrink: 0,
+    transition: 'opacity 0.1s, border-color 0.1s',
   }),
   repoTabLabel: {
     overflow: 'hidden',
@@ -856,6 +879,19 @@ const styles = {
     borderRadius: '50%',
     flexShrink: 0,
     display: 'inline-block',
+  } as React.CSSProperties,
+  repoDotSmall: (color: string): React.CSSProperties => ({
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    background: color,
+    flexShrink: 0,
+  }),
+  dotGroup: {
+    display: 'flex',
+    gap: '2px',
+    alignItems: 'center',
+    flexShrink: 0,
   } as React.CSSProperties,
   clearBtn: {
     height: '26px',

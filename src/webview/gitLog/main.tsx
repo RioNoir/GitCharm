@@ -4,7 +4,7 @@ import { useLogStore } from './store/logStore';
 import { BranchSidebar } from './components/BranchSidebar';
 import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
-import { CommitFiltersBar } from './components/CommitFiltersBar';
+import { CommitFiltersBar, RepoTabs } from './components/CommitFiltersBar';
 import { assignLanes } from './utils/graphLayout';
 import type { GraphLayout } from './utils/graphLayout';
 import { ResizeHandle } from '../shared/ResizeHandle';
@@ -415,24 +415,31 @@ function App() {
         {!sidebarCollapsed && <ResizeHandle onMouseDown={onSidebarResize} />}
 
         {/* Commit list (center) */}
-        <CommitList
-          layout={graphLayout}
-          selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
-          repoColors={repoColors}
-          repos={store.repos}
-          currentBranchByRepo={currentBranchByRepo}
-          headHashByRepo={headHashByRepo}
-          onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
-          onLoadMore={handleLoadMore}
-          hasMore={store.hasMore}
-          storeHasMore={store.hasMore}
-          loading={store.loadingCommits}
-          backgroundLoading={store.backgroundLoading}
-          scrollToHash={store.pendingScrollHash}
-          onScrolledToHash={() => store.setPendingScrollHash(null)}
-          aiEnabled={store.aiEnabled}
-          themeVersion={themeVersion}
-        />
+        <div style={commitColumn}>
+          <RepoTabs
+            value={store.commitFilters.repoId}
+            repos={store.repos}
+            onChange={handleRepoChange}
+          />
+          <CommitList
+            layout={graphLayout}
+            selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
+            repoColors={repoColors}
+            repos={store.repos}
+            currentBranchByRepo={currentBranchByRepo}
+            headHashByRepo={headHashByRepo}
+            onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
+            onLoadMore={handleLoadMore}
+            hasMore={store.hasMore}
+            storeHasMore={store.hasMore}
+            loading={store.loadingCommits}
+            backgroundLoading={store.backgroundLoading}
+            scrollToHash={store.pendingScrollHash}
+            onScrolledToHash={() => store.setPendingScrollHash(null)}
+            aiEnabled={store.aiEnabled}
+            themeVersion={themeVersion}
+          />
+        </div>
 
         {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
 
@@ -521,6 +528,14 @@ const mainLayout: React.CSSProperties = {
   flex: 1,
   overflow: 'hidden',
   userSelect: 'none',
+};
+
+const commitColumn: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
 };
 
 const detailPane: React.CSSProperties = {
