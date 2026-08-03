@@ -28,13 +28,15 @@ interface FileContextMenuProps {
   onShowCombinedDiff: () => void;
   onEditSource: () => void;
   onFileHistory: () => void;
+  onCherryPickFile: () => void;
   onRevertFile: () => void;
   onRevealExplorer: () => void;
   onRevealOS: () => void;
   onClose: () => void;
+  canApplyCommitChanges: boolean;
 }
 
-function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onRevertFile, onRevealExplorer, onRevealOS, onClose }: FileContextMenuProps) {
+function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onCherryPickFile, onRevertFile, onRevealExplorer, onRevealOS, onClose, canApplyCommitChanges }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -110,7 +112,12 @@ function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, o
       <Item icon="diff-multiple" label="Show Combined Diff" onClick={onShowCombinedDiff} />
       <Item icon="history" label="Show File History" onClick={onFileHistory} />
       <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
-      <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
+      {canApplyCommitChanges && (
+        <>
+          <Item icon="git-commit" label="Cherry-Pick Selected Changes" onClick={onCherryPickFile} />
+          <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
+        </>
+      )}
       <Item icon="list-tree" label="Reveal in Explorer" onClick={onRevealExplorer} />
       <Item icon="folder-opened" label="Reveal in File Manager" onClick={onRevealOS} />
     </div>
@@ -451,6 +458,20 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     } as LogToHostMsg);
     setCtxMenu(null);
   }, [ctxMenu, commit]);
+
+  const handleCtxCherryPickFile = useCallback(() => {
+    if (!ctxMenu || !commit || commit.isStash) return;
+    const reqId = generateId();
+    getVsCodeApi().postMessage({
+      type: 'LOG_CHERRY_PICK_FILE',
+      requestId: reqId,
+      repoId: commit.repoId,
+      hash: selectedMergeHash ?? commit.hash,
+      filePath: ctxMenu.file.path,
+      oldPath: ctxMenu.file.oldPath,
+    } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit, selectedMergeHash]);
 
   const handleCtxRevealExplorer = useCallback(() => {
     if (!ctxMenu || !commit) return;
@@ -835,9 +856,11 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           onShowCombinedDiff={handleCtxShowCombinedDiff}
           onFileHistory={handleCtxFileHistory}
           onEditSource={handleCtxEditSource}
+          onCherryPickFile={handleCtxCherryPickFile}
           onRevertFile={handleCtxRevertFile}
           onRevealExplorer={handleCtxRevealExplorer}
           onRevealOS={handleCtxRevealOS}
+          canApplyCommitChanges={!commit.isStash}
           onClose={() => setCtxMenu(null)}
         />
       )}

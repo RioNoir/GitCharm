@@ -497,6 +497,28 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_CHERRY_PICK_FILE': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          await repo.cherryPickFile(msg.hash, msg.filePath, msg.oldPath);
+          this.post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: true });
+          vscode.window.showInformationMessage(`GitCharm: Cherry-picked changes for ${msg.filePath}.`);
+        } catch (e: unknown) {
+          const errMsg = String(e);
+          this.post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
+          if (errMsg.includes('FILE_CHERRY_PICK_CONFLICT')) {
+            const files = errMsg.split('FILE_CHERRY_PICK_CONFLICT:')[1]?.trim();
+            vscode.window.showWarningMessage(
+              `GitCharm: Cherry-pick of ${msg.filePath} has conflicts${files ? ` in ${files}` : ''}. Resolve them in the editor.`
+            );
+          } else {
+            vscode.window.showErrorMessage(`GitCharm: Cannot cherry-pick file changes: ${errMsg}`);
+          }
+        }
+        break;
+      }
+
       case 'LOG_CHECKOUT': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }

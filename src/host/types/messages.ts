@@ -234,6 +234,7 @@ export type LogToHostMsg =
   | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string; oldPath?: string; parents?: string[]; combined?: boolean }
   | { type: 'LOG_OPEN_FILE'; repoId: string; filePath: string }
   | { type: 'LOG_REVERT_FILE'; requestId: string; repoId: string; hash: string; filePath: string; fileStatus?: string }
+  | { type: 'LOG_CHERRY_PICK_FILE'; requestId: string; repoId: string; hash: string; filePath: string; oldPath?: string }
   | { type: 'LOG_CHECKOUT'; requestId: string; repoId: string; branchName: string; createNew?: boolean; from?: string }
   | { type: 'LOG_PULL'; requestId: string; repoId: string }
   | { type: 'LOG_PUSH'; requestId: string; repoId: string; remote?: string; force?: boolean }
