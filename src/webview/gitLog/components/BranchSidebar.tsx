@@ -359,7 +359,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
         </span>
       )}
 
-      {merged.instances[0].aheadBehind && (
+      {merged.instances[0].aheadBehind && (merged.instances[0].aheadBehind.ahead > 0 || merged.instances[0].aheadBehind.behind > 0) && (
         <span style={styles.aheadBehind}>
           {merged.instances[0].aheadBehind.ahead > 0 && <span>↑{merged.instances[0].aheadBehind.ahead}</span>}
           {merged.instances[0].aheadBehind.behind > 0 && <span>↓{merged.instances[0].aheadBehind.behind}</span>}
@@ -553,14 +553,14 @@ const styles = {
     borderBottom: '1px solid var(--vscode-panel-border)',
     display: 'flex',
     alignItems: 'stretch',
-    height: '35px',
+    height: '28px',
   },
   searchInputWrap: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     alignItems: 'center',
-    background: 'var(--vscode-input-background)',
+    background: 'var(--vscode-sideBar-background)',
     paddingLeft: '8px',
     gap: '5px',
   } as React.CSSProperties,
