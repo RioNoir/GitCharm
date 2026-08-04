@@ -6,6 +6,7 @@ import type { WorktreeEntry } from './GitService';
 import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
 import { PROJECT_COLORS } from '../types/workspace';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 const MAX_SUBMODULE_DEPTH = 5;
 const DEFAULT_REPOSITORY_SCAN_MAX_DEPTH = 1;
@@ -804,9 +805,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
       try {
         const message = rebase ? await r.pullRebase() : await r.pull();
         results.push({ repoId: r.repoId, ok: true, message });
-      } catch (e: any) {
-        const detail = e?.stderr?.trim() || e?.gitErrorCode || e?.message || 'Unknown error';
-        results.push({ repoId: r.repoId, ok: false, message: detail });
+      } catch (e: unknown) {
+        results.push({ repoId: r.repoId, ok: false, message: formatGitError(e) });
       }
     }
     return results;
@@ -819,9 +819,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
       try {
         await r.push();
         results.push({ repoId: r.repoId, ok: true, message: 'pushed' });
-      } catch (e: any) {
-        const detail = e?.stderr?.trim() || e?.gitErrorCode || e?.message || 'Unknown error';
-        results.push({ repoId: r.repoId, ok: false, message: detail });
+      } catch (e: unknown) {
+        results.push({ repoId: r.repoId, ok: false, message: formatGitError(e) });
       }
     }
     return results;

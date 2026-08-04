@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 export async function openCombinedDiffPanel(
   extensionUri: vscode.Uri,
@@ -35,7 +36,7 @@ export async function openCombinedDiffPanel(
     orderedHashes = await repo.getCombinedFilesOrder(hashes);
     commitMetas.sort((a, b) => orderedHashes.indexOf(a.hash) - orderedHashes.indexOf(b.hash));
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`GitCharm: Failed to load combined diff: ${String(e)}`);
+    vscode.window.showErrorMessage(`GitCharm: Failed to load combined diff: ${formatGitError(e)}`);
     return;
   }
 

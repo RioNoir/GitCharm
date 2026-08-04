@@ -3,6 +3,7 @@ import * as path from 'path';
 import { generateNonce } from '../utils/webviewHtml';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -34,7 +35,7 @@ export async function openFileHistoryPanel(
   try {
     commits = await repo.getFileHistory(relPath);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`GitCharm: Failed to load file history: ${String(e)}`);
+    vscode.window.showErrorMessage(`GitCharm: Failed to load file history: ${formatGitError(e)}`);
     return;
   }
 
@@ -120,7 +121,7 @@ export async function openFileHistoryPanel(
 
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${String(e)}`);
+        vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${formatGitError(e)}`);
       }
     } else if (msg.type === 'openInLog' && msg.hash) {
       if (logPanel) {

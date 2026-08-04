@@ -3,6 +3,7 @@ import { generateNonce } from '../utils/webviewHtml';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { loadIconTheme, resolveIconsForFiles } from '../utils/IconThemeService';
 import type { ResolvedIconMap } from '../utils/IconThemeService';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 export async function openCommitDetailPanel(
   extensionUri: vscode.Uri,
@@ -33,7 +34,7 @@ export async function openCommitDetailPanel(
       repo.getBranchesContaining(hash).catch(() => ({ local: [], remote: [], tags: [] })),
     ]);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`GitCharm: Failed to load commit details: ${String(e)}`);
+    vscode.window.showErrorMessage(`GitCharm: Failed to load commit details: ${formatGitError(e)}`);
     return;
   }
 
@@ -140,7 +141,7 @@ export async function openCommitDetailPanel(
         );
         panel.webview.postMessage({ type: 'explainCommitResult', explanation });
       } catch (e: unknown) {
-        panel.webview.postMessage({ type: 'explainCommitResult', error: String(e) });
+        panel.webview.postMessage({ type: 'explainCommitResult', error: formatGitError(e) });
       }
       return;
     }
@@ -168,7 +169,7 @@ export async function openCommitDetailPanel(
         const absUri = vscode.Uri.file(join(repo.rootPath, msg.filePath));
         await vscode.commands.executeCommand('gitcharm.showFileHistory', absUri);
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Cannot open file history: ${String(e)}`);
+        vscode.window.showErrorMessage(`GitCharm: Cannot open file history: ${formatGitError(e)}`);
       }
       return;
     }
@@ -202,7 +203,7 @@ export async function openCommitDetailPanel(
         }
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${String(e)}`);
+        vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${formatGitError(e)}`);
       }
     } else if (msg.type === 'openFile' && msg.filePath) {
       const fileUri = vscode.Uri.joinPath(vscode.Uri.file(repo.rootPath), msg.filePath);
@@ -248,7 +249,7 @@ export async function openCommitDetailPanel(
         vscode.window.showInformationMessage(`GitCharm: Reverted "${msg.filePath}".`);
         panel.webview.postMessage({ type: 'revertDone', filePath: msg.filePath });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Revert failed: ${String(e)}`);
+        vscode.window.showErrorMessage(`GitCharm: Revert failed: ${formatGitError(e)}`);
       }
     }
   });

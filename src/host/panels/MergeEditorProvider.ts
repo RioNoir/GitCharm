@@ -5,6 +5,7 @@ import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { parseConflictFile, hasConflictMarkers } from '../git/ConflictParser';
 import type { MergeToHostMsg, HostToMergeMsg } from '../types/messages';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 export class MergeEditorProvider implements vscode.Disposable {
   private panels = new Map<string, vscode.WebviewPanel>();
@@ -81,7 +82,7 @@ export class MergeEditorProvider implements vscode.Disposable {
           vscode.window.showInformationMessage(`GitCharm: File resolved and staged: ${path.basename(filePath)}`);
           vscode.commands.executeCommand('gitcharm.commitPanel.focus');
         } catch (e: unknown) {
-          post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }

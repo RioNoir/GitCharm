@@ -19,6 +19,7 @@ import { openEditMessageEditor } from './EditMessageEditorPanel';
 import type { GitProfileService } from '../git/GitProfileService';
 import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
@@ -461,7 +462,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             : await repo.getUnstagedDiff(msg.repoId, msg.filePath);
           this.post({ type: 'COMMIT_DIFF_RESULT', requestId: msg.requestId, diff });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_DIFF_RESULT', requestId: msg.requestId, diff: null, error: String(e) });
+          this.post({ type: 'COMMIT_DIFF_RESULT', requestId: msg.requestId, diff: null, error: formatGitError(e) });
         }
         break;
       }
@@ -476,7 +477,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -491,7 +492,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -506,7 +507,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -521,7 +522,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -539,7 +540,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -560,7 +561,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
             }
           }
         );
@@ -617,7 +618,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                 await repo.commit(r.message, r.amend, creds, s => this.profileService?.trace(s));
                 if (msg.andPush) await repo.push();
               } catch (e: unknown) {
-                errors.push(`${r.repoId.split('/').pop()}: ${String(e)}`);
+                errors.push(`${r.repoId.split('/').pop()}: ${formatGitError(e)}`);
               }
             }
             if (errors.length > 0) {
@@ -662,7 +663,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const pullStatus = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: pullStatus });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -674,7 +675,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const remotes = await repo.getRemotes();
           this.post({ type: 'COMMIT_REMOTES_RESULT', requestId: msg.requestId, remotes });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_REMOTES_RESULT', requestId: msg.requestId, remotes: [], error: String(e) });
+          this.post({ type: 'COMMIT_REMOTES_RESULT', requestId: msg.requestId, remotes: [], error: formatGitError(e) });
         }
         break;
       }
@@ -686,7 +687,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const message = await repo.getLastCommitMessage();
           this.post({ type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT', requestId: msg.requestId, message });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT', requestId: msg.requestId, message: '', error: String(e) });
+          this.post({ type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT', requestId: msg.requestId, message: '', error: formatGitError(e) });
         }
         break;
       }
@@ -713,7 +714,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
             }
           }
         );
@@ -729,7 +730,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             try {
               await (msg.rebase ? repo.pullRebase() : repo.pull());
             } catch (e: unknown) {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Pull failed: ${String(e)}` });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Pull failed: ${formatGitError(e)}` });
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
               return;
@@ -741,7 +742,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Push failed: ${String(e)}` });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Push failed: ${formatGitError(e)}` });
             }
           }
         );
@@ -762,7 +763,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const status = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -782,7 +783,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repo = this.manager.getRepo(f.repoId);
           if (!repo) { errors.push(`${f.path}: repo not found`); continue; }
           try { await repo.discardFile(f.path); }
-          catch (e: unknown) { errors.push(`${f.path}: ${String(e)}`); }
+          catch (e: unknown) { errors.push(`${f.path}: ${formatGitError(e)}`); }
         }
         if (errors.length > 0) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n') });
@@ -862,7 +863,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           await vscode.workspace.fs.delete(absPath, { useTrash: true });
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -883,7 +884,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const status = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1029,7 +1030,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const message = await generateWithAI(provider, prompt, cfg);
           this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, message });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, error: String(e) });
+          this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, error: formatGitError(e) });
         }
         break;
       }
@@ -1041,7 +1042,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const shelves = await svc.list();
           this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves });
         } catch (e: unknown) {
-          this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves: [], error: String(e) });
+          this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves: [], error: formatGitError(e) });
         }
         break;
       }
@@ -1059,7 +1060,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.postChangelistsUpdate(status);
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: String(e) });
+          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1103,7 +1104,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               }
             }
           } else {
-            this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: String(e) });
+            this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: formatGitError(e) });
           }
         }
         break;
@@ -1121,7 +1122,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           svc.drop(msg.shelveId);
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
+          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1139,7 +1140,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           svc.rename(msg.shelveId, newName);
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
+          this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1151,7 +1152,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const diff = svc.getFileDiff(msg.shelveId, msg.filePath);
           this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff });
         } catch (e: unknown) {
-          this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff: '', error: String(e) });
+          this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff: '', error: formatGitError(e) });
         }
         break;
       }
@@ -1231,7 +1232,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             `${fileName} (Working Tree ↔ ${msg.stashRef})`
           );
         } catch (e) {
-          vscode.window.showErrorMessage(`GitCharm: Cannot open stash diff — ${String(e)}`);
+          vscode.window.showErrorMessage(`GitCharm: Cannot open stash diff — ${formatGitError(e)}`);
         }
         break;
       }
@@ -1246,7 +1247,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const stashes = await repo.stashList();
           this.post({ type: 'STASH_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, stashes });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, stashes: [], error: String(e) });
+          this.post({ type: 'STASH_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, stashes: [], error: formatGitError(e) });
         }
         break;
       }
@@ -1261,7 +1262,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const diff = await repo.stashShow(msg.stashRef, msg.filePath);
           this.post({ type: 'STASH_SHOW_RESULT', requestId: msg.requestId, diff });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_SHOW_RESULT', requestId: msg.requestId, diff: '', error: String(e) });
+          this.post({ type: 'STASH_SHOW_RESULT', requestId: msg.requestId, diff: '', error: formatGitError(e) });
         }
         break;
       }
@@ -1278,7 +1279,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: String(e) });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1295,7 +1296,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'pop', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'pop', ok: false, error: String(e) });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'pop', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1318,7 +1319,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           await repo.stashDrop(msg.stashRef);
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1336,7 +1337,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           await repo.stashRename(msg.stashRef, newMessage);
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: String(e) });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1351,7 +1352,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const commits = await repo.getUnpushedCommits();
           this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
         } catch (e: unknown) {
-          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits: [], error: String(e) });
+          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits: [], error: formatGitError(e) });
         }
         break;
       }
@@ -1368,7 +1369,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: String(e) });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1391,8 +1392,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
           this.logProvider?.refresh();
         } catch (e: unknown) {
-          this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
-          vscode.window.showErrorMessage(`GitCharm: Squash failed: ${String(e)}`);
+          this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          vscode.window.showErrorMessage(`GitCharm: Squash failed: ${formatGitError(e)}`);
         }
         break;
       }
@@ -1412,8 +1413,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
           this.logProvider?.refresh();
         } catch (e: unknown) {
-          this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
-          vscode.window.showErrorMessage(`GitCharm: Drop failed: ${String(e)}`);
+          this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          vscode.window.showErrorMessage(`GitCharm: Drop failed: ${formatGitError(e)}`);
         }
         break;
       }
@@ -1435,7 +1436,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
           this.logProvider?.refresh();
         } catch (e: unknown) {
-          const errMsg = String(e);
+          const errMsg = formatGitError(e);
           this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not revert')) {
             const choice = await vscode.window.showWarningMessage(
@@ -1467,8 +1468,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits });
           this.logProvider?.refresh();
         } catch (e: unknown) {
-          this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
-          vscode.window.showErrorMessage(`GitCharm: Edit commit message failed: ${String(e)}`);
+          this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          vscode.window.showErrorMessage(`GitCharm: Edit commit message failed: ${formatGitError(e)}`);
         }
         break;
       }
@@ -1533,7 +1534,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const status = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e) });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1655,7 +1656,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           try {
             await shelveSvc.push(shelveName.trim(), paths, clAssignments);
           } catch (e: unknown) {
-            vscode.window.showErrorMessage(`Shelve failed for repo ${repoId}: ${String(e)}`);
+            vscode.window.showErrorMessage(`Shelve failed for repo ${repoId}: ${formatGitError(e)}`);
           }
         }
         const shelveStatus = await this.manager.getAllStatusesFresh();
@@ -1684,7 +1685,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           try {
             await repo.stashPush(stashName.trim(), paths);
           } catch (e: unknown) {
-            vscode.window.showErrorMessage(`Stash failed for repo ${repoId}: ${String(e)}`);
+            vscode.window.showErrorMessage(`Stash failed for repo ${repoId}: ${formatGitError(e)}`);
           }
         }
         const stashStatus = await this.manager.getAllStatusesFresh();
@@ -1810,7 +1811,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: true });
               this.logProvider?.refresh();
             } catch (e: unknown) {
-              this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: String(e) });
+              this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: formatGitError(e) });
             }
           }
         );
@@ -1829,7 +1830,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const status = await this.manager.getAllStatusesFresh();
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
         } catch (e: unknown) {
-          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: String(e) });
+          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1846,7 +1847,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           // Re-discover so the newly-initialized submodule gets its own GitService
           // scheduleRefresh will re-send status to the webview
         } catch (e: unknown) {
-          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: false, error: String(e) });
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1869,7 +1870,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           await parentRepoD.deinitSubmodule(msg.submodulePath, msg.force);
           this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: true });
         } catch (e: unknown) {
-          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: String(e) });
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -1896,7 +1897,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                 }
               }
             } catch (e: unknown) {
-              this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: false, error: String(e) });
+              this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: false, error: formatGitError(e) });
             }
           }
         );
@@ -1970,7 +1971,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
           vscode.window.showInformationMessage(`GitCharm: Worktree created at ${worktreePath.trim()}`);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`GitCharm: Failed to create worktree — ${String(e)}`);
+          vscode.window.showErrorMessage(`GitCharm: Failed to create worktree — ${formatGitError(e)}`);
         }
         break;
       }
@@ -1987,7 +1988,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
         } catch (e: unknown) {
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: false, error: String(e) });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -2004,7 +2005,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
         } catch (e: unknown) {
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: false, error: String(e) });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -2021,7 +2022,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
         } catch (e: unknown) {
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: false, error: String(e) });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -2038,7 +2039,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
         } catch (e: unknown) {
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: false, error: String(e) });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: false, error: formatGitError(e) });
         }
         break;
       }
@@ -2055,7 +2056,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
         } catch (e: unknown) {
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: false, error: String(e) });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: false, error: formatGitError(e) });
         }
         break;
       }

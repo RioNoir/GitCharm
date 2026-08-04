@@ -15,6 +15,7 @@ import type { StashEntry, UnpushedCommit } from '../types/messages';
 import { parseDiff, buildMonacoContents, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
+import { formatGitError } from '../utils/gitErrorUtils';
 
 const STATUS_MAP: Record<string, GitFileStatus> = {
   M: 'modified', A: 'added', D: 'deleted',
@@ -1141,7 +1142,11 @@ export class GitService {
       const hasUpstream = !!vsRepo.state.HEAD?.upstream;
       const targetRemote = remote ?? vsRepo.state.HEAD?.upstream?.remote ?? vsRepo.state.remotes[0]?.name ?? 'origin';
       const forceMode = force ? ForcePushMode.ForceWithLease : undefined;
-      await vsRepo.push(targetRemote, branchName, !hasUpstream, forceMode);
+      try {
+        await vsRepo.push(targetRemote, branchName, !hasUpstream, forceMode);
+      } catch (e: unknown) {
+        throw new Error(formatGitError(e));
+      }
       return;
     }
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
@@ -1155,7 +1160,11 @@ export class GitService {
     if (!hasUpstream) args.push('--set-upstream', targetRemote, branchName);
     else if (remote) args.push(remote, branchName);
     if (force) args.push('--force-with-lease');
-    await this.git.raw(args);
+    try {
+      await this.git.raw(args);
+    } catch (e: unknown) {
+      throw new Error(formatGitError(e));
+    }
   }
 
   async pull(): Promise<string> {
@@ -1165,9 +1174,8 @@ export class GitService {
       try {
         await vsRepo.pull();
         return 'pulled';
-      } catch (e: any) {
-        const detail = e?.stderr?.trim() || e?.gitErrorCode || e?.message || 'Unknown error';
-        throw new Error(detail);
+      } catch (e: unknown) {
+        throw new Error(formatGitError(e));
       }
     }
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
@@ -1185,9 +1193,8 @@ export class GitService {
         await vsRepo.fetch();
         await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
         return 'pulled (rebase)';
-      } catch (e: any) {
-        const detail = e?.stderr?.trim() || e?.gitErrorCode || e?.message || 'Unknown error';
-        throw new Error(detail);
+      } catch (e: unknown) {
+        throw new Error(formatGitError(e));
       }
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
