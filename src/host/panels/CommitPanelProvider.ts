@@ -16,6 +16,8 @@ import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
+import { compareFileWithRef, compareFolderWithRef } from './CompareWithCommand';
+import { pickRefQuickPick } from '../utils/refPicker';
 import type { GitProfileService } from '../git/GitProfileService';
 import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
@@ -847,6 +849,44 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!repo) return;
         const absUri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
         await vscode.commands.executeCommand('gitcharm.showFileHistory', absUri);
+        break;
+      }
+
+      case 'COMMIT_COMPARE_FILE_WITH': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        const pickedRef = await pickRefQuickPick(repo, {
+          placeHolder: `Compare ${msg.filePath} with…`,
+          title: 'GitCharm - Compare With',
+        });
+        if (!pickedRef) return;
+        let refHash: string;
+        try {
+          refHash = await repo.resolveRef(pickedRef);
+        } catch {
+          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+          return;
+        }
+        await compareFileWithRef(repo, msg.filePath, refHash);
+        break;
+      }
+
+      case 'COMMIT_COMPARE_FOLDER_WITH': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        const pickedRef = await pickRefQuickPick(repo, {
+          placeHolder: `Compare ${msg.folderPath || '.'} with…`,
+          title: 'GitCharm - Compare With',
+        });
+        if (!pickedRef) return;
+        let refHash: string;
+        try {
+          refHash = await repo.resolveRef(pickedRef);
+        } catch {
+          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+          return;
+        }
+        await compareFolderWithRef(repo, msg.folderPath, refHash);
         break;
       }
 

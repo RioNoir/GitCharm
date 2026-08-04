@@ -47,6 +47,7 @@ const FILE_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'shelve',          label: 'Shelve',              icon: 'archive' },
   { id: 'stash',           label: 'Stash',               icon: 'git-stash' },
   { id: 'diff',            label: 'Show Diff',           icon: 'diff' },
+  { id: 'compare-with',    label: 'Compare with…',       icon: 'git-compare' },
   { id: 'file-history',    label: 'Show File History',   icon: 'history' },
   { id: 'jump',            label: 'Jump to Source',      icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',  icon: 'list-tree' },
@@ -69,6 +70,7 @@ const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
   { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
   { id: 'stash',     label: 'Stash Changes',       icon: 'git-stash' },
+  { id: 'compare-with', label: 'Compare with…',    icon: 'git-compare' },
   { separator: true },
   { id: 'gitignore', label: 'Add to .gitignore',  icon: 'exclude' },
   { separator: true },
@@ -118,6 +120,7 @@ const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'unstage',         label: 'Unstage',              icon: 'remove' },
   { separator: true },
   { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
+  { id: 'compare-with',    label: 'Compare with…',        icon: 'git-compare' },
   { id: 'file-history',    label: 'Show File History',    icon: 'history' },
   { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
@@ -133,6 +136,7 @@ const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'stash',           label: 'Stash',                icon: 'git-stash' },
   { separator: true },
   { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
+  { id: 'compare-with',    label: 'Compare with…',        icon: 'git-compare' },
   { id: 'file-history',    label: 'Show File History',    icon: 'history' },
   { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
   { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
@@ -148,6 +152,8 @@ const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
 const VSCODE_FOLDER_STAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'unstage',  label: 'Unstage Folder',       icon: 'remove' },
   { separator: true },
+  { id: 'compare-with', label: 'Compare with…',    icon: 'git-compare' },
+  { separator: true },
   { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
 ];
 
@@ -156,6 +162,7 @@ const VSCODE_FOLDER_UNSTAGED_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback', label: 'Rollback',             icon: 'discard' },
   { id: 'shelve',   label: 'Shelve Changes',        icon: 'archive' },
   { id: 'stash',    label: 'Stash Changes',         icon: 'git-stash' },
+  { id: 'compare-with', label: 'Compare with…',    icon: 'git-compare' },
   { separator: true },
   { id: 'gitignore',label: 'Add to .gitignore',    icon: 'exclude' },
   { separator: true },
@@ -741,6 +748,9 @@ function App() {
       case 'diff':
         openDiff(file.repoId, file.path);
         break;
+      case 'compare-with':
+        send({ type: 'COMMIT_COMPARE_FILE_WITH', repoId: file.repoId, filePath: file.path });
+        break;
       case 'file-history':
         send({ type: 'COMMIT_SHOW_FILE_HISTORY', repoId: file.repoId, filePath: file.path });
         break;
@@ -783,6 +793,9 @@ function App() {
         break;
       case 'stash':
         doStash(ctx.repoId, 'Changes', ctx.files.map(f => f.path));
+        break;
+      case 'compare-with':
+        send({ type: 'COMMIT_COMPARE_FOLDER_WITH', repoId: ctx.repoId, folderPath: ctx.folderPath });
         break;
       case 'gitignore':
         send({ type: 'COMMIT_ADD_TO_GITIGNORE', repoId: ctx.repoId, entryPath: ctx.folderPath });
@@ -1769,6 +1782,7 @@ function App() {
               { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
               { id: 'shelve',     label: 'Shelve Changes',     icon: 'archive' },
               { id: 'stash',      label: 'Stash Changes',      icon: 'git-stash' },
+              { id: 'compare-with', label: 'Compare with…',   icon: 'git-compare' },
               { separator: true },
               { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
               { separator: true },

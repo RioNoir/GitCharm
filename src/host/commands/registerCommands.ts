@@ -7,6 +7,7 @@ import { FileAnnotationController } from '../ui/FileAnnotationController';
 import { ProfileStatusBar } from '../ui/ProfileStatusBar';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
+import { compareWithCommand } from '../panels/CompareWithCommand';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -602,6 +603,19 @@ export function registerCommands(
         return;
       }
       await openFileHistoryPanel(extensionUri, manager, fileUri, logPanel);
+    }),
+
+    // ── Compare With ────────────────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.compareWith', async (uri?: vscode.Uri) => {
+      if (!manager) return;
+      // uri comes from explorer/context or editor/context; fall back to active editor
+      const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!fileUri || fileUri.scheme !== 'file') {
+        vscode.window.showInformationMessage('GitCharm: Select a file or folder to compare.');
+        return;
+      }
+      await compareWithCommand(manager, fileUri);
     }),
   );
 

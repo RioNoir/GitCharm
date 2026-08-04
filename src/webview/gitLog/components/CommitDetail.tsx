@@ -28,6 +28,7 @@ interface FileContextMenuProps {
   onShowCombinedDiff: () => void;
   onEditSource: () => void;
   onFileHistory: () => void;
+  onCompareWith: () => void;
   onCherryPickFile: () => void;
   onRevertFile: () => void;
   onRevealExplorer: () => void;
@@ -36,7 +37,7 @@ interface FileContextMenuProps {
   canApplyCommitChanges: boolean;
 }
 
-function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onCherryPickFile, onRevertFile, onRevealExplorer, onRevealOS, onClose, canApplyCommitChanges }: FileContextMenuProps) {
+function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onCompareWith, onCherryPickFile, onRevertFile, onRevealExplorer, onRevealOS, onClose, canApplyCommitChanges }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -110,6 +111,7 @@ function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, o
     <div ref={menuRef} style={menuStyle} onContextMenu={e => e.preventDefault()}>
       <Item icon="diff" label="Show Diff" onClick={onShowDiff} />
       <Item icon="diff-multiple" label="Show Combined Diff" onClick={onShowCombinedDiff} />
+      <Item icon="git-compare" label="Compare with…" onClick={onCompareWith} />
       <Item icon="history" label="Show File History" onClick={onFileHistory} />
       <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
       {canApplyCommitChanges && (
@@ -290,7 +292,10 @@ function TreeDir({ node, depth, selectedFile, ctxFile, onOpen, onContextMenu, al
 
   return (
     <>
-      <div style={styles.dirRow} onClick={() => { if (allExpanded === null) setLocalOpen(o => !o); }}>
+      <div
+        style={styles.dirRow}
+        onClick={() => { if (allExpanded === null) setLocalOpen(o => !o); }}
+      >
         <div style={{ width: indent, flexShrink: 0 }} />
         <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={styles.chevron} />
         <FileIcon name={folderBaseName} isFolder isOpen={open} theme={iconTheme} size={16} style={styles.folderIconBase} />
@@ -490,6 +495,17 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     getVsCodeApi().postMessage({ type: 'LOG_SHOW_FILE_HISTORY', repoId: commit.repoId, filePath: ctxMenu.file.path } as LogToHostMsg);
     setCtxMenu(null);
   }, [ctxMenu, commit]);
+
+  const handleCtxCompareWith = useCallback(() => {
+    if (!ctxMenu || !commit) return;
+    getVsCodeApi().postMessage({
+      type: 'LOG_COMPARE_FILE_WITH',
+      repoId: commit.repoId,
+      hash: selectedMergeHash ?? commit.hash,
+      filePath: ctxMenu.file.path,
+    } as LogToHostMsg);
+    setCtxMenu(null);
+  }, [ctxMenu, commit, selectedMergeHash]);
 
   function selectMergeCommit(c: MergeParentCommit) {
     if (selectedMergeHash === c.hash) {
@@ -855,6 +871,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
           onShowDiff={handleCtxShowDiff}
           onShowCombinedDiff={handleCtxShowCombinedDiff}
           onFileHistory={handleCtxFileHistory}
+          onCompareWith={handleCtxCompareWith}
           onEditSource={handleCtxEditSource}
           onCherryPickFile={handleCtxCherryPickFile}
           onRevertFile={handleCtxRevertFile}

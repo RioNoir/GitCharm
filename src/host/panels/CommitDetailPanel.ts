@@ -4,6 +4,7 @@ import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { loadIconTheme, resolveIconsForFiles } from '../utils/IconThemeService';
 import type { ResolvedIconMap } from '../utils/IconThemeService';
 import { formatGitError } from '../utils/gitErrorUtils';
+import { pickRefQuickPick } from '../utils/refPicker';
 
 export async function openCommitDetailPanel(
   extensionUri: vscode.Uri,
@@ -205,6 +206,32 @@ export async function openCommitDetailPanel(
       } catch (e: unknown) {
         vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${formatGitError(e)}`);
       }
+    } else if (msg.type === 'compareFileWith' && msg.filePath) {
+      const compareHash = msg.hash ?? hash;
+      const pickedRef = await pickRefQuickPick(repo, {
+        placeHolder: `Compare ${msg.filePath} with…`,
+        title: 'GitCharm - Compare With',
+      });
+      if (!pickedRef) return;
+      let refHash: string;
+      try {
+        refHash = await repo.resolveRef(pickedRef);
+      } catch {
+        vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+        return;
+      }
+      const pathMod = await import('path');
+      const gitUri = (ref: string, filePath: string): vscode.Uri => {
+        const fileUri = vscode.Uri.file(pathMod.join(repo.rootPath, filePath));
+        return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+      };
+      const shortHash = compareHash.slice(0, 7);
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        gitUri(compareHash, msg.filePath),
+        gitUri(refHash, msg.filePath),
+        `${msg.filePath} (${shortHash} vs ${pickedRef})`,
+      );
     } else if (msg.type === 'openFile' && msg.filePath) {
       const fileUri = vscode.Uri.joinPath(vscode.Uri.file(repo.rootPath), msg.filePath);
       vscode.commands.executeCommand('vscode.open', fileUri);
@@ -663,6 +690,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
 
   <div class="ctx-menu hidden" id="ctxMenu">
     <div class="ctx-item" id="ctxDiff"><span class="codicon codicon-diff"></span>Show Diff</div>
+    <div class="ctx-item" id="ctxCompare"><span class="codicon codicon-git-compare"></span>Compare with…</div>
     <div class="ctx-item" id="ctxHistory"><span class="codicon codicon-history"></span>Show File History</div>
     <div class="ctx-item" id="ctxEdit"><span class="codicon codicon-go-to-file"></span>Edit Source</div>
     <div class="ctx-sep"></div>
@@ -788,10 +816,10 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
 
     // ── Context menu ──
     const ctxMenu  = document.getElementById('ctxMenu');
-    let ctxPath = null, ctxStatus = null;
+    let ctxPath = null, ctxStatus = null, ctxHash = null;
 
-    function showCtx(x, y, path, status) {
-      ctxPath = path; ctxStatus = status;
+    function showCtx(x, y, path, status, hashOverride) {
+      ctxPath = path; ctxStatus = status; ctxHash = hashOverride || __d.hash;
       ctxMenu.classList.remove('hidden');
       requestAnimationFrame(() => {
         const margin = 4;
@@ -808,7 +836,8 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     window.addEventListener('blur', hideCtx);
 
     document.getElementById('btnOpenChanges').addEventListener('click', () => { vscode.postMessage({ type: 'openChanges' }); });
-    document.getElementById('ctxDiff').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openDiff',         filePath: ctxPath, fileStatus: ctxStatus }); hideCtx(); });
+    document.getElementById('ctxDiff').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openDiff',         filePath: ctxPath, fileStatus: ctxStatus, hash: ctxHash }); hideCtx(); });
+    document.getElementById('ctxCompare').addEventListener('click',   () => { if (ctxPath) vscode.postMessage({ type: 'compareFileWith',   filePath: ctxPath, hash: ctxHash }); hideCtx(); });
     document.getElementById('ctxHistory').addEventListener('click',   () => { if (ctxPath) vscode.postMessage({ type: 'showFileHistory',   filePath: ctxPath }); hideCtx(); });
     document.getElementById('ctxEdit').addEventListener('click',      () => { if (ctxPath) vscode.postMessage({ type: 'openFile',         filePath: ctxPath }); hideCtx(); });
     document.getElementById('ctxRevert').addEventListener('click',    () => { if (ctxPath) vscode.postMessage({ type: 'revertFile',       filePath: ctxPath, fileStatus: ctxStatus }); hideCtx(); });
@@ -969,7 +998,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
       if (!row) return;
       document.querySelectorAll('.file-row.ctx-active').forEach(el => el.classList.remove('ctx-active'));
       row.classList.add('ctx-active');
-      showCtx(e.clientX, e.clientY, row.dataset.path, row.dataset.status);
+      showCtx(e.clientX, e.clientY, row.dataset.path, row.dataset.status, row.dataset.hash);
     });
 
     // ── Toolbar buttons ──

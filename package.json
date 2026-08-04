@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -265,6 +265,12 @@
         "title": "Show File History",
         "category": "GitCharm",
         "icon": "$(history)"
+      },
+      {
+        "command": "gitcharm.compareWith",
+        "title": "Compare with...",
+        "category": "GitCharm",
+        "icon": "$(git-compare)"
       }
     ],
     "menus": {
@@ -430,6 +436,10 @@
           "when": "resourceScheme == file"
         },
         {
+          "command": "gitcharm.compareWith",
+          "when": "resourceScheme == file"
+        },
+        {
           "command": "gitcharm.commitAndPush",
           "when": "false"
         },
@@ -461,7 +471,7 @@
       "explorer/context": [
         {
           "submenu": "gitcharm/explorer",
-          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "when": "resourceScheme == file",
           "group": "gitcharm@1"
         }
       ],
@@ -470,11 +480,21 @@
           "command": "gitcharm.showFileHistory",
           "when": "resourceScheme == file && !explorerResourceIsFolder",
           "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.compareWith",
+          "when": "resourceScheme == file",
+          "group": "navigation@2"
         }
       ],
       "editor/context": [
         {
           "command": "gitcharm.showFileHistory",
+          "when": "resourceScheme == file",
+          "group": "gitcharm@1"
+        },
+        {
+          "command": "gitcharm.compareWith",
           "when": "resourceScheme == file",
           "group": "gitcharm@1"
         },

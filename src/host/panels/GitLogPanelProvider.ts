@@ -10,6 +10,7 @@ import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { formatGitError } from '../utils/gitErrorUtils';
+import { pickRefQuickPick } from '../utils/refPicker';
 
 function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
   if (!current.detachedTag && !current.detachedHash) return branches; // normal branch — already in list
@@ -1442,41 +1443,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_COMPARE_COMMIT_WITH': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) break;
-        const [branches, tags, commitMeta] = await Promise.all([
-          repo.getBranches(),
-          repo.getTags(),
-          repo.getCommitMeta(msg.hash),
-        ]);
+        const commitMeta = await repo.getCommitMeta(msg.hash);
         const shortHash = commitMeta?.shortHash ?? msg.hash.slice(0, 7);
-        type RefItem = vscode.QuickPickItem & { ref: string };
-        const items: RefItem[] = [
-          { label: 'LOCAL BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
-          ...branches.filter(b => !b.isRemote).map(b => ({
-            label: `$(git-branch) ${b.name}`,
-            description: b.isHead ? '(current)' : undefined,
-            ref: b.name,
-          })),
-          { label: 'REMOTE BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
-          ...branches.filter(b => b.isRemote).map(b => ({
-            label: `$(cloud) ${b.name}`,
-            ref: b.name,
-          })),
-          ...(tags.length ? [
-            { label: 'TAGS', kind: vscode.QuickPickItemKind.Separator, ref: '' },
-            ...tags.map(t => ({ label: `$(tag) ${t.name}`, ref: t.name })),
-          ] : []),
-        ];
-        const picked = await vscode.window.showQuickPick(items, {
+        const pickedRef = await pickRefQuickPick(repo, {
           placeHolder: `Compare ${shortHash} with…`,
           title: 'GitCharm - Compare Commit With',
-          matchOnDescription: true,
         });
-        if (!picked?.ref) break;
+        if (!pickedRef) break;
         let refHash: string;
         try {
-          refHash = await repo.resolveRef(picked.ref);
+          refHash = await repo.resolveRef(pickedRef);
         } catch {
-          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${picked.ref}"`);
+          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
           break;
         }
         const rootPath = repo.rootPath;
@@ -1494,7 +1472,37 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
             return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
           });
-        await vscode.commands.executeCommand('vscode.changes', `${shortHash} vs ${picked.ref}`, resources);
+        await vscode.commands.executeCommand('vscode.changes', `${shortHash} vs ${pickedRef}`, resources);
+        break;
+      }
+
+      case 'LOG_COMPARE_FILE_WITH': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        const pickedRef = await pickRefQuickPick(repo, {
+          placeHolder: `Compare ${msg.filePath} with…`,
+          title: 'GitCharm - Compare With',
+        });
+        if (!pickedRef) break;
+        let refHash: string;
+        try {
+          refHash = await repo.resolveRef(pickedRef);
+        } catch {
+          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+          break;
+        }
+        const rootPath = repo.rootPath;
+        const gitUri = (ref: string, filePath: string): vscode.Uri => {
+          const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+          return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+        };
+        const shortHash = msg.hash.slice(0, 7);
+        await vscode.commands.executeCommand(
+          'vscode.diff',
+          gitUri(msg.hash, msg.filePath),
+          gitUri(refHash, msg.filePath),
+          `${msg.filePath} (${shortHash} vs ${pickedRef})`,
+        );
         break;
       }
 

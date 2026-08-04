@@ -796,6 +796,26 @@ export class GitService {
     return this._sortHashesOldestFirst(hashes);
   }
 
+  async getRefVsWorkingTreeFiles(ref: string, folderPath: string): Promise<Array<{ path: string; status: string }>> {
+    const pathArgs = folderPath ? ['--', folderPath] : [];
+    const [nameStatus, untracked] = await Promise.all([
+      this.git.raw(['diff', '--name-status', ref, ...pathArgs]).catch(() => ''),
+      this.git.raw(['ls-files', '--others', '--exclude-standard', ...pathArgs]).catch(() => ''),
+    ]);
+    const files: Array<{ path: string; status: string }> = [];
+    for (const line of nameStatus.trim().split('\n')) {
+      if (!line.trim()) continue;
+      const parts = line.split('\t');
+      if (parts.length < 2) continue;
+      files.push({ status: parts[0][0], path: parts[parts.length - 1] });
+    }
+    for (const line of untracked.trim().split('\n')) {
+      const p = line.trim();
+      if (p) files.push({ status: 'A', path: p });
+    }
+    return files;
+  }
+
   private async _sortHashesOldestFirst(hashes: string[]): Promise<string[]> {
     if (hashes.length <= 1) return [...hashes];
     try {
