@@ -426,6 +426,7 @@ function App() {
             selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
             repoColors={repoColors}
             repos={store.repos}
+            activeRepoId={store.commitFilters.repoId}
             currentBranchByRepo={currentBranchByRepo}
             headHashByRepo={headHashByRepo}
             onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}

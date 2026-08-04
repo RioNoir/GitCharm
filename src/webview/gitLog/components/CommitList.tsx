@@ -19,6 +19,7 @@ interface Props {
   selectedHash: string | null;
   repoColors: Record<string, string>;
   repos: RepoMeta[];
+  activeRepoId?: string | null;
   currentBranchByRepo: Record<string, string>;
   headHashByRepo: Record<string, string>;
   onSelect: (commit: LaidOutCommit) => void;
@@ -79,7 +80,7 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors, repos, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
+export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -144,7 +145,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, currentBra
     return map;
   }, [repos]);
 
-  const multiRepo = repos.length > 1;
+  const multiRepo = repos.length > 1 && !activeRepoId;
 
   const repoBlocks = useMemo((): RepoBlock[] => {
     if (!multiRepo || commits.length === 0) return [];
