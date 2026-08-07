@@ -83,6 +83,16 @@ export class WorkspaceGitManager implements vscode.Disposable {
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.setupGitInitWatchers()),
     );
 
+    // VS Code's git extension can discover a repo (e.g. a parent-folder repo found via
+    // git.openRepositoryInParentFolders) asynchronously, after its API already reports
+    // 'initialized'. Pick those up as soon as they appear.
+    const gitApiForOpenEvent = getVscodeGitApi();
+    if (gitApiForOpenEvent) {
+      this.globalListeners.push(
+        gitApiForOpenEvent.onDidOpenRepository(() => { this.reinitialize(); this.scheduleRefresh(); })
+      );
+    }
+
     this.reinitialize();
     this.setupGitInitWatchers();
     this.scheduleRefresh();
@@ -178,8 +188,45 @@ export class WorkspaceGitManager implements vscode.Disposable {
       });
     }
 
+    // Pick up repositories VS Code's built-in Git extension already discovered but that
+    // this scan missed — most notably a parent-folder repo found via
+    // git.openRepositoryInParentFolders when the workspace root is a subfolder of the repo
+    // (so no workspace folder path sits inside it, and the downward scans above never reach it).
+    this.registerVscodeDiscoveredRepositories(colorIdx, customColors);
+
     // Notify listeners that the set of known repos has changed (e.g. submodule added/removed)
     this.reposListeners.forEach(l => l());
+  }
+
+  private registerVscodeDiscoveredRepositories(
+    colorIdx: { value: number },
+    customColors: Record<string, string>,
+  ): void {
+    const gitApi = getVscodeGitApi();
+    if (!gitApi) return;
+
+    for (const vsRepo of gitApi.repositories) {
+      const repoPath = path.normalize(vsRepo.rootUri.fsPath);
+      if (this.repos.has(repoPath)) continue;
+
+      const color = customColors[path.basename(repoPath)] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+      const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(repoPath);
+
+      const meta: RepoMeta = {
+        id: repoPath,
+        name: path.basename(repoPath),
+        rootPath: repoPath,
+        color,
+        depth: 0,
+        isWorktree,
+        mainWorktreePath,
+      };
+      this.repoMetas.set(repoPath, meta);
+      this.repos.set(repoPath, new GitService(repoPath, repoPath));
+      this.setupWatcher(repoPath, repoPath);
+      this.discoverSubmodules(repoPath, repoPath, 1, colorIdx, customColors);
+      this.setupRepositoryAuxWatchers(repoPath, repoPath);
+    }
   }
 
   private getRepositoryScanMaxDepth(): number {
