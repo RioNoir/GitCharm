@@ -418,8 +418,11 @@ export class GitService {
       }
 
       for (const ref of remoteRefs.filter(r => r.type === RefType.RemoteHead)) {
+        // ref.name is already the full "remote/branch" string (e.g. "origin/noissue/team/x").
+        // Use ref.remote for the remote name — splitting ref.name on '/' breaks for branch
+        // names that themselves contain slashes.
         const name = ref.name ?? '';
-        const remoteName = name.split('/')[0];
+        const remoteName = ref.remote ?? name.split('/')[0];
         branches.push({
           repoId: this.repoId,
           name,
