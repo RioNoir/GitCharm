@@ -7,4 +7,5 @@ MEMORY.md
 .vscode/settings.json
 .idea/
 .vscode/gitcharm-changelists.json
+.vscode/changelists.json
 *.tsbuildinfo

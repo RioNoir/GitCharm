@@ -102,8 +102,8 @@ async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPa
   const commitWord = totalAhead === 1 ? 'commit' : 'commits';
   const repoWord = reposWithAhead === 1 ? 'repository' : 'repositories';
   const message = reposWithAhead === 1
-    ? `GitCharm: ${totalAhead} unpushed ${commitWord} ready to push.`
-    : `GitCharm: ${totalAhead} unpushed ${commitWord} across ${reposWithAhead} ${repoWord}.`;
+    ? `${totalAhead} unpushed ${commitWord} ready to push.`
+    : `${totalAhead} unpushed ${commitWord} across ${reposWithAhead} ${repoWord}.`;
 
   const picked = await vscode.window.showInformationMessage(message, 'Go to Push', 'Dismiss');
 
@@ -142,8 +142,8 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
   const commitWord = totalBehind === 1 ? 'commit' : 'commits';
   const repoWord = reposWithBehind === 1 ? 'repository' : 'repositories';
   const message = reposWithBehind === 1
-    ? `GitCharm: ${totalBehind} incoming ${commitWord} available to pull.`
-    : `GitCharm: ${totalBehind} incoming ${commitWord} across ${reposWithBehind} ${repoWord}.`;
+    ? `${totalBehind} incoming ${commitWord} available to pull.`
+    : `${totalBehind} incoming ${commitWord} across ${reposWithBehind} ${repoWord}.`;
 
   const pull = 'Pull';
   const dismiss = 'Dismiss';
@@ -156,14 +156,14 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
   } else if (picked === pull) {
     const metaById = new Map(metas.map(m => [m.id, m]));
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pulling…', cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: 'Pulling…', cancellable: false },
       async () => {
         const results = await manager.pullAll(false);
         const failed = results.filter(r => !r.ok);
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
           vscode.window.showInformationMessage(
-            `GitCharm: ${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
+            `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
           );
         } else {
           const failedDesc = failed.map(r => {
@@ -171,7 +171,7 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
             return `${name}: ${r.message}`;
           }).join('; ');
           vscode.window.showWarningMessage(
-            `GitCharm: ${ok.length} updated, ${failed.length} failed: ${failedDesc}`
+            `${ok.length} updated, ${failed.length} failed: ${failedDesc}`
           );
         }
       }

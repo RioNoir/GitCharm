@@ -137,7 +137,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
     const result = await this.profileService.getEffectiveProfile(resolvedPath);
     if (!result) {
-      vscode.window.showWarningMessage('GitCharm: No Git identity configured. Set a profile before committing.');
+      vscode.window.showWarningMessage('No Git identity configured. Set a profile before committing.');
       return undefined;
     }
     if (result.source === 'local' || result.source === 'global') return undefined;
@@ -336,7 +336,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   async manageHiddenRepos(): Promise<void> {
     const hidden = this.getHiddenRepoIds();
     if (hidden.length === 0) {
-      vscode.window.showInformationMessage('GitCharm: No hidden repositories.');
+      vscode.window.showInformationMessage('No hidden repositories.');
       return;
     }
     const allMetas = this.manager.getRepoMetas();
@@ -552,7 +552,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Commit & Push', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: 'Commit & Push', cancellable: false },
           async () => {
             try {
               const creds = await this.getCommitCredentials(repo.rootPath);
@@ -589,14 +589,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             } else {
               const names = noRemoteRepoIds.map(id => id.split('/').pop() ?? id);
               vscode.window.showInformationMessage(
-                `GitCharm: Cannot push — no remote configured for: ${names.join(', ')}. Add a remote first (git remote add <name> <url>).`
+                `Cannot push — no remote configured for: ${names.join(', ')}. Add a remote first (git remote add <name> <url>).`
               );
             }
             return;
           }
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: `Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
           async () => {
             const errors: string[] = [];
             // Commit submodules before parent repos so the parent's pointer update
@@ -644,12 +644,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_PULL_ALL': {
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pulling all repositories', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: 'Pulling all repositories', cancellable: false },
           async (progress) => {
             const results = await this.manager.pullAll();
             const failed = results.filter(r => !r.ok);
             if (failed.length > 0) {
-              vscode.window.showWarningMessage(`GitCharm: ${failed.length} pull(s) failed`);
+              vscode.window.showWarningMessage(`${failed.length} pull(s) failed`);
             }
           }
         );
@@ -707,7 +707,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           break;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pushing', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: 'Pushing', cancellable: false },
           async () => {
             try {
               await repo.push(msg.force ?? false, msg.remote);
@@ -727,7 +727,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Syncing', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: 'Syncing', cancellable: false },
           async () => {
             try {
               await (msg.rebase ? repo.pullRebase() : repo.pull());
@@ -864,7 +864,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           refHash = await repo.resolveRef(pickedRef);
         } catch {
-          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+          vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
           return;
         }
         await compareFileWithRef(repo, msg.filePath, refHash);
@@ -883,7 +883,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try {
           refHash = await repo.resolveRef(pickedRef);
         } catch {
-          vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+          vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
           return;
         }
         await compareFolderWithRef(repo, msg.folderPath, refHash);
@@ -1272,7 +1272,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             `${fileName} (Working Tree ↔ ${msg.stashRef})`
           );
         } catch (e) {
-          vscode.window.showErrorMessage(`GitCharm: Cannot open stash diff — ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(`Cannot open stash diff — ${formatGitError(e)}`);
         }
         break;
       }
@@ -1433,7 +1433,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.logProvider?.refresh();
         } catch (e: unknown) {
           this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
-          vscode.window.showErrorMessage(`GitCharm: Squash failed: ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(`Squash failed: ${formatGitError(e)}`);
         }
         break;
       }
@@ -1454,7 +1454,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.logProvider?.refresh();
         } catch (e: unknown) {
           this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
-          vscode.window.showErrorMessage(`GitCharm: Drop failed: ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(`Drop failed: ${formatGitError(e)}`);
         }
         break;
       }
@@ -1486,7 +1486,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             if (choice === 'Continue') await repo.revertContinue();
             else await repo.revertAbort();
           } else {
-            vscode.window.showErrorMessage(`GitCharm: Revert failed: ${errMsg}`);
+            vscode.window.showErrorMessage(`Revert failed: ${errMsg}`);
           }
         }
         break;
@@ -1509,7 +1509,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.logProvider?.refresh();
         } catch (e: unknown) {
           this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
-          vscode.window.showErrorMessage(`GitCharm: Edit commit message failed: ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(`Edit commit message failed: ${formatGitError(e)}`);
         }
         break;
       }
@@ -1844,7 +1844,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           return;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Pushing submodule ${subRepoPush.rootPath.split('/').pop()}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: `Pushing submodule ${subRepoPush.rootPath.split('/').pop()}`, cancellable: false },
           async () => {
             try {
               await subRepoPush.pushSubmodule();
@@ -1922,7 +1922,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           return;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `GitCharm: Updating submodule ${msg.submodulePath}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: `Updating submodule ${msg.submodulePath}`, cancellable: false },
           async () => {
             try {
               await parentRepoU.updateSubmodule(msg.submodulePath, true, msg.recursive);
@@ -1999,7 +1999,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
         try {
           await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Creating worktree…', cancellable: false },
+            { location: vscode.ProgressLocation.Notification, title: 'Creating worktree…', cancellable: false },
             async () => {
               await repoCP.createWorktree(worktreePath.trim(), {
                 branch: picked.isNew ? undefined : picked.branchName,
@@ -2009,9 +2009,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           );
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
-          vscode.window.showInformationMessage(`GitCharm: Worktree created at ${worktreePath.trim()}`);
+          vscode.window.showInformationMessage(`Worktree created at ${worktreePath.trim()}`);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`GitCharm: Failed to create worktree — ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(`Failed to create worktree — ${formatGitError(e)}`);
         }
         break;
       }
@@ -2124,12 +2124,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'NOTIFY_ERROR': {
-        vscode.window.showErrorMessage(`GitCharm: ${msg.message}`);
+        vscode.window.showErrorMessage(`${msg.message}`);
         break;
       }
 
       case 'NOTIFY_INFO': {
-        vscode.window.showInformationMessage(`GitCharm: ${msg.message}`);
+        vscode.window.showInformationMessage(`${msg.message}`);
         break;
       }
 

@@ -47,14 +47,14 @@ export function registerCommands(
       const metas = manager.getRepoMetas();
       const metaById = new Map(metas.map(m => [m.id, m]));
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Pushing all repositories…', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: 'Pushing all repositories…', cancellable: false },
         async () => {
           const results = await manager.pushAll();
           const failed = results.filter(r => !r.ok);
           const ok = results.filter(r => r.ok);
           if (failed.length === 0) {
             vscode.window.showInformationMessage(
-              `GitCharm: ${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} pushed.`
+              `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} pushed.`
             );
           } else {
             const failedDesc = failed.map(r => {
@@ -62,7 +62,7 @@ export function registerCommands(
               return `${name}: ${r.message}`;
             }).join('; ');
             vscode.window.showWarningMessage(
-              `GitCharm: ${ok.length} pushed, ${failed.length} failed: ${failedDesc}`
+              `${ok.length} pushed, ${failed.length} failed: ${failedDesc}`
             );
           }
         }
@@ -91,7 +91,7 @@ export function registerCommands(
       if (!pick) return;
 
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'GitCharm: Syncing all repositories…', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: 'Syncing all repositories…', cancellable: false },
         async () => {
           // Pull first
           const pullResults = await manager.pullAll(pick.rebase);
@@ -103,7 +103,7 @@ export function registerCommands(
               return `${name}: ${r.message}`;
             }).join('; ');
             vscode.window.showWarningMessage(
-              `GitCharm Sync: Pull failed — stopping before push. ${failedDesc}`
+              `Sync: Pull failed — stopping before push. ${failedDesc}`
             );
             commitPanel.refresh();
             return;
@@ -116,7 +116,7 @@ export function registerCommands(
 
           if (pushFailed.length === 0) {
             vscode.window.showInformationMessage(
-              `GitCharm Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`
+              `Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`
             );
           } else {
             const failedDesc = pushFailed.map(r => {
@@ -124,7 +124,7 @@ export function registerCommands(
               return `${name}: ${r.message}`;
             }).join('; ');
             vscode.window.showWarningMessage(
-              `GitCharm Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`
+              `Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`
             );
           }
           commitPanel.refresh();
@@ -269,7 +269,7 @@ export function registerCommands(
       providerItems.push({ label: '$(settings-gear) Open AI Settings', description: 'Configure paths, model, diff limits…', providerId: OPEN_SETTINGS_ID, kind: vscode.QuickPickItemKind.Default });
 
       const pickedProvider = await vscode.window.showQuickPick(providerItems, {
-        title: 'GitCharm: Select AI Provider',
+        title: 'Select AI Provider',
         placeHolder: 'Choose a provider…',
       });
       if (!pickedProvider) return;
@@ -303,12 +303,12 @@ export function registerCommands(
         ];
 
         const pickedModel = await vscode.window.showQuickPick(modelItems, {
-          title: 'GitCharm: Select VS Code LM Model',
+          title: 'Select VS Code LM Model',
           placeHolder: 'Pick a model…',
         });
         if (!pickedModel) return;
         await config.update('ai.modelId', pickedModel.modelId, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: VS Code LM — ${pickedModel.modelId || 'Auto'}`);
+        vscode.window.showInformationMessage(`AI: VS Code LM — ${pickedModel.modelId || 'Auto'}`);
 
       } else if (pickedProvider.providerId === 'ollama') {
         const ollamaUrl: string = config.get('ai.ollamaUrl', 'http://localhost:11434');
@@ -334,7 +334,7 @@ export function registerCommands(
             modelName: m.name,
           }));
           const picked = await vscode.window.showQuickPick(modelItems, {
-            title: 'GitCharm: Select Ollama Model',
+            title: 'Select Ollama Model',
             placeHolder: 'Pick a local model…',
           });
           if (!picked) return;
@@ -346,7 +346,7 @@ export function registerCommands(
             : undefined;
           if (msg) vscode.window.showWarningMessage(msg);
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: Ollama Model',
+            title: 'Ollama Model',
             prompt: 'Enter the Ollama model name',
             value: currentModel,
             placeHolder: 'e.g. llama3, mistral, qwen3.5:9b',
@@ -356,7 +356,7 @@ export function registerCommands(
         }
 
         await config.update('ai.ollamaModel', chosenModel, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: Ollama — ${chosenModel}`);
+        vscode.window.showInformationMessage(`AI: Ollama — ${chosenModel}`);
 
       } else if (pickedProvider.providerId === 'lmstudio') {
         const lmstudioUrl: string = config.get('ai.lmstudioUrl', 'http://localhost:1234');
@@ -381,7 +381,7 @@ export function registerCommands(
             modelId: m.id,
           }));
           const picked = await vscode.window.showQuickPick(modelItems, {
-            title: 'GitCharm: Select LM Studio Model',
+            title: 'Select LM Studio Model',
             placeHolder: 'Pick a loaded model…',
           });
           if (!picked) return;
@@ -389,7 +389,7 @@ export function registerCommands(
         } else {
           vscode.window.showWarningMessage('Could not reach LM Studio. Make sure it is running and the server is started.');
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: LM Studio Model',
+            title: 'LM Studio Model',
             prompt: 'Enter the model identifier (as shown in LM Studio)',
             value: currentModel,
             placeHolder: 'e.g. lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF',
@@ -399,7 +399,7 @@ export function registerCommands(
         }
 
         await config.update('ai.lmstudioModel', chosenModel, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: LM Studio — ${chosenModel || 'default'}`);
+        vscode.window.showInformationMessage(`AI: LM Studio — ${chosenModel || 'default'}`);
 
       } else if (pickedProvider.providerId === 'claude-api') {
         const currentModel: string = config.get('ai.claudeModel', '');
@@ -412,14 +412,14 @@ export function registerCommands(
           { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
         ];
         const pickedClaudeApi = await vscode.window.showQuickPick(claudeApiModels, {
-          title: 'GitCharm: Select Claude Model',
+          title: 'Select Claude Model',
           placeHolder: 'Pick a model…',
         });
         if (!pickedClaudeApi) return;
         let chosenClaudeApi = pickedClaudeApi.modelId;
         if (chosenClaudeApi === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: Claude Model ID',
+            title: 'Claude Model ID',
             prompt: 'Enter the full model ID',
             value: currentModel,
             placeHolder: 'e.g. claude-opus-4-8',
@@ -428,7 +428,7 @@ export function registerCommands(
           chosenClaudeApi = input.trim();
         }
         await config.update('ai.claudeModel', chosenClaudeApi, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: Claude API — ${chosenClaudeApi || 'default'}`);
+        vscode.window.showInformationMessage(`AI: Claude API — ${chosenClaudeApi || 'default'}`);
 
       } else if (pickedProvider.providerId === 'openai-api') {
         const currentModel: string = config.get('ai.openaiModel', 'gpt-4o');
@@ -442,14 +442,14 @@ export function registerCommands(
           { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
         ];
         const pickedOpenAI = await vscode.window.showQuickPick(openaiModels, {
-          title: 'GitCharm: Select OpenAI Model',
+          title: 'Select OpenAI Model',
           placeHolder: 'Pick a model…',
         });
         if (!pickedOpenAI) return;
         let chosenOpenAI = pickedOpenAI.modelId;
         if (chosenOpenAI === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: OpenAI Model ID',
+            title: 'OpenAI Model ID',
             prompt: 'Enter the full model ID',
             value: currentModel,
             placeHolder: 'e.g. gpt-4o, o3',
@@ -458,7 +458,7 @@ export function registerCommands(
           chosenOpenAI = input.trim();
         }
         await config.update('ai.openaiModel', chosenOpenAI, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: OpenAI API — ${chosenOpenAI || 'default'}`);
+        vscode.window.showInformationMessage(`AI: OpenAI API — ${chosenOpenAI || 'default'}`);
 
       } else if (pickedProvider.providerId === 'claude-cli') {
         const currentModel: string = config.get('ai.claudeModel', '');
@@ -472,14 +472,14 @@ export function registerCommands(
           { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
         ];
         const pickedClaude = await vscode.window.showQuickPick(claudeModels, {
-          title: 'GitCharm: Select Claude Model',
+          title: 'Select Claude Model',
           placeHolder: 'Pick a model…',
         });
         if (!pickedClaude) return;
         let chosenClaude = pickedClaude.modelId;
         if (chosenClaude === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: Claude Model ID',
+            title: 'Claude Model ID',
             prompt: 'Enter the full model ID',
             value: currentModel,
             placeHolder: 'e.g. claude-opus-4-7',
@@ -488,7 +488,7 @@ export function registerCommands(
           chosenClaude = input.trim();
         }
         await config.update('ai.claudeModel', chosenClaude, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: Claude CLI — ${chosenClaude || 'default'}`);
+        vscode.window.showInformationMessage(`AI: Claude CLI — ${chosenClaude || 'default'}`);
 
       } else if (pickedProvider.providerId === 'codex-cli') {
         const currentModel: string = config.get('ai.codexModel', '');
@@ -502,14 +502,14 @@ export function registerCommands(
           { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
         ];
         const pickedCodex = await vscode.window.showQuickPick(codexModels, {
-          title: 'GitCharm: Select Codex Model',
+          title: 'Select Codex Model',
           placeHolder: 'Pick a model…',
         });
         if (!pickedCodex) return;
         let chosenCodex = pickedCodex.modelId;
         if (chosenCodex === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: Codex Model ID',
+            title: 'Codex Model ID',
             prompt: 'Enter the full model ID',
             value: currentModel,
             placeHolder: 'e.g. o3, o4-mini',
@@ -518,7 +518,7 @@ export function registerCommands(
           chosenCodex = input.trim();
         }
         await config.update('ai.codexModel', chosenCodex, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`GitCharm AI: Codex CLI — ${chosenCodex || 'default'}`);
+        vscode.window.showInformationMessage(`AI: Codex CLI — ${chosenCodex || 'default'}`);
 
       } else if (pickedProvider.providerId === 'gemini-api' || pickedProvider.providerId === 'gemini-cli') {
         const isApi = pickedProvider.providerId === 'gemini-api';
@@ -533,14 +533,14 @@ export function registerCommands(
           { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
         ];
         const pickedGemini = await vscode.window.showQuickPick(geminiModels, {
-          title: `GitCharm: Select Gemini Model`,
+          title: `Select Gemini Model`,
           placeHolder: 'Pick a model…',
         });
         if (!pickedGemini) return;
         let chosenGemini = pickedGemini.modelId;
         if (chosenGemini === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'GitCharm: Gemini Model ID',
+            title: 'Gemini Model ID',
             prompt: 'Enter the full model ID',
             value: currentModel,
             placeHolder: 'e.g. gemini-2.5-pro',
@@ -550,7 +550,7 @@ export function registerCommands(
         }
         await config.update('ai.geminiModel', chosenGemini, vscode.ConfigurationTarget.Global);
         const label = isApi ? 'Gemini API' : 'Gemini CLI';
-        vscode.window.showInformationMessage(`GitCharm AI: ${label} — ${chosenGemini || 'default'}`);
+        vscode.window.showInformationMessage(`AI: ${label} — ${chosenGemini || 'default'}`);
       }
     }),
 
@@ -599,7 +599,7 @@ export function registerCommands(
       // uri comes from explorer/context or editor/context; fall back to active editor
       const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!fileUri || fileUri.scheme !== 'file') {
-        vscode.window.showInformationMessage('GitCharm: Open a file to view its history.');
+        vscode.window.showInformationMessage('Open a file to view its history.');
         return;
       }
       await openFileHistoryPanel(extensionUri, manager, fileUri, logPanel);
@@ -612,7 +612,7 @@ export function registerCommands(
       // uri comes from explorer/context or editor/context; fall back to active editor
       const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!fileUri || fileUri.scheme !== 'file') {
-        vscode.window.showInformationMessage('GitCharm: Select a file or folder to compare.');
+        vscode.window.showInformationMessage('Select a file or folder to compare.');
         return;
       }
       await compareWithCommand(manager, fileUri);

@@ -15,7 +15,7 @@ export async function openCommitDetailPanel(
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
-    vscode.window.showErrorMessage('GitCharm: Repository not found.');
+    vscode.window.showErrorMessage('Repository not found.');
     return;
   }
 
@@ -35,7 +35,7 @@ export async function openCommitDetailPanel(
       repo.getBranchesContaining(hash).catch(() => ({ local: [], remote: [], tags: [] })),
     ]);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`GitCharm: Failed to load commit details: ${formatGitError(e)}`);
+    vscode.window.showErrorMessage(`Failed to load commit details: ${formatGitError(e)}`);
     return;
   }
 
@@ -170,7 +170,7 @@ export async function openCommitDetailPanel(
         const absUri = vscode.Uri.file(join(repo.rootPath, msg.filePath));
         await vscode.commands.executeCommand('gitcharm.showFileHistory', absUri);
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Cannot open file history: ${formatGitError(e)}`);
+        vscode.window.showErrorMessage(`Cannot open file history: ${formatGitError(e)}`);
       }
       return;
     }
@@ -204,7 +204,7 @@ export async function openCommitDetailPanel(
         }
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${formatGitError(e)}`);
+        vscode.window.showErrorMessage(`Cannot open diff: ${formatGitError(e)}`);
       }
     } else if (msg.type === 'compareFileWith' && msg.filePath) {
       const compareHash = msg.hash ?? hash;
@@ -217,7 +217,7 @@ export async function openCommitDetailPanel(
       try {
         refHash = await repo.resolveRef(pickedRef);
       } catch {
-        vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+        vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
         return;
       }
       const pathMod = await import('path');
@@ -273,10 +273,10 @@ export async function openCommitDetailPanel(
         } else {
           await repo.revertFileToParent(hash, msg.filePath);
         }
-        vscode.window.showInformationMessage(`GitCharm: Reverted "${msg.filePath}".`);
+        vscode.window.showInformationMessage(`Reverted "${msg.filePath}".`);
         panel.webview.postMessage({ type: 'revertDone', filePath: msg.filePath });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Revert failed: ${formatGitError(e)}`);
+        vscode.window.showErrorMessage(`Revert failed: ${formatGitError(e)}`);
       }
     }
   });

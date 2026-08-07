@@ -9,7 +9,6 @@
 </p>
 
 <p align="center">
-  <a href="https://buymeacoffee.com/rionoir" target="_blank"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20Me%20A-Coffee-FFDD00?logo=buymeacoffee&logoColor=#FFDD00"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.85%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
   <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-red">
@@ -20,6 +19,10 @@
 GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, and a 3-way merge editor for conflict resolution.
 
 It activates automatically when the opened workspace contains a Git repository.
+
+<a href="https://buymeacoffee.com/rionoir" target="_blank">
+  <img alt="Support GitCharm" src="media/banners/support-banner.png" width="100%">
+</a>
 
 <img src="media/screenshots/full.png" alt="GitCharm">
 
@@ -120,6 +123,8 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - **Branch options…** in the commit context menu: opens the Git Menu focused on that branch.
 - Log Panel auto-refreshes in the background after a commit or push, with a loading skeleton during the fetch.
 - Hides `origin/HEAD` from the remote branches list.
+- **Repository tabs** above the commit list let you filter the log to a single repository at a time in multi-repo workspaces; per-repo color dots in the Branch/Tag filter dropdown group branches and tags by name across repositories.
+- **Compare with…** context-menu action on files and folders (Commit Panel, Explorer/editor context menu, and commit detail) diffs the picked path against a chosen branch, tag, or commit.
 
 <br>
 <img src="media/screenshots/log_options.png" alt="GitCharm log panel">
@@ -370,6 +375,23 @@ For new features, open an issue describing:
 - Desired functionality
 - Specific use case
 - Priority (low/medium/high)
+
+## 🙏 Acknowledgements
+
+GitCharm is built on top of the excellent work of the open-source community. It wouldn't function without:
+
+| Package | Role |
+|:--|:--|
+| [simple-git](https://github.com/steveukx/git-js) | Direct Git operations fallback when the VS Code Git API is unavailable. |
+| [Monaco Editor](https://github.com/microsoft/monaco-editor) / [@monaco-editor/react](https://github.com/suren-atoyan/monaco-react) | Diff and 3-way merge editor views. |
+| [React](https://react.dev/) | Renders every webview panel (Commit, Log, Merge Editor, Undocked Panel). |
+| [Zustand](https://github.com/pmndrs/zustand) | State management across all webview panels. |
+| [@tanstack/react-virtual](https://github.com/TanStack/virtual) | Virtualized rendering of large commit and file lists. |
+| [Prism.js](https://prismjs.com/) | Syntax highlighting in diff and file previews. |
+| [@vscode/codicons](https://github.com/microsoft/vscode-codicons) | Icons throughout the panels, matching VS Code's native look. |
+| [material-icon-theme](https://github.com/material-extensions/vscode-material-icon-theme) | File-type icons in the Commit panel's file tree. |
+
+Thanks also to everyone who opens issues, submits pull requests, and provides feedback.
 
 ## 📄 License
 

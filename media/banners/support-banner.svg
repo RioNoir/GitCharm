@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="92" viewBox="0 0 960 92">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3a2a17"/>
+      <stop offset="100%" stop-color="#1f160c"/>
+    </linearGradient>
+    <linearGradient id="btn" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffe066"/>
+      <stop offset="100%" stop-color="#ffcc33"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="1" y="1" width="958" height="90" rx="18" fill="url(#bg)" stroke="#ffcc33" stroke-width="1.5"/>
+
+  <text x="32" y="39" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">
+    ☕ Love using GitCharm?
+  </text>
+  <text x="32" y="63" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#e6d9c7">
+    Fuel late-night coding sessions and help ship new features faster.
+  </text>
+
+  <g transform="translate(756, 22)">
+    <rect x="0" y="0" width="172" height="42" rx="21" fill="url(#btn)"/>
+    <text x="86" y="27" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#2b1c04">
+      Buy Me a Coffee
+    </text>
+  </g>
+</svg>

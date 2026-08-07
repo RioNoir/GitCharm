@@ -349,6 +349,7 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
     flex: 1,
+    minWidth: 0,
     cursor: 'pointer',
     userSelect: 'none' as const,
     paddingLeft: '2px',
@@ -356,6 +357,7 @@ const styles = {
   folderChevron: { fontSize: '12px', opacity: 0.7, width: '12px', flexShrink: 0 },
   folderName: {
     flex: 1,
+    minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,

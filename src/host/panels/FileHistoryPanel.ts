@@ -18,13 +18,13 @@ export async function openFileHistoryPanel(
   const meta = metas.find(m => fileUri.fsPath.startsWith(m.rootPath + path.sep) || fileUri.fsPath === m.rootPath)
     ?? metas.find(m => fileUri.fsPath.startsWith(m.rootPath));
   if (!meta) {
-    vscode.window.showErrorMessage('GitCharm: No git repository found for this file.');
+    vscode.window.showErrorMessage('No git repository found for this file.');
     return;
   }
 
   const repo = manager.getRepo(meta.id);
   if (!repo) {
-    vscode.window.showErrorMessage('GitCharm: Repository not found.');
+    vscode.window.showErrorMessage('Repository not found.');
     return;
   }
 
@@ -35,7 +35,7 @@ export async function openFileHistoryPanel(
   try {
     commits = await repo.getFileHistory(relPath);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`GitCharm: Failed to load file history: ${formatGitError(e)}`);
+    vscode.window.showErrorMessage(`Failed to load file history: ${formatGitError(e)}`);
     return;
   }
 
@@ -121,7 +121,7 @@ export async function openFileHistoryPanel(
 
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`GitCharm: Cannot open diff: ${formatGitError(e)}`);
+        vscode.window.showErrorMessage(`Cannot open diff: ${formatGitError(e)}`);
       }
     } else if (msg.type === 'openInLog' && msg.hash) {
       if (logPanel) {

@@ -71,7 +71,7 @@ export class ProfileStatusBar implements vscode.Disposable {
 
   private renderNoProfile(): void {
     this.statusBarItem.text = `$(account) No profile`;
-    this.statusBarItem.tooltip = 'GitCharm: No Git identity configured — click to set one';
+    this.statusBarItem.tooltip = 'No Git identity configured — click to set one';
   }
 
   // ── Main menu ────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ export class ProfileStatusBar implements vscode.Disposable {
         action: async () => {
           await this.profileService.setActiveProfile(id);
           this.refresh();
-          vscode.window.showInformationMessage(`GitCharm: ${label} set as active profile for this workspace.`);
+          vscode.window.showInformationMessage(`${label} set as active profile for this workspace.`);
         },
       });
     } else {
@@ -228,7 +228,7 @@ export class ProfileStatusBar implements vscode.Disposable {
   private async activateProfile(profile: GitProfile): Promise<void> {
     await this.profileService.setActiveProfile(profile.id);
     this.refresh();
-    vscode.window.showInformationMessage(`GitCharm: "${profile.name}" is now active.`);
+    vscode.window.showInformationMessage(`"${profile.name}" is now active.`);
   }
 
   async createProfile(): Promise<void> {
@@ -307,7 +307,7 @@ export class ProfileStatusBar implements vscode.Disposable {
 
     await this.profileService.saveProfile({ ...profile, name: displayName.trim(), gitName: gitName.trim(), gitEmail: gitEmail.trim() });
     this.refresh();
-    vscode.window.showInformationMessage(`GitCharm: Profile "${displayName}" updated.`);
+    vscode.window.showInformationMessage(`Profile "${displayName}" updated.`);
   }
 
   private async deleteProfile(profile: GitProfile): Promise<void> {
@@ -319,7 +319,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     if (!confirm?.value) return;
     await this.profileService.deleteProfile(profile.id);
     this.refresh();
-    vscode.window.showInformationMessage(`GitCharm: Profile "${profile.name}" deleted.`);
+    vscode.window.showInformationMessage(`Profile "${profile.name}" deleted.`);
   }
 
   // ── Command palette: switch ───────────────────────────────────────────────────
@@ -327,7 +327,7 @@ export class ProfileStatusBar implements vscode.Disposable {
   async switchProfile(): Promise<void> {
     const profiles = this.profileService.getProfiles().filter(p => !p.builtIn);
     if (profiles.length === 0) {
-      const create = await vscode.window.showWarningMessage('GitCharm: No profiles configured.', 'Create Profile');
+      const create = await vscode.window.showWarningMessage('No profiles configured.', 'Create Profile');
       if (create) await this.createProfile();
       return;
     }
@@ -350,7 +350,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     const selected = profiles.find(p => p.id === pick.id);
     if (selected) {
       this.refresh();
-      vscode.window.showInformationMessage(`GitCharm: "${selected.name}" is now active.`);
+      vscode.window.showInformationMessage(`"${selected.name}" is now active.`);
     }
   }
 

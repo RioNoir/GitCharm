@@ -53,7 +53,7 @@ export class MergeEditorProvider implements vscode.Disposable {
     if (conflictFile) {
       panel.webview.postMessage({ type: 'MERGE_FILE_LOADED', file: conflictFile } satisfies HostToMergeMsg);
     } else {
-      vscode.window.showErrorMessage(`GitCharm: No conflict markers found in ${fileName}`);
+      vscode.window.showErrorMessage(`No conflict markers found in ${fileName}`);
       panel.dispose();
     }
   }
@@ -79,7 +79,7 @@ export class MergeEditorProvider implements vscode.Disposable {
             await repo?.stageFiles([relPath]);
           }
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: true });
-          vscode.window.showInformationMessage(`GitCharm: File resolved and staged: ${path.basename(filePath)}`);
+          vscode.window.showInformationMessage(`File resolved and staged: ${path.basename(filePath)}`);
           vscode.commands.executeCommand('gitcharm.commitPanel.focus');
         } catch (e: unknown) {
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
@@ -98,13 +98,13 @@ export class MergeEditorProvider implements vscode.Disposable {
   openCurrentEditorFile(): void {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-      vscode.window.showWarningMessage('GitCharm: No active file');
+      vscode.window.showWarningMessage('No active file');
       return;
     }
     const filePath = editor.document.uri.fsPath;
     const content = editor.document.getText();
     if (!hasConflictMarkers(content)) {
-      vscode.window.showWarningMessage('GitCharm: No conflict markers found in the current file');
+      vscode.window.showWarningMessage('No conflict markers found in the current file');
       return;
     }
     this.openForFile(filePath);

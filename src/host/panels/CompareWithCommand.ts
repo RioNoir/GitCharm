@@ -36,12 +36,12 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
   const meta = metas.find(m => fileUri.fsPath.startsWith(m.rootPath + path.sep) || fileUri.fsPath === m.rootPath)
     ?? metas.find(m => fileUri.fsPath.startsWith(m.rootPath));
   if (!meta) {
-    vscode.window.showErrorMessage('GitCharm: No git repository found for this path.');
+    vscode.window.showErrorMessage('No git repository found for this path.');
     return;
   }
   const repo = manager.getRepo(meta.id);
   if (!repo) {
-    vscode.window.showErrorMessage('GitCharm: Repository not found.');
+    vscode.window.showErrorMessage('Repository not found.');
     return;
   }
 
@@ -52,7 +52,7 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
     const stat = await vscode.workspace.fs.stat(fileUri);
     isDirectory = (stat.type & vscode.FileType.Directory) !== 0;
   } catch {
-    vscode.window.showErrorMessage('GitCharm: Path not found.');
+    vscode.window.showErrorMessage('Path not found.');
     return;
   }
 
@@ -66,7 +66,7 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
   try {
     refHash = await repo.resolveRef(pickedRef);
   } catch {
-    vscode.window.showErrorMessage(`GitCharm: Cannot resolve ref "${pickedRef}"`);
+    vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
     return;
   }
 
