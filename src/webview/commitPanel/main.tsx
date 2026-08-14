@@ -2028,9 +2028,10 @@ const css = {
   tabBar: {
     display: 'flex', borderBottom: '1px solid var(--vscode-panel-border)',
     background: 'var(--vscode-editor-background)', flexShrink: 0,
+    overflowX: 'auto' as const, overflowY: 'hidden' as const,
   } as React.CSSProperties,
   tab: (active: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center',
+    display: 'flex', alignItems: 'center', flexShrink: 0,
     padding: active ? '5px 12px' : '5px 10px',
     fontSize: '12px',
     cursor: 'pointer', background: 'transparent', border: 'none',

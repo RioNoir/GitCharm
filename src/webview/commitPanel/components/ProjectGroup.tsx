@@ -229,6 +229,7 @@ const styles = {
     background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
     height: '26px',
     boxSizing: 'border-box',
+    minWidth: 0,
   }),
   repoCheckbox: {
     margin: '0 0 0 6px',

@@ -115,8 +115,8 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
           position: 'absolute', inset: 0,
           overflowY: 'scroll', overflowX: 'hidden',
           // Push native scrollbar off-screen; paddingRight matches track width so content fills to the track edge
-          marginRight: '-20px', paddingRight: '8px',
-          boxSizing: 'content-box',
+          right: '-20px', paddingRight: '20px',
+          boxSizing: 'border-box',
         }}
       >
         {children}

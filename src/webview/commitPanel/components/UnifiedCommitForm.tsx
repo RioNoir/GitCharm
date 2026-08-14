@@ -309,7 +309,7 @@ export function UnifiedCommitForm({
                   >
                     <Codicon name="close" style={{ fontSize: '10px' }} />
                   </button>
-                  {displayName}
+                  <span style={styles.targetPillLabel}>{displayName}</span>
                   <span style={styles.pillCount}>{r.selectedCount}</span>
                 </span>
               );
@@ -451,12 +451,15 @@ const styles = {
     padding: '8px',
     borderTop: '1px solid var(--vscode-panel-border)',
     background: 'var(--vscode-editor-background)',
+    minWidth: 0,
+    overflow: 'hidden',
   },
   targets: {
     display: 'flex',
     flexWrap: 'wrap' as const,
     gap: '4px',
     minHeight: '20px',
+    minWidth: 0,
   },
   noTargets: {
     fontSize: '11px',
@@ -473,7 +476,14 @@ const styles = {
     background: color + '28',
     color,
     border: `1px solid ${color}60`,
+    maxWidth: '100%',
   }),
+  targetPillLabel: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    minWidth: 0,
+  } as React.CSSProperties,
   pillCount: {
     background: 'rgba(255,255,255,0.15)',
     borderRadius: '7px',
@@ -610,6 +620,8 @@ const styles = {
     color: 'var(--vscode-foreground)',
     opacity: 0.75,
     overflow: 'hidden',
+    minWidth: 0,
+    maxWidth: '100%',
     marginTop: '4px',
   } as React.CSSProperties,
   profileIcon: {
@@ -623,10 +635,15 @@ const styles = {
   } as React.CSSProperties,
   profileName: {
     fontWeight: 600,
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: '30px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
   profileEmail: {
+    flex: '1 1 auto',
+    minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,

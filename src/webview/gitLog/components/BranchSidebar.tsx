@@ -614,9 +614,11 @@ const styles = {
     padding: '2px 8px',
     fontSize: '11px',
     color: 'var(--vscode-foreground)',
+    minWidth: 0,
   },
   repoName: {
     flex: 1,
+    minWidth: 0,
     fontWeight: 'bold' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.04em',
@@ -665,6 +667,7 @@ const styles = {
     background: 'var(--vscode-sideBarSectionHeader-background)',
     borderBottom: '1px solid var(--vscode-panel-border)',
     color: 'var(--vscode-foreground)',
+    minWidth: 0,
   },
   chevron: {
     fontSize: '9px',
@@ -679,6 +682,10 @@ const styles = {
   } as React.CSSProperties,
   sectionLabel: {
     flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
     fontSize: '11px',
     fontWeight: 'bold' as const,
     textTransform: 'uppercase' as const,
@@ -699,6 +706,7 @@ const styles = {
     gap: '5px',
     padding: '2px 8px 2px 14px',
     cursor: 'pointer',
+    minWidth: 0,
     background: isHead
       ? 'var(--vscode-list-activeSelectionBackground)'
       : isFilterSelected
@@ -726,6 +734,7 @@ const styles = {
   }),
   branchName: (isHead: boolean, isPrimary: boolean, primaryColor: string): React.CSSProperties => ({
     flex: 1,
+    minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,

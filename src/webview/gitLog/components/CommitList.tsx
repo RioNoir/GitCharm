@@ -1592,6 +1592,7 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
     paddingRight: '8px',
+    overflow: 'hidden',
     cursor: 'pointer',
     background: selected
       ? 'var(--vscode-list-activeSelectionBackground)'
@@ -1710,7 +1711,7 @@ const styles = {
     alignItems: 'center',
     flex: '0 4 auto',
     maxWidth: '300px',
-    minWidth: '20px',
+    minWidth: 0,
     fontSize: '11px',
     opacity: 0.65,
     overflow: 'hidden',
@@ -1737,7 +1738,10 @@ const styles = {
   },
   date: {
     whiteSpace: 'nowrap' as const,
-    flexShrink: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    flexShrink: 1,
+    minWidth: '40px',
     fontSize: '11px',
     opacity: 0.65,
     marginLeft: '8px',

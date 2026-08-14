@@ -648,6 +648,7 @@ const repoHeaderStyle = (color: string): React.CSSProperties => ({
   background: color + '14',
   height: '26px',
   boxSizing: 'border-box',
+  minWidth: 0,
 });
 
 const repoHeaderMainStyle: React.CSSProperties = {
