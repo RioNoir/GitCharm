@@ -1594,7 +1594,9 @@ export class BranchStatusBar implements vscode.Disposable {
     const candidates = results
       .filter((r): r is PromiseFulfilledResult<{ meta: RepoMeta; hasBranch: boolean; isRemote: boolean; fullName?: string }> => r.status === 'fulfilled')
       .map(r => r.value)
-      .filter(r => r.hasBranch);
+      // A remote match without a resolved fullName can't be checked out safely — the short
+      // name alone is ambiguous (see GitService.checkout's remote-vs-local-slash handling).
+      .filter(r => r.hasBranch && (!r.isRemote || !!r.fullName));
 
     if (candidates.length === 0) {
       vscode.window.showWarningMessage(`Branch "${branchName}" not found in any repository.`);

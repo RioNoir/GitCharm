@@ -1240,11 +1240,19 @@ export class GitService {
         await vsRepo.createBranch(branchName, true, from);
         return;
       }
+      // If branchName already names an existing local branch verbatim, check it out directly —
+      // don't run it through remote-name splitting just because it contains a slash (e.g. a
+      // local branch legitimately named "noissue/team/FOO" must not be mistaken for a
+      // "noissue" remote + "team/FOO" branch).
+      const locals = await vsRepo.getBranches({ remote: false });
+      if (locals.some(b => b.name === branchName)) {
+        await vsRepo.checkout(branchName);
+        return;
+      }
       // Remote branch → create local tracking branch then checkout
       const remoteMatch = branchName.match(/^([^/]+)\/(.+)$/);
       if (remoteMatch) {
         const [, , localName] = remoteMatch;
-        const locals = await vsRepo.getBranches({ remote: false });
         const exists = locals.some(b => b.name === localName);
         if (!exists) await vsRepo.createBranch(localName, false, branchName);
         await vsRepo.checkout(localName);
@@ -1259,10 +1267,14 @@ export class GitService {
       else await this.git.checkoutLocalBranch(branchName);
       return;
     }
+    const branches = await this.getBranches();
+    if (branches.some(b => !b.isRemote && b.name === branchName)) {
+      await this.git.checkout(branchName);
+      return;
+    }
     const remoteMatch = branchName.match(/^([^/]+)\/(.+)$/);
     if (remoteMatch) {
       const [, , localName] = remoteMatch;
-      const branches = await this.getBranches();
       const localExists = branches.some(b => !b.isRemote && b.name === localName);
       if (localExists) await this.git.checkout(localName);
       else await this.git.checkout(['-b', localName, '--track', branchName]);
