@@ -45,6 +45,7 @@ export interface CommitState {
   setLoadingDiff: (v: boolean) => void;
   setCommitMessage: (msg: string) => void;
   setAmend: (repoId: string, v: boolean) => void;
+  clearAmend: (repoId: string) => void;
   setViewMode: (mode: ViewMode) => void;
   setShelveViewMode: (mode: ViewMode) => void;
   isShelveCollapsed: (key: string) => boolean;
@@ -207,6 +208,12 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   setLoadingDiff: (v) => set({ loadingDiff: v }),
   setCommitMessage: (msg) => set({ commitMessage: msg }),
   setAmend: (repoId, v) => set(s => ({ amendFlags: { ...s.amendFlags, [repoId]: v } })),
+  clearAmend: (repoId) => set(s => {
+    if (!(repoId in s.amendFlags)) return s;
+    const next = { ...s.amendFlags };
+    delete next[repoId];
+    return { amendFlags: next };
+  }),
   setViewMode: (mode) => set({ viewMode: mode }),
   setShelveViewMode: (mode) => set({ shelveViewMode: mode }),
   // shelveCollapsedKeys tracks *expanded* items — absence means collapsed (default)

@@ -1045,21 +1045,39 @@ function App() {
     const freshState = useCommitStore.getState();
     const currentRepos = freshState.status?.repos ?? [];
 
+    // Amend is only ever valid when exactly one repo is the commit target and that repo
+    // is ahead of its upstream — the same condition that shows the Amend checkbox in
+    // UnifiedCommitForm. amendFlags can stay "armed" after the checkbox is hidden (e.g.
+    // after a push drops `ahead` to 0, or after switching to a multi-repo selection), so
+    // re-check the condition here rather than trusting the stored flag as-is.
+    const resolveAmend = (repoId: string, targetCount: number): boolean => {
+      if (targetCount !== 1) return false;
+      if (!(freshState.amendFlags[repoId] ?? false)) return false;
+      const repoStatus = currentRepos.find(rs => rs.repoId === repoId);
+      return (repoStatus?.branch.aheadBehind?.ahead ?? 0) > 0;
+    };
+
     // In vscode mode, commit only what's already staged — no stage/unstage manipulation
     if (freshState.changesViewMode === 'vscode') {
       const selectedSet = vscodeSelectedRepos;
-      const targets = currentRepos
-        .filter(r => r.stagedFiles.length > 0 && selectedSet.has(r.repoId))
-        .map(r => ({ repoId: r.repoId, message: freshState.commitMessage, amend: freshState.amendFlags[r.repoId] ?? false, filesToStage: [], filesToUnstage: [] }));
+      const candidates = currentRepos.filter(r => r.stagedFiles.length > 0 && selectedSet.has(r.repoId));
+      const targets = candidates.map(r => ({
+        repoId: r.repoId,
+        message: freshState.commitMessage,
+        amend: resolveAmend(r.repoId, candidates.length),
+        filesToStage: [],
+        filesToUnstage: [],
+      }));
       if (targets.length === 0) return;
       store.setLoading(true);
 
       getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
       store.setCommitMessage('');
+      targets.forEach(t => store.clearAmend(t.repoId));
       return;
     }
 
-    const targets = currentRepos
+    const candidates = currentRepos
       .filter(r => freshState.repoSelections[r.repoId] !== false)
       .map(r => {
         const repoId = r.repoId;
@@ -1069,7 +1087,7 @@ function App() {
         // Include partially-staged files so their unstaged changes are also committed.
         const filesToStage = Array.from(selectedPaths).filter(p => !stagedPaths.has(p) || unstagedPaths.has(p));
         const filesToUnstage = r.stagedFiles.map(f => f.path).filter(p => !selectedPaths.has(p));
-        return { repoId, message: freshState.commitMessage, amend: freshState.amendFlags[repoId] ?? false, filesToStage, filesToUnstage };
+        return { repoId, filesToStage, filesToUnstage };
       })
       .filter(r => {
         const repoStatus = currentRepos.find(rs => rs.repoId === r.repoId)!;
@@ -1078,11 +1096,19 @@ function App() {
         for (const p of r.filesToStage) stagedAfter.add(p);
         return stagedAfter.size > 0;
       });
+    const targets = candidates.map(r => ({
+      repoId: r.repoId,
+      message: freshState.commitMessage,
+      amend: resolveAmend(r.repoId, candidates.length),
+      filesToStage: r.filesToStage,
+      filesToUnstage: r.filesToUnstage,
+    }));
     if (targets.length === 0) return;
     store.setLoading(true);
     store.setError(null);
     getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
     store.setCommitMessage('');
+    targets.forEach(t => store.clearAmend(t.repoId));
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
