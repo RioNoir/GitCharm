@@ -24,14 +24,14 @@ export const GLOBAL_PROFILE_ID = '__global__';
 export class GitProfileService implements vscode.Disposable {
   private _onProfileChange = new vscode.EventEmitter<void>();
   readonly onProfileChange = this._onProfileChange.event;
-  private log: vscode.OutputChannel | undefined;
+  private log: vscode.LogOutputChannel | undefined;
 
-  constructor(private readonly context: vscode.ExtensionContext, log?: vscode.OutputChannel) {
+  constructor(private readonly context: vscode.ExtensionContext, log?: vscode.LogOutputChannel) {
     this.log = log;
   }
 
   trace(msg: string): void {
-    this.log?.appendLine(`[${new Date().toISOString()}] ${msg}`);
+    this.log?.info(`[profile] ${msg}`);
   }
 
   // ── Profiles ─────────────────────────────────────────────────────────────────

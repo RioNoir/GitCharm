@@ -3,8 +3,9 @@ import { generateNonce } from '../utils/webviewHtml';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { loadIconTheme, resolveIconsForFiles } from '../utils/IconThemeService';
 import type { ResolvedIconMap } from '../utils/IconThemeService';
-import { formatGitError } from '../utils/gitErrorUtils';
+import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { pickRefQuickPick } from '../utils/refPicker';
+import { logInfo, logWarn, logError } from '../utils/Logger';
 
 export async function openCommitDetailPanel(
   extensionUri: vscode.Uri,
@@ -15,6 +16,7 @@ export async function openCommitDetailPanel(
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
+    logWarn('commitDetail', 'Repository not found.');
     vscode.window.showErrorMessage('Repository not found.');
     return;
   }
@@ -35,7 +37,7 @@ export async function openCommitDetailPanel(
       repo.getBranchesContaining(hash).catch(() => ({ local: [], remote: [], tags: [] })),
     ]);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`Failed to load commit details: ${formatGitError(e)}`);
+    showGitError('commitDetail:load', e);
     return;
   }
 
@@ -142,6 +144,7 @@ export async function openCommitDetailPanel(
         );
         panel.webview.postMessage({ type: 'explainCommitResult', explanation });
       } catch (e: unknown) {
+        logError('commitDetail:explain', formatGitError(e), getRawErrorDetail(e));
         panel.webview.postMessage({ type: 'explainCommitResult', error: formatGitError(e) });
       }
       return;
@@ -170,7 +173,7 @@ export async function openCommitDetailPanel(
         const absUri = vscode.Uri.file(join(repo.rootPath, msg.filePath));
         await vscode.commands.executeCommand('gitcharm.showFileHistory', absUri);
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`Cannot open file history: ${formatGitError(e)}`);
+        showGitError('commitDetail:fileHistory', e);
       }
       return;
     }
@@ -204,7 +207,7 @@ export async function openCommitDetailPanel(
         }
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`Cannot open diff: ${formatGitError(e)}`);
+        showGitError('commitDetail:diff', e);
       }
     } else if (msg.type === 'compareFileWith' && msg.filePath) {
       const compareHash = msg.hash ?? hash;
@@ -217,6 +220,7 @@ export async function openCommitDetailPanel(
       try {
         refHash = await repo.resolveRef(pickedRef);
       } catch {
+        logError('commitDetail:compareWith', `Cannot resolve ref "${pickedRef}"`);
         vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
         return;
       }
@@ -273,10 +277,11 @@ export async function openCommitDetailPanel(
         } else {
           await repo.revertFileToParent(hash, msg.filePath);
         }
+        logInfo('commitDetail:revert', `Reverted "${msg.filePath}".`);
         vscode.window.showInformationMessage(`Reverted "${msg.filePath}".`);
         panel.webview.postMessage({ type: 'revertDone', filePath: msg.filePath });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`Revert failed: ${formatGitError(e)}`);
+        showGitError('commitDetail:revert', e);
       }
     }
   });

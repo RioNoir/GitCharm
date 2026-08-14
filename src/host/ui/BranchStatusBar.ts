@@ -4,7 +4,8 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { RepoMeta } from '../types/git';
 import { isPrimaryBranch } from '../utils/branchUtils';
 import type { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
-import { formatGitError } from '../utils/gitErrorUtils';
+import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
+import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 
 export class BranchStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -248,12 +249,18 @@ export class BranchStatusBar implements vscode.Disposable {
               for (const meta of metas) {
                 const repo = this.manager.getRepo(meta.id);
                 if (!repo) continue;
-                try { await repo.push(true); } catch (e: unknown) { errors.push(`${meta.name}: ${formatGitError(e)}`); }
+                try { await repo.push(true); } catch (e: unknown) {
+                  logError(`force-push:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                  errors.push(`${meta.name}: ${formatGitError(e)}`);
+                }
               }
               if (errors.length > 0) {
-                vscode.window.showWarningMessage(`${errors.length} force push(es) failed: ${errors.join('; ')}`);
+                void vscode.window.showWarningMessage(`${errors.length} force push(es) failed: ${errors.join('; ')}`, 'Show Log')
+                  .then(choice => { if (choice === 'Show Log') showLogChannel(); });
               } else {
-                vscode.window.showInformationMessage(`Force push complete for ${metas.length} ${metas.length === 1 ? 'repository' : 'repositories'}.`);
+                const msg = `Force push complete for ${metas.length} ${metas.length === 1 ? 'repository' : 'repositories'}.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo('force-push-all', msg);
               }
             }
           );
@@ -538,12 +545,18 @@ export class BranchStatusBar implements vscode.Disposable {
             for (const meta of metas) {
               const repo = this.manager.getRepo(meta.id);
               if (!repo) continue;
-              try { await repo.pushTag(tagName, remote); } catch (e: unknown) { errors.push(`${meta.name}: ${formatGitError(e)}`); }
+              try { await repo.pushTag(tagName, remote); } catch (e: unknown) {
+                logError(`push-tag:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                errors.push(`${meta.name}: ${formatGitError(e)}`);
+              }
             }
             if (errors.length > 0) {
-              vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+              void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+                .then(choice => { if (choice === 'Show Log') showLogChannel(); });
             } else {
-              vscode.window.showInformationMessage(`tag "${tagName}" pushed to "${remote}" in ${metas.length} repos.`);
+              const msg = `tag "${tagName}" pushed to "${remote}" in ${metas.length} repos.`;
+              vscode.window.showInformationMessage(msg);
+              logInfo('push-tag', msg);
             }
           }
         );
@@ -567,10 +580,19 @@ export class BranchStatusBar implements vscode.Disposable {
               for (const meta of metas) {
                 const repo = this.manager.getRepo(meta.id);
                 if (!repo) continue;
-                try { await repo.checkoutTag(tagName); } catch (e: unknown) { errors.push(`${meta.name}: ${formatGitError(e)}`); }
+                try { await repo.checkoutTag(tagName); } catch (e: unknown) {
+                  logError(`checkout-tag:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                  errors.push(`${meta.name}: ${formatGitError(e)}`);
+                }
               }
-              if (errors.length > 0) vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
-              else vscode.window.showInformationMessage(`checked out tag "${tagName}" in ${metas.length} repos.`);
+              if (errors.length > 0) {
+                void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+                  .then(choice => { if (choice === 'Show Log') showLogChannel(); });
+              } else {
+                const msg = `checked out tag "${tagName}" in ${metas.length} repos.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo('checkout-tag', msg);
+              }
             }
           );
           await this.refresh();
@@ -586,10 +608,19 @@ export class BranchStatusBar implements vscode.Disposable {
               for (const meta of metas) {
                 const repo = this.manager.getRepo(meta.id);
                 if (!repo) continue;
-                try { await repo.mergeTag(tagName); } catch (e: unknown) { errors.push(`${meta.name}: ${formatGitError(e)}`); }
+                try { await repo.mergeTag(tagName); } catch (e: unknown) {
+                  logError(`merge-tag:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                  errors.push(`${meta.name}: ${formatGitError(e)}`);
+                }
               }
-              if (errors.length > 0) vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
-              else vscode.window.showInformationMessage(`merged tag "${tagName}" in ${metas.length} repos.`);
+              if (errors.length > 0) {
+                void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+                  .then(choice => { if (choice === 'Show Log') showLogChannel(); });
+              } else {
+                const msg = `merged tag "${tagName}" in ${metas.length} repos.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo('merge-tag', msg);
+              }
             }
           );
           await this.refresh();
@@ -623,10 +654,19 @@ export class BranchStatusBar implements vscode.Disposable {
                       await repo.deleteTagRemote(tagName, remote).catch(() => {});
                     }
                   }
-                } catch (e: unknown) { errors.push(`${meta.name}: ${formatGitError(e)}`); }
+                } catch (e: unknown) {
+                  logError(`delete-tag:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                  errors.push(`${meta.name}: ${formatGitError(e)}`);
+                }
               }
-              if (errors.length > 0) vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
-              else vscode.window.showInformationMessage(`deleted tag "${tagName}" in ${metas.length} repos.`);
+              if (errors.length > 0) {
+                void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+                  .then(choice => { if (choice === 'Show Log') showLogChannel(); });
+              } else {
+                const msg = `deleted tag "${tagName}" in ${metas.length} repos.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo('delete-tag', msg);
+              }
               for (const meta of metas) void this.logPanel?.refreshTagsForRepo(meta.id);
             }
           );
@@ -736,6 +776,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
     if (items.length === 0) {
       vscode.window.showWarningMessage('No remotes configured in any repository.');
+      logWarn('push', 'No remotes configured in any repository.');
       return;
     }
 
@@ -754,9 +795,11 @@ export class BranchStatusBar implements vscode.Disposable {
       async () => {
         try {
           await repo.push(false, pick.remote);
-          vscode.window.showInformationMessage(`[${pick.label.replace('$(cloud-upload) ', '')}]: pushed to "${pick.remote}" successfully.`);
+          const msg = `[${pick.label.replace('$(cloud-upload) ', '')}]: pushed to "${pick.remote}" successfully.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('push', msg);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`Push failed — ${formatGitError(e)}`);
+          showGitError('push', e);
         }
       }
     );
@@ -775,8 +818,9 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showInformationMessage(
         `[${meta.name}]: ${state} aborted successfully.`
       );
+      logInfo(`${state}:${meta.name}`, `${state} aborted successfully.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`${state}-abort:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -827,17 +871,19 @@ export class BranchStatusBar implements vscode.Disposable {
         const failed = results.filter(r => !r.ok);
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
-          vscode.window.showInformationMessage(
-            `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
-          );
+          const msg = `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('update-project', msg);
         } else {
           const failedDesc = failed.map(r => {
             const name = metaById.get(r.repoId)?.name ?? r.repoId;
             return `${name}: ${r.message}`;
           }).join('; ');
-          vscode.window.showWarningMessage(
-            `${ok.length} updated, ${failed.length} failed: ${failedDesc}`
-          );
+          logWarn('update-project', `${ok.length} updated, ${failed.length} failed.`, failedDesc);
+          void vscode.window.showWarningMessage(
+            `${ok.length} updated, ${failed.length} failed: ${failedDesc}`,
+            'Show Log'
+          ).then(choice => { if (choice === 'Show Log') showLogChannel(); });
         }
         await vscode.commands.executeCommand('gitcharm.openLog');
       }
@@ -912,15 +958,17 @@ export class BranchStatusBar implements vscode.Disposable {
               await repo.createBranch(branchName, baseFrom);
             }
           } catch (e: unknown) {
+            logError(`new-branch:${item.label}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${item.label}: ${formatGitError(e)}`);
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(
-            `Branch "${branchName}" created in ${pickedRepos.length} ${pickedRepos.length === 1 ? 'repo' : 'repos'}.`
-          );
+          const msg = `Branch "${branchName}" created in ${pickedRepos.length} ${pickedRepos.length === 1 ? 'repo' : 'repos'}.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('new-branch', msg);
         }
       }
     );
@@ -978,8 +1026,9 @@ export class BranchStatusBar implements vscode.Disposable {
               try {
                 const msg = pick.rebase ? await repo.pullRebase() : await repo.pull();
                 vscode.window.showInformationMessage(`[${meta.name}]: ${msg}`);
+                logInfo(`pull:${meta.name}`, `[${meta.name}]: ${msg}`);
               } catch (e: unknown) {
-                vscode.window.showWarningMessage(`[${meta.name}]: Pull failed — ${formatGitError(e)}`);
+                showGitError(`pull:${meta.name}`, e);
               }
             }
           );
@@ -993,6 +1042,7 @@ export class BranchStatusBar implements vscode.Disposable {
           const remotes = await repo.getRemotes().catch(() => [] as string[]);
           if (remotes.length === 0) {
             vscode.window.showWarningMessage(`[${meta.name}]: No remotes configured.`);
+            logWarn(`push:${meta.name}`, 'No remotes configured.');
             return;
           }
           let targetRemote = remotes[0];
@@ -1009,9 +1059,11 @@ export class BranchStatusBar implements vscode.Disposable {
             async () => {
               try {
                 await repo.push(false, targetRemote);
-                vscode.window.showInformationMessage(`[${meta.name}]: pushed to "${targetRemote}" successfully.`);
+                const msg = `[${meta.name}]: pushed to "${targetRemote}" successfully.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo(`push:${meta.name}`, msg);
               } catch (e: unknown) {
-                vscode.window.showErrorMessage(`[${meta.name}]: Push failed — ${formatGitError(e)}`);
+                showGitError(`push:${meta.name}`, e);
               }
             }
           );
@@ -1032,9 +1084,11 @@ export class BranchStatusBar implements vscode.Disposable {
             async () => {
               try {
                 await repo.push(true);
-                vscode.window.showInformationMessage(`[${meta.name}]: force pushed successfully.`);
+                const msg = `[${meta.name}]: force pushed successfully.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo(`force-push:${meta.name}`, msg);
               } catch (e: unknown) {
-                vscode.window.showErrorMessage(`[${meta.name}]: Force push failed — ${formatGitError(e)}`);
+                showGitError(`force-push:${meta.name}`, e);
               }
             }
           );
@@ -1059,16 +1113,19 @@ export class BranchStatusBar implements vscode.Disposable {
               try {
                 const msg = pick.rebase ? await repo.pullRebase() : await repo.pull();
                 vscode.window.showInformationMessage(`[${meta.name}]: Pull — ${msg}`);
+                logInfo(`sync-pull:${meta.name}`, `[${meta.name}]: Pull — ${msg}`);
               } catch (e: unknown) {
-                vscode.window.showWarningMessage(`[${meta.name}]: Pull failed — stopping before push. ${formatGitError(e)}`);
+                showGitError(`sync-pull:${meta.name}`, e);
                 await this.refresh();
                 return;
               }
               try {
                 await repo.push();
-                vscode.window.showInformationMessage(`[${meta.name}]: synced successfully.`);
+                const msg = `[${meta.name}]: synced successfully.`;
+                vscode.window.showInformationMessage(msg);
+                logInfo(`sync-push:${meta.name}`, msg);
               } catch (e: unknown) {
-                vscode.window.showErrorMessage(`[${meta.name}]: Push failed — ${formatGitError(e)}`);
+                showGitError(`sync-push:${meta.name}`, e);
               }
             }
           );
@@ -1186,9 +1243,11 @@ export class BranchStatusBar implements vscode.Disposable {
           async () => {
             try {
               await repo.pushTag(tagName, r);
-              vscode.window.showInformationMessage(`[${meta.name}]: tag "${tagName}" pushed to "${r}".`);
+              const msg = `[${meta.name}]: tag "${tagName}" pushed to "${r}".`;
+              vscode.window.showInformationMessage(msg);
+              logInfo(`push-tag:${meta.name}`, msg);
             } catch (e: unknown) {
-              vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+              showGitError(`push-tag:${meta.name}`, e);
             }
           }
         );
@@ -1200,9 +1259,11 @@ export class BranchStatusBar implements vscode.Disposable {
       action: async () => {
         try {
           await repo.mergeTag(tagName);
-          vscode.window.showInformationMessage(`[${meta.name}]: merged tag "${tagName}".`);
+          const msg = `[${meta.name}]: merged tag "${tagName}".`;
+          vscode.window.showInformationMessage(msg);
+          logInfo(`merge-tag:${meta.name}`, msg);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+          showGitError(`merge-tag:${meta.name}`, e);
         }
         await this.refresh();
       },
@@ -1220,9 +1281,11 @@ export class BranchStatusBar implements vscode.Disposable {
         action: async () => {
           try {
             await repo.checkoutTag(tagName);
-            vscode.window.showInformationMessage(`[${meta.name}]: checked out tag "${tagName}" (detached HEAD).`);
+            const msg = `[${meta.name}]: checked out tag "${tagName}" (detached HEAD).`;
+            vscode.window.showInformationMessage(msg);
+            logInfo(`checkout-tag:${meta.name}`, msg);
           } catch (e: unknown) {
-            vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+            showGitError(`checkout-tag:${meta.name}`, e);
           }
           await this.refresh();
         },
@@ -1247,6 +1310,7 @@ export class BranchStatusBar implements vscode.Disposable {
               const remotes = await repo.getRemotes().catch(() => [] as string[]);
               if (remotes.length === 0) {
                 vscode.window.showWarningMessage(`[${meta.name}]: no remotes configured.`);
+                logWarn(`delete-tag:${meta.name}`, 'No remotes configured.');
               } else {
                 const remote = remotes.length === 1
                   ? remotes[0]
@@ -1254,10 +1318,12 @@ export class BranchStatusBar implements vscode.Disposable {
                 if (remote) await repo.deleteTagRemote(tagName, remote);
               }
             }
-            vscode.window.showInformationMessage(`[${meta.name}]: tag "${tagName}" deleted.`);
+            const msg = `[${meta.name}]: tag "${tagName}" deleted.`;
+            vscode.window.showInformationMessage(msg);
+            logInfo(`delete-tag:${meta.name}`, msg);
             void this.logPanel?.refreshTagsForRepo(meta.id);
           } catch (e: unknown) {
-            vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+            showGitError(`delete-tag:${meta.name}`, e);
           }
           await this.refresh();
         },
@@ -1401,11 +1467,11 @@ export class BranchStatusBar implements vscode.Disposable {
       } else {
         await repo.createBranch(branchName, baseFrom);
       }
-      vscode.window.showInformationMessage(
-        `[${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`
-      );
+      const msg = `[${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`new-branch:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`new-branch:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1423,13 +1489,19 @@ export class BranchStatusBar implements vscode.Disposable {
     try {
       await repo.createTag(tagName.trim(), 'HEAD');
       void this.logPanel?.refreshTagsForRepo(meta.id);
+      const createdMsg = `[${meta.name}]: tag "${tagName.trim()}" created on HEAD.`;
+      logInfo(`new-tag:${meta.name}`, createdMsg);
       vscode.window.showInformationMessage(
-        `[${meta.name}]: tag "${tagName.trim()}" created on HEAD.`,
+        createdMsg,
         'Push'
       ).then(async pick => {
         if (pick !== 'Push') return;
         const remotes = await repo.getRemotes().catch(() => [] as string[]);
-        if (remotes.length === 0) { vscode.window.showWarningMessage('No remotes configured.'); return; }
+        if (remotes.length === 0) {
+          vscode.window.showWarningMessage('No remotes configured.');
+          logWarn(`push-tag:${meta.name}`, 'No remotes configured.');
+          return;
+        }
         const remote = remotes.length === 1
           ? remotes[0]
           : (await vscode.window.showQuickPick(remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })), { title: `Push tag "${tagName.trim()}" — Select remote` }) as { label: string; remote: string } | undefined)?.remote;
@@ -1439,15 +1511,17 @@ export class BranchStatusBar implements vscode.Disposable {
           async () => {
             try {
               await repo.pushTag(tagName.trim(), remote);
-              vscode.window.showInformationMessage(`Tag "${tagName.trim()}" pushed to "${remote}".`);
+              const msg = `Tag "${tagName.trim()}" pushed to "${remote}".`;
+              vscode.window.showInformationMessage(msg);
+              logInfo(`push-tag:${meta.name}`, msg);
             } catch (e: unknown) {
-              vscode.window.showErrorMessage(`Push tag failed: ${formatGitError(e)}`);
+              showGitError(`push-tag:${meta.name}`, e);
             }
           }
         );
       });
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: Create tag failed: ${formatGitError(e)}`);
+      showGitError(`new-tag:${meta.name}`, e);
     }
   }
 
@@ -1468,10 +1542,19 @@ export class BranchStatusBar implements vscode.Disposable {
       try {
         await repo.createTag(trimmed, 'HEAD');
         void this.logPanel?.refreshTagsForRepo(meta.id);
-      } catch (e: unknown) { errors.push(`${meta.name}: ${formatGitError(e)}`); }
+      } catch (e: unknown) {
+        logError(`new-tag:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+        errors.push(`${meta.name}: ${formatGitError(e)}`);
+      }
     }
-    if (errors.length > 0) { vscode.window.showWarningMessage(`Some tags failed:\n${errors.join('\n')}`); return; }
-    vscode.window.showInformationMessage(`Tag "${trimmed}" created on HEAD in all repositories.`, 'Push').then(async pick => {
+    if (errors.length > 0) {
+      void vscode.window.showWarningMessage(`Some tags failed:\n${errors.join('\n')}`, 'Show Log')
+        .then(choice => { if (choice === 'Show Log') showLogChannel(); });
+      return;
+    }
+    const createdMsg = `Tag "${trimmed}" created on HEAD in all repositories.`;
+    logInfo('new-tag', createdMsg);
+    vscode.window.showInformationMessage(createdMsg, 'Push').then(async pick => {
       if (pick !== 'Push') return;
       const repoWithRemotes = await Promise.all(metas.map(async meta => {
         const repo = this.manager.getRepo(meta.id);
@@ -1479,7 +1562,11 @@ export class BranchStatusBar implements vscode.Disposable {
         return { meta, repo, remotes };
       }));
       const allRemotes = [...new Set(repoWithRemotes.flatMap(r => r.remotes))];
-      if (allRemotes.length === 0) { vscode.window.showWarningMessage('No remotes configured.'); return; }
+      if (allRemotes.length === 0) {
+        vscode.window.showWarningMessage('No remotes configured.');
+        logWarn('push-tag', 'No remotes configured.');
+        return;
+      }
       const remote = allRemotes.length === 1
         ? allRemotes[0]!
         : (await vscode.window.showQuickPick(allRemotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })), { title: `Push tag "${trimmed}" — Select remote` }) as { label: string; remote: string } | undefined)?.remote;
@@ -1490,10 +1577,19 @@ export class BranchStatusBar implements vscode.Disposable {
           const pushErrors: string[] = [];
           for (const { meta, repo: r } of repoWithRemotes) {
             if (!r) continue;
-            try { await r.pushTag(trimmed, remote); } catch (e: unknown) { pushErrors.push(`${meta.name}: ${formatGitError(e)}`); }
+            try { await r.pushTag(trimmed, remote); } catch (e: unknown) {
+              logError(`push-tag:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+              pushErrors.push(`${meta.name}: ${formatGitError(e)}`);
+            }
           }
-          if (pushErrors.length > 0) vscode.window.showWarningMessage(`Some pushes failed:\n${pushErrors.join('\n')}`);
-          else vscode.window.showInformationMessage(`Tag "${trimmed}" pushed to "${remote}" in all repositories.`);
+          if (pushErrors.length > 0) {
+            void vscode.window.showWarningMessage(`Some pushes failed:\n${pushErrors.join('\n')}`, 'Show Log')
+              .then(choice => { if (choice === 'Show Log') showLogChannel(); });
+          } else {
+            const msg = `Tag "${trimmed}" pushed to "${remote}" in all repositories.`;
+            vscode.window.showInformationMessage(msg);
+            logInfo('push-tag', msg);
+          }
         }
       );
     });
@@ -1504,10 +1600,12 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.checkout(branchName);
-      vscode.window.showInformationMessage(`[${meta.name}]: switched to "${branchName}"`);
+      const msg = `[${meta.name}]: switched to "${branchName}"`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`checkout:${meta.name}`, msg);
     } catch (e: unknown) {
       const handled = await this.handleDirtyCheckout(repo, meta, branchName, e);
-      if (!handled) vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      if (!handled) showGitError(`checkout:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1532,9 +1630,9 @@ export class BranchStatusBar implements vscode.Disposable {
         action: async () => {
           await repo.stashPush(`WIP before checkout to ${branchName}`);
           await repo.checkout(branchName);
-          vscode.window.showInformationMessage(
-            `[${meta.name}]: changes stashed, switched to "${branchName}"`
-          );
+          const msg = `[${meta.name}]: changes stashed, switched to "${branchName}"`;
+          vscode.window.showInformationMessage(msg);
+          logInfo(`checkout:${meta.name}`, msg);
         },
       },
       {
@@ -1544,9 +1642,9 @@ export class BranchStatusBar implements vscode.Disposable {
           await repo.stashPush(`WIP migrating to ${branchName}`);
           await repo.checkout(branchName);
           await repo.stashPop();
-          vscode.window.showInformationMessage(
-            `[${meta.name}]: changes migrated to "${branchName}"`
-          );
+          const msg = `[${meta.name}]: changes migrated to "${branchName}"`;
+          vscode.window.showInformationMessage(msg);
+          logInfo(`checkout:${meta.name}`, msg);
         },
       },
       {
@@ -1554,9 +1652,9 @@ export class BranchStatusBar implements vscode.Disposable {
         detail: 'Discard local changes and switch to the branch',
         action: async () => {
           await repo.checkoutForce(branchName);
-          vscode.window.showInformationMessage(
-            `[${meta.name}]: force checkout to "${branchName}" (changes discarded)`
-          );
+          const msg = `[${meta.name}]: force checkout to "${branchName}" (changes discarded)`;
+          vscode.window.showInformationMessage(msg);
+          logInfo(`checkout:${meta.name}`, msg);
         },
       },
       {
@@ -1600,6 +1698,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
     if (candidates.length === 0) {
       vscode.window.showWarningMessage(`Branch "${branchName}" not found in any repository.`);
+      logWarn('checkout', `Branch "${branchName}" not found in any repository.`);
       return;
     }
 
@@ -1614,15 +1713,19 @@ export class BranchStatusBar implements vscode.Disposable {
             await repo.checkout(fullName ?? branchName);
           } catch (e: unknown) {
             const handled = await this.handleDirtyCheckout(repo, meta, fullName ?? branchName, e);
-            if (!handled) errors.push(`${meta.name}: ${formatGitError(e)}`);
+            if (!handled) {
+              logError(`checkout:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+              errors.push(`${meta.name}: ${formatGitError(e)}`);
+            }
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(
-            `Checked out "${branchName}" in ${candidates.length} ${candidates.length === 1 ? 'repo' : 'repos'}.`
-          );
+          const msg = `Checked out "${branchName}" in ${candidates.length} ${candidates.length === 1 ? 'repo' : 'repos'}.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('checkout', msg);
         }
       }
     );
@@ -1657,11 +1760,11 @@ export class BranchStatusBar implements vscode.Disposable {
       } else {
         await repo.createBranch(branchName, fromBranch);
       }
-      vscode.window.showInformationMessage(
-        `[${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`
-      );
+      const msg = `[${meta.name}]: branch "${branchName}" ${checkoutPick.value ? 'created and checked out' : 'created'}.`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`new-branch:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`new-branch:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1674,9 +1777,11 @@ export class BranchStatusBar implements vscode.Disposable {
       async () => {
         try {
           await repo.pull();
-          vscode.window.showInformationMessage(`[${meta.name}]: pulled successfully.`);
+          const msg = `[${meta.name}]: pulled successfully.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo(`pull:${meta.name}`, msg);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+          showGitError(`pull:${meta.name}`, e);
         }
       }
     );
@@ -1696,9 +1801,11 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.renameBranch(oldName, newName);
-      vscode.window.showInformationMessage(`[${meta.name}]: renamed "${oldName}" → "${newName}".`);
+      const msg = `[${meta.name}]: renamed "${oldName}" → "${newName}".`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`rename-branch:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`rename-branch:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1708,9 +1815,11 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.push();
-      vscode.window.showInformationMessage(`[${meta.name}]: pushed successfully.`);
+      const msg = `[${meta.name}]: pushed successfully.`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`push:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`push:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1725,8 +1834,9 @@ export class BranchStatusBar implements vscode.Disposable {
         repo.resolveRef(branchName),
         repo.resolveRef('HEAD'),
       ]);
-    } catch {
+    } catch (e: unknown) {
       vscode.window.showErrorMessage(`Cannot resolve refs for comparison in "${meta.name}".`);
+      logError(`compare:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
       return;
     }
     const files = await repo.getCombinedFiles([branchHash, headHash]);
@@ -1756,9 +1866,11 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.rebase(onto);
-      vscode.window.showInformationMessage(`[${meta.name}]: rebased onto "${onto}".`);
+      const msg = `[${meta.name}]: rebased onto "${onto}".`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`rebase:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`rebase:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1768,9 +1880,11 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!repo) return;
     try {
       await repo.merge(from);
-      vscode.window.showInformationMessage(`[${meta.name}]: merged "${from}".`);
+      const msg = `[${meta.name}]: merged "${from}".`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`merge:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`merge:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1790,9 +1904,11 @@ export class BranchStatusBar implements vscode.Disposable {
 
     try {
       await repo.deleteBranch(branchName, confirm.value === 'force');
-      vscode.window.showInformationMessage(`[${meta.name}]: deleted "${branchName}".`);
+      const msg = `[${meta.name}]: deleted "${branchName}".`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`delete-branch:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`delete-branch:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1805,11 +1921,11 @@ export class BranchStatusBar implements vscode.Disposable {
     const branch = parts.slice(1).join('/');
     try {
       await repo.pullFromRemote(remote, branch, useRebase);
-      vscode.window.showInformationMessage(
-        `[${meta.name}]: pulled "${remoteBranch}" using ${useRebase ? 'rebase' : 'merge'}.`
-      );
+      const msg = `[${meta.name}]: pulled "${remoteBranch}" using ${useRebase ? 'rebase' : 'merge'}.`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`pull:${meta.name}`, msg);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`pull:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1847,13 +1963,17 @@ export class BranchStatusBar implements vscode.Disposable {
               await repo.createBranch(branchName, fromBranch);
             }
           } catch (e: unknown) {
+            logError(`new-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(`Branch "${branchName}" created in ${metas.length} repos.`);
+          const msg = `Branch "${branchName}" created in ${metas.length} repos.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('new-branch', msg);
         }
       }
     );
@@ -1871,13 +1991,17 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             await repo.pull();
           } catch (e: unknown) {
+            logError(`pull:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(`Pulled in ${metas.length} repos.`);
+          const msg = `Pulled in ${metas.length} repos.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('pull', msg);
         }
       }
     );
@@ -1902,13 +2026,17 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             await repo.renameBranch(oldName, newName);
           } catch (e: unknown) {
+            logError(`rename-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(`Renamed "${oldName}" → "${newName}" in ${metas.length} repos.`);
+          const msg = `Renamed "${oldName}" → "${newName}" in ${metas.length} repos.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('rename-branch', msg);
         }
       }
     );
@@ -1932,13 +2060,17 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             await repo.rebase(onto);
           } catch (e: unknown) {
+            logError(`rebase:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(`Rebased onto "${onto}" in ${metas.length} repos.`);
+          const msg = `Rebased onto "${onto}" in ${metas.length} repos.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('rebase', msg);
         }
       }
     );
@@ -1975,18 +2107,23 @@ export class BranchStatusBar implements vscode.Disposable {
                   await repo.stashPush(`WIP before merge of ${from}`);
                   await repo.merge(from);
                 } catch (e2: unknown) {
+                  logError(`merge:${meta.name}`, formatGitError(e2), getRawErrorDetail(e2));
                   errors.push(`${meta.name}: ${String(e2)}`);
                 }
               }
             } else {
+              logError(`merge:${meta.name}`, errMsg, getRawErrorDetail(e));
               errors.push(`${meta.name}: ${errMsg}`);
             }
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(`Merged "${from}" in ${metas.length} repos.`);
+          const msg = `Merged "${from}" in ${metas.length} repos.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('merge', msg);
         }
       }
     );
@@ -2013,13 +2150,17 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             await repo.deleteBranch(branchName, confirm.value === 'force');
           } catch (e: unknown) {
+            logError(`delete-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
           }
         }
         if (errors.length > 0) {
-          vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`);
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          vscode.window.showInformationMessage(`Deleted "${branchName}" in ${metas.length} repos.`);
+          const msg = `Deleted "${branchName}" in ${metas.length} repos.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('delete-branch', msg);
         }
       }
     );
@@ -2151,7 +2292,7 @@ export class BranchStatusBar implements vscode.Disposable {
       await repo.addRemote(name.trim(), url.trim());
       vscode.window.showInformationMessage(`[${meta.name}]: remote "${name}" added.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`add-remote:${meta.name}`, e);
     }
     await this.showRepoRemotesMenu(meta);
   }
@@ -2174,7 +2315,7 @@ export class BranchStatusBar implements vscode.Disposable {
       await repo.renameRemote(remote.name, newName.trim());
       vscode.window.showInformationMessage(`[${meta.name}]: remote renamed "${remote.name}" → "${newName}".`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`rename-remote:${meta.name}`, e);
     }
     await this.showRepoRemotesMenu(meta);
   }
@@ -2197,7 +2338,7 @@ export class BranchStatusBar implements vscode.Disposable {
       await repo.setRemoteUrl(remote.name, newUrl.trim());
       vscode.window.showInformationMessage(`[${meta.name}]: URL of "${remote.name}" updated.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`change-remote-url:${meta.name}`, e);
     }
     await this.showRepoRemotesMenu(meta);
   }
@@ -2223,7 +2364,7 @@ export class BranchStatusBar implements vscode.Disposable {
       await repo.removeRemote(remote.name);
       vscode.window.showInformationMessage(`[${meta.name}]: remote "${remote.name}" removed.`);
     } catch (e: unknown) {
-      vscode.window.showErrorMessage(`[${meta.name}]: ${formatGitError(e)}`);
+      showGitError(`remove-remote:${meta.name}`, e);
     }
     await this.showRepoRemotesMenu(meta);
   }

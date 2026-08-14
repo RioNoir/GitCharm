@@ -11,6 +11,7 @@ import { ShelveDocumentProvider } from './utils/ShelveDocumentProvider';
 import { FileAnnotationController } from './ui/FileAnnotationController';
 import { GitProfileService } from './git/GitProfileService';
 import { ProfileStatusBar } from './ui/ProfileStatusBar';
+import { initLogger, logInfo, logWarn, showLogChannel } from './utils/Logger';
 
 async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void> {
   const SHOWN_KEY = 'hasShownViewModeQuickpick';
@@ -162,17 +163,21 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
         const failed = results.filter(r => !r.ok);
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
-          vscode.window.showInformationMessage(
-            `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`
-          );
+          const successMessage = `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`;
+          logInfo('pull:incoming', successMessage);
+          vscode.window.showInformationMessage(successMessage);
         } else {
           const failedDesc = failed.map(r => {
             const name = metaById.get(r.repoId)?.name ?? r.repoId;
             return `${name}: ${r.message}`;
           }).join('; ');
-          vscode.window.showWarningMessage(
-            `${ok.length} updated, ${failed.length} failed: ${failedDesc}`
-          );
+          logWarn('pull:incoming', `${ok.length} updated, ${failed.length} failed`, failedDesc);
+          void vscode.window.showWarningMessage(
+            `${ok.length} updated, ${failed.length} failed: ${failedDesc}`,
+            'Show Log'
+          ).then(choice => {
+            if (choice === 'Show Log') showLogChannel();
+          });
         }
       }
     );
@@ -180,6 +185,7 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const log = initLogger(context);
   const manager = new WorkspaceGitManager(context);
 
   // DEV ONLY: uncomment to reset the quickpick flag
@@ -199,9 +205,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const badge = new BadgeController();
   badge.startLoading();
-
-  const log = vscode.window.createOutputChannel('GitCharm Profiles');
-  context.subscriptions.push(log);
 
   const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();

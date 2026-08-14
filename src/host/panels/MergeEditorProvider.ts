@@ -5,7 +5,8 @@ import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { parseConflictFile, hasConflictMarkers } from '../git/ConflictParser';
 import type { MergeToHostMsg, HostToMergeMsg } from '../types/messages';
-import { formatGitError } from '../utils/gitErrorUtils';
+import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
+import { logInfo, logWarn, logError } from '../utils/Logger';
 
 export class MergeEditorProvider implements vscode.Disposable {
   private panels = new Map<string, vscode.WebviewPanel>();
@@ -53,6 +54,7 @@ export class MergeEditorProvider implements vscode.Disposable {
     if (conflictFile) {
       panel.webview.postMessage({ type: 'MERGE_FILE_LOADED', file: conflictFile } satisfies HostToMergeMsg);
     } else {
+      logWarn('mergeEditor:open', `No conflict markers found in ${fileName}`);
       vscode.window.showErrorMessage(`No conflict markers found in ${fileName}`);
       panel.dispose();
     }
@@ -79,9 +81,11 @@ export class MergeEditorProvider implements vscode.Disposable {
             await repo?.stageFiles([relPath]);
           }
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: true });
+          logInfo('mergeEditor:save', `File resolved and staged: ${path.basename(filePath)}`);
           vscode.window.showInformationMessage(`File resolved and staged: ${path.basename(filePath)}`);
           vscode.commands.executeCommand('gitcharm.commitPanel.focus');
         } catch (e: unknown) {
+          logError('mergeEditor:save', formatGitError(e), getRawErrorDetail(e));
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
         }
         break;
@@ -98,12 +102,14 @@ export class MergeEditorProvider implements vscode.Disposable {
   openCurrentEditorFile(): void {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
+      logWarn('mergeEditor:openCurrent', 'No active file');
       vscode.window.showWarningMessage('No active file');
       return;
     }
     const filePath = editor.document.uri.fsPath;
     const content = editor.document.getText();
     if (!hasConflictMarkers(content)) {
+      logWarn('mergeEditor:openCurrent', 'No conflict markers found in the current file');
       vscode.window.showWarningMessage('No conflict markers found in the current file');
       return;
     }

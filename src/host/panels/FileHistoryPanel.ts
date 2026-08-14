@@ -3,7 +3,8 @@ import * as path from 'path';
 import { generateNonce } from '../utils/webviewHtml';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
-import { formatGitError } from '../utils/gitErrorUtils';
+import { showGitError } from '../utils/gitErrorUtils';
+import { logWarn } from '../utils/Logger';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -18,12 +19,14 @@ export async function openFileHistoryPanel(
   const meta = metas.find(m => fileUri.fsPath.startsWith(m.rootPath + path.sep) || fileUri.fsPath === m.rootPath)
     ?? metas.find(m => fileUri.fsPath.startsWith(m.rootPath));
   if (!meta) {
+    logWarn('fileHistory', 'No git repository found for this file.');
     vscode.window.showErrorMessage('No git repository found for this file.');
     return;
   }
 
   const repo = manager.getRepo(meta.id);
   if (!repo) {
+    logWarn('fileHistory', 'Repository not found.');
     vscode.window.showErrorMessage('Repository not found.');
     return;
   }
@@ -35,7 +38,7 @@ export async function openFileHistoryPanel(
   try {
     commits = await repo.getFileHistory(relPath);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`Failed to load file history: ${formatGitError(e)}`);
+    showGitError(`fileHistory:${meta.name}`, e);
     return;
   }
 
@@ -121,7 +124,7 @@ export async function openFileHistoryPanel(
 
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
       } catch (e: unknown) {
-        vscode.window.showErrorMessage(`Cannot open diff: ${formatGitError(e)}`);
+        showGitError(`fileHistory:diff:${meta.name}`, e);
       }
     } else if (msg.type === 'openInLog' && msg.hash) {
       if (logPanel) {

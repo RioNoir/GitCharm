@@ -90,6 +90,11 @@
         "icon": "$(history)"
       },
       {
+        "command": "gitcharm.showOutputLog",
+        "title": "Show Output Log",
+        "category": "GitCharm"
+      },
+      {
         "command": "gitcharm.commit",
         "title": "Commit",
         "category": "GitCharm"

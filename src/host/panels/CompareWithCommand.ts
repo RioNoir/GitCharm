@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitService } from '../git/GitService';
 import { pickRefQuickPick } from '../utils/refPicker';
+import { logWarn, logError } from '../utils/Logger';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -36,11 +37,13 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
   const meta = metas.find(m => fileUri.fsPath.startsWith(m.rootPath + path.sep) || fileUri.fsPath === m.rootPath)
     ?? metas.find(m => fileUri.fsPath.startsWith(m.rootPath));
   if (!meta) {
+    logWarn('compareWith', 'No git repository found for this path.');
     vscode.window.showErrorMessage('No git repository found for this path.');
     return;
   }
   const repo = manager.getRepo(meta.id);
   if (!repo) {
+    logWarn('compareWith', 'Repository not found.');
     vscode.window.showErrorMessage('Repository not found.');
     return;
   }
@@ -52,6 +55,7 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
     const stat = await vscode.workspace.fs.stat(fileUri);
     isDirectory = (stat.type & vscode.FileType.Directory) !== 0;
   } catch {
+    logWarn('compareWith', 'Path not found.');
     vscode.window.showErrorMessage('Path not found.');
     return;
   }
@@ -66,6 +70,7 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
   try {
     refHash = await repo.resolveRef(pickedRef);
   } catch {
+    logError('compareWith', `Cannot resolve ref "${pickedRef}"`);
     vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
     return;
   }

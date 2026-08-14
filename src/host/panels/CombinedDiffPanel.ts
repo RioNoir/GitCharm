@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import { formatGitError } from '../utils/gitErrorUtils';
+import { showGitError } from '../utils/gitErrorUtils';
+import { logWarn } from '../utils/Logger';
 
 export async function openCombinedDiffPanel(
   extensionUri: vscode.Uri,
@@ -11,10 +12,12 @@ export async function openCombinedDiffPanel(
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
+    logWarn('combinedDiff', 'Repository not found.');
     vscode.window.showErrorMessage('Repository not found.');
     return;
   }
   if (hashes.length < 2) {
+    logWarn('combinedDiff', 'Select at least 2 commits to view combined diff.');
     vscode.window.showErrorMessage('Select at least 2 commits to view combined diff.');
     return;
   }
@@ -36,11 +39,12 @@ export async function openCombinedDiffPanel(
     orderedHashes = await repo.getCombinedFilesOrder(hashes);
     commitMetas.sort((a, b) => orderedHashes.indexOf(a.hash) - orderedHashes.indexOf(b.hash));
   } catch (e: unknown) {
-    vscode.window.showErrorMessage(`Failed to load combined diff: ${formatGitError(e)}`);
+    showGitError('combinedDiff', e);
     return;
   }
 
   if (files.length === 0) {
+    logWarn('combinedDiff', `No files found for the selected commits (hashes: ${hashes.map(h => h.slice(0, 7)).join(', ')}).`);
     vscode.window.showWarningMessage(`No files found for the selected commits (hashes: ${hashes.map(h => h.slice(0, 7)).join(', ')}). The commits may not be in the same repository branch.`);
     return;
   }

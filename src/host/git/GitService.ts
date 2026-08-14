@@ -15,7 +15,6 @@ import type { StashEntry, UnpushedCommit } from '../types/messages';
 import { parseDiff, buildMonacoContents, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
-import { formatGitError } from '../utils/gitErrorUtils';
 
 const STATUS_MAP: Record<string, GitFileStatus> = {
   M: 'modified', A: 'added', D: 'deleted',
@@ -1165,11 +1164,10 @@ export class GitService {
       const hasUpstream = !!vsRepo.state.HEAD?.upstream;
       const targetRemote = remote ?? vsRepo.state.HEAD?.upstream?.remote ?? vsRepo.state.remotes[0]?.name ?? 'origin';
       const forceMode = force ? ForcePushMode.ForceWithLease : undefined;
-      try {
-        await vsRepo.push(targetRemote, branchName, !hasUpstream, forceMode);
-      } catch (e: unknown) {
-        throw new Error(formatGitError(e));
-      }
+      // Let the original error (with its stderr/gitErrorCode intact) propagate as-is —
+      // callers need the raw detail to show an accurate message (e.g. a failing hook's
+      // real output), not a string pre-collapsed by formatGitError.
+      await vsRepo.push(targetRemote, branchName, !hasUpstream, forceMode);
       return;
     }
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
@@ -1183,23 +1181,15 @@ export class GitService {
     if (!hasUpstream) args.push('--set-upstream', targetRemote, branchName);
     else if (remote) args.push(remote, branchName);
     if (force) args.push('--force-with-lease');
-    try {
-      await this.git.raw(args);
-    } catch (e: unknown) {
-      throw new Error(formatGitError(e));
-    }
+    await this.git.raw(args);
   }
 
   async pull(): Promise<string> {
     const vsRepo = this.vsRepo();
     if (vsRepo && vsRepo.state.remotes.length > 0) {
       if (!vsRepo.state.HEAD?.upstream) return 'No remote tracking branch — skipped';
-      try {
-        await vsRepo.pull();
-        return 'pulled';
-      } catch (e: unknown) {
-        throw new Error(formatGitError(e));
-      }
+      await vsRepo.pull();
+      return 'pulled';
     }
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
     if (!tracking.trim()) return 'No remote tracking branch — skipped';
@@ -1212,13 +1202,9 @@ export class GitService {
     if (vsRepo && vsRepo.state.remotes.length > 0) {
       if (!vsRepo.state.HEAD?.upstream) return 'No remote tracking branch — skipped';
       const upstream = vsRepo.state.HEAD.upstream;
-      try {
-        await vsRepo.fetch();
-        await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
-        return 'pulled (rebase)';
-      } catch (e: unknown) {
-        throw new Error(formatGitError(e));
-      }
+      await vsRepo.fetch();
+      await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
+      return 'pulled (rebase)';
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
     if (!tracking) return 'No remote tracking branch — skipped';

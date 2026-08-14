@@ -8,6 +8,7 @@ import { ProfileStatusBar } from '../ui/ProfileStatusBar';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
+import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -24,6 +25,11 @@ export function registerCommands(
     // Focus the Git Log panel in the bottom bar
     vscode.commands.registerCommand('gitcharm.openLog', () => {
       logPanel.focus();
+    }),
+
+    // Show the GitCharm output channel (full error/event log)
+    vscode.commands.registerCommand('gitcharm.showOutputLog', () => {
+      showLogChannel();
     }),
 
     vscode.commands.registerCommand('gitcharm.refreshCommitPanel', () => {
@@ -53,17 +59,19 @@ export function registerCommands(
           const failed = results.filter(r => !r.ok);
           const ok = results.filter(r => r.ok);
           if (failed.length === 0) {
-            vscode.window.showInformationMessage(
-              `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} pushed.`
-            );
+            const msg = `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} pushed.`;
+            vscode.window.showInformationMessage(msg);
+            logInfo('push', msg);
           } else {
             const failedDesc = failed.map(r => {
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            vscode.window.showWarningMessage(
-              `${ok.length} pushed, ${failed.length} failed: ${failedDesc}`
-            );
+            const msg = `${ok.length} pushed, ${failed.length} failed: ${failedDesc}`;
+            logWarn('push', msg);
+            void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
+              if (choice === 'Show Log') showLogChannel();
+            });
           }
         }
       );
@@ -102,9 +110,11 @@ export function registerCommands(
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            vscode.window.showWarningMessage(
-              `Sync: Pull failed — stopping before push. ${failedDesc}`
-            );
+            const msg = `Sync: Pull failed — stopping before push. ${failedDesc}`;
+            logWarn('sync', msg);
+            void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
+              if (choice === 'Show Log') showLogChannel();
+            });
             commitPanel.refresh();
             return;
           }
@@ -115,17 +125,19 @@ export function registerCommands(
           const pushOk = pushResults.filter(r => r.ok);
 
           if (pushFailed.length === 0) {
-            vscode.window.showInformationMessage(
-              `Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`
-            );
+            const msg = `Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`;
+            vscode.window.showInformationMessage(msg);
+            logInfo('sync', msg);
           } else {
             const failedDesc = pushFailed.map(r => {
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            vscode.window.showWarningMessage(
-              `Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`
-            );
+            const msg = `Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`;
+            logWarn('sync', msg);
+            void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
+              if (choice === 'Show Log') showLogChannel();
+            });
           }
           commitPanel.refresh();
         }
@@ -344,7 +356,10 @@ export function registerCommands(
           const msg = ollamaModels.length === 0
             ? 'Could not reach Ollama. Enter the model name manually.'
             : undefined;
-          if (msg) vscode.window.showWarningMessage(msg);
+          if (msg) {
+            vscode.window.showWarningMessage(msg);
+            logWarn('selectAiModel:ollama', msg);
+          }
           const input = await vscode.window.showInputBox({
             title: 'Ollama Model',
             prompt: 'Enter the Ollama model name',
@@ -388,6 +403,7 @@ export function registerCommands(
           chosenModel = picked.modelId;
         } else {
           vscode.window.showWarningMessage('Could not reach LM Studio. Make sure it is running and the server is started.');
+          logWarn('selectAiModel:lmstudio', 'Could not reach LM Studio. Make sure it is running and the server is started.');
           const input = await vscode.window.showInputBox({
             title: 'LM Studio Model',
             prompt: 'Enter the model identifier (as shown in LM Studio)',
