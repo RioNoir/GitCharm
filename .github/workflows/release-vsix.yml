@@ -57,17 +57,27 @@ jobs:
             TAG_EXISTS="true"
           fi
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${EXPLICIT_TAG}" = "false" ] && [ "${TAG_EXISTS}" = "true" ]; then
-            echo "Tag ${TAG} already exists. Bump package.json version or provide an explicit tag to rebuild an existing release." >&2
-            exit 1
-          fi
-
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "tag_exists=${TAG_EXISTS}" >> "$GITHUB_OUTPUT"
           echo "explicit_tag=${EXPLICIT_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout existing manual tag
-        if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.explicit_tag == 'true' && steps.release_tag.outputs.tag_exists == 'true'
+      - name: Check for existing GitHub Release
+        id: gh_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.release_tag.outputs.tag_exists }}" = "true" ] && gh release view "${RELEASE_TAG}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout existing tag
+        if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.tag_exists == 'true' && steps.gh_release.outputs.exists == 'false'
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         shell: bash
@@ -80,12 +90,15 @@ jobs:
           git checkout "refs/tags/${RELEASE_TAG}"
 
       - name: Install dependencies
+        if: steps.gh_release.outputs.exists == 'false'
         run: npm ci
 
       - name: Typecheck host
+        if: steps.gh_release.outputs.exists == 'false'
         run: npm run typecheck
 
       - name: Typecheck webviews
+        if: steps.gh_release.outputs.exists == 'false'
         run: npm run typecheck:webview
 
       - name: Read package version
@@ -96,12 +109,13 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Package VSIX
+        if: steps.gh_release.outputs.exists == 'false'
         run: |
           mkdir -p dist
           npm run package -- --out "dist/gitcharm-${{ steps.package.outputs.version }}.vsix"
 
       - name: Create and push tag
-        if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.tag_exists == 'false'
+        if: github.event_name == 'workflow_dispatch' && steps.release_tag.outputs.tag_exists == 'false' && steps.gh_release.outputs.exists == 'false'
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         shell: bash
@@ -114,6 +128,7 @@ jobs:
           git push origin "refs/tags/${RELEASE_TAG}"
 
       - name: Upload VSIX artifact
+        if: steps.gh_release.outputs.exists == 'false'
         uses: actions/upload-artifact@v6
         with:
           name: gitcharm-vsix
@@ -121,6 +136,7 @@ jobs:
           if-no-files-found: error
 
       - name: Generate changelog
+        if: steps.gh_release.outputs.exists == 'false'
         id: changelog
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
@@ -181,6 +197,7 @@ jobs:
           echo "notes_file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
+        if: steps.gh_release.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
@@ -189,20 +206,29 @@ jobs:
         run: |
           set -euo pipefail
 
-          if gh release view "${RELEASE_TAG}" > /dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" dist/*.vsix --clobber
-          else
-            gh release create "${RELEASE_TAG}" dist/*.vsix \
-              --title "GitCharm ${RELEASE_TAG}" \
-              --notes-file "${NOTES_FILE}"
-          fi
+          gh release create "${RELEASE_TAG}" dist/*.vsix \
+            --title "GitCharm ${RELEASE_TAG}" \
+            --notes-file "${NOTES_FILE}"
 
-      - name: Publish to VS Code Marketplace
-        run: npx vsce publish --packagePath dist/*.vsix
+      - name: Download existing release VSIX
+        if: steps.gh_release.outputs.exists == 'true'
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Release ${RELEASE_TAG} already exists on GitHub — skipping build and publishing existing asset to marketplaces only."
+          mkdir -p dist
+          gh release download "${RELEASE_TAG}" --pattern '*.vsix' --dir dist --clobber
 
       - name: Publish to Open VSX Registry
         run: npx ovsx publish dist/*.vsix
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --packagePath dist/*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
