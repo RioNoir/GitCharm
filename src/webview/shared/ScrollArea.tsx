@@ -1,5 +1,19 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
+let scrollbarHideStyleInjected = false;
+function ensureScrollbarHideStyle(): void {
+  if (scrollbarHideStyleInjected) return;
+  scrollbarHideStyleInjected = true;
+  const s = document.createElement('style');
+  // Hides the native scrollbar without altering box dimensions — the previous approach
+  // (overshooting the box past its container with a negative offset, then compensating
+  // with padding sized to an assumed scrollbar width) silently broke whenever the real
+  // native scrollbar width didn't match that assumption, causing content to overflow the
+  // visible panel and get clipped by an ancestor's overflow:hidden.
+  s.textContent = `.gitcharm-scroll-viewport::-webkit-scrollbar { display: none; }`;
+  document.head.appendChild(s);
+}
+
 interface Props {
   children: React.ReactNode;
   style?: React.CSSProperties;
@@ -15,6 +29,7 @@ interface Props {
  * position over the content and fades out when idle.
  */
 export function ScrollArea({ children, style, className, onScroll, onClick, scrollRef }: Props) {
+  useEffect(() => { ensureScrollbarHideStyle(); }, []);
   const internalRef = useRef<HTMLDivElement>(null);
   const viewportRef = (scrollRef as React.RefObject<HTMLDivElement>) ?? internalRef;
   const thumbRef = useRef<HTMLDivElement>(null);
@@ -111,11 +126,11 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
       <div
         ref={viewportRef}
         onScroll={handleScroll}
+        className="gitcharm-scroll-viewport"
         style={{
           position: 'absolute', inset: 0,
           overflowY: 'scroll', overflowX: 'hidden',
-          // Push native scrollbar off-screen; paddingRight matches track width so content fills to the track edge
-          right: '-20px', paddingRight: '20px',
+          scrollbarWidth: 'none' as const,
           boxSizing: 'border-box',
         }}
       >

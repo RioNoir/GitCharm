@@ -37,8 +37,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
     s.textContent = `[data-filter-field]:focus-within { border-color: var(--vscode-focusBorder) !important; outline: none; }`;
     document.head.appendChild(s);
   }, []);
-  const localBranches = branches.filter(b => !b.isRemote);
-  const groupedBranches = groupByName(localBranches);
+  const groupedBranches = groupByName(branches);
   const groupedTags = groupByName(tags);
 
   const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo);
@@ -239,16 +238,17 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth, d
 interface NamedRef {
   name: string;
   repoIds: string[];
+  isRemote?: boolean;
 }
 
-function groupByName(items: Array<{ name: string; repoId: string }>): NamedRef[] {
+function groupByName(items: Array<{ name: string; repoId: string; isRemote?: boolean }>): NamedRef[] {
   const map = new Map<string, NamedRef>();
   for (const item of items) {
     const existing = map.get(item.name);
     if (existing) {
       if (!existing.repoIds.includes(item.repoId)) existing.repoIds.push(item.repoId);
     } else {
-      map.set(item.name, { name: item.name, repoIds: [item.repoId] });
+      map.set(item.name, { name: item.name, repoIds: [item.repoId], isRemote: item.isRemote });
     }
   }
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -274,6 +274,8 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
   const q = query.toLowerCase();
   const displayedBranches = q ? branches.filter(o => o.name.toLowerCase().includes(q)) : branches;
   const displayedTags = q ? tags.filter(o => o.name.toLowerCase().includes(q)) : tags;
+  const displayedLocalBranches = displayedBranches.filter(b => !b.isRemote);
+  const displayedRemoteBranches = displayedBranches.filter(b => b.isRemote);
   const isEmpty = displayedBranches.length === 0 && displayedTags.length === 0;
 
   const isTag = value ? tags.some(t => t.name === value) : false;
@@ -330,16 +332,37 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
             >
               <span style={{ opacity: 0.5, fontSize: '12px' }}>All branches & tags</span>
             </div>
-            {displayedBranches.length > 0 && (
-              <div style={styles.dropdownGroupLabel}>Branches</div>
+            {displayedLocalBranches.length > 0 && (
+              <div style={styles.dropdownGroupLabel}>Local Branches</div>
             )}
-            {displayedBranches.map(({ name, repoIds }) => (
+            {displayedLocalBranches.map(({ name, repoIds, isRemote }) => (
               <div
                 key={`b:${name}`}
                 style={styles.dropdownItem(value === name)}
                 onClick={() => { onChange(name); setOpen(false); }}
               >
-                <Codicon name="git-branch" style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
+                <Codicon name={isRemote ? 'cloud' : 'git-branch'} style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
+                <span style={styles.dropdownItemLabel}>{name}</span>
+                {multiRepo && (
+                  <span style={styles.dotGroup}>
+                    {repoIds.map(id => (
+                      <span key={id} style={styles.repoDotSmall(repoColorMap[id] ?? '#888')} />
+                    ))}
+                  </span>
+                )}
+                {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, flexShrink: 0 }} />}
+              </div>
+            ))}
+            {displayedRemoteBranches.length > 0 && (
+              <div style={styles.dropdownGroupLabel}>Remote Branches</div>
+            )}
+            {displayedRemoteBranches.map(({ name, repoIds, isRemote }) => (
+              <div
+                key={`b:${name}`}
+                style={styles.dropdownItem(value === name)}
+                onClick={() => { onChange(name); setOpen(false); }}
+              >
+                <Codicon name={isRemote ? 'cloud' : 'git-branch'} style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
                 <span style={styles.dropdownItemLabel}>{name}</span>
                 {multiRepo && (
                   <span style={styles.dotGroup}>
@@ -695,7 +718,7 @@ const styles = {
     overflowX: 'auto' as const,
     overflowY: 'hidden' as const,
     borderBottom: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)',
+    background: 'var(--vscode-sideBar-background)',
     flexShrink: 0,
   },
   repoTab: (active: boolean): React.CSSProperties => ({
@@ -731,7 +754,7 @@ const styles = {
     gap: '6px',
     padding: '6px 10px',
     borderBottom: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)',
+    background: 'var(--vscode-sideBar-background)',
     flexShrink: 0,
   },
   fieldWrap: {

@@ -169,33 +169,6 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             </div>
           </button>
         </div>
-
-        {repos.length > 1 && (
-          <div style={styles.repoList}>
-            {repos.map(repo => {
-              const headBranch = repo.isWorktree
-                ? branches.find(b => b.repoId === repo.id && b.isHead)
-                : undefined;
-              const wtBranch = headBranch
-                ? (headBranch.detachedTag ?? headBranch.detachedHash ?? headBranch.name)
-                : undefined;
-              const displayName = wtBranch
-                ? `${repo.mainWorktreePath?.split('/').pop() ?? repo.name} (${wtBranch})`
-                : repo.name;
-              return (
-                <div key={repo.id} style={styles.repoRow}>
-                  <span style={styles.repoDot(repo.color)} />
-                  <span style={styles.repoName}>{displayName}</span>
-                  {repo.isSubmodule && (
-                    <span style={styles.submoduleBadge} title={repo.submodulePath ? `Submodule: ${repo.submodulePath}` : 'Submodule'}>
-                      SUB
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       <ScrollArea style={{ flex: 1, minHeight: 0 }}>
@@ -603,30 +576,6 @@ const styles = {
     padding: '3px 3px',
     borderRadius: '3px',
   } as React.CSSProperties,
-  repoList: {
-    borderBottom: '1px solid var(--vscode-panel-border)',
-    padding: '3px 0',
-  },
-  repoRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    padding: '2px 8px',
-    fontSize: '11px',
-    color: 'var(--vscode-foreground)',
-    minWidth: 0,
-  },
-  repoName: {
-    flex: 1,
-    minWidth: 0,
-    fontWeight: 'bold' as const,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em',
-    fontSize: '10px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
   repoDot: (color: string): React.CSSProperties => ({
     width: '7px',
     height: '7px',
@@ -634,19 +583,6 @@ const styles = {
     background: color,
     flexShrink: 0,
   }),
-  submoduleBadge: {
-    fontSize: '9px',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    color: 'var(--vscode-badge-foreground)',
-    background: 'var(--vscode-badge-background)',
-    borderRadius: '3px',
-    padding: '1px 4px',
-    flexShrink: 0,
-    opacity: 0.75,
-    marginLeft: '4px',
-  } as React.CSSProperties,
   iconBtn: {
     background: 'transparent',
     border: 'none',

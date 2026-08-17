@@ -31,7 +31,7 @@ export class GitProfileService implements vscode.Disposable {
   }
 
   trace(msg: string): void {
-    this.log?.info(`[profile] ${msg}`);
+    this.log?.debug(`[profile] ${msg}`);
   }
 
   // ── Profiles ─────────────────────────────────────────────────────────────────

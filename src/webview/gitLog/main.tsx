@@ -303,6 +303,16 @@ function App() {
     reloadCommits(cleared);
   }, [reloadCommits]);
 
+  const activeRepoId = store.commitFilters.repoId;
+  const sidebarBranches = useMemo(
+    () => activeRepoId ? store.branches.filter(b => b.repoId === activeRepoId) : store.branches,
+    [store.branches, activeRepoId]
+  );
+  const sidebarTags = useMemo(
+    () => activeRepoId ? store.tags.filter(t => t.repoId === activeRepoId) : store.tags,
+    [store.tags, activeRepoId]
+  );
+
   const hasSelectedCommit = !!store.selectedCommit;
 
   const showNoRepo = store.repos.length === 0 && store.initialized;
@@ -346,6 +356,11 @@ function App() {
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
         onUndock={(target) => send({ type: 'LOG_UNDOCK', target } as LogToHostMsg)}
       />
+      <RepoTabs
+        value={store.commitFilters.repoId}
+        repos={store.repos}
+        onChange={handleRepoChange}
+      />
 
       {/* Main layout */}
       <div style={{ ...mainLayout, visibility: showNoRepo ? 'hidden' : 'visible' }}>
@@ -360,8 +375,8 @@ function App() {
         <BranchSidebar
           ref={sidebarRef}
           repos={store.repos.filter(r => !r.isWorktree)}
-          branches={store.branches}
-          tags={store.tags}
+          branches={sidebarBranches}
+          tags={sidebarTags}
           filter={store.branchFilter}
           selectedBranchFilter={store.commitFilters.branch}
           onFilterChange={store.setBranchFilter}
@@ -416,11 +431,6 @@ function App() {
 
         {/* Commit list (center) */}
         <div style={commitColumn}>
-          <RepoTabs
-            value={store.commitFilters.repoId}
-            repos={store.repos}
-            onChange={handleRepoChange}
-          />
           <CommitList
             layout={graphLayout}
             selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}

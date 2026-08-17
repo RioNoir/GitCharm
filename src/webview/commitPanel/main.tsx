@@ -2010,8 +2010,9 @@ const css = {
   },
   toolbar: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '2px 6px', borderBottom: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)', flexShrink: 0, gap: '4px',
+    padding: '2px 6px', borderTop: '1px solid var(--vscode-panel-border)',
+    borderBottom: '1px solid var(--vscode-panel-border)',
+    background: 'var(--vscode-sideBar-background)', flexShrink: 0, gap: '4px',
   },
   toolbarLeft:  { display: 'flex', alignItems: 'center', gap: '1px' } as React.CSSProperties,
   iconBtn: {
@@ -2053,7 +2054,7 @@ const css = {
   } as React.CSSProperties,
   tabBar: {
     display: 'flex', borderBottom: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)', flexShrink: 0,
+    background: 'var(--vscode-sideBar-background)', flexShrink: 0,
     overflowX: 'auto' as const, overflowY: 'hidden' as const,
   } as React.CSSProperties,
   tab: (active: boolean): React.CSSProperties => ({
