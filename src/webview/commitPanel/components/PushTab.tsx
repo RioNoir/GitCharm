@@ -845,7 +845,7 @@ const css = {
     display: 'flex', flexDirection: 'column' as const, gap: '6px',
     padding: '8px',
     borderTop: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)',
+    background: 'var(--vscode-sideBar-background)',
   } as React.CSSProperties,
   pills: { display: 'flex', flexWrap: 'wrap' as const, gap: '4px' } as React.CSSProperties,
   pill: (color: string): React.CSSProperties => ({

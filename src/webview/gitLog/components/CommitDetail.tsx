@@ -942,7 +942,7 @@ const styles = {
     flexDirection: 'column' as const,
     height: '100%',
     borderLeft: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)',
+    background: 'var(--vscode-sideBar-background)',
   },
   empty: {
     display: 'flex',

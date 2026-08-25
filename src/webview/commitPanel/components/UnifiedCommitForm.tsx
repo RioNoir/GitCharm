@@ -450,7 +450,7 @@ const styles = {
     gap: '6px',
     padding: '8px',
     borderTop: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-editor-background)',
+    background: 'var(--vscode-sideBar-background)',
     minWidth: 0,
     overflow: 'hidden',
   },
