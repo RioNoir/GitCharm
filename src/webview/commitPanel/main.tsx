@@ -456,6 +456,11 @@ function App() {
     getVsCodeApi().postMessage(msg);
   }, []);
 
+  const setRepoFilter = useCallback((showOnlyChangedRepos: boolean) => {
+    setShowOnlyChangedRepos(showOnlyChangedRepos);
+    send({ type: 'COMMIT_SET_REPO_FILTER', showOnlyChangedRepos });
+  }, [send]);
+
   // Close view-menus on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -487,6 +492,9 @@ function App() {
       }
 
       switch (msg.type) {
+        case 'COMMIT_REPO_FILTER_UPDATE':
+          setShowOnlyChangedRepos(msg.showOnlyChangedRepos);
+          break;
         case 'COMMIT_STATUS_UPDATE':
           store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
@@ -1229,7 +1237,7 @@ function App() {
               style={{ ...css.iconBtn, ...(showOnlyChangedRepos ? css.activeIconBtn : {}) }}
               title={showOnlyChangedRepos ? 'Show all repositories' : 'Show only repositories with changes'}
               aria-pressed={showOnlyChangedRepos}
-              onClick={() => setShowOnlyChangedRepos(value => !value)}
+              onClick={() => setRepoFilter(!showOnlyChangedRepos)}
             >
               <Codicon name="filter" />
             </button>
@@ -1389,7 +1397,7 @@ function App() {
               <div style={css.filteredEmptyState}>
                 <Codicon name="filter" style={{ fontSize: '18px', opacity: 0.55 }} />
                 <div>No repositories with changes</div>
-                <button style={css.clearFilterBtn} onClick={() => setShowOnlyChangedRepos(false)}>
+                <button style={css.clearFilterBtn} onClick={() => setRepoFilter(false)}>
                   Show all repositories
                 </button>
               </div>

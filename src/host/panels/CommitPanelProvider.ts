@@ -26,6 +26,7 @@ import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 
 export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
+  private static readonly SHOW_ONLY_CHANGED_REPOS_KEY = 'gitcharm.showOnlyChangedRepos';
   private view?: vscode.WebviewView;
   private logProvider?: GitLogPanelProvider;
   private undockedPanel?: UndockedPanelProvider;
@@ -175,6 +176,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     // Refresh status whenever the panel becomes visible (e.g. user switches to it)
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
+        this.postRepoFilterState();
         this.manager.getAllStatuses().then(status => {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
@@ -188,6 +190,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       this.postChangelistsUpdate(status);
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, fileViewMode: this.getFileViewMode() });
       this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: this.getHiddenRepoIds() });
+      this.postRepoFilterState();
       loadIconTheme(webviewView.webview).then(iconTheme => {
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme, fileViewMode: this.getFileViewMode() });
       }).catch(() => { /* icon theme optional */ });
@@ -296,6 +299,19 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private getFileViewMode(): 'flat' | 'tree' {
     return this.globalState?.get<'flat' | 'tree'>('fileViewMode', 'tree') ?? 'tree';
+  }
+
+  private getShowOnlyChangedRepos(): boolean {
+    return this.globalState?.get<boolean>(CommitPanelProvider.SHOW_ONLY_CHANGED_REPOS_KEY, false) ?? false;
+  }
+
+  private postRepoFilterState(): void {
+    this.post({ type: 'COMMIT_REPO_FILTER_UPDATE', showOnlyChangedRepos: this.getShowOnlyChangedRepos() });
+  }
+
+  private async setShowOnlyChangedRepos(showOnlyChangedRepos: boolean): Promise<void> {
+    await this.globalState?.update(CommitPanelProvider.SHOW_ONLY_CHANGED_REPOS_KEY, showOnlyChangedRepos);
+    this.postRepoFilterState();
   }
 
   private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
@@ -450,6 +466,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos, status, iconTheme });
+        this.postRepoFilterState();
         this.postChangelistsUpdate(status);
         break;
       }
@@ -1845,6 +1862,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_SET_FILE_VIEW_MODE': {
         await this.globalState?.update('fileViewMode', msg.mode);
+        break;
+      }
+
+      case 'COMMIT_SET_REPO_FILTER': {
+        await this.setShowOnlyChangedRepos(msg.showOnlyChangedRepos);
         break;
       }
 
