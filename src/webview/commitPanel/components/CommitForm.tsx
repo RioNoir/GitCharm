@@ -67,6 +67,7 @@ export function CommitForm({
         <label style={styles.amendLabel}>
           <input
             type="checkbox"
+            className="gitcharm-subtle-checkbox"
             checked={amend}
             onChange={(e) => onAmendChange(e.target.checked)}
             disabled={loading}

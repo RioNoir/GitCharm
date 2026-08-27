@@ -115,7 +115,7 @@ function Checkbox({ checked, indeterminate, onChange, onClick }: {
     if (ref.current) ref.current.indeterminate = indeterminate ?? false;
   }, [indeterminate]);
   return (
-    <input ref={ref} type="checkbox" checked={checked}
+    <input ref={ref} type="checkbox" className="gitcharm-subtle-checkbox" checked={checked}
       onChange={onChange} onClick={onClick} style={styles.checkbox} />
   );
 }
@@ -273,7 +273,7 @@ export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSe
 
 const styles = {
   container: { display: 'flex', flexDirection: 'column' as const },
-  checkbox: { flexShrink: 0, margin: '0 3px 0 0', accentColor: 'var(--vscode-button-background)' } as React.CSSProperties,
+  checkbox: { flexShrink: 0, margin: '0 3px 0 0' } as React.CSSProperties,
   row: (selected: boolean, ctxActive = false, hovered = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',

@@ -88,6 +88,7 @@ export function ProjectGroup({
         <input
           ref={checkboxRef}
           type="checkbox"
+          className="gitcharm-subtle-checkbox"
           checked={allSelected}
           onChange={totalFiles > 0 ? toggleAll : () => {}}
           onClick={(e) => e.stopPropagation()}
@@ -234,7 +235,6 @@ const styles = {
   repoCheckbox: {
     margin: '0 0 0 6px',
     flexShrink: 0,
-    accentColor: 'var(--vscode-button-background)',
   } as React.CSSProperties,
   headerMain: {
     display: 'flex',

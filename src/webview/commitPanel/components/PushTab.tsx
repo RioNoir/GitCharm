@@ -503,11 +503,12 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
         {!singleRepo && (
           <input
             type="checkbox"
+            className="gitcharm-subtle-checkbox"
             checked={checked}
             disabled={!canCheck}
             onChange={() => onToggle(repoStatus.repoId)}
             onClick={e => e.stopPropagation()}
-            style={{ ...styles.checkbox, opacity: canCheck ? 1 : 0.35, cursor: canCheck ? 'pointer' : 'default' }}
+            style={{ ...styles.checkbox, cursor: canCheck ? 'pointer' : 'default' }}
             title={!canCheck ? 'Nothing to push' : checked ? 'Exclude from push' : 'Include in push'}
           />
         )}
@@ -879,7 +880,6 @@ const styles = {
   }),
   checkbox: {
     margin: '0 2px 0 0', flexShrink: 0,
-    accentColor: 'var(--vscode-button-background)',
   } as React.CSSProperties,
   headerMain: {
     display: 'flex', alignItems: 'center', gap: '6px',

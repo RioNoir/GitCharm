@@ -55,23 +55,26 @@ export function getWebviewHtml(
       -webkit-appearance: none;
       width: 14px;
       height: 14px;
-      border: 1.5px solid var(--vscode-focusBorder, #007fd4);
+      border: 1px solid #b3b3b3;
       border-radius: 3px;
       background: transparent;
       cursor: pointer;
       flex-shrink: 0;
       position: relative;
       vertical-align: middle;
-      transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+      opacity: 0.72;
+      transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
     }
     input[type="checkbox"]:hover {
-      background: var(--vscode-focusBorder, #007fd4)22;
-      box-shadow: 0 0 0 2px var(--vscode-focusBorder, #007fd4)33;
+      background: #b3b3b322;
+      border-color: #d2d2d2;
+      box-shadow: 0 0 0 2px #b3b3b333;
+      opacity: 0.95;
     }
     input[type="checkbox"]:checked,
     input[type="checkbox"]:indeterminate {
-      background: var(--vscode-focusBorder, #007fd4);
-      border-color: var(--vscode-focusBorder, #007fd4);
+      background: #b3b3b3;
+      border-color: #b3b3b3;
     }
     input[type="checkbox"]:checked::after {
       content: '';
@@ -80,7 +83,7 @@ export function getWebviewHtml(
       top: 0px;
       width: 4px;
       height: 8px;
-      border: 2px solid #fff;
+      border: 1.5px solid #4d4d4d;
       border-top: none;
       border-left: none;
       transform: rotate(45deg);
@@ -92,11 +95,11 @@ export function getWebviewHtml(
       top: 5px;
       width: 8px;
       height: 2px;
-      background: #fff;
+      background: #4d4d4d;
       border-radius: 1px;
     }
     input[type="checkbox"]:focus-visible {
-      outline: 1px solid var(--vscode-focusBorder);
+      outline: 1px solid #d2d2d2;
       outline-offset: 2px;
     }
     input[type="checkbox"]:disabled {
