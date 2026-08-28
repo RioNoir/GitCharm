@@ -323,7 +323,6 @@ export function UnifiedCommitForm({
         <label style={styles.amendLabel} title="Modify the last commit instead of creating a new one. Rewrites history — avoid on shared branches.">
           <input
             type="checkbox"
-            className="gitcharm-subtle-checkbox"
             checked={amend}
             onChange={() => onAmendToggle(amendRepoId!)}
             style={{ margin: '0 4px 0 0' }}

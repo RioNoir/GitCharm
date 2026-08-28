@@ -91,7 +91,6 @@ export function ChangelistGroup({
         <input
           ref={checkboxRef}
           type="checkbox"
-          className="gitcharm-subtle-checkbox"
           checked={allSelected}
           onChange={() => {}}
           onClick={totalFiles > 0 ? toggleAll : e => e.stopPropagation()}
@@ -247,7 +246,6 @@ function RepoSubGroup({
           <input
             ref={checkboxRef}
             type="checkbox"
-            className="gitcharm-subtle-checkbox"
             checked={allSelected}
             onChange={() => {}}
             onClick={totalFiles > 0 ? toggleAll : e => e.stopPropagation()}
@@ -345,6 +343,7 @@ const styles = {
   clCheckbox: {
     margin: '0 0 0 3px',
     flexShrink: 0,
+    accentColor: 'var(--vscode-button-background)',
   } as React.CSSProperties,
 
   headerMain: {
@@ -423,6 +422,7 @@ const styles = {
   repoCheckbox: {
     margin: '0 0 0 18px',
     flexShrink: 0,
+    accentColor: 'var(--vscode-button-background)',
   } as React.CSSProperties,
 
   repoHeaderMain: {

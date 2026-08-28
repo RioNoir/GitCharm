@@ -57,7 +57,7 @@ function Checkbox({ checked, indeterminate, onChange, onClick }: {
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (ref.current) ref.current.indeterminate = indeterminate ?? false; }, [indeterminate]);
-  return <input ref={ref} type="checkbox" className="gitcharm-subtle-checkbox" checked={checked} onChange={onChange} onClick={onClick} style={s.checkbox} />;
+  return <input ref={ref} type="checkbox" checked={checked} onChange={onChange} onClick={onClick} style={s.checkbox} />;
 }
 
 // ── Dir node ──────────────────────────────────────────────────────────────────

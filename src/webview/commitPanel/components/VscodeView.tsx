@@ -327,13 +327,12 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           {staged && onToggleRepoSelection && (
             <input
               type="checkbox"
-              className="gitcharm-subtle-checkbox"
               checked={isEmpty ? false : (repoSelected ?? true)}
               onChange={e => { if (!isEmpty) { e.stopPropagation(); onToggleRepoSelection?.(); } }}
               onClick={e => e.stopPropagation()}
               title={isEmpty ? undefined : "Include this repository in the commit"}
               disabled={isEmpty}
-              style={{ margin: '0 0 0 8px', flexShrink: 0, cursor: isEmpty ? 'default' : 'pointer', ...(isEmpty ? { opacity: 0.3, pointerEvents: 'none' } : {}) }}
+              style={{ margin: '0 0 0 8px', flexShrink: 0, accentColor: 'var(--vscode-button-background)', cursor: isEmpty ? 'default' : 'pointer', ...(isEmpty ? { opacity: 0.3, pointerEvents: 'none' } : {}) }}
             />
           )}
           <div style={repoHeaderMainStyle} onClick={() => toggleCollapsed(collapseKey)}>
