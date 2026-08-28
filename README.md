@@ -138,8 +138,6 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - **Per-repository sub-menu** with full remote management: add, rename, change URL, and remove remotes.
 - Tracks the active editor to reflect the correct repository in multi-repo workspaces.
 
-<br>
-<img src="media/screenshots/branches_menu.png" alt="GitCharm branches menu">
 
 ### 👤 Git Profiles
 
@@ -151,8 +149,6 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Active profile applied automatically to the local repo config before every commit.
 - Each workspace/repository can use a different identity.
 
-<br>
-<img src="media/screenshots/git_profiles.png" alt="GitCharm git profiles">
 
 ### 🔍 Git Annotations (Blame)
 
@@ -173,7 +169,8 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Activity bar badge showing the total number of changed files across all repositories.
 - Nested repository scanning: automatically discovers Git repositories inside workspace subfolders up to a configurable depth, skipping ignored folders (e.g. `node_modules`). Files belonging to nested repos are filtered out from their parent repository's change list, matching VS Code's built-in behavior.
 - Repository context menu in the Commit Panel header (all view modes and all tabs): quick access to branch operations, fetch, push, settings, **Reveal in Explorer**, **Open in New Window**, and **Open in File Manager** for each repository.
-- Hide/show individual repositories from the Commit Panel and Log Panel via the context menu; hidden repos are persisted per workspace.
+- Hide/show individual repositories from the Commit Panel and Log Panel via the context menu or the Commit Panel's `···` title menu; hidden repos are persisted per workspace.
+- Sort repositories by discovery time, name, or path from the Commit Panel's `···` title menu; the choice is persisted across reloads.
 
 ### 🌳 Worktrees
 
@@ -255,9 +252,11 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Pull` | Pulls all repositories (prompts for merge or rebase strategy). |
 | `GitCharm: Push` | Pushes all repositories. |
 | `GitCharm: Sync All` | Pulls then pushes all repositories; stops if any pull fails. |
+| `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Git Log panel. |
 | `GitCharm: Open Merge Editor` | Opens the merge editor for the active file when conflict markers are present. |
 | `GitCharm: Branch Menu` | Opens the Status Bar branch menu. |
 | `GitCharm: Settings` | Opens GitCharm settings. |
+| `GitCharm: Manage Hidden Repositories` | Reopens repositories previously hidden from the Commit Panel and Log Panel. |
 | `GitCharm: Manage Git Profiles` | Opens the Git profile manager. |
 | `GitCharm: Switch Git Profile` | Switches the active Git profile for the current workspace. |
 | `GitCharm: Open Git Annotations` | Shows inline blame annotations in the active editor. |
