@@ -365,7 +365,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           </div>
           {!isEmpty && (
             <div style={repoActionsStyle}>
-              {viewMode === 'tree' && !collapsed && (
+              {viewMode === 'tree' && !collapsed && dirKeys.length > 0 && (
                 <InlineIconBtn
                   icon={expanded ? 'collapse-all' : 'expand-all'}
                   title={expanded ? 'Collapse' : 'Expand'}

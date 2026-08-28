@@ -291,7 +291,7 @@ function RepoSubGroup({
               </span>
             )}
             <div style={styles.repoRightGroup}>
-              {viewMode === 'tree' && totalFiles > 0 && !collapsed && (
+              {viewMode === 'tree' && totalFiles > 0 && !collapsed && dirKeys.length > 0 && (
                 <InlineIconBtn
                   icon={expanded ? 'collapse-all' : 'expand-all'}
                   title={expanded ? 'Collapse' : 'Expand'}

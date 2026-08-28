@@ -130,7 +130,7 @@ export function ProjectGroup({
           </span>
           {totalFiles > 0 && (
             <div style={styles.rightGroup}>
-              {viewMode === 'tree' && !collapsed && (
+              {viewMode === 'tree' && !collapsed && dirKeys.length > 0 && (
                 <InlineIconBtn
                   icon={expanded ? 'collapse-all' : 'expand-all'}
                   title={expanded ? 'Collapse' : 'Expand'}
