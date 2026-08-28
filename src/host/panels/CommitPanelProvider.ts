@@ -23,10 +23,12 @@ import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
+import type { ViewAndSortSettings } from '../types/settings';
 
 export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
-  private static readonly SHOW_ONLY_CHANGED_REPOS_KEY = 'gitcharm.showOnlyChangedRepos';
+  private readonly viewAndSortSettings: ViewAndSortSettingsService;
   private view?: vscode.WebviewView;
   private logProvider?: GitLogPanelProvider;
   private undockedPanel?: UndockedPanelProvider;
@@ -86,6 +88,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private readonly globalState?: vscode.Memento,
     private readonly workspaceState?: vscode.Memento
   ) {
+    this.viewAndSortSettings = new ViewAndSortSettingsService(this.globalState, this.workspaceState);
+    this.viewAndSortSettings.migrateIfNeeded().then(() => this.syncContextKeys(this.viewAndSortSettings.getAll()));
+
     this.manager.onStatusChange(async (status) => {
       await this.refreshActiveProfile();
       this.postChangelistsUpdate(status);
@@ -176,7 +181,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     // Refresh status whenever the panel becomes visible (e.g. user switches to it)
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
-        this.postRepoFilterState();
+        this.postViewAndSortSettings();
         this.manager.getAllStatuses().then(status => {
           this.postChangelistsUpdate(status);
           this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
@@ -184,15 +189,16 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
     });
 
+    // Send view/sort settings first so the webview can render the file tree with the right mode from the start
+    this.postViewAndSortSettings();
+
     // Sync current state — send changelists first so setStatus can read the correct viewMode
     this.manager.getAllStatuses().then(async status => {
       await this.refreshActiveProfile();
       this.postChangelistsUpdate(status);
-      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, fileViewMode: this.getFileViewMode() });
-      this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: this.getHiddenRepoIds() });
-      this.postRepoFilterState();
+      this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
       loadIconTheme(webviewView.webview).then(iconTheme => {
-        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme, fileViewMode: this.getFileViewMode() });
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status, iconTheme });
       }).catch(() => { /* icon theme optional */ });
     });
 
@@ -251,8 +257,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private enrichCommitMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
-      const m = msg as typeof msg & { fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean };
-      if (m.fileViewMode === undefined) m.fileViewMode = this.getFileViewMode();
+      const m = msg as typeof msg & { defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean };
       if (m.defaultCommitAction === undefined) m.defaultCommitAction = this.getDefaultCommitAction();
       if (m.defaultSaveAction === undefined) m.defaultSaveAction = this.getDefaultSaveAction();
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
@@ -297,21 +302,28 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     return vscode.workspace.getConfiguration('gitcharm').get<'simplified' | 'changelists' | 'vscode'>('changesViewMode', 'simplified');
   }
 
-  private getFileViewMode(): 'flat' | 'tree' {
-    return this.globalState?.get<'flat' | 'tree'>('fileViewMode', 'tree') ?? 'tree';
+  private postViewAndSortSettings(): void {
+    const settings = this.viewAndSortSettings.getAll();
+    this.broadcastCommit({ type: 'COMMIT_VIEW_SORT_SETTINGS_UPDATE', ...settings });
+    this.syncContextKeys(settings);
   }
 
-  private getShowOnlyChangedRepos(): boolean {
-    return this.globalState?.get<boolean>(CommitPanelProvider.SHOW_ONLY_CHANGED_REPOS_KEY, false) ?? false;
+  private syncContextKeys(settings: ViewAndSortSettings): void {
+    vscode.commands.executeCommand('setContext', 'gitcharm.fileViewMode', settings.fileViewMode);
+    vscode.commands.executeCommand('setContext', 'gitcharm.repoSortMode', settings.repoSortMode);
+    vscode.commands.executeCommand('setContext', 'gitcharm.hideReposWithoutChanges', settings.hideReposWithoutChanges);
   }
 
-  private postRepoFilterState(): void {
-    this.post({ type: 'COMMIT_REPO_FILTER_UPDATE', showOnlyChangedRepos: this.getShowOnlyChangedRepos() });
+  setFileViewMode(mode: 'flat' | 'tree'): void {
+    this.viewAndSortSettings.updatePrefs({ fileViewMode: mode }).then(() => this.postViewAndSortSettings());
   }
 
-  private async setShowOnlyChangedRepos(showOnlyChangedRepos: boolean): Promise<void> {
-    await this.globalState?.update(CommitPanelProvider.SHOW_ONLY_CHANGED_REPOS_KEY, showOnlyChangedRepos);
-    this.postRepoFilterState();
+  setRepoSortMode(mode: 'discovery' | 'name' | 'path'): void {
+    this.viewAndSortSettings.updatePrefs({ repoSortMode: mode }).then(() => this.postViewAndSortSettings());
+  }
+
+  setHideReposWithoutChanges(value: boolean): void {
+    this.viewAndSortSettings.updatePrefs({ hideReposWithoutChanges: value }).then(() => this.postViewAndSortSettings());
   }
 
   private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
@@ -326,13 +338,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     return vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
   }
 
-  private getHiddenRepoIds(): string[] {
-    return this.workspaceState?.get<string[]>('gitcharm.hiddenRepoIds', []) ?? [];
+  getHiddenRepoIds(): string[] {
+    return this.viewAndSortSettings.getAll().hiddenRepoIds;
   }
 
   private async setHiddenRepoIds(ids: string[]): Promise<void> {
-    await this.workspaceState?.update('gitcharm.hiddenRepoIds', ids);
-    this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: ids });
+    await this.viewAndSortSettings.setHiddenRepoIds(ids);
+    this.postViewAndSortSettings();
     this.logProvider?.notifyHiddenReposChanged(ids);
     this.badgeController?.setHiddenRepoIds(ids);
   }
@@ -466,7 +478,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos, status, iconTheme });
-        this.postRepoFilterState();
+        this.postViewAndSortSettings();
         this.postChangelistsUpdate(status);
         break;
       }
@@ -1860,13 +1872,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
-      case 'COMMIT_SET_FILE_VIEW_MODE': {
-        await this.globalState?.update('fileViewMode', msg.mode);
-        break;
-      }
-
-      case 'COMMIT_SET_REPO_FILTER': {
-        await this.setShowOnlyChangedRepos(msg.showOnlyChangedRepos);
+      case 'COMMIT_SET_VIEW_SORT_SETTINGS': {
+        const { type: _type, ...partial } = msg;
+        await this.viewAndSortSettings.updatePrefs(partial);
+        this.postViewAndSortSettings();
         break;
       }
 
@@ -2301,7 +2310,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.manager.getAllStatuses().then(status => {
       this.postChangelistsUpdate(status);
       this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
-      this.post({ type: 'COMMIT_HIDDEN_REPOS_UPDATE', hiddenRepoIds: this.getHiddenRepoIds() });
+      this.postViewAndSortSettings();
     });
   }
 }

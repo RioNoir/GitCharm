@@ -16,6 +16,8 @@ import { ScrollArea } from '../shared/ScrollArea';
 import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
+import type { ViewAndSortUserPrefs } from '../../host/types/settings';
+import { sortRepos } from './repoSort';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -275,18 +277,11 @@ function App() {
   const [stashMap, setStashMap]       = useState<Record<string, StashEntry[]>>({});
   const [stashLoading, setStashLoading] = useState<Record<string, boolean>>({});
   const [stashError, setStashError]   = useState<Record<string, string | null>>({});
-  const [stashExpandAll, setStashExpandAll] = useState(false);
 
   // ── Worktree state ────────────────────────────────────────────────────────
   const [worktreeRepos, setWorktreeRepos] = useState<Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }>>([]);
   const [worktreeLoading, setWorktreeLoading] = useState(false);
   const [worktreeError, setWorktreeError] = useState<string | null>(null);
-
-  // ── Hidden repositories ───────────────────────────────────────────────────
-  const [hiddenRepoIds, setHiddenRepoIds] = useState<string[]>([]);
-
-  // ── Changes view filters ──────────────────────────────────────────────────
-  const [showOnlyChangedRepos, setShowOnlyChangedRepos] = useState(false);
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -363,12 +358,6 @@ function App() {
   // ── Autopilot ─────────────────────────────────────────────────────────────
   const [generatingMessage, setGeneratingMessage]   = useState(false);
 
-  // ── Dropdowns ─────────────────────────────────────────────────────────────
-  const [viewMenuOpen, setViewMenuOpen]             = useState(false);
-  const [shelveViewMenuOpen, setShelveViewMenuOpen] = useState(false);
-  const viewMenuRef       = useRef<HTMLDivElement>(null);
-  const shelveViewMenuRef = useRef<HTMLDivElement>(null);
-
   // ── Selected file (highlighted when diff is open or on right-click) ──────
   const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
 
@@ -391,20 +380,10 @@ function App() {
     getVsCodeApi().postMessage(msg);
   }, []);
 
-  const setRepoFilter = useCallback((showOnlyChangedRepos: boolean) => {
-    setShowOnlyChangedRepos(showOnlyChangedRepos);
-    send({ type: 'COMMIT_SET_REPO_FILTER', showOnlyChangedRepos });
+  const updateViewAndSort = useCallback((partial: Partial<ViewAndSortUserPrefs>) => {
+    store.setViewAndSort(partial);
+    send({ type: 'COMMIT_SET_VIEW_SORT_SETTINGS', ...partial });
   }, [send]);
-
-  // Close view-menus on outside click
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) setViewMenuOpen(false);
-      if (shelveViewMenuRef.current && !shelveViewMenuRef.current.contains(e.target as Node)) setShelveViewMenuOpen(false);
-    };
-    document.addEventListener('mousedown', h, true);
-    return () => document.removeEventListener('mousedown', h, true);
-  }, []);
 
   const notifyError = useCallback((message: string) => {
     send({ type: 'NOTIFY_ERROR', message } satisfies CommitToHostMsg);
@@ -427,11 +406,16 @@ function App() {
       }
 
       switch (msg.type) {
-        case 'COMMIT_REPO_FILTER_UPDATE':
-          setShowOnlyChangedRepos(msg.showOnlyChangedRepos);
+        case 'COMMIT_VIEW_SORT_SETTINGS_UPDATE':
+          store.setViewAndSort({
+            fileViewMode: msg.fileViewMode,
+            hideReposWithoutChanges: msg.hideReposWithoutChanges,
+            repoSortMode: msg.repoSortMode,
+            hiddenRepoIds: msg.hiddenRepoIds,
+          });
           break;
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.fileViewMode, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
             let hasNewChanges = false;
@@ -553,10 +537,6 @@ function App() {
 
         case 'WORKTREE_OP_RESULT':
           if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
-          break;
-
-        case 'COMMIT_HIDDEN_REPOS_UPDATE':
-          setHiddenRepoIds(msg.hiddenRepoIds);
           break;
 
         case 'COMMIT_SWITCH_TAB':
@@ -705,10 +685,12 @@ function App() {
     send({ type: 'COMMIT_OPEN_DIFF', repoId, filePath, staged: isStaged });
   }, [store.status, send]);
 
+  const { hiddenRepoIds, hideReposWithoutChanges, repoSortMode } = store.viewAndSort;
   const allRepos = store.status?.repos ?? [];
-  const repos = hiddenRepoIds.length > 0 ? allRepos.filter(r => !hiddenRepoIds.includes(r.repoId)) : allRepos;
+  const visibleRepos = hiddenRepoIds.length > 0 ? allRepos.filter(r => !hiddenRepoIds.includes(r.repoId)) : allRepos;
+  const repos = sortRepos(visibleRepos, repoSortMode, store.repoMetas);
   const changedRepos = repos.filter(r => r.stagedFiles.length > 0 || r.unstagedFiles.length > 0);
-  const changesRepos = showOnlyChangedRepos ? changedRepos : repos;
+  const changesRepos = hideReposWithoutChanges ? changedRepos : repos;
   const metaMap = new Map(store.repoMetas.map(m => [m.id, m]));
   const multiRepo = repos.length >= 1;
   const singleRepo = repos.length === 1;
@@ -1131,145 +1113,6 @@ function App() {
   return (
     <div style={css.app} onContextMenu={e => e.preventDefault()}>
 
-      {/* ── Toolbar ── */}
-      <div style={css.toolbar}>
-        <div style={css.toolbarLeft}>
-          <button data-action-btn="" style={css.iconBtn} title="Refresh" onClick={() => send({ type: 'COMMIT_REQUEST_STATUS' })}>
-            <Codicon name="refresh" />
-          </button>
-          {activeTab === 'changes' && (<>
-            <button data-action-btn="" style={css.iconBtn} title="Expand all" onClick={() => store.expandAll()}>
-              <Codicon name="expand-all" />
-            </button>
-            <button data-action-btn="" style={css.iconBtn} title="Collapse all" onClick={() => store.collapseAll()}>
-              <Codicon name="collapse-all" />
-            </button>
-            <div ref={viewMenuRef} style={{ position: 'relative' }}>
-              <button data-action-btn="" style={css.iconBtn} title="View options" onClick={() => setViewMenuOpen(o => !o)}>
-                <Codicon name="eye" />
-              </button>
-              {viewMenuOpen && (
-                <div style={{ ...css.dropdownPanel, left: 0 }}>
-                  <div style={css.dropdownTitle}>View</div>
-                  {(['flat', 'tree'] as const).map(mode => (
-                    <div
-                      key={mode}
-                      style={{ ...css.dropdownItem, fontWeight: store.viewMode === mode ? 'bold' : 'normal' }}
-                      onClick={() => { store.setViewMode(mode); send({ type: 'COMMIT_SET_FILE_VIEW_MODE', mode }); setViewMenuOpen(false); }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <Codicon name={mode === 'flat' ? 'list-unordered' : 'list-tree'} style={{ marginRight: '6px' }} />
-                      {mode === 'flat' ? 'Flat list' : 'Tree view'}
-                      {store.viewMode === mode && <Codicon name="check" style={{ marginLeft: 'auto' }} />}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button
-              data-action-btn=""
-              style={{ ...css.iconBtn, ...(showOnlyChangedRepos ? css.activeIconBtn : {}) }}
-              title={showOnlyChangedRepos ? 'Show all repositories' : 'Show only repositories with changes'}
-              aria-pressed={showOnlyChangedRepos}
-              onClick={() => setRepoFilter(!showOnlyChangedRepos)}
-            >
-              <Codicon name="filter" />
-            </button>
-          </>)}
-          {activeTab === 'shelf' && (<>
-            <button data-action-btn="" style={css.iconBtn} title="Expand all" onClick={() => {
-              const allShelves = Object.values(shelveMap).flat();
-              const shelveIds = allShelves.map(s => s.id);
-              const dirPaths = new Set<string>();
-              for (const s of allShelves) {
-                for (const f of s.files) {
-                  const parts = f.path.split('/');
-                  for (let i = 1; i < parts.length; i++) dirPaths.add(parts.slice(0, i).join('/'));
-                }
-              }
-              store.shelveExpandAll(shelveIds, Array.from(dirPaths));
-            }}>
-              <Codicon name="expand-all" />
-            </button>
-            <button data-action-btn="" style={css.iconBtn} title="Collapse all" onClick={() => {
-              store.shelveCollapseAll([], []);
-            }}>
-              <Codicon name="collapse-all" />
-            </button>
-            <div ref={shelveViewMenuRef} style={{ position: 'relative' }}>
-              <button data-action-btn="" style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
-                <Codicon name="eye" />
-              </button>
-              {shelveViewMenuOpen && (
-                <div style={{ ...css.dropdownPanel, left: 0 }}>
-                  <div style={css.dropdownTitle}>View</div>
-                  {(['flat', 'tree'] as const).map(mode => (
-                    <div
-                      key={mode}
-                      style={{ ...css.dropdownItem, fontWeight: store.shelveViewMode === mode ? 'bold' : 'normal' }}
-                      onClick={() => { store.setShelveViewMode(mode); setShelveViewMenuOpen(false); }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <Codicon name={mode === 'flat' ? 'list-unordered' : 'list-tree'} style={{ marginRight: '6px' }} />
-                      {mode === 'flat' ? 'Flat list' : 'Tree view'}
-                      {store.shelveViewMode === mode && <Codicon name="check" style={{ marginLeft: 'auto' }} />}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>)}
-          {activeTab === 'stash' && (<>
-            <button data-action-btn="" style={css.iconBtn} title="Expand all" onClick={() => setStashExpandAll(true)}>
-              <Codicon name="expand-all" />
-            </button>
-            <button data-action-btn="" style={css.iconBtn} title="Collapse all" onClick={() => setStashExpandAll(false)}>
-              <Codicon name="collapse-all" />
-            </button>
-            <div ref={shelveViewMenuRef} style={{ position: 'relative' }}>
-              <button data-action-btn="" style={css.iconBtn} title="View options" onClick={() => setShelveViewMenuOpen(o => !o)}>
-                <Codicon name="eye" />
-              </button>
-              {shelveViewMenuOpen && (
-                <div style={{ ...css.dropdownPanel, left: 0 }}>
-                  <div style={css.dropdownTitle}>View</div>
-                  {(['flat', 'tree'] as const).map(mode => (
-                    <div
-                      key={mode}
-                      style={{ ...css.dropdownItem, fontWeight: store.shelveViewMode === mode ? 'bold' : 'normal' }}
-                      onClick={() => { store.setShelveViewMode(mode); setShelveViewMenuOpen(false); }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--vscode-list-hoverBackground)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <Codicon name={mode === 'flat' ? 'list-unordered' : 'list-tree'} style={{ marginRight: '6px' }} />
-                      {mode === 'flat' ? 'Flat list' : 'Tree view'}
-                      {store.shelveViewMode === mode && <Codicon name="check" style={{ marginLeft: 'auto' }} />}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>)}
-          {hiddenRepoIds.length > 0 && (
-            <button
-              style={{ ...css.iconBtn, position: 'relative' }}
-              title={`${hiddenRepoIds.length} hidden repositor${hiddenRepoIds.length === 1 ? 'y' : 'ies'} — click to manage`}
-              onClick={() => send({ type: 'COMMIT_MANAGE_HIDDEN_REPOS' })}
-            >
-              <Codicon name="eye-closed" />
-              <span style={{
-                position: 'absolute', top: '1px', right: '1px',
-                background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
-                borderRadius: '8px', fontSize: '9px', lineHeight: '14px',
-                minWidth: '14px', height: '14px', textAlign: 'center', padding: '0 3px',
-              }}>{hiddenRepoIds.length}</span>
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* ── Tab bar ── */}
       {(() => {
         const totalToPush = repos.reduce((sum, r) => {
@@ -1328,11 +1171,11 @@ function App() {
 
           {/* File list */}
           <ScrollArea style={css.repoList}>
-            {showOnlyChangedRepos && changesRepos.length === 0 ? (
+            {hideReposWithoutChanges && changesRepos.length === 0 ? (
               <div style={css.filteredEmptyState}>
                 <Codicon name="filter" style={{ fontSize: '18px', opacity: 0.55 }} />
                 <div>No repositories with changes</div>
-                <button style={css.clearFilterBtn} onClick={() => setRepoFilter(false)}>
+                <button style={css.clearFilterBtn} onClick={() => updateViewAndSort({ hideReposWithoutChanges: false })}>
                   Show all repositories
                 </button>
               </div>
@@ -1342,9 +1185,11 @@ function App() {
                 repoMetas={store.repoMetas}
                 selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                 ctxFile={ctxFile}
-                viewMode={store.viewMode}
+                viewMode={store.viewAndSort.fileViewMode}
                 isCollapsed={store.isCollapsed}
                 toggleCollapsed={store.toggleCollapsed}
+                hasExpandedDirs={store.hasExpandedDirs}
+                setDirsCollapsed={store.setDirsCollapsed}
                 onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
                 onContextMenu={(e, file, staged) => {
                   if (e.metaKey || e.ctrlKey) {
@@ -1400,10 +1245,12 @@ function App() {
                 repos={changesRepos}
                 repoMetas={store.repoMetas}
                 selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
-                viewMode={store.viewMode}
+                viewMode={store.viewAndSort.fileViewMode}
                 isFileSelected={store.isFileSelected}
                 isCollapsed={store.isCollapsed}
                 toggleCollapsed={store.toggleCollapsed}
+                hasExpandedDirs={store.hasExpandedDirs}
+                setDirsCollapsed={store.setDirsCollapsed}
                 onToggleFile={store.toggleFileSelection}
                 onSetFiles={store.setFileSelections}
                 onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
@@ -1487,10 +1334,12 @@ function App() {
                       isWorktree={meta?.isWorktree}
                       mainWorktreePath={meta?.mainWorktreePath}
                       selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
-                      viewMode={store.viewMode}
+                      viewMode={store.viewAndSort.fileViewMode}
                       isFileSelected={store.isFileSelected}
                       isCollapsed={store.isCollapsed}
                       toggleCollapsed={store.toggleCollapsed}
+                      hasExpandedDirs={store.hasExpandedDirs}
+                      setDirsCollapsed={store.setDirsCollapsed}
                       onToggleFile={store.toggleFileSelection}
                       onSetFiles={store.setFileSelections}
                       onSelectFile={f => { setSelectedFile(f); openDiff(f.repoId, f.path); }}
@@ -1652,7 +1501,7 @@ function App() {
                   shelves={shelveMap[repoId] ?? []}
                   loading={shelveLoading[repoId] ?? false}
                   error={shelveError[repoId] ?? null}
-                  viewMode={store.shelveViewMode}
+                  viewMode={store.viewAndSort.fileViewMode}
                   onUnshelve={handleUnshelve}
                   onUnshelveFile={handleUnshelveFile}
                   onDrop={handleDropShelve}
@@ -1690,14 +1539,13 @@ function App() {
                   stashes={(stashMap[repoId] ?? []).filter(s => !worktreeBranch || s.branch === worktreeBranch)}
                   loading={stashLoading[repoId] ?? false}
                   error={stashError[repoId] ?? null}
-                  viewMode={store.shelveViewMode}
+                  viewMode={store.viewAndSort.fileViewMode}
                   onApply={handleStashApply}
                   onPop={handleStashPop}
                   onDrop={handleStashDrop}
                   onRename={handleRenameStash}
                   onRequestList={requestStashList}
                   onOpenFileDiff={handleStashShowFileDiff}
-                  expandAll={stashExpandAll}
                 />
               );
             })}
@@ -2040,39 +1888,6 @@ const css = {
     fontFamily: 'var(--vscode-font-family)', fontSize: 'var(--vscode-font-size)', overflow: 'hidden',
     userSelect: 'none' as const,
   },
-  toolbar: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '2px 6px', borderTop: '1px solid var(--vscode-panel-border)',
-    borderBottom: '1px solid var(--vscode-panel-border)',
-    background: 'var(--vscode-sideBar-background)', flexShrink: 0, gap: '4px',
-  },
-  toolbarLeft:  { display: 'flex', alignItems: 'center', gap: '1px' } as React.CSSProperties,
-  iconBtn: {
-    background: 'transparent', border: 'none', color: 'var(--vscode-foreground)',
-    cursor: 'pointer', padding: '4px 5px', borderRadius: '3px',
-    fontSize: '14px', display: 'flex', alignItems: 'center', opacity: 0.8,
-  } as React.CSSProperties,
-  activeIconBtn: {
-    background: 'var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground))',
-    color: 'var(--vscode-textLink-foreground, var(--vscode-foreground))',
-    opacity: 1,
-  } as React.CSSProperties,
-  dropdownPanel: {
-    position: 'absolute' as const, top: '100%', left: 0, zIndex: 1000,
-    background: 'var(--vscode-menu-background, var(--vscode-editor-background))',
-    border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-    borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-    minWidth: '200px', maxWidth: '280px', padding: '4px 0', fontSize: '12px',
-  },
-  dropdownTitle: {
-    padding: '4px 12px', fontSize: '10px', opacity: 0.5,
-    textTransform: 'uppercase' as const, letterSpacing: '0.05em',
-  },
-  dropdownItem: {
-    display: 'flex', alignItems: 'center', padding: '5px 12px', cursor: 'pointer',
-    background: 'transparent', overflow: 'hidden', textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const, gap: '4px',
-  } as React.CSSProperties,
   notificationBar: {
     display: 'flex', alignItems: 'flex-start', gap: '7px',
     padding: '6px 8px 6px 10px', flexShrink: 0,

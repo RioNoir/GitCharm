@@ -6,6 +6,7 @@ import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
 import { Codicon } from '../../shared/Codicon';
 import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 
 export interface RepoFileGroup {
@@ -31,6 +32,8 @@ interface Props {
   isFileSelected: (repoId: string, path: string) => boolean;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   onToggleFile: (repoId: string, path: string) => void;
   onSetFiles: (repoId: string, paths: string[], selected: boolean) => void;
   onSelectFile: (file: FileStatus) => void;
@@ -53,7 +56,7 @@ interface Props {
 export function ChangelistGroup({
   changelist, repoGroups, isFixed, multiRepo, singleRepo,
   selectedFile, viewMode,
-  isFileSelected, isCollapsed, toggleCollapsed,
+  isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
   onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, ctxFile,
   onMultiSelect, multiSelectedFiles,
@@ -138,6 +141,8 @@ export function ChangelistGroup({
                 isFileSelected={isFileSelected}
                 isCollapsed={isCollapsed}
                 toggleCollapsed={toggleCollapsed}
+                hasExpandedDirs={hasExpandedDirs}
+                setDirsCollapsed={setDirsCollapsed}
                 onToggleFile={onToggleFile}
                 onSetFiles={onSetFiles}
                 onSelectFile={onSelectFile}
@@ -182,6 +187,8 @@ interface RepoSubGroupProps {
   isFileSelected: (repoId: string, path: string) => boolean;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   onToggleFile: (repoId: string, path: string) => void;
   onSetFiles: (repoId: string, paths: string[], selected: boolean) => void;
   onSelectFile: (file: FileStatus) => void;
@@ -206,7 +213,7 @@ interface RepoSubGroupProps {
 function RepoSubGroup({
   repoId, repoName, repoColor, repoStatus, files, multiRepo, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
-  isFileSelected, isCollapsed, toggleCollapsed,
+  isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
   onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, defaultCollapsed = false,
   onMultiSelect, multiSelectedFiles,
@@ -214,6 +221,12 @@ function RepoSubGroup({
   const collapseKey = `cl-repo:${changelistId ?? ''}:${repoId}`;
   // When defaultCollapsed, the key's presence means "user explicitly opened it"
   const collapsed = defaultCollapsed ? !isCollapsed(collapseKey) : isCollapsed(collapseKey);
+  const dirKeys: string[] = [];
+  for (const f of files) {
+    const parts = f.path.split('/');
+    for (let i = 1; i < parts.length; i++) dirKeys.push(`${repoId}:${parts.slice(0, i).join('/')}`);
+  }
+  const expanded = viewMode === 'tree' && hasExpandedDirs(dirKeys);
   const totalFiles = files.length;
   const selectedCount = files.filter(f => isFileSelected(repoId, f.path)).length;
   const allSelected = totalFiles > 0 && selectedCount === totalFiles;
@@ -278,6 +291,14 @@ function RepoSubGroup({
               </span>
             )}
             <div style={styles.repoRightGroup}>
+              {viewMode === 'tree' && totalFiles > 0 && !collapsed && (
+                <InlineIconBtn
+                  icon={expanded ? 'collapse-all' : 'expand-all'}
+                  title={expanded ? 'Collapse' : 'Expand'}
+                  visible={hovered}
+                  onClick={e => { e.stopPropagation(); setDirsCollapsed(dirKeys, expanded); }}
+                />
+              )}
               <OpenChangesBtn visible={hovered && totalFiles > 0} onClick={e => { e.stopPropagation(); onOpenChanges(repoId); }} />
               {totalFiles > 0 && (
                 <span style={styles.repoCountBadge(selectedCount > 0)}>

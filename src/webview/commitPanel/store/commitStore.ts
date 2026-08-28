@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ChangelistData, FileDiff, FileStatus, RepoMeta, RepoStatus, WorkspaceStatus } from '../../shared/types';
 import type { IconThemeData } from '../../../host/types/messages';
+import { DEFAULT_VIEW_AND_SORT_SETTINGS, type ViewAndSortSettings } from '../../../host/types/settings';
 
 export type ViewMode = 'flat' | 'tree';
 
@@ -21,8 +22,7 @@ export interface CommitState {
   loadingDiff: boolean;
   commitMessage: string;
   amendFlags: Record<string, boolean>;
-  viewMode: ViewMode;
-  shelveViewMode: ViewMode;
+  viewAndSort: ViewAndSortSettings;
   shelveCollapsedKeys: Set<string>;
   loading: boolean;
   error: string | null;
@@ -34,7 +34,7 @@ export interface CommitState {
   aiEnabled: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 
-  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, fileViewMode?: 'flat' | 'tree', defaultCommitAction?: 'commit' | 'commitAndPush', defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
+  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, defaultCommitAction?: 'commit' | 'commitAndPush', defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
   toggleFileSelection: (repoId: string, path: string) => void;
   setFileSelections: (repoId: string, paths: string[], selected: boolean) => void;
@@ -46,8 +46,7 @@ export interface CommitState {
   setCommitMessage: (msg: string) => void;
   setAmend: (repoId: string, v: boolean) => void;
   clearAmend: (repoId: string) => void;
-  setViewMode: (mode: ViewMode) => void;
-  setShelveViewMode: (mode: ViewMode) => void;
+  setViewAndSort: (partial: Partial<ViewAndSortSettings>) => void;
   isShelveCollapsed: (key: string) => boolean;
   toggleShelveCollapsed: (key: string) => void;
   shelveExpandAll: (shelveIds: string[], allDirPaths: string[]) => void;
@@ -59,6 +58,8 @@ export interface CommitState {
   getSelectedRepos: () => string[];
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   expandAll: () => void;
   collapseAll: () => void;
 }
@@ -97,8 +98,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   loadingDiff: false,
   commitMessage: '',
   amendFlags: {},
-  viewMode: 'flat',
-  shelveViewMode: 'flat',
+  viewAndSort: DEFAULT_VIEW_AND_SORT_SETTINGS,
   shelveCollapsedKeys: new Set(),
   loading: false,
   error: null,
@@ -110,7 +110,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   aiEnabled: true,
   activeProfile: undefined,
 
-  setStatus: (repoMetas, status, iconTheme, fileViewMode, defaultCommitAction, defaultSaveAction, hasWorkspaceFolder, aiEnabled, activeProfile) => {
+  setStatus: (repoMetas, status, iconTheme, defaultCommitAction, defaultSaveAction, hasWorkspaceFolder, aiEnabled, activeProfile) => {
     const prev = get().repoSelections;
     const prevFiles = get().fileSelections;
     const prevSeen = get().seenFiles;
@@ -169,7 +169,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
         }
       }
     }
-    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(fileViewMode !== undefined ? { viewMode: fileViewMode } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(defaultSaveAction !== undefined ? { defaultSaveAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}), ...(activeProfile !== undefined ? { activeProfile } : {}) });
+    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(defaultSaveAction !== undefined ? { defaultSaveAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}), ...(activeProfile !== undefined ? { activeProfile } : {}) });
   },
 
   setRepoSelection: (repoId, selected) =>
@@ -214,8 +214,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
     delete next[repoId];
     return { amendFlags: next };
   }),
-  setViewMode: (mode) => set({ viewMode: mode }),
-  setShelveViewMode: (mode) => set({ shelveViewMode: mode }),
+  setViewAndSort: (partial) => set(s => ({ viewAndSort: { ...s.viewAndSort, ...partial } })),
   // shelveCollapsedKeys tracks *expanded* items — absence means collapsed (default)
   isShelveCollapsed: (key) => !get().shelveCollapsedKeys.has(key),
   toggleShelveCollapsed: (key) => set(s => {
@@ -254,6 +253,17 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   toggleCollapsed: (key) => set(s => {
     const next = new Set(s.collapsedKeys);
     if (next.has(key)) next.delete(key); else next.add(key);
+    return { collapsedKeys: next };
+  }),
+  hasExpandedDirs: (dirKeys) => {
+    const collapsedKeys = get().collapsedKeys;
+    return dirKeys.some(k => !collapsedKeys.has(k));
+  },
+  setDirsCollapsed: (dirKeys, collapsed) => set(s => {
+    const next = new Set(s.collapsedKeys);
+    for (const k of dirKeys) {
+      if (collapsed) next.add(k); else next.delete(k);
+    }
     return { collapsedKeys: next };
   }),
   expandAll: () => set({ collapsedKeys: new Set() }),

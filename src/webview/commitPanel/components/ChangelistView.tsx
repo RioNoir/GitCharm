@@ -15,6 +15,8 @@ interface Props {
   isFileSelected: (repoId: string, path: string) => boolean;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   onToggleFile: (repoId: string, path: string) => void;
   onSetFiles: (repoId: string, paths: string[], selected: boolean) => void;
   onSelectFile: (file: FileStatus) => void;
@@ -37,7 +39,7 @@ interface Props {
 export function ChangelistView({
   changelists, repos, repoMetas,
   selectedFile, viewMode,
-  isFileSelected, isCollapsed, toggleCollapsed,
+  isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
   onOpenFile, onRollback, onResolveMerge, onHeaderContextMenu, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, ctxFile,
   onMultiSelect, multiSelectedFiles,
@@ -177,6 +179,8 @@ export function ChangelistView({
             isFileSelected={isFileSelected}
             isCollapsed={isCollapsed}
             toggleCollapsed={toggleCollapsed}
+            hasExpandedDirs={hasExpandedDirs}
+            setDirsCollapsed={setDirsCollapsed}
             onToggleFile={onToggleFile}
             onSetFiles={onSetFiles}
             onSelectFile={onSelectFile}

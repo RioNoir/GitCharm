@@ -41,6 +41,18 @@
       {
         "id": "gitcharm/explorer",
         "label": "GitCharm"
+      },
+      {
+        "id": "gitcharm/commitPanel.fileView",
+        "label": "File View"
+      },
+      {
+        "id": "gitcharm/commitPanel.sortRepos",
+        "label": "Sort Repository By"
+      },
+      {
+        "id": "gitcharm/commitPanel.reposWithoutChanges",
+        "label": "Repository View"
       }
     ],
     "viewsContainers": {
@@ -134,15 +146,79 @@
       },
       {
         "command": "gitcharm.refreshCommitPanel",
-        "title": "Refresh Commit Panel",
+        "title": "Refresh",
         "category": "GitCharm",
         "icon": "$(refresh)"
       },
       {
-        "command": "gitcharm.reloadRepositories",
-        "title": "Reload Repositories",
-        "category": "GitCharm",
-        "icon": "$(sync)"
+        "command": "gitcharm.setFileViewFlat",
+        "title": "Flat List",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.setFileViewFlatChecked",
+        "title": "✓ Flat List",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.setFileViewTree",
+        "title": "Tree View",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.setFileViewTreeChecked",
+        "title": "✓ Tree View",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortReposByDiscovery",
+        "title": "Discovery Time",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortReposByDiscoveryChecked",
+        "title": "✓ Discovery Time",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortReposByName",
+        "title": "Name",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortReposByNameChecked",
+        "title": "✓ Name",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortReposByPath",
+        "title": "Path",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortReposByPathChecked",
+        "title": "✓ Path",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.showReposWithoutChanges",
+        "title": "Show All",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.showReposWithoutChangesChecked",
+        "title": "✓ Show All",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.hideReposWithoutChanges",
+        "title": "Hide without changes",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.hideReposWithoutChangesChecked",
+        "title": "✓ Hide without changes",
+        "category": "GitCharm"
       },
       {
         "command": "gitcharm.showBranchMenu",
@@ -311,9 +387,110 @@
           "group": "navigation@6"
         },
         {
+          "command": "gitcharm.refreshCommitPanel",
+          "when": "view == gitcharm.commitPanel",
+          "group": "1_viewSort@1"
+        },
+        {
           "command": "gitcharm.openSettings",
           "when": "view == gitcharm.commitPanel",
-          "group": "navigation@7"
+          "group": "1_viewSort@2"
+        },
+        {
+          "submenu": "gitcharm/commitPanel.fileView",
+          "when": "view == gitcharm.commitPanel",
+          "group": "2_viewSort@1"
+        },
+        {
+          "submenu": "gitcharm/commitPanel.sortRepos",
+          "when": "view == gitcharm.commitPanel",
+          "group": "2_viewSort@2"
+        },
+        {
+          "submenu": "gitcharm/commitPanel.reposWithoutChanges",
+          "when": "view == gitcharm.commitPanel",
+          "group": "2_viewSort@3"
+        },
+        {
+          "command": "gitcharm.manageHiddenRepos",
+          "when": "view == gitcharm.commitPanel",
+          "group": "2_viewSort@4"
+        }
+      ],
+      "gitcharm/commitPanel.fileView": [
+        {
+          "command": "gitcharm.setFileViewFlat",
+          "when": "gitcharm.fileViewMode != 'flat'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.setFileViewFlatChecked",
+          "when": "gitcharm.fileViewMode == 'flat'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.setFileViewTree",
+          "when": "gitcharm.fileViewMode != 'tree'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.setFileViewTreeChecked",
+          "when": "gitcharm.fileViewMode == 'tree'",
+          "group": "navigation@2"
+        }
+      ],
+      "gitcharm/commitPanel.sortRepos": [
+        {
+          "command": "gitcharm.sortReposByDiscovery",
+          "when": "gitcharm.repoSortMode != 'discovery'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.sortReposByDiscoveryChecked",
+          "when": "gitcharm.repoSortMode == 'discovery'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.sortReposByName",
+          "when": "gitcharm.repoSortMode != 'name'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.sortReposByNameChecked",
+          "when": "gitcharm.repoSortMode == 'name'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.sortReposByPath",
+          "when": "gitcharm.repoSortMode != 'path'",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitcharm.sortReposByPathChecked",
+          "when": "gitcharm.repoSortMode == 'path'",
+          "group": "navigation@3"
+        }
+      ],
+      "gitcharm/commitPanel.reposWithoutChanges": [
+        {
+          "command": "gitcharm.showReposWithoutChanges",
+          "when": "gitcharm.hideReposWithoutChanges",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.showReposWithoutChangesChecked",
+          "when": "!gitcharm.hideReposWithoutChanges",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.hideReposWithoutChanges",
+          "when": "!gitcharm.hideReposWithoutChanges",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.hideReposWithoutChangesChecked",
+          "when": "gitcharm.hideReposWithoutChanges",
+          "group": "navigation@2"
         }
       ],
       "editor/title": [
@@ -380,7 +557,60 @@
           "command": "gitcharm.refreshCommitPanel"
         },
         {
-          "command": "gitcharm.reloadRepositories"
+          "command": "gitcharm.setFileViewFlat",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.setFileViewFlatChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.setFileViewTree",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.setFileViewTreeChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortReposByDiscovery",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortReposByDiscoveryChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortReposByName",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortReposByNameChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortReposByPath",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortReposByPathChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.showReposWithoutChanges",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.showReposWithoutChangesChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.hideReposWithoutChanges",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.hideReposWithoutChangesChecked",
+          "when": "false"
         },
         {
           "command": "gitcharm.openMergeEditor"

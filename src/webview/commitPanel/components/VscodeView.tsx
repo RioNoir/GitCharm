@@ -18,6 +18,8 @@ interface Props {
   viewMode: ViewMode;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   onSelectFile: (file: FileStatus) => void;
   onContextMenu: (e: React.MouseEvent, file: FileStatus, staged: boolean) => void;
   onFolderContextMenu: (e: React.MouseEvent, repoId: string, folderPath: string, files: FileStatus[], staged: boolean) => void;
@@ -264,6 +266,8 @@ interface RepoSubGroupProps {
   iconTheme?: IconThemeData | null;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   activeFolderPath?: string | null;
   onSelectFile: (file: FileStatus) => void;
   onContextMenu: (e: React.MouseEvent, file: FileStatus) => void;
@@ -287,9 +291,15 @@ interface RepoSubGroupProps {
   multiSelectedFiles?: FileStatus[];
 }
 
-function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
+function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
+  const dirKeys: string[] = [];
+  for (const f of files) {
+    const parts = f.path.split('/');
+    for (let i = 1; i < parts.length; i++) dirKeys.push(`vscode-${staged ? 'staged' : 'unstaged'}-${repoId}:${parts.slice(0, i).join('/')}`);
+  }
+  const expanded = viewMode === 'tree' && hasExpandedDirs(dirKeys);
   const isEmpty = files.length === 0;
   // Empty repos default to collapsed; key presence means "explicitly opened"
   const collapsed = isEmpty ? !isCollapsed(collapseKey) : isCollapsed(collapseKey);
@@ -355,6 +365,14 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           </div>
           {!isEmpty && (
             <div style={repoActionsStyle}>
+              {viewMode === 'tree' && !collapsed && (
+                <InlineIconBtn
+                  icon={expanded ? 'collapse-all' : 'expand-all'}
+                  title={expanded ? 'Collapse' : 'Expand'}
+                  visible={hovered}
+                  onClick={e => { e.stopPropagation(); setDirsCollapsed(dirKeys, expanded); }}
+                />
+              )}
               <InlineIconBtn icon="diff-multiple" title={staged ? 'Open Staged Changes' : 'Open Changes'} visible={hovered} onClick={e => { e.stopPropagation(); onOpenChanges(); }} />
               {!staged && (
                 <InlineIconBtn icon="discard" title="Rollback All" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(files); }} />
@@ -433,7 +451,7 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
 
 export function VscodeView({
   repos, repoMetas, selectedFile, ctxFile, viewMode,
-  isCollapsed, toggleCollapsed,
+  isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
   onStageFiles, onUnstageFiles, onStageAll, onUnstageAll,
   onRepoContextMenu, onBranchClick, onOpenStagedChanges, onOpenUnstagedChanges, iconTheme, activeFolderPath,
@@ -504,6 +522,8 @@ export function VscodeView({
             iconTheme={iconTheme}
             isCollapsed={isCollapsed}
             toggleCollapsed={toggleCollapsed}
+            hasExpandedDirs={hasExpandedDirs}
+            setDirsCollapsed={setDirsCollapsed}
             activeFolderPath={activeFolderPath}
             onSelectFile={onSelectFile}
             onContextMenu={(e, file) => onContextMenu(e, file, true)}
@@ -564,6 +584,8 @@ export function VscodeView({
             iconTheme={iconTheme}
             isCollapsed={isCollapsed}
             toggleCollapsed={toggleCollapsed}
+            hasExpandedDirs={hasExpandedDirs}
+            setDirsCollapsed={setDirsCollapsed}
             activeFolderPath={activeFolderPath}
             onSelectFile={onSelectFile}
             onContextMenu={(e, file) => onContextMenu(e, file, false)}

@@ -233,7 +233,7 @@ export function activate(context: vscode.ExtensionContext): void {
   logPanel.setUndockedPanel(undockedPanel);
 
   // Apply saved hidden repos to badge immediately (before webview opens)
-  const savedHidden = context.workspaceState.get<string[]>('gitcharm.hiddenRepoIds', []);
+  const savedHidden = commitPanel.getHiddenRepoIds();
   if (savedHidden.length > 0) badge.setHiddenRepoIds(savedHidden);
 
   const branchStatusBar = new BranchStatusBar(manager, () => {

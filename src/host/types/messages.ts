@@ -9,6 +9,7 @@ import type {
 } from './git';
 import type { WorktreeEntry } from '../git/WorkspaceGitManager';
 import type { IconThemeData } from '../utils/IconThemeService';
+import type { ViewAndSortSettings, ViewAndSortUserPrefs } from './settings';
 
 export interface MergeParentCommit {
   hash: string;
@@ -60,7 +61,7 @@ export interface UnpushedCommit {
 // ─── Commit Panel: Host → WebView ────────────────────────────────────────────
 
 export type HostToCommitMsg =
-  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; fileViewMode?: 'flat' | 'tree'; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } }
+  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
   | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'COMMIT_BRANCHES_UPDATE'; repoId: string; branches: BranchInfo[] }
@@ -86,8 +87,7 @@ export type HostToCommitMsg =
   | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string }
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
   | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
-  | { type: 'COMMIT_HIDDEN_REPOS_UPDATE'; hiddenRepoIds: string[] }
-  | { type: 'COMMIT_REPO_FILTER_UPDATE'; showOnlyChangedRepos: boolean }
+  | ({ type: 'COMMIT_VIEW_SORT_SETTINGS_UPDATE' } & ViewAndSortSettings)
   | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' }
   | { type: 'COMMIT_DESELECT_FILE'; filePath: string };
 
@@ -160,8 +160,7 @@ export type CommitToHostMsg =
   | { type: 'CHANGELISTS_MOVE_FILES_PROMPT'; files: Array<{ repoId: string; path: string }> }
   | { type: 'CHANGELISTS_SHELVE'; changelistId: string; requestId: string }
   | { type: 'CHANGELISTS_STASH'; changelistId: string; requestId: string }
-  | { type: 'COMMIT_SET_FILE_VIEW_MODE'; mode: 'flat' | 'tree' }
-  | { type: 'COMMIT_SET_REPO_FILTER'; showOnlyChangedRepos: boolean }
+  | ({ type: 'COMMIT_SET_VIEW_SORT_SETTINGS' } & Partial<ViewAndSortUserPrefs>)
   | { type: 'SUBMODULE_INIT'; requestId: string; parentRepoId: string; submodulePath: string }
   | { type: 'SUBMODULE_DEINIT'; requestId: string; parentRepoId: string; submodulePath: string; force?: boolean }
   | { type: 'SUBMODULE_UPDATE'; requestId: string; parentRepoId: string; submodulePath: string; recursive?: boolean }

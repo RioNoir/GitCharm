@@ -5,6 +5,7 @@ import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
 import { Codicon } from '../../shared/Codicon';
 import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
+import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
   isFileSelected: (repoId: string, path: string) => boolean;
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  hasExpandedDirs: (dirKeys: string[]) => boolean;
+  setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   onToggleFile: (repoId: string, path: string) => void;
   onSetFiles: (repoId: string, paths: string[], selected: boolean) => void;
   onSelectFile: (file: FileStatus) => void;
@@ -45,7 +48,7 @@ export function ProjectGroup({
   repoStatus, repoName, repoColor, multiRepo, singleRepo = false, isFirst = false,
   isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
-  isFileSelected, isCollapsed, toggleCollapsed,
+  isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
   onBranchClick, onRepoContextMenu, onOpenAllChanges, iconTheme, activeFolderPath, ctxFile,
   onMultiSelect, multiSelectedFiles,
@@ -60,6 +63,13 @@ export function ProjectGroup({
   for (const f of repoStatus.unstagedFiles) fileMap.set(f.path, f);
   for (const f of repoStatus.stagedFiles) fileMap.set(f.path, f);
   const allFiles = Array.from(fileMap.values());
+
+  const dirKeys: string[] = [];
+  for (const f of allFiles) {
+    const parts = f.path.split('/');
+    for (let i = 1; i < parts.length; i++) dirKeys.push(`${repoId}:${parts.slice(0, i).join('/')}`);
+  }
+  const expanded = viewMode === 'tree' && hasExpandedDirs(dirKeys);
 
   const totalFiles = allFiles.length;
   const selectedCount = allFiles.filter(f => isFileSelected(repoId, f.path)).length;
@@ -120,6 +130,14 @@ export function ProjectGroup({
           </span>
           {totalFiles > 0 && (
             <div style={styles.rightGroup}>
+              {viewMode === 'tree' && !collapsed && (
+                <InlineIconBtn
+                  icon={expanded ? 'collapse-all' : 'expand-all'}
+                  title={expanded ? 'Collapse' : 'Expand'}
+                  visible={hovered}
+                  onClick={e => { e.stopPropagation(); setDirsCollapsed(dirKeys, expanded); }}
+                />
+              )}
               <OpenChangesBtn visible={hovered} onClick={e => { e.stopPropagation(); onOpenAllChanges(repoId); }} />
               <span style={styles.countBadge(selectedCount > 0)}>
                 {selectedCount}/{totalFiles}

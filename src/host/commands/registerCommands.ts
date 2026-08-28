@@ -32,8 +32,59 @@ export function registerCommands(
       showLogChannel();
     }),
 
-    vscode.commands.registerCommand('gitcharm.refreshCommitPanel', () => {
-      commitPanel.refresh();
+    vscode.commands.registerCommand('gitcharm.refreshCommitPanel', async () => {
+      if (!manager) return;
+      await manager.reinitializeAndRefresh();
+      logPanel.refresh();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.setFileViewFlat', () => {
+      commitPanel.setFileViewMode('flat');
+    }),
+    vscode.commands.registerCommand('gitcharm.setFileViewFlatChecked', () => {
+      commitPanel.setFileViewMode('flat');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.setFileViewTree', () => {
+      commitPanel.setFileViewMode('tree');
+    }),
+    vscode.commands.registerCommand('gitcharm.setFileViewTreeChecked', () => {
+      commitPanel.setFileViewMode('tree');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortReposByDiscovery', () => {
+      commitPanel.setRepoSortMode('discovery');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortReposByDiscoveryChecked', () => {
+      commitPanel.setRepoSortMode('discovery');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortReposByName', () => {
+      commitPanel.setRepoSortMode('name');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortReposByNameChecked', () => {
+      commitPanel.setRepoSortMode('name');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortReposByPath', () => {
+      commitPanel.setRepoSortMode('path');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortReposByPathChecked', () => {
+      commitPanel.setRepoSortMode('path');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.showReposWithoutChanges', () => {
+      commitPanel.setHideReposWithoutChanges(false);
+    }),
+    vscode.commands.registerCommand('gitcharm.showReposWithoutChangesChecked', () => {
+      commitPanel.setHideReposWithoutChanges(false);
+    }),
+
+    vscode.commands.registerCommand('gitcharm.hideReposWithoutChanges', () => {
+      commitPanel.setHideReposWithoutChanges(true);
+    }),
+    vscode.commands.registerCommand('gitcharm.hideReposWithoutChangesChecked', () => {
+      commitPanel.setHideReposWithoutChanges(true);
     }),
 
     vscode.commands.registerCommand('gitcharm.openMergeEditor', () => {
@@ -194,12 +245,6 @@ export function registerCommands(
 
     vscode.commands.registerCommand('gitcharm.switchProfile', () => {
       profileStatusBar.switchProfile();
-    }),
-
-    vscode.commands.registerCommand('gitcharm.reloadRepositories', () => {
-      if (manager) {
-        manager.reinitializeAndRefresh();
-      }
     }),
 
     // ── Submodule commands ────────────────────────────────────────────────────
