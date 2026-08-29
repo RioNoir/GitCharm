@@ -1111,9 +1111,9 @@
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@vscode/codicons": "^0.0.45",
-    "@vscode/vsce": "^2.24.0",
+    "@vscode/vsce": "^3.9.2",
     "concurrently": "^8.2.0",
-    "esbuild": "^0.28.0",
+    "esbuild": "^0.28.1",
     "eslint": "^8.56.0",
     "material-icon-theme": "^5.34.0",
     "monaco-editor": "^0.47.0",
@@ -1124,8 +1124,11 @@
     "zustand": "^4.5.0"
   },
   "optionalDependencies": {
-    "@esbuild/darwin-arm64": "^0.20.0",
-    "@esbuild/linux-arm64": "^0.20.0",
+    "@esbuild/darwin-arm64": "^0.28.1",
+    "@esbuild/linux-arm64": "^0.28.1",
     "@rollup/rollup-darwin-arm64": "^4.60.4"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
   }
 }
