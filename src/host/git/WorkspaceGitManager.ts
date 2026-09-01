@@ -830,15 +830,19 @@ export class WorkspaceGitManager implements vscode.Disposable {
       }
     }
 
+    const isInterleaved = targets.length > 1;
+    const fetchLimit = isInterleaved ? limit + skip : limit;
+    const fetchSkip = isInterleaved ? 0 : skip;
     const results = await Promise.allSettled(
-      targets.map(r => r.getLog(limit, skip, { ...opts, worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
+      targets.map(r => r.getLog(fetchLimit, fetchSkip, { ...opts, worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
     );
     const allCommits = results
       .filter((r): r is PromiseFulfilledResult<CommitNode[]> => r.status === 'fulfilled')
       .flatMap(r => r.value);
 
     allCommits.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
-    return allCommits.slice(0, limit);
+    const pageStart = isInterleaved ? skip : 0;
+    return allCommits.slice(pageStart, pageStart + limit);
   }
 
   async fetchAll(): Promise<void> {

@@ -28,8 +28,8 @@ interface Props {
   storeHasMore: boolean;
   loading: boolean;
   backgroundLoading?: boolean;
-  scrollToHash?: string | null;
-  onScrolledToHash?: () => void;
+  scrollTarget?: { hash: string; repoId: string } | null;
+  onScrollTargetHandled?: () => void;
   aiEnabled?: boolean;
   themeVersion?: number;
 }
@@ -80,7 +80,7 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
+export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -224,17 +224,22 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
   }, []);
 
   useEffect(() => {
-    if (!scrollToHash) return;
-    const idx = commits.findIndex(c => c.hash === scrollToHash);
+    if (!scrollTarget || showSkeleton) return;
+    const idx = commits.findIndex(c => c.hash === scrollTarget.hash && c.repoId === scrollTarget.repoId);
     if (idx >= 0) {
       virtualizer.scrollToIndex(idx, { align: 'center' });
+      setMultiSelectHashes(new Set());
       onSelect(commits[idx]);
-      onScrolledToHash?.();
+      onScrollTargetHandled?.();
       return;
     }
-    // Commit not yet in the loaded list — keep fetching batches until found or exhausted
-    if (hasMore && !loading) onLoadMore();
-  }, [scrollToHash, commits, hasMore, loading]);
+    // Commit not yet in the loaded list — keep fetching batches until found or exhausted.
+    if (hasMore && !loading) {
+      onLoadMore();
+    } else if (!hasMore && !loading) {
+      onScrollTargetHandled?.();
+    }
+  }, [scrollTarget, commits, hasMore, loading, showSkeleton]);
 
   const anyExpanded = expandedRepos.size > 0;
   const labelColWidth = multiRepo ? (anyExpanded ? REPO_LABEL_WIDTH_EXPANDED + 6 : REPO_LABEL_WIDTH + 8) : 0;

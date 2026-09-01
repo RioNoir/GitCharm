@@ -101,7 +101,7 @@ function App() {
           break;
         case 'LOG_SCROLL_TO_COMMIT':
           filterRepoRef.current(msg.repoId, null);
-          store.setPendingScrollHash(msg.hash);
+          store.setPendingScrollTarget({ hash: msg.hash, repoId: msg.repoId });
           break;
         case 'LOG_FILTER_BY_REPO':
           filterRepoRef.current(msg.repoId, msg.branch ?? null);
@@ -379,10 +379,16 @@ function App() {
           tags={sidebarTags}
           filter={store.branchFilter}
           selectedBranchFilter={store.commitFilters.branch}
+          activeRepoId={store.commitFilters.repoId}
           onFilterChange={store.setBranchFilter}
           onBranchFilterSelect={useCallback((branchName: string) => {
             handleFilterChange('branch', branchName);
           }, [handleFilterChange])}
+          onBranchFocus={(branch) => {
+            if (branch.lastCommitHash) {
+              store.setPendingScrollTarget({ hash: branch.lastCommitHash, repoId: branch.repoId });
+            }
+          }}
           onCheckout={(repoIds, branch) => {
             repoIds.forEach(repoId => {
               getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: branch } satisfies LogToHostMsg);
@@ -445,8 +451,8 @@ function App() {
             storeHasMore={store.hasMore}
             loading={store.loadingCommits}
             backgroundLoading={store.backgroundLoading}
-            scrollToHash={store.pendingScrollHash}
-            onScrolledToHash={() => store.setPendingScrollHash(null)}
+            scrollTarget={store.pendingScrollTarget}
+            onScrollTargetHandled={() => store.setPendingScrollTarget(null)}
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
           />

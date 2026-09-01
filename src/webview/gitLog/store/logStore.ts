@@ -32,7 +32,7 @@ interface LogState {
   branchFilter: string;
   commitFilters: CommitFilters;
   error: string | null;
-  pendingScrollHash: string | null;
+  pendingScrollTarget: { hash: string; repoId: string } | null;
   fileLoadSeq: number;
   stashes: CommitNode[];
 
@@ -58,7 +58,7 @@ interface LogState {
   setCommitFilters: (filters: Partial<CommitFilters>) => void;
   updateBranches: (repoId: string, branches: BranchInfo[]) => void;
   setError: (err: string | null) => void;
-  setPendingScrollHash: (hash: string | null) => void;
+  setPendingScrollTarget: (target: { hash: string; repoId: string } | null) => void;
   setStashes: (stashes: CommitNode[]) => void;
 }
 
@@ -95,7 +95,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   branchFilter: '',
   commitFilters: { ...defaultCommitFilters },
   error: null,
-  pendingScrollHash: null,
+  pendingScrollTarget: null,
   fileLoadSeq: 0,
 
   setRepos: (repos, hasWorkspaceFolder, aiEnabled) => set({ repos, initialized: true, ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}) }),
@@ -127,6 +127,6 @@ export const useLogStore = create<LogState>((set, get) => ({
     branches: [...s.branches.filter(b => b.repoId !== repoId), ...branches],
   })),
   setError: (err) => set({ error: err }),
-  setPendingScrollHash: (hash) => set({ pendingScrollHash: hash }),
+  setPendingScrollTarget: (target) => set({ pendingScrollTarget: target }),
   setStashes: (stashes) => set({ stashes }),
 }));

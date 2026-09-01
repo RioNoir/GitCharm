@@ -387,6 +387,20 @@ export class GitService {
   }
 
   async getBranches(): Promise<BranchInfo[]> {
+    const tipMetadata = new Map<string, { hash: string; date?: string }>();
+    try {
+      const raw = await this.git.raw([
+        'for-each-ref',
+        '--format=%(objectname)%00%(committerdate:iso-strict)%00%(refname:short)',
+        'refs/heads/',
+        'refs/remotes/',
+      ]);
+      for (const line of raw.trim().split('\n')) {
+        const [hash, date, name] = line.split('\0');
+        if (hash && name) tipMetadata.set(name, { hash, date: date || undefined });
+      }
+    } catch { /* branch refs still come from the primary provider */ }
+
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       // getBranches({ remote: false }) returns local branches (RefType.Head),
@@ -409,7 +423,8 @@ export class GitService {
           fullName: `refs/heads/${name}`,
           isHead,
           isRemote: false,
-          lastCommitHash: ref.commit,
+          lastCommitHash: ref.commit ?? tipMetadata.get(name)?.hash,
+          lastCommitDate: tipMetadata.get(name)?.date,
           aheadBehind: (isHead && head!.ahead !== undefined && head!.behind !== undefined)
             ? { ahead: head!.ahead, behind: head!.behind }
             : undefined,
@@ -429,7 +444,8 @@ export class GitService {
           isHead: false,
           isRemote: true,
           remoteName,
-          lastCommitHash: ref.commit,
+          lastCommitHash: ref.commit ?? tipMetadata.get(name)?.hash,
+          lastCommitDate: tipMetadata.get(name)?.date,
         });
       }
 
@@ -437,15 +453,6 @@ export class GitService {
     }
 
     // Fallback: simple-git
-    // Fetch full hashes for all branches separately (simple-git returns short hashes)
-    const fullHashMap = new Map<string, string>();
-    try {
-      const forEachRefRaw = await this.git.raw(['for-each-ref', '--format=%(objectname) %(refname:short)', 'refs/heads/', 'refs/remotes/']);
-      for (const line of forEachRefRaw.trim().split('\n')) {
-        const [hash, name] = line.trim().split(' ');
-        if (hash && name) fullHashMap.set(name, hash);
-      }
-    } catch { /* ignore, fall back to short hashes */ }
     const result = await this.git.branch(['-avv', '--sort=-committerdate']);
     const branches: BranchInfo[] = [];
     for (const [name, branch] of Object.entries(result.branches)) {
@@ -468,7 +475,8 @@ export class GitService {
         isHead: branch.current,
         isRemote,
         remoteName,
-        lastCommitHash: fullHashMap.get(cleanName) ?? branch.commit,
+        lastCommitHash: tipMetadata.get(cleanName)?.hash ?? branch.commit,
+        lastCommitDate: tipMetadata.get(cleanName)?.date,
         aheadBehind,
       });
     }

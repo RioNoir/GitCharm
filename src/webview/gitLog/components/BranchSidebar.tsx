@@ -11,8 +11,10 @@ interface Props {
   tags: TagInfo[];
   filter: string;
   selectedBranchFilter: string;
+  activeRepoId?: string | null;
   onFilterChange: (v: string) => void;
   onBranchFilterSelect: (branchName: string) => void;
+  onBranchFocus: (branch: BranchInfo) => void;
   onCheckout: (repoIds: string[], branchName: string) => void;
   onMerge: (repoId: string, from: string) => void;
   onRebase: (repoId: string, onto: string) => void;
@@ -91,7 +93,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 }
 
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
-  repos, branches, tags, filter, selectedBranchFilter, onFilterChange, onBranchFilterSelect,
+  repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
   onCheckout, onMerge, onRebase, onDelete, onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
 }, ref) {
@@ -149,6 +151,21 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     return merged.instances.find(i => i.isHead) ?? merged.instances[0];
   }
 
+  function focusInstance(merged: MergedBranch): BranchInfo | undefined {
+    const candidates = merged.instances.filter(instance => !!instance.lastCommitHash);
+    const activeInstance = activeRepoId ? candidates.find(instance => instance.repoId === activeRepoId) : undefined;
+    if (activeInstance) return activeInstance;
+
+    const repoNames = new Map(repos.map(repo => [repo.id, repo.name]));
+    return [...candidates].sort((a, b) => {
+      const aTimestamp = Date.parse(a.lastCommitDate ?? '');
+      const bTimestamp = Date.parse(b.lastCommitDate ?? '');
+      const dateDifference = (Number.isNaN(bTimestamp) ? 0 : bTimestamp) - (Number.isNaN(aTimestamp) ? 0 : aTimestamp);
+      if (dateDifference !== 0) return dateDifference;
+      return (repoNames.get(a.repoId) ?? a.repoId).localeCompare(repoNames.get(b.repoId) ?? b.repoId);
+    })[0];
+  }
+
   return (
     <div ref={ref} style={hidden ? { ...styles.container, display: 'none' } : styles.container} onClick={() => { setContextMenu(null); setTagContextMenu(null); }}>
       {/* Sticky header: search + repo list */}
@@ -192,6 +209,10 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             e.stopPropagation();
             setContextMenu({ merged: m, x: e.clientX, y: e.clientY });
           }}
+          onClick={() => {
+            const instance = focusInstance(m);
+            if (instance) onBranchFocus(instance);
+          }}
           onDoubleClick={() => onBranchFilterSelect(m.baseName)}
         />
       ))}
@@ -219,6 +240,10 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
                   e.preventDefault();
                   e.stopPropagation();
                   setContextMenu({ merged: m, x: e.clientX, y: e.clientY });
+                }}
+                onClick={() => {
+                  const instance = focusInstance(m);
+                  if (instance) onBranchFocus(instance);
                 }}
                 onDoubleClick={() => onBranchFilterSelect(m.baseName)}
               />
@@ -294,19 +319,25 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   );
 });
 
-function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onDoubleClick }: {
+function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick }: {
   merged: MergedBranch;
   repoColorMap: Record<string, string>;
   multiRepo: boolean;
   isFilterSelected: boolean;
   isCtxActive: boolean;
   onContextMenu: (e: React.MouseEvent) => void;
+  onClick: () => void;
   onDoubleClick: () => void;
 }) {
   const { baseName, isPrimary, isHead, repoIds } = merged;
   const isRemote = merged.instances[0].isRemote;
   const [hovered, setHovered] = useState(false);
   const primaryColor = primaryBranchColor();
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+  }, []);
 
   return (
     <div
@@ -314,8 +345,21 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onContextMenu={onContextMenu}
-      onDoubleClick={onDoubleClick}
-      title={`${baseName}\nDouble-click to filter by this branch · Right-click for git actions`}
+      onClick={() => {
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = setTimeout(() => {
+          clickTimerRef.current = null;
+          onClick();
+        }, 300);
+      }}
+      onDoubleClick={() => {
+        if (clickTimerRef.current) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+        onDoubleClick();
+      }}
+      title={`${baseName}\nClick to focus branch head · Double-click to filter · Right-click for git actions`}
     >
       <Codicon
         name={isPrimary ? 'git-branch' : isRemote ? 'cloud' : 'git-branch'}
