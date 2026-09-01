@@ -58,7 +58,7 @@ export async function openCombinedDiffPanel(
     return;
   }
 
-  let files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }> = [];
+  let files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
   let commitMetas: Array<{ hash: string; shortHash: string; message: string; authorName: string; authorDate: string }> = [];
   let orderedHashes: string[] = [];
 
@@ -88,14 +88,12 @@ export async function openCombinedDiffPanel(
   const oldest = commitMetas[0];
   const newest = commitMetas[commitMetas.length - 1];
   const rootPath = repo.rootPath;
-  const parents = await repo.getParents(oldest.hash);
-  const base = parents[0] ?? EMPTY_TREE;
 
   const resources = files
     .filter(f => f.status !== 'U')
     .map(f => {
       const label = vscode.Uri.file(path.join(rootPath, f.path));
-      const original = gitUri(rootPath, f.status === 'A' ? EMPTY_TREE : base, f.oldPath ?? f.path);
+      const original = gitUri(rootPath, f.status === 'A' ? EMPTY_TREE : `${oldest.hash}~1`, f.path);
       const modified = gitUri(rootPath, f.status === 'D' ? EMPTY_TREE : newest.hash, f.path);
       return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
     });
