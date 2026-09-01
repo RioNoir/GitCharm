@@ -16,6 +16,8 @@ import { parseDiff, buildMonacoContents, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
 
+const EMPTY_TREE_HASH = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
 const STATUS_MAP: Record<string, GitFileStatus> = {
   M: 'modified', A: 'added', D: 'deleted',
   R: 'renamed', C: 'copied', U: 'conflicted',
@@ -739,15 +741,23 @@ export class GitService {
     } catch { return ''; }
   }
 
-  async getCombinedFiles(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
+  async getCombinedFiles(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
+    const refs = await this._getInclusiveDiffRefs(hashes);
+    return refs ? this._getFilesBetweenRefs(refs.base, refs.newest) : [];
+  }
+
+  async getFilesBetween(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
     const ordered = await this._sortHashesOldestFirst(hashes);
     const oldest = ordered[0];
     const newest = ordered[ordered.length - 1];
-    if (!oldest || !newest) return [];
+    return oldest && newest ? this._getFilesBetweenRefs(oldest, newest) : [];
+  }
+
+  private async _getFilesBetweenRefs(base: string, newest: string): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
     try {
       const [nameStatus, numStat] = await Promise.all([
-        this.git.raw(['diff', '--name-status', `${oldest}~1`, newest]),
-        this.git.raw(['diff', '--numstat', `${oldest}~1`, newest]),
+        this.git.raw(['diff', '--name-status', base, newest]),
+        this.git.raw(['diff', '--numstat', base, newest]),
       ]);
       const stats = new Map<string, { added: number; removed: number }>();
       for (const line of numStat.trim().split('\n')) {
@@ -759,36 +769,35 @@ export class GitService {
         const p = parts[parts.length - 1];
         if (!isNaN(added) && !isNaN(removed)) stats.set(p, { added, removed });
       }
-      const files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+      const files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }> = [];
       for (const line of nameStatus.trim().split('\n')) {
         if (!line.trim()) continue;
         const parts = line.split('\t');
         if (parts.length < 2) continue;
         const statusCode = parts[0][0];
         const filePath = parts[parts.length - 1];
+        const oldPath = (statusCode === 'R' || statusCode === 'C') && parts.length >= 3 ? parts[1] : undefined;
         const s = stats.get(filePath);
-        files.push({ status: statusCode, path: filePath, added: s?.added, removed: s?.removed });
+        files.push({ status: statusCode, path: filePath, added: s?.added, removed: s?.removed, ...(oldPath ? { oldPath } : {}) });
       }
       return files;
     } catch { return []; }
   }
 
   async getCombinedFileDiff(repoId: string, hashes: string[], filePath: string): Promise<FileDiff | null> {
-    const ordered = await this._sortHashesOldestFirst(hashes);
-    const oldest = ordered[0];
-    const newest = ordered[ordered.length - 1];
-    if (!oldest || !newest) return null;
+    const refs = await this._getInclusiveDiffRefs(hashes);
+    if (!refs) return null;
     try {
       const vsRepo = this.vsRepo();
-      const rawDiff = await this.git.raw(['diff', `${oldest}~1`, newest, '--', filePath, '--no-renames']);
+      const rawDiff = await this.git.raw(['diff', refs.base, refs.newest, '--', filePath, '--no-renames']);
       const diffs = parseDiff(rawDiff || `diff --git a/${filePath} b/${filePath}\n`, repoId);
       const diff = diffs[0] ?? { repoId, oldPath: filePath, newPath: filePath, isBinary: false, isNew: false, isDeleted: false, hunks: [] };
       if (vsRepo) {
-        diff.originalContent = await vsRepo.show(`${oldest}~1`, filePath).catch(() => '');
-        diff.modifiedContent = await vsRepo.show(newest, filePath).catch(() => '');
+        diff.originalContent = refs.base === EMPTY_TREE_HASH ? '' : await vsRepo.show(refs.base, filePath).catch(() => '');
+        diff.modifiedContent = await vsRepo.show(refs.newest, filePath).catch(() => '');
       } else {
-        diff.originalContent = await this.git.raw(['show', `${oldest}~1:${filePath}`]).catch(() => '');
-        diff.modifiedContent = await this.git.raw(['show', `${newest}:${filePath}`]).catch(() => '');
+        diff.originalContent = refs.base === EMPTY_TREE_HASH ? '' : await this.git.raw(['show', `${refs.base}:${filePath}`]).catch(() => '');
+        diff.modifiedContent = await this.git.raw(['show', `${refs.newest}:${filePath}`]).catch(() => '');
       }
       return diff;
     } catch { return null; }
@@ -816,6 +825,15 @@ export class GitService {
       if (p) files.push({ status: 'A', path: p });
     }
     return files;
+  }
+
+  private async _getInclusiveDiffRefs(hashes: string[]): Promise<{ base: string; newest: string } | null> {
+    const ordered = await this._sortHashesOldestFirst(hashes);
+    const oldest = ordered[0];
+    const newest = ordered[ordered.length - 1];
+    if (!oldest || !newest) return null;
+    const parents = await this.getParents(oldest);
+    return { base: parents[0] ?? EMPTY_TREE_HASH, newest };
   }
 
   private async _sortHashesOldestFirst(hashes: string[]): Promise<string[]> {

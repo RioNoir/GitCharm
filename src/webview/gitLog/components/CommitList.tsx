@@ -23,6 +23,7 @@ interface Props {
   currentBranchByRepo: Record<string, string>;
   headHashByRepo: Record<string, string>;
   onSelect: (commit: LaidOutCommit) => void;
+  onMultiSelectionChange?: (commits: LaidOutCommit[]) => void;
   onLoadMore: () => void;
   hasMore: boolean;
   storeHasMore: boolean;
@@ -80,7 +81,7 @@ function CommitSkeleton() {
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
+export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollToHash, onScrolledToHash, aiEnabled }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -136,6 +137,12 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
   const popoverHoveredRef = useRef(false);
   const closePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
+  const multiSelectedCommits = useMemo(
+    () => commits.filter(c => multiSelectHashes.has(`${c.hash}:${c.repoId}`)),
+    [commits, multiSelectHashes],
+  );
+  useEffect(() => onMultiSelectionChange?.(multiSelectedCommits), [multiSelectedCommits, onMultiSelectionChange]);
+
   const [containerWidth, setContainerWidth] = useState<number>(9999);
   const containerRoRef = useRef<ResizeObserver | null>(null);
 

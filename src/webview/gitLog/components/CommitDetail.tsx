@@ -128,6 +128,7 @@ function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, o
 
 interface Props {
   commit: CommitNode | null;
+  range?: { older: CommitNode; newer: CommitNode };
   files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>;
   selectedFile: { path: string; status: string } | null;
   loadingFiles: boolean;
@@ -342,7 +343,7 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose, refColors }: Props) {
+export function CommitDetail({ commit, range, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose, refColors }: Props) {
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree');
   const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
   const [mergeCommits, setMergeCommits] = useState<MergeParentCommit[]>([]);
@@ -357,11 +358,12 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   const [refsExpanded, setRefsExpanded] = useState(false);
 
   const repoName = useMemo(() => {
-    if (!commit) return null;
-    return repos.find(r => r.id === commit.repoId)?.name ?? null;
-  }, [commit, repos]);
+    const activeCommit = range?.newer ?? commit;
+    if (!activeCommit) return null;
+    return repos.find(r => r.id === activeCommit.repoId)?.name ?? null;
+  }, [commit, range, repos]);
 
-  const isMerge = (commit?.parents.length ?? 0) >= 2;
+  const isMerge = !range && (commit?.parents.length ?? 0) >= 2;
 
   useEffect(() => {
     const handler = (event: MessageEvent<HostToLogMsg>) => {
@@ -378,7 +380,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   }, []);
 
   useEffect(() => {
-    if (!commit || commit.isStash) { setContainingBranches({ local: [], remote: [], tags: [] }); setLoadingBranches(false); return; }
+    if (range || !commit || commit.isStash) { setContainingBranches({ local: [], remote: [], tags: [] }); setLoadingBranches(false); return; }
     setRefsExpanded(false);
     setLoadingBranches(true);
     const reqId = generateId();
@@ -394,12 +396,12 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       repoId: commit.repoId,
       hash: commit.hash,
     } satisfies LogToHostMsg);
-  }, [commit?.hash]);
+  }, [commit?.hash, range]);
 
   useEffect(() => {
     setSelectedMergeHash(null);
     setMergeFiles([]);
-    if (!commit || !isMerge || commit.isStash) { setMergeCommits([]); return; }
+    if (range || !commit || !isMerge || commit.isStash) { setMergeCommits([]); return; }
     setLoadingMerge(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -415,10 +417,21 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       hash: commit.hash,
       parents: commit.parents,
     } satisfies LogToHostMsg);
-  }, [commit?.hash]);
+  }, [commit?.hash, range]);
 
   function openVscodeDiff(file: FileEntry, hash?: string, combined?: boolean) {
     onSelectFile(file);
+    if (range) {
+      getVsCodeApi().postMessage({
+        type: 'LOG_OPEN_RANGE_FILE_DIFF',
+        repoId: range.newer.repoId,
+        hashes: [range.older.hash, range.newer.hash],
+        filePath: file.path,
+        fileStatus: file.status,
+        oldPath: file.oldPath,
+      } satisfies LogToHostMsg);
+      return;
+    }
     if (!commit) return;
     getVsCodeApi().postMessage({
       type: 'LOG_OPEN_FILE_DIFF',
@@ -539,9 +552,9 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
     );
   }
 
-  const activeFiles = selectedMergeHash ? mergeFiles : files;
-  const activeLoading = selectedMergeHash ? loadingMergeFiles : loadingFiles;
-  const activeHash = selectedMergeHash ?? commit?.hash;
+  const activeFiles = !range && selectedMergeHash ? mergeFiles : files;
+  const activeLoading = !range && selectedMergeHash ? loadingMergeFiles : loadingFiles;
+  const activeHash = !range && selectedMergeHash ? selectedMergeHash : commit?.hash;
 
   const tree = viewMode === 'tree' && activeFiles.length > 0
     ? buildTree(activeFiles)
@@ -550,22 +563,26 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
   return (
     <div style={styles.container} onContextMenu={e => e.preventDefault()}>
       <div style={styles.topActions}>
-        <button
-          data-top-action-btn=""
-          style={styles.topActionBtn}
-          title="Open Changes"
-          onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
-        >
-          <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
-        </button>
-        <button
-          data-top-action-btn=""
-          style={styles.topActionBtn}
-          title="Open extended commit detail"
-          onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
-        >
-          <Codicon name="open-preview" style={{ fontSize: '16px' }} />
-        </button>
+        {!range && (
+          <>
+            <button
+              data-top-action-btn=""
+              style={styles.topActionBtn}
+              title="Open Changes"
+              onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+            >
+              <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
+            </button>
+            <button
+              data-top-action-btn=""
+              style={styles.topActionBtn}
+              title="Open extended commit detail"
+              onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+            >
+              <Codicon name="open-preview" style={{ fontSize: '16px' }} />
+            </button>
+          </>
+        )}
         {onClose && (
           <button data-top-action-btn="" style={styles.topActionBtn} title="Close commit detail" onClick={onClose}>
             <Codicon name="layout-sidebar-right" style={{ fontSize: '16px' }} />
@@ -574,8 +591,29 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       </div>
       {/* Commit header */}
       <div style={styles.header}>
-        {repoName && (
-          <div style={styles.repoRow}>
+        {range ? (
+          <>
+            {repoName && (
+              <div style={styles.repoRow}>
+                <Codicon name="repo" style={styles.repoIcon} />
+                <span style={styles.repoName(repoColor)}>{repoName}</span>
+              </div>
+            )}
+            <div style={styles.rangeTitle}>
+              <Codicon name="diff-multiple" style={{ fontSize: '14px', opacity: 0.8 }} />
+              <span>Compare commits</span>
+            </div>
+            <div style={styles.hashRow}>
+              <span style={styles.hash}>{range.older.shortHash}</span>
+              <Codicon name="arrow-right" style={{ fontSize: '11px', opacity: 0.6 }} />
+              <span style={styles.hash}>{range.newer.shortHash}</span>
+            </div>
+            <div style={styles.rangeHint}>Changes between the selected snapshots</div>
+          </>
+        ) : (
+          <>
+            {repoName && (
+              <div style={styles.repoRow}>
             <Codicon name="repo" style={styles.repoIcon} />
             <span style={styles.repoName(repoColor)}>{repoName}</span>
           </div>
@@ -760,8 +798,8 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
         })()}
 
         {/* Merged commits section */}
-        {isMerge && (
-          <div style={styles.mergeSection}>
+            {isMerge && (
+              <div style={styles.mergeSection}>
             <div style={styles.mergeSectionTitle}>
               <Codicon name="git-merge" style={{ fontSize: '11px', opacity: 0.7 }} />
               <span>Merged commits</span>
@@ -815,7 +853,9 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
                 </div>
               );
             })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -863,7 +903,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
       </div>
 
       {/* File context menu */}
-      {ctxMenu && commit && (
+      {ctxMenu && commit && !range && (
         <FileContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
@@ -905,7 +945,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
                 selectedFile={selectedFile}
                 ctxFile={ctxMenu?.file.path ?? null}
                 onOpen={f => openVscodeDiff(f, activeHash)}
-                onContextMenu={(e, f) => setCtxMenu({ x: e.clientX, y: e.clientY, file: f })}
+                onContextMenu={(e, f) => { if (!range) setCtxMenu({ x: e.clientX, y: e.clientY, file: f }); }}
                 allExpanded={allExpanded}
                 iconTheme={iconTheme}
               />
@@ -926,7 +966,7 @@ export function CommitDetail({ commit, files, selectedFile, loadingFiles, repoCo
               iconTheme={iconTheme}
               activeHash={activeHash}
               onOpen={openVscodeDiff}
-              onContextMenu={setCtxMenu}
+              onContextMenu={range ? () => {} : setCtxMenu}
             />
           );
         })}
@@ -1001,6 +1041,18 @@ const styles = {
     textTransform: 'uppercase' as const,
     letterSpacing: '0.04em',
   }),
+  rangeTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    paddingRight: '28px',
+  } as React.CSSProperties,
+  rangeHint: {
+    fontSize: '11px',
+    opacity: 0.65,
+  } as React.CSSProperties,
   hashRow: {
     display: 'flex',
     alignItems: 'center',
