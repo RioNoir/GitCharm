@@ -309,8 +309,8 @@ function LogApp() {
           onRebase={(repoId, onto) => getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: generateId(), repoId, onto } satisfies LogToHostMsg)}
           onDelete={(repoIds, branchName) => getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds, branchName } satisfies LogToHostMsg)}
           onFetchRepo={(repoId) => getVsCodeApi().postMessage({ type: 'LOG_FETCH_REPO', requestId: generateId(), repoId } satisfies LogToHostMsg)}
-          onPull={(repoId) => getVsCodeApi().postMessage({ type: 'LOG_PULL', requestId: generateId(), repoId } satisfies LogToHostMsg)}
-          onPush={(repoId) => getVsCodeApi().postMessage({ type: 'LOG_PUSH_PICK', repoId } satisfies LogToHostMsg)}
+          onPull={(repoIds, branchName) => getVsCodeApi().postMessage({ type: 'LOG_PULL_BRANCH_PICK', repoIds, branchName } satisfies LogToHostMsg)}
+          onPush={(repoIds, branchName) => getVsCodeApi().postMessage({ type: 'LOG_PUSH_BRANCH_PICK', repoIds, branchName } satisfies LogToHostMsg)}
           onCheckoutTag={(repoIds, tagName) => repoIds.forEach(repoId => getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT_TAG', requestId: generateId(), repoId, tagName } satisfies LogToHostMsg))}
           onMergeTag={(repoIds, tagName) => getVsCodeApi().postMessage({ type: 'LOG_MERGE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg)}
           onPushTag={(repoId, tagName) => getVsCodeApi().postMessage({ type: 'LOG_PUSH_TAG_PICK', repoId, tagName } satisfies LogToHostMsg)}

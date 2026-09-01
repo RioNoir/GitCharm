@@ -18,8 +18,8 @@ interface Props {
   onRebase: (repoId: string, onto: string) => void;
   onDelete: (repoIds: string[], branchName: string) => void;
   onFetchRepo: (repoId: string) => void;
-  onPull: (repoId: string) => void;
-  onPush: (repoId: string) => void;
+  onPull: (repoIds: string[], branchName: string) => void;
+  onPush: (repoIds: string[], branchName: string) => void;
   onCheckoutTag: (repoIds: string[], tagName: string) => void;
   onMergeTag: (repoIds: string[], tagName: string) => void;
   onPushTag: (repoId: string, tagName: string) => void;
@@ -259,6 +259,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       {/* Branch context menu */}
       {contextMenu && (() => {
         const inst = primaryInstance(contextMenu.merged);
+        const localInstances = contextMenu.merged.instances.filter(instance => !instance.isRemote);
+        const currentLocalRepoIds = localInstances.filter(instance => instance.isHead).map(instance => instance.repoId);
+        const localRepoIds = localInstances.map(instance => instance.repoId);
         return (
           <ContextMenu
             merged={contextMenu.merged}
@@ -270,8 +273,8 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             onMerge={() => { onMerge(inst.repoId, inst.name); setContextMenu(null); }}
             onRebase={() => { onRebase(inst.repoId, inst.name); setContextMenu(null); }}
             onDelete={() => { onDelete(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
-            onPull={() => { onPull(inst.repoId); setContextMenu(null); }}
-            onPush={() => { onPush(inst.repoId); setContextMenu(null); }}
+            onPull={currentLocalRepoIds.length > 0 ? () => { onPull(currentLocalRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
+            onPush={localRepoIds.length > 0 ? () => { onPush(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
           />
         );
       })()}
@@ -463,8 +466,8 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
   onMerge: () => void;
   onRebase: () => void;
   onDelete: () => void;
-  onPull: () => void;
-  onPush: () => void;
+  onPull?: () => void;
+  onPush?: () => void;
 }) {
   const { ref, pos } = useClampedPosition(x, y);
   useEffect(() => {
@@ -485,9 +488,11 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
     { sep: true },
     { icon: 'git-merge', label: 'Merge into current', action: onMerge },
     { icon: 'repo-forked', label: `Rebase onto "${merged.baseName}"`, action: onRebase },
-    { sep: true },
-    { icon: 'cloud-download', label: 'Pull', action: onPull },
-    { icon: 'cloud-upload', label: 'Push...', action: onPush },
+    ...(onPull || onPush ? [
+      { sep: true as const },
+      ...(onPull ? [{ icon: 'cloud-download', label: `Pull "${merged.baseName}"`, action: onPull }] : []),
+      ...(onPush ? [{ icon: 'cloud-upload', label: `Push "${merged.baseName}"...`, action: onPush }] : []),
+    ] : []),
     ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete branch', action: onDelete, danger: true }] : []),
   ];
 

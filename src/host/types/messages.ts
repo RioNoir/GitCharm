@@ -240,7 +240,9 @@ export type LogToHostMsg =
   | { type: 'LOG_CHERRY_PICK_FILE'; requestId: string; repoId: string; hash: string; filePath: string; oldPath?: string }
   | { type: 'LOG_CHECKOUT'; requestId: string; repoId: string; branchName: string; createNew?: boolean; from?: string }
   | { type: 'LOG_PULL'; requestId: string; repoId: string }
+  | { type: 'LOG_PULL_BRANCH_PICK'; repoIds: string[]; branchName: string }
   | { type: 'LOG_PUSH'; requestId: string; repoId: string; remote?: string; force?: boolean }
+  | { type: 'LOG_PUSH_BRANCH_PICK'; repoIds: string[]; branchName: string }
   | { type: 'LOG_MERGE'; requestId: string; repoId: string; from: string }
   | { type: 'LOG_REBASE'; requestId: string; repoId: string; onto: string }
   | { type: 'LOG_COMPARE'; requestId: string; repoId: string; refA: string; refB: string }

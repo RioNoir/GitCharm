@@ -1153,6 +1153,31 @@ export class GitService {
     await this.git.remote(['set-url', name, url]);
   }
 
+  async getBranchUpstream(branchName: string): Promise<{ remote: string; branchName: string } | null> {
+    const localRef = `refs/heads/${branchName}`;
+    const raw = await this.git.raw([
+      'for-each-ref',
+      '--format=%(upstream:remotename)%00%(upstream:remoteref)',
+      localRef,
+    ]).catch(() => '');
+    const [remote, remoteRef] = raw.trim().split('\0');
+    if (!remote || remote === '.' || !remoteRef?.startsWith('refs/heads/')) return null;
+    return { remote, branchName: remoteRef.slice('refs/heads/'.length) };
+  }
+
+  async pushBranch(branchName: string, remote: string, remoteBranchName: string, setUpstream: boolean): Promise<void> {
+    const refspec = `refs/heads/${branchName}:refs/heads/${remoteBranchName}`;
+    const vsRepo = this.vsRepo();
+    if (vsRepo?.state.remotes.some(item => item.name === remote)) {
+      await vsRepo.push(remote, refspec, setUpstream);
+      return;
+    }
+    const args = ['push'];
+    if (setUpstream) args.push('--set-upstream');
+    args.push(remote, refspec);
+    await this.git.raw(args);
+  }
+
   async push(force = false, remote?: string): Promise<void> {
     const vsRepo = this.vsRepo();
     // Only use VS Code API when it actually knows the remotes for this repo.

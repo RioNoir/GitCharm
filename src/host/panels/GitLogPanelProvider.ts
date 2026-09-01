@@ -318,6 +318,30 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     return all.filter(b => ids.has(b.repoId));
   }
 
+  private async pickBranchRepo(repoIds: string[], branchName: string, action: 'Pull' | 'Push'): Promise<string | null> {
+    const metas = new Map(this.manager.getRepoMetas().map(meta => [meta.id, meta]));
+    const candidates = Array.from(new Set(repoIds))
+      .filter(repoId => !!this.manager.getRepo(repoId))
+      .map(repoId => {
+        const meta = metas.get(repoId);
+        return {
+          label: `$(repo) ${meta?.name ?? repoId}`,
+          description: meta?.rootPath,
+          repoId,
+        };
+      });
+    if (candidates.length === 0) {
+      vscode.window.showWarningMessage(`No repository found for branch "${branchName}".`);
+      return null;
+    }
+    if (candidates.length === 1) return candidates[0].repoId;
+    const picked = await vscode.window.showQuickPick(candidates, {
+      title: `${action} "${branchName}" — Select repository`,
+      placeHolder: `Select the repository in which to ${action.toLowerCase()} this branch`,
+    });
+    return picked?.repoId ?? null;
+  }
+
   private async handleMessage(msg: LogToHostMsg): Promise<void> {
     switch (msg.type) {
       case 'LOG_REQUEST_COMMITS': {
@@ -566,6 +590,31 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_PULL_BRANCH_PICK': {
+        const repoId = await this.pickBranchRepo(msg.repoIds, msg.branchName, 'Pull');
+        if (!repoId) break;
+        const repo = this.manager.getRepo(repoId);
+        if (!repo) break;
+        const current = await repo.getCurrentBranch().catch(() => null);
+        if (!current || current.name !== msg.branchName || current.detachedTag || current.detachedHash) {
+          vscode.window.showWarningMessage(`Cannot pull "${msg.branchName}" because it is no longer the current branch.`);
+          break;
+        }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Pulling "${msg.branchName}"`, cancellable: false },
+          async () => {
+            try {
+              await repo.pull();
+              this.post({ type: 'LOG_REFRESH' });
+            } catch (e: unknown) {
+              logError('pullBranch', formatGitError(e), getRawErrorDetail(e));
+              showGitError('pullBranch', e);
+            }
+          }
+        );
+        break;
+      }
+
       case 'LOG_PUSH': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
@@ -579,6 +628,52 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             } catch (e: unknown) {
               logError('push', formatGitError(e), getRawErrorDetail(e));
               this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+            }
+          }
+        );
+        break;
+      }
+
+      case 'LOG_PUSH_BRANCH_PICK': {
+        const repoId = await this.pickBranchRepo(msg.repoIds, msg.branchName, 'Push');
+        if (!repoId) break;
+        const repo = this.manager.getRepo(repoId);
+        if (!repo) break;
+        const branches = await repo.getBranches().catch(() => []);
+        if (!branches.some(branch => !branch.isRemote && branch.name === msg.branchName)) {
+          vscode.window.showWarningMessage(`Local branch "${msg.branchName}" was not found.`);
+          break;
+        }
+
+        const upstream = await repo.getBranchUpstream(msg.branchName);
+        let remote = upstream?.remote;
+        let remoteBranchName = upstream?.branchName ?? msg.branchName;
+        if (!remote) {
+          const remotes = await repo.getRemotes().catch(() => [] as string[]);
+          if (remotes.length === 0) {
+            vscode.window.showWarningMessage('No remotes configured.');
+            break;
+          }
+          remote = remotes.length === 1
+            ? remotes[0]
+            : (await vscode.window.showQuickPick(
+                remotes.map(name => ({ label: `$(cloud-upload) ${name}`, remote: name })),
+                { title: `Push "${msg.branchName}" — Select remote` }
+              ))?.remote;
+          if (!remote) break;
+          remoteBranchName = msg.branchName;
+        }
+
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Pushing "${msg.branchName}" to ${remote}`, cancellable: false },
+          async () => {
+            try {
+              await repo.pushBranch(msg.branchName, remote!, remoteBranchName, !upstream);
+              logInfo('pushBranch', `Pushed "${msg.branchName}" to "${remote}/${remoteBranchName}" successfully.`);
+              vscode.window.showInformationMessage(`Pushed "${msg.branchName}" to "${remote}/${remoteBranchName}" successfully.`);
+              this.post({ type: 'LOG_REFRESH' });
+            } catch (e: unknown) {
+              showGitError('pushBranch', e);
             }
           }
         );

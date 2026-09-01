@@ -403,12 +403,11 @@ function App() {
             const reqId = generateId();
             getVsCodeApi().postMessage({ type: 'LOG_FETCH_REPO', requestId: reqId, repoId } satisfies LogToHostMsg);
           }}
-          onPull={(repoId) => {
-            const reqId = generateId();
-            getVsCodeApi().postMessage({ type: 'LOG_PULL', requestId: reqId, repoId } satisfies LogToHostMsg);
+          onPull={(repoIds, branchName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_PULL_BRANCH_PICK', repoIds, branchName } satisfies LogToHostMsg);
           }}
-          onPush={(repoId) => {
-            getVsCodeApi().postMessage({ type: 'LOG_PUSH_PICK', repoId } satisfies LogToHostMsg);
+          onPush={(repoIds, branchName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_PUSH_BRANCH_PICK', repoIds, branchName } satisfies LogToHostMsg);
           }}
           onCheckoutTag={(repoIds, tagName) => {
             repoIds.forEach(repoId => {
