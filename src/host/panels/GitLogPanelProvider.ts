@@ -98,6 +98,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private pendingScrollRepoId: string | null = null;
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
+  // Scroll/filter intents queued while a freshly opened undocked panel boots up.
+  private pendingUndocked: {
+    scroll?: { hash: string; repoId: string };
+    filter?: { repoId: string; branch: string | null };
+  } | null = null;
 
   setCommitPanel(provider: CommitPanelProvider): void {
     this.commitPanel = provider;
@@ -128,12 +133,25 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
    * or a separate window. Used by `gitcharm.openLog` (command + keybinding).
    */
   openPreferred(): void {
+    this.revealPreferred();
+  }
+
+  /**
+   * Reveal the Git Log on whichever surface the default location points at.
+   * `wasOpen` tells callers whether the surface was already live, so they know
+   * if a follow-up message can be posted right away or has to be queued until
+   * the webview has booted and asked for its first batch of commits.
+   */
+  private revealPreferred(): { target: 'sidebar' | 'undocked'; wasOpen: boolean } {
     const location = getGitLogDefaultLocation();
     if (location === 'panel' || !this.undockedPanel) {
+      const wasOpen = this.view?.visible === true;
       this.focus();
-      return;
+      return { target: 'sidebar', wasOpen };
     }
+    const wasOpen = this.undockedPanel.isOpen();
     this.undockedPanel.open(location, getGitLogDefaultLayout() === 'logAndCommit');
+    return { target: 'undocked', wasOpen };
   }
 
   /** Ask for — and persist — the default Git Log location, then apply it right away. */
@@ -165,7 +183,9 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
     if (pick.location === 'panel') {
       this.undockedPanel?.close();
-      this.focus();
+      // The view's `when` clause has just flipped back on — give the workbench a
+      // tick to re-register the panel container before focusing it.
+      setTimeout(() => this.focus(), 100);
     } else {
       this.undockedPanel?.open(pick.location, pick.layout === 'logAndCommit');
     }
@@ -298,28 +318,47 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     vscode.commands.executeCommand(`${GitLogPanelProvider.viewType}.focus`);
   }
 
-  /** Focus the panel and scroll to a specific commit. */
+  /** Reveal the Git Log (wherever it lives) and scroll to a specific commit. */
   selectCommit(hash: string, repoId: string): void {
+    const { target, wasOpen } = this.revealPreferred();
+
+    if (target === 'undocked') {
+      if (wasOpen) {
+        // postToLog, not post(): the timeout fires after activeReplyTarget resets.
+        setTimeout(() => this.undockedPanel?.postToLog({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
+      } else {
+        this.pendingUndocked = { ...this.pendingUndocked, scroll: { hash, repoId } };
+      }
+      return;
+    }
+
+    if (wasOpen) {
+      setTimeout(() => this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
+      return;
+    }
     this.pendingScrollHash = hash;
     this.pendingScrollRepoId = repoId;
-    this.focus();
-    if (this.view?.visible) {
-      this.pendingScrollHash = null;
-      this.pendingScrollRepoId = null;
-      setTimeout(() => this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
-    }
   }
 
-  /** Focus the panel and filter the log to a specific repository (and optionally branch). */
+  /** Reveal the Git Log and filter it to a specific repository (and optionally branch). */
   focusRepo(repoId: string, branch?: string): void {
+    const { target, wasOpen } = this.revealPreferred();
+
+    if (target === 'undocked') {
+      if (wasOpen) {
+        setTimeout(() => this.undockedPanel?.postToLog({ type: 'LOG_FILTER_BY_REPO', repoId, branch }), 150);
+      } else {
+        this.pendingUndocked = { ...this.pendingUndocked, filter: { repoId, branch: branch ?? null } };
+      }
+      return;
+    }
+
+    if (wasOpen) {
+      this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
+      return;
+    }
     this.pendingFilterRepoId = repoId;
     this.pendingFilterBranch = branch ?? null;
-    this.focus();
-    if (this.view?.visible) {
-      this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
-      this.pendingFilterRepoId = null;
-      this.pendingFilterBranch = null;
-    }
   }
 
   /** Trigger a full log refresh — call this after any operation that creates new commits. */
@@ -380,9 +419,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const limit = Math.min(msg.limit, maxCommits);
 
         const repos = this.getVisibleRepos();
+        // Resolve the icon theme against the webview that asked, so the undocked
+        // panel still gets file icons when the bottom-panel view is hidden.
+        const iconWebview = this.activeReplyTarget === 'undocked'
+          ? this.undockedPanel?.webview
+          : this.view?.webview;
         const [branches, iconTheme] = await Promise.all([
           this.getFilteredBranches(),
-          this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
+          iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
 
@@ -406,6 +450,22 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           filterDateTo: msg.filterDateTo,
         });
         this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast: commits.length < limit, batchIndex: 0, requestId: msg.requestId });
+
+        // A freshly opened undocked panel is only ready once it has asked for commits.
+        if (msg.skip === 0 && this.activeReplyTarget === 'undocked' && this.pendingUndocked) {
+          const queued = this.pendingUndocked;
+          this.pendingUndocked = null;
+          setTimeout(() => {
+            if (queued.filter) {
+              const { repoId, branch } = queued.filter;
+              this.undockedPanel?.postToLog({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
+            }
+            if (queued.scroll) {
+              const { hash, repoId } = queued.scroll;
+              this.undockedPanel?.postToLog({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId });
+            }
+          }, 150);
+        }
 
         // Send stashes only on first load (not on pagination)
         if (msg.skip === 0) {

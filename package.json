@@ -90,7 +90,8 @@
           "type": "webview",
           "id": "gitcharm.gitLog",
           "name": "Git Log",
-          "retainContextWhenHidden": true
+          "retainContextWhenHidden": true,
+          "when": "!gitcharm.gitLogDefaultUndocked"
         }
       ]
     },
@@ -891,7 +892,7 @@
               "Open the GitCharm Log in a separate window"
             ],
             "default": "panel",
-            "description": "Where the GitCharm Log opens when you run 'GitCharm: Focus Git Log' or press its keyboard shortcut. The 'Undock…' menu item still moves the Log for the current session only, without changing this setting.",
+            "description": "Where the GitCharm Log opens when you run 'GitCharm: Focus Git Log' or press its keyboard shortcut. Anything other than 'panel' also hides the GitCharm Log view from the bottom panel, so there is only ever one Log surface. The 'Undock…' menu item still moves the Log for the current session only, without changing this setting.",
             "scope": "window"
           },
           "gitcharm.gitLogDefaultLayout": {

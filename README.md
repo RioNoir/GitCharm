@@ -98,6 +98,7 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
   - **Undock in New Window** — separate window with the Git Log only.
 - **Default Location…** in the same burger menu (or `GitCharm: Set Default Git Log Location` in the Command Palette) does the same thing, but *remembers* the choice: Bottom Panel, Editor Tab (Log & Commit / Only Log), or New Window (Log & Commit / Only Log). The picked location applies immediately and is written to `gitcharm.gitLogDefaultLocation` / `gitcharm.gitLogDefaultLayout`, so `GitCharm: Focus Git Log` and its keyboard shortcut (`Ctrl/Cmd+Alt+L`) reopen the Log there — even after you close the editor tab or restart VS Code.
   - **Undock…** is session-only and never changes the setting; **Default Location…** is the persistent counterpart.
+  - Picking anything other than **Bottom Panel** also removes the GitCharm Log view from the bottom panel, so you never end up with two Log surfaces. Switching back restores it.
 - State is fully synchronised with the sidebar panels: commits, branches, and status update in real time in both views.
 - The undocked tab shows the same toolbar actions as the Commit Panel (Fetch All, Pull All, Push All, Sync All, Branch Menu, Settings).
 
@@ -286,7 +287,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.repositoryScanMaxDepth` | `1` | Maximum depth of workspace subfolders to scan for Git repositories. `0` only checks workspace folders. |
 | `gitcharm.repositoryScanIgnoredFolders` | `["node_modules"]` | Folder names or workspace-relative paths skipped while scanning for nested Git repositories. |
 | `gitcharm.autoRefreshInterval` | `0` | Auto-refresh interval in seconds. `0` disables interval refresh and uses file watchers only. |
-| `gitcharm.gitLogDefaultLocation` | `"panel"` | Where `GitCharm: Focus Git Log` opens the Log: `panel`, `editorTab`, or `newWindow`. |
+| `gitcharm.gitLogDefaultLocation` | `"panel"` | Where `GitCharm: Focus Git Log` opens the Log: `panel`, `editorTab`, or `newWindow`. Anything but `panel` also hides the Log view from the bottom panel. |
 | `gitcharm.gitLogDefaultLayout` | `"logAndCommit"` | What the Log shows outside the bottom panel: `logAndCommit` or `logOnly`. Ignored when the location is `panel`. |
 | `gitcharm.changesViewMode` | `"simplified"` | How to display changed files: `simplified`, `changelists`, or `vscode`. Chosen via QuickPick on first install. |
 | `gitcharm.gitAnnotations.enabled` | `true` | Enable inline Git blame annotations in the editor. |

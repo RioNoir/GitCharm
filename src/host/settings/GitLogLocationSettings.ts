@@ -46,3 +46,27 @@ export async function setGitLogDefault(location: GitLogLocation, layout: GitLogL
   await cfg.update(LOCATION_KEY, location, target);
   await cfg.update(LAYOUT_KEY, layout, target);
 }
+
+/** True when the default location puts the Log outside the bottom panel. */
+export function isGitLogDefaultUndocked(): boolean {
+  return getGitLogDefaultLocation() !== 'panel';
+}
+
+/**
+ * Mirror the default location into the `gitcharm.gitLogDefaultUndocked` context
+ * key, which package.json uses to hide the bottom-panel Git Log view when the
+ * Log lives in an editor tab or its own window. Call this as early as possible
+ * in activation, before VS Code evaluates the view's `when` clause.
+ */
+export function syncGitLogLocationContext(): void {
+  void vscode.commands.executeCommand('setContext', 'gitcharm.gitLogDefaultUndocked', isGitLogDefaultUndocked());
+}
+
+/** Keep the context key in sync when the setting changes from the Settings UI. */
+export function watchGitLogLocationContext(onChange?: (undocked: boolean) => void): vscode.Disposable {
+  return vscode.workspace.onDidChangeConfiguration(e => {
+    if (!e.affectsConfiguration(`${CONFIG_SECTION}.${LOCATION_KEY}`)) return;
+    syncGitLogLocationContext();
+    onChange?.(isGitLogDefaultUndocked());
+  });
+}
