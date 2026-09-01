@@ -15,6 +15,8 @@ interface Props {
   onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
   /** When true, hides the Undock menu item (already in undocked mode). */
   hideUndock?: boolean;
+  /** Opens the picker that persists where the Git Log opens by default. */
+  onSetDefaultLocation?: () => void;
 }
 
 function useIsLightTheme() {
@@ -27,7 +29,7 @@ function useIsLightTheme() {
   return light;
 }
 
-export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll, onUndock, hideUndock }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll, onUndock, hideUndock, onSetDefaultLocation }: Props) {
   const isLight = useIsLightTheme();
   useEffect(() => {
     const id = 'gitcharm-filter-field-focus';
@@ -118,17 +120,18 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         )}
 
         {/* More menu — pushed to the right */}
-        <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
+        <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} onSetDefaultLocation={onSetDefaultLocation} />
       </div>
   );
 }
 
 /* ─── MoreMenu ────────────────────────────────────────────────────────────── */
 
-function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
+function MoreMenu({ onFetchAll, onUndock, hideUndock, onSetDefaultLocation }: {
   onFetchAll: () => void;
   onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
   hideUndock?: boolean;
+  onSetDefaultLocation?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -168,17 +171,28 @@ function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
             <span>Fetch and Refresh</span>
           </div>
 
+          {(!hideUndock || onSetDefaultLocation) && <div style={styles.moreSeparator} />}
+
           {!hideUndock && (
-            <>
-              <div style={styles.moreSeparator} />
-              <div
-                style={styles.moreItem}
-                onClick={() => { onUndock?.('pick'); setOpen(false); }}
-              >
-                <Codicon name="multiple-windows" style={{ fontSize: '13px', opacity: 0.7 }} />
-                <span>Undock…</span>
-              </div>
-            </>
+            <div
+              style={styles.moreItem}
+              onClick={() => { onUndock?.('pick'); setOpen(false); }}
+              title="Move the Git Log for this session only"
+            >
+              <Codicon name="multiple-windows" style={{ fontSize: '13px', opacity: 0.7 }} />
+              <span>Undock…</span>
+            </div>
+          )}
+
+          {onSetDefaultLocation && (
+            <div
+              style={styles.moreItem}
+              onClick={() => { onSetDefaultLocation(); setOpen(false); }}
+              title="Remember where the Git Log opens from now on"
+            >
+              <Codicon name="settings-gear" style={{ fontSize: '13px', opacity: 0.7 }} />
+              <span>Default Location…</span>
+            </div>
           )}
         </div>
       )}

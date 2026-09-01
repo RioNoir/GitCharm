@@ -120,6 +120,11 @@ export class UndockedPanelProvider implements vscode.Disposable {
     return this.panel !== null;
   }
 
+  /** Close the undocked panel, if open. onDidDispose resets the internal state. */
+  close(): void {
+    this.panel?.dispose();
+  }
+
   dispose(): void {
     this.panel?.dispose();
     this.disposables.forEach(d => d.dispose());

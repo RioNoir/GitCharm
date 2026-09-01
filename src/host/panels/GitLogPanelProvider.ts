@@ -12,6 +12,13 @@ import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import {
+  getGitLogDefaultLayout,
+  getGitLogDefaultLocation,
+  setGitLogDefault,
+  type GitLogLayout,
+  type GitLogLocation,
+} from '../settings/GitLogLocationSettings';
 
 function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
   if (!current.detachedTag && !current.detachedHash) return branches; // normal branch — already in list
@@ -114,6 +121,54 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     );
     if (!pick) return;
     this.undockedPanel.open(pick.value, pick.showCommit);
+  }
+
+  /**
+   * Open the Git Log where the persisted default says — bottom panel, editor tab
+   * or a separate window. Used by `gitcharm.openLog` (command + keybinding).
+   */
+  openPreferred(): void {
+    const location = getGitLogDefaultLocation();
+    if (location === 'panel' || !this.undockedPanel) {
+      this.focus();
+      return;
+    }
+    this.undockedPanel.open(location, getGitLogDefaultLayout() === 'logAndCommit');
+  }
+
+  /** Ask for — and persist — the default Git Log location, then apply it right away. */
+  async triggerDefaultLocationPick(): Promise<void> {
+    type Item = vscode.QuickPickItem & { location: GitLogLocation; layout: GitLogLayout };
+    const currentLocation = getGitLogDefaultLocation();
+    const currentLayout = getGitLogDefaultLayout();
+
+    const items: Item[] = [
+      { label: '$(layout-panel) Bottom Panel', location: 'panel', layout: currentLayout },
+      { label: '$(editor-layout) Editor Tab (Log & Commit)', location: 'editorTab', layout: 'logAndCommit' },
+      { label: '$(editor-layout) Editor Tab (Only Log)', location: 'editorTab', layout: 'logOnly' },
+      { label: '$(empty-window) New Window (Log & Commit)', location: 'newWindow', layout: 'logAndCommit' },
+      { label: '$(empty-window) New Window (Only Log)', location: 'newWindow', layout: 'logOnly' },
+    ];
+    for (const item of items) {
+      const isCurrent = item.location === currentLocation
+        && (item.location === 'panel' || item.layout === currentLayout);
+      if (isCurrent) item.description = 'current default';
+    }
+
+    const pick = await vscode.window.showQuickPick<Item>(items, {
+      title: 'Default GitCharm Log Location',
+      placeHolder: 'Where should the Git Log open from now on?',
+    });
+    if (!pick) return;
+
+    await setGitLogDefault(pick.location, pick.layout);
+
+    if (pick.location === 'panel') {
+      this.undockedPanel?.close();
+      this.focus();
+    } else {
+      this.undockedPanel?.open(pick.location, pick.layout === 'logAndCommit');
+    }
   }
 
   handleUndockedMessage(msg: LogToHostMsg, _provider: UndockedPanelProvider): void {
@@ -1626,6 +1681,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } else {
           this.undockedPanel.open(msg.target);
         }
+        break;
+      }
+
+      case 'LOG_SET_DEFAULT_LOCATION': {
+        await this.triggerDefaultLocationPick();
         break;
       }
     }

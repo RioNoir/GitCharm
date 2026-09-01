@@ -342,6 +342,12 @@
         "icon": "$(multiple-windows)"
       },
       {
+        "command": "gitcharm.setGitLogDefaultLocation",
+        "title": "Set Default Git Log Location",
+        "category": "GitCharm",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "gitcharm.showFileHistory",
         "title": "Show File History",
         "category": "GitCharm",
@@ -631,6 +637,9 @@
           "command": "gitcharm.undock"
         },
         {
+          "command": "gitcharm.setGitLogDefaultLocation"
+        },
+        {
           "command": "gitcharm.submodule.init"
         },
         {
@@ -867,6 +876,38 @@
             "type": "boolean",
             "default": true,
             "description": "Enable inline Git ghost text in the editor."
+          },
+          "gitcharm.gitLogDefaultLocation": {
+            "order": 12,
+            "type": "string",
+            "enum": [
+              "panel",
+              "editorTab",
+              "newWindow"
+            ],
+            "enumDescriptions": [
+              "Open the GitCharm Log in the bottom panel, next to the terminal",
+              "Open the GitCharm Log as an editor tab",
+              "Open the GitCharm Log in a separate window"
+            ],
+            "default": "panel",
+            "description": "Where the GitCharm Log opens when you run 'GitCharm: Focus Git Log' or press its keyboard shortcut. The 'Undock…' menu item still moves the Log for the current session only, without changing this setting.",
+            "scope": "window"
+          },
+          "gitcharm.gitLogDefaultLayout": {
+            "order": 13,
+            "type": "string",
+            "enum": [
+              "logAndCommit",
+              "logOnly"
+            ],
+            "enumDescriptions": [
+              "Show the Git Log and the Commit panel side by side",
+              "Show only the Git Log"
+            ],
+            "default": "logAndCommit",
+            "description": "What the GitCharm Log shows when it opens outside the bottom panel. Ignored when 'Git Log Default Location' is 'panel'.",
+            "scope": "window"
           },
           "gitcharm.changesViewMode": {
             "order": 10,

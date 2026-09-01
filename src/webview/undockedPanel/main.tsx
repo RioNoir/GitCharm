@@ -284,6 +284,7 @@ function LogApp() {
         onRepoChange={handleRepoChange}
         onClear={handleClearFilters}
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
+        onSetDefaultLocation={() => send({ type: 'LOG_SET_DEFAULT_LOCATION' })}
         hideUndock
       />
 

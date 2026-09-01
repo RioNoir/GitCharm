@@ -22,9 +22,14 @@ export function registerCommands(
   extensionUri?: vscode.Uri,
 ): void {
   context.subscriptions.push(
-    // Focus the Git Log panel in the bottom bar
+    // Open the Git Log where the persisted default location says
     vscode.commands.registerCommand('gitcharm.openLog', () => {
-      logPanel.focus();
+      logPanel.openPreferred();
+    }),
+
+    // Pick and persist where the Git Log opens by default
+    vscode.commands.registerCommand('gitcharm.setGitLogDefaultLocation', () => {
+      void logPanel.triggerDefaultLocationPick();
     }),
 
     // Show the GitCharm output channel (full error/event log)
