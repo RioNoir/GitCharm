@@ -111,7 +111,7 @@ function LogApp() {
           store.setStashes(msg.stashCommits);
           break;
         case 'LOG_SCROLL_TO_COMMIT':
-          store.setPendingScrollHash(msg.hash);
+          store.setPendingScrollTarget({ hash: msg.hash, repoId: msg.repoId });
           break;
         case 'LOG_FILTER_BY_REPO':
           filterRepoRef.current(msg.repoId, msg.branch ?? null);
@@ -302,8 +302,14 @@ function LogApp() {
           tags={store.tags}
           filter={store.branchFilter}
           selectedBranchFilter={store.commitFilters.branch}
+          activeRepoId={store.commitFilters.repoId}
           onFilterChange={store.setBranchFilter}
           onBranchFilterSelect={useCallback((b: string) => handleFilterChange('branch', b), [handleFilterChange])}
+          onBranchFocus={(branch) => {
+            if (branch.lastCommitHash) {
+              store.setPendingScrollTarget({ hash: branch.lastCommitHash, repoId: branch.repoId });
+            }
+          }}
           onCheckout={(repoIds, branch) => repoIds.forEach(repoId => getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: branch } satisfies LogToHostMsg))}
           onMerge={(repoId, from) => getVsCodeApi().postMessage({ type: 'LOG_MERGE', requestId: generateId(), repoId, from } satisfies LogToHostMsg)}
           onRebase={(repoId, onto) => getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: generateId(), repoId, onto } satisfies LogToHostMsg)}
@@ -328,9 +334,10 @@ function LogApp() {
           />
           <CommitList
             layout={graphLayout}
-            selectedHash={store.selectedCommit?.hash ?? null}
+            selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
             repoColors={repoColors}
             repos={store.repos}
+            activeRepoId={store.commitFilters.repoId}
             currentBranchByRepo={currentBranchByRepo}
             headHashByRepo={headHashByRepo}
             onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
@@ -339,8 +346,8 @@ function LogApp() {
             storeHasMore={store.hasMore}
             loading={store.loadingCommits}
             backgroundLoading={store.backgroundLoading}
-            scrollToHash={store.pendingScrollHash}
-            onScrolledToHash={() => store.setPendingScrollHash(null)}
+            scrollTarget={store.pendingScrollTarget}
+            onScrollTargetHandled={() => store.setPendingScrollTarget(null)}
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
           />
