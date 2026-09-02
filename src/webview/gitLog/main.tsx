@@ -12,6 +12,7 @@ import { useResize } from '../shared/useResize';
 import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import type { LogToHostMsg, HostToLogMsg } from '../../host/types/messages';
+import type { CommitNode } from '../shared/types';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -28,6 +29,11 @@ function App() {
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [themeVersion, setThemeVersion] = useState(0);
+  const [multiSelectedCommits, setMultiSelectedCommits] = useState<CommitNode[]>([]);
+  const [rangeEndpoints, setRangeEndpoints] = useState<{ older: CommitNode; newer: CommitNode } | null>(null);
+  const [rangeFiles, setRangeFiles] = useState<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>>([]);
+  const [loadingRangeFiles, setLoadingRangeFiles] = useState(false);
+  const rangeRequestKeyRef = useRef('');
 
   useEffect(() => {
     const obs = new MutationObserver(() => setThemeVersion(v => v + 1));
@@ -53,6 +59,47 @@ function App() {
       pendingRef.current.set(reqId, r => resolve(r as T));
       getVsCodeApi().postMessage(m);
     });
+  }, []);
+
+  const selectedRangeKey = multiSelectedCommits.length === 2
+    ? `${multiSelectedCommits[0].repoId}:${multiSelectedCommits.map(c => c.hash).sort().join(':')}`
+    : '';
+  rangeRequestKeyRef.current = selectedRangeKey;
+
+  useEffect(() => {
+    if (!selectedRangeKey || multiSelectedCommits.length !== 2) {
+      setRangeEndpoints(null);
+      setRangeFiles([]);
+      setLoadingRangeFiles(false);
+      return;
+    }
+
+    const selectedByHash = new Map(multiSelectedCommits.map(c => [c.hash, c]));
+    const fallback = [...multiSelectedCommits].sort(
+      (a, b) => new Date(a.committerDate).getTime() - new Date(b.committerDate).getTime(),
+    );
+    setRangeEndpoints({ older: fallback[0], newer: fallback[1] });
+    setRangeFiles([]);
+    setLoadingRangeFiles(true);
+    useLogStore.getState().selectFile(null);
+
+    request<Extract<HostToLogMsg, { type: 'LOG_RANGE_FILES_RESULT' }>>({
+      type: 'LOG_REQUEST_RANGE_FILES',
+      requestId: '',
+      repoId: multiSelectedCommits[0].repoId,
+      hashes: multiSelectedCommits.map(c => c.hash),
+    }).then(msg => {
+      if (rangeRequestKeyRef.current !== selectedRangeKey) return;
+      const ordered = msg.orderedHashes.map(hash => selectedByHash.get(hash)).filter((c): c is CommitNode => !!c);
+      if (ordered.length === 2) setRangeEndpoints({ older: ordered[0], newer: ordered[1] });
+      setRangeFiles(msg.files);
+      setLoadingRangeFiles(false);
+    });
+  }, [selectedRangeKey, request]);
+
+  const handleMultiSelectionChange = useCallback((commits: CommitNode[]) => {
+    setMultiSelectedCommits(commits);
+    if (commits.length === 2) setDetailCollapsed(false);
   }, []);
 
   useEffect(() => {
@@ -267,9 +314,11 @@ function App() {
     return map;
   }, [store.branches]);
 
-  const selectedRepoColor = store.selectedCommit
-    ? repoColors[store.selectedCommit.repoId]
-    : undefined;
+  const selectedRepoColor = rangeEndpoints
+    ? repoColors[rangeEndpoints.newer.repoId]
+    : store.selectedCommit
+      ? repoColors[store.selectedCommit.repoId]
+      : undefined;
 
   // text/author are debounced inside DebouncedInput; branch/date/repo fire immediately
   const handleFilterChange = useCallback((key: keyof import('./store/logStore').CommitFilters, value: string) => {
@@ -313,7 +362,7 @@ function App() {
     [store.tags, activeRepoId]
   );
 
-  const hasSelectedCommit = !!store.selectedCommit;
+  const hasSelectedCommit = !!store.selectedCommit || !!rangeEndpoints;
 
   const showNoRepo = store.repos.length === 0 && store.initialized;
   const noRepoOverlay = showNoRepo ? (
@@ -439,6 +488,7 @@ function App() {
             currentBranchByRepo={currentBranchByRepo}
             headHashByRepo={headHashByRepo}
             onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
+            onMultiSelectionChange={handleMultiSelectionChange}
             onLoadMore={handleLoadMore}
             hasMore={store.hasMore}
             storeHasMore={store.hasMore}
@@ -457,10 +507,11 @@ function App() {
         {hasSelectedCommit && !detailCollapsed && (
           <div ref={detailRef} style={detailPane}>
             <CommitDetail
-              commit={store.selectedCommit}
-              files={store.commitFiles}
+              commit={rangeEndpoints?.newer ?? store.selectedCommit}
+              range={rangeEndpoints ?? undefined}
+              files={rangeEndpoints ? rangeFiles : store.commitFiles}
               selectedFile={store.selectedFile}
-              loadingFiles={store.loadingFiles}
+              loadingFiles={rangeEndpoints ? loadingRangeFiles : store.loadingFiles}
               repoColor={selectedRepoColor}
               repos={store.repos}
               iconTheme={store.iconTheme}

@@ -423,6 +423,22 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_REQUEST_RANGE_FILES': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { this.post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: [], error: 'Repo not found' }); return; }
+        try {
+          const [files, orderedHashes] = await Promise.all([
+            repo.getFilesBetween(msg.hashes),
+            repo.getCombinedFilesOrder(msg.hashes),
+          ]);
+          this.post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files, orderedHashes });
+        } catch (e: unknown) {
+          logError('rangeFiles', formatGitError(e), getRawErrorDetail(e));
+          this.post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: [], error: formatGitError(e) });
+        }
+        break;
+      }
+
       case 'LOG_REQUEST_MERGE_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { this.post({ type: 'LOG_MERGE_COMMITS_RESULT', requestId: msg.requestId, commits: [], error: 'Repo not found' }); return; }
@@ -457,6 +473,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } catch (e: unknown) {
           showGitError('openDiff', e);
         }
+        break;
+      }
+
+      case 'LOG_OPEN_RANGE_FILE_DIFF': {
+        const { openRangeFileDiff } = await import('./CombinedDiffPanel');
+        await openRangeFileDiff(this.manager, msg.repoId, msg.hashes, msg.filePath, msg.fileStatus, msg.oldPath);
         break;
       }
 

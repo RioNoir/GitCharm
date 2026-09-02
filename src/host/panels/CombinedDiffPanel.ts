@@ -4,6 +4,42 @@ import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { showGitError } from '../utils/gitErrorUtils';
 import { logWarn } from '../utils/Logger';
 
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+function gitUri(rootPath: string, ref: string, filePath: string): vscode.Uri {
+  const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+  return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+}
+
+export async function openRangeFileDiff(
+  manager: WorkspaceGitManager,
+  repoId: string,
+  hashes: string[],
+  filePath: string,
+  status?: string,
+  oldPath?: string,
+): Promise<void> {
+  const repo = manager.getRepo(repoId);
+  if (!repo) {
+    vscode.window.showErrorMessage('Repository not found.');
+    return;
+  }
+
+  try {
+    const ordered = await repo.getCombinedFilesOrder(hashes);
+    const oldest = ordered[0];
+    const newest = ordered[ordered.length - 1];
+    if (!oldest || !newest) return;
+    const originalPath = oldPath ?? filePath;
+    const original = gitUri(repo.rootPath, status === 'A' ? EMPTY_TREE : oldest, originalPath);
+    const modified = gitUri(repo.rootPath, status === 'D' ? EMPTY_TREE : newest, filePath);
+    const title = `${path.basename(filePath)} (${oldest.slice(0, 7)}…${newest.slice(0, 7)})`;
+    await vscode.commands.executeCommand('vscode.diff', original, modified, title);
+  } catch (e: unknown) {
+    showGitError('rangeDiff', e);
+  }
+}
+
 export async function openCombinedDiffPanel(
   extensionUri: vscode.Uri,
   manager: WorkspaceGitManager,
@@ -51,20 +87,14 @@ export async function openCombinedDiffPanel(
 
   const oldest = commitMetas[0];
   const newest = commitMetas[commitMetas.length - 1];
-  const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
   const rootPath = repo.rootPath;
-
-  const gitUri = (ref: string, filePath: string): vscode.Uri => {
-    const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
-    return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
-  };
 
   const resources = files
     .filter(f => f.status !== 'U')
     .map(f => {
       const label = vscode.Uri.file(path.join(rootPath, f.path));
-      const original = gitUri(f.status === 'A' ? EMPTY_TREE : `${oldest.hash}~1`, f.path);
-      const modified = gitUri(f.status === 'D' ? EMPTY_TREE : newest.hash, f.path);
+      const original = gitUri(rootPath, f.status === 'A' ? EMPTY_TREE : `${oldest.hash}~1`, f.path);
+      const modified = gitUri(rootPath, f.status === 'D' ? EMPTY_TREE : newest.hash, f.path);
       return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
     });
 

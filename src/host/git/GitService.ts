@@ -739,15 +739,25 @@ export class GitService {
     } catch { return ''; }
   }
 
-  async getCombinedFiles(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
+  async getCombinedFiles(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
     const ordered = await this._sortHashesOldestFirst(hashes);
     const oldest = ordered[0];
     const newest = ordered[ordered.length - 1];
-    if (!oldest || !newest) return [];
+    return oldest && newest ? this._getFilesBetweenRefs(`${oldest}~1`, newest) : [];
+  }
+
+  async getFilesBetween(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
+    const ordered = await this._sortHashesOldestFirst(hashes);
+    const oldest = ordered[0];
+    const newest = ordered[ordered.length - 1];
+    return oldest && newest ? this._getFilesBetweenRefs(oldest, newest) : [];
+  }
+
+  private async _getFilesBetweenRefs(base: string, newest: string): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
     try {
       const [nameStatus, numStat] = await Promise.all([
-        this.git.raw(['diff', '--name-status', `${oldest}~1`, newest]),
-        this.git.raw(['diff', '--numstat', `${oldest}~1`, newest]),
+        this.git.raw(['diff', '--name-status', base, newest]),
+        this.git.raw(['diff', '--numstat', base, newest]),
       ]);
       const stats = new Map<string, { added: number; removed: number }>();
       for (const line of numStat.trim().split('\n')) {
@@ -759,15 +769,16 @@ export class GitService {
         const p = parts[parts.length - 1];
         if (!isNaN(added) && !isNaN(removed)) stats.set(p, { added, removed });
       }
-      const files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+      const files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }> = [];
       for (const line of nameStatus.trim().split('\n')) {
         if (!line.trim()) continue;
         const parts = line.split('\t');
         if (parts.length < 2) continue;
         const statusCode = parts[0][0];
         const filePath = parts[parts.length - 1];
+        const oldPath = (statusCode === 'R' || statusCode === 'C') && parts.length >= 3 ? parts[1] : undefined;
         const s = stats.get(filePath);
-        files.push({ status: statusCode, path: filePath, added: s?.added, removed: s?.removed });
+        files.push({ status: statusCode, path: filePath, added: s?.added, removed: s?.removed, ...(oldPath ? { oldPath } : {}) });
       }
       return files;
     } catch { return []; }
