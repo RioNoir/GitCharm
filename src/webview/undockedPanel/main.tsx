@@ -43,6 +43,8 @@ function generateId() {
 }
 
 const LOAD_STEP = 150;
+// Upper bound on how many commits a warm refresh re-requests in one go.
+const REFRESH_LIMIT_MAX = 3000;
 
 // ── Log sub-app ───────────────────────────────────────────────────────────────
 
@@ -128,7 +130,7 @@ function LogApp() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, skip: number) => {
+  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, skip: number, limit: number = LOAD_STEP) => {
     if (loadingInFlightRef.current) return;
     loadingInFlightRef.current = true;
     const reqId = generateId();
@@ -137,7 +139,7 @@ function LogApp() {
     getVsCodeApi().postMessage({
       type: 'LOG_REQUEST_COMMITS',
       repoIds: f.repoId ? [f.repoId] : [],
-      limit: LOAD_STEP,
+      limit,
       skip,
       requestId: reqId,
       filterText: f.text || undefined,
@@ -161,7 +163,23 @@ function LogApp() {
     sendAppendRequest(f, 0);
   }, [sendAppendRequest]);
 
-  reloadRef.current = reloadCommits;
+  // Refresh triggered by a repo change (not by the user changing filters): keep the
+  // existing rows visible and swap them for the fresh ones when they arrive, so the
+  // skeleton only ever appears on a cold start. Re-request as many commits as are
+  // currently loaded, so a deep-scrolled list doesn't shrink and jump under the user.
+  const refreshCommits = useCallback(() => {
+    loadingInFlightRef.current = false;
+    const s = useLogStore.getState();
+    if (s.commits.length === 0) {
+      reloadCommits();
+      return;
+    }
+    const limit = Math.min(REFRESH_LIMIT_MAX, Math.ceil(s.commits.length / LOAD_STEP) * LOAD_STEP);
+    s.beginReload();
+    sendAppendRequest(s.commitFilters, 0, limit);
+  }, [sendAppendRequest, reloadCommits]);
+
+  reloadRef.current = refreshCommits;
 
   useEffect(() => {
     const { selectedCommit } = store;
