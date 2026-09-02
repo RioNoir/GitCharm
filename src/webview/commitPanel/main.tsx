@@ -5,6 +5,7 @@ import { ProjectGroup } from './components/ProjectGroup';
 import { ChangelistView } from './components/ChangelistView';
 import { VscodeView } from './components/VscodeView';
 import { UnifiedCommitForm } from './components/UnifiedCommitForm';
+import type { SyncAction } from './syncState';
 import { ContextMenu, type ContextMenuEntry } from './components/ContextMenu';
 import { ShelvePanel } from './components/ShelvePanel';
 import { StashTab } from './components/StashTab';
@@ -972,6 +973,30 @@ function App() {
     send({ type: 'COMMIT_SYNC_AND_PUSH_REPO', requestId: generateId(), repoId, rebase: false });
   };
 
+  const doPull = (repoId: string) => {
+    send({ type: 'COMMIT_PULL_REPO', requestId: generateId(), repoId });
+  };
+
+  // Commit-tab publish/sync button. Publish and the explicit dropdown entries map straight
+  // onto push/pull; 'sync' goes to the host, which works out whether a plain pull is enough
+  // or the divergence needs a rebase/force decision from the user.
+  const doSyncAction = (action: SyncAction, repoIds: string[]) => {
+    switch (action) {
+      case 'publish':
+      case 'push':
+        repoIds.forEach(doPush);
+        break;
+      case 'pull':
+        repoIds.forEach(doPull);
+        break;
+      case 'sync':
+        send({ type: 'COMMIT_SYNC_REPOS', requestId: generateId(), repoIds } satisfies CommitToHostMsg);
+        break;
+      case 'none':
+        break;
+    }
+  };
+
   // ── Autopilot ─────────────────────────────────────────────────────────────
 
   const doAutopilot = useCallback(() => {
@@ -1448,6 +1473,11 @@ function App() {
             onCommitAndPush={() => doCommit(true)}
             onPush={doPush}
             onPushAll={doPushAll}
+            syncRepoStatuses={repos}
+            onSyncAction={doSyncAction}
+            onPullRepos={ids => ids.forEach(doPull)}
+            onPushRepos={ids => ids.forEach(doPush)}
+            onForcePushRepos={ids => ids.forEach(doForcePush)}
             aiEnabled={store.aiEnabled}
             onAutopilot={doAutopilot}
             onAutopilotContextMenu={doAutopilotContextMenu}

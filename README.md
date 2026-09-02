@@ -63,6 +63,18 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 - Click the **×** on a pill to quickly deselect that repository from the commit.
 - In VS Code mode, a per-repository checkbox in the Staged Changes section controls which repositories are included.
 
+#### Adaptive commit button
+
+When there is nothing left to commit, the primary button turns into the remote action the branch actually needs — no switching to the Push tab:
+
+| Branch state | Button |
+|:--|:--|
+| Uncommitted changes | **Commit** (or **Commit & Push**) |
+| No upstream yet | **Publish Branch** |
+| Ahead and/or behind the upstream | **Sync Changes** with the commit counts and ↑ / ↓ arrows |
+
+**Sync Changes** pushes, pulls, or does both, depending on what the branch needs. When your branch and the remote have diverged — after an amend, rebase, or squash — a QuickPick asks how to reconcile: **Pull, then Push**, **Pull (Rebase), then Push**, or **Force Push** (`--force-with-lease`). If the local history looks rewritten, the force option is listed first. The same prompt appears if a push is rejected because the remote moved. The dropdown always exposes **Push**, **Pull**, and **Force Push** directly.
+
 ### 🚀 Push Tab
 
 - Lists unpushed commits for every repository, including branches without an upstream tracking branch.
