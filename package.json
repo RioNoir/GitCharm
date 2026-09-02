@@ -892,7 +892,7 @@
               "Open the GitCharm Log in a separate window"
             ],
             "default": "panel",
-            "description": "Where the GitCharm Log opens when you run 'GitCharm: Focus Git Log' or press its keyboard shortcut. Anything other than 'panel' also hides the GitCharm Log view from the bottom panel, so there is only ever one Log surface. The 'Undock…' menu item still moves the Log for the current session only, without changing this setting.",
+            "description": "Where the Git Log opens by default: bottom panel, editor tab, or a new window.",
             "scope": "window"
           },
           "gitcharm.gitLogDefaultLayout": {
@@ -907,7 +907,7 @@
               "Show only the Git Log"
             ],
             "default": "logAndCommit",
-            "description": "What the GitCharm Log shows when it opens outside the bottom panel. Ignored when 'Git Log Default Location' is 'panel'.",
+            "description": "What the Git Log shows when opened outside the bottom panel.",
             "scope": "window"
           },
           "gitcharm.changesViewMode": {

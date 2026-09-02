@@ -355,7 +355,6 @@ function App() {
         onClear={handleClearFilters}
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
         onUndock={(target) => send({ type: 'LOG_UNDOCK', target } as LogToHostMsg)}
-        onSetDefaultLocation={() => send({ type: 'LOG_SET_DEFAULT_LOCATION' } as LogToHostMsg)}
       />
       <RepoTabs
         value={store.commitFilters.repoId}
