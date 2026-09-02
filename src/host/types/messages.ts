@@ -110,6 +110,7 @@ export type CommitToHostMsg =
   | { type: 'OPEN_PROFILES_MENU' }
   | { type: 'COMMIT_PUSH_REPO'; requestId: string; repoId: string; remote: string; force?: boolean }
   | { type: 'COMMIT_SYNC_AND_PUSH_REPO'; requestId: string; repoId: string; rebase: boolean }
+  | { type: 'COMMIT_SYNC_REPOS'; requestId: string; repoIds: string[] }
   | { type: 'COMMIT_DISCARD_FILE'; requestId: string; repoId: string; path: string }
   | { type: 'COMMIT_DISCARD_FILES'; requestId: string; files: Array<{ repoId: string; path: string }> }
   | { type: 'COMMIT_DISCARD_ALL'; requestId: string; repoId: string }

@@ -1153,6 +1153,46 @@ export class GitService {
     await this.git.remote(['set-url', name, url]);
   }
 
+  /**
+   * Upstream tracking state read straight from git (VS Code's cached HEAD can lag), plus
+   * whether a divergence looks like rewritten history rather than genuine new remote work.
+   */
+  async getUpstreamState(): Promise<{ upstream?: string; ahead: number; behind: number; rewritten: boolean }> {
+    const upstream = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
+    if (!upstream) return { ahead: 0, behind: 0, rewritten: false };
+    const [aheadRaw, behindRaw] = await Promise.all([
+      this.git.raw(['rev-list', '--count', `${upstream}..HEAD`]).catch(() => '0'),
+      this.git.raw(['rev-list', '--count', `HEAD..${upstream}`]).catch(() => '0'),
+    ]);
+    const ahead = parseInt(aheadRaw.trim(), 10) || 0;
+    const behind = parseInt(behindRaw.trim(), 10) || 0;
+    const rewritten = ahead > 0 && behind > 0 && await this.isDivergenceRewrite(upstream);
+    return { upstream, ahead, behind, rewritten };
+  }
+
+  /**
+   * True when the commits only the upstream has look like older versions of our own —
+   * the signature of an amend, rebase or squash rather than someone else's new commits.
+   * Checked two ways: patch equivalence (`git cherry` marks those with "-"), which catches
+   * message-only rewrites, and matching subjects, which catches rewrites that changed content.
+   */
+  private async isDivergenceRewrite(upstream: string): Promise<boolean> {
+    try {
+      const [cherryRaw, oursRaw, theirsRaw] = await Promise.all([
+        this.git.raw(['cherry', 'HEAD', upstream]).catch(() => ''),
+        this.git.raw(['log', '--format=%s', `${upstream}..HEAD`]).catch(() => ''),
+        this.git.raw(['log', '--format=%s', `HEAD..${upstream}`]).catch(() => ''),
+      ]);
+      const cherry = cherryRaw.trim().split('\n').map(l => l.trim()).filter(Boolean);
+      if (cherry.length > 0 && cherry.every(l => l.startsWith('-'))) return true;
+      const ours = new Set(oursRaw.split('\n').map(l => l.trim()).filter(Boolean));
+      const theirs = theirsRaw.split('\n').map(l => l.trim()).filter(Boolean);
+      return theirs.length > 0 && theirs.every(subject => ours.has(subject));
+    } catch {
+      return false;
+    }
+  }
+
   async push(force = false, remote?: string): Promise<void> {
     const vsRepo = this.vsRepo();
     // Only use VS Code API when it actually knows the remotes for this repo.

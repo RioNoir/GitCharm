@@ -2,10 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { RepoMeta, RepoStatus } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
+import { computeSyncState, hasWorkingChanges, type SyncAction } from '../syncState';
 
 interface Props {
   message: string;
   repoStatuses: RepoStatus[];
+  /**
+   * Every repo visible in the panel, including ones with no changes — the commit tab can
+   * hide unchanged repos, but publish/sync still has to work for them.
+   */
+  syncRepoStatuses?: RepoStatus[];
   repoMetas: RepoMeta[];
   amendFlags: Record<string, boolean>;
   loading: boolean;
@@ -23,6 +29,10 @@ interface Props {
   onStash: () => void;
   onPush: (repoId: string) => void;
   onPushAll: () => void;
+  onSyncAction: (action: SyncAction, repoIds: string[]) => void;
+  onPullRepos: (repoIds: string[]) => void;
+  onPushRepos: (repoIds: string[]) => void;
+  onForcePushRepos: (repoIds: string[]) => void;
   aiEnabled: boolean;
   onAutopilot: () => void;
   onAutopilotContextMenu: (e: React.MouseEvent) => void;
@@ -35,7 +45,7 @@ interface DropdownButtonItem { icon: string; label: string; onSelect: () => void
 interface DropdownButtonProps {
   enabled: boolean;
   icon: string;
-  label: string;
+  label: React.ReactNode;
   title?: string;
   disabledTitle?: string;
   variant: 'primary' | 'secondary';
@@ -106,7 +116,7 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
         <button
           style={{ ...childStyle, flex: fullWidth ? 1 : undefined, gap: '6px', padding: '5px 12px', backgroundColor: hoverMain && enabled ? bgHover : bg }}
           disabled={!enabled}
-          title={enabled ? (title ?? label) : (disabledTitle ?? '')}
+          title={enabled ? (title ?? (typeof label === 'string' ? label : undefined)) : (disabledTitle ?? '')}
           onClick={() => { if (enabled) onMainClick(); }}
           onMouseEnter={() => setHoverMain(true)}
           onMouseLeave={() => setHoverMain(false)}
@@ -114,19 +124,21 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
           <Codicon name={icon} style={{ fontSize: '14px', flexShrink: 0 }} />
           <span>{label}</span>
         </button>
-        <div style={{ width: '1px', alignSelf: 'stretch', padding: '4px 0', flexShrink: 0, display: 'flex', backgroundColor: 'inherit' }}>
-          <div style={{ flex: 1, backgroundColor: variant === 'primary' ? 'var(--vscode-button-foreground)' : 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))', opacity: 0.3 }} />
-        </div>
-        <button
-          style={{ ...childStyle, padding: '5px 7px', backgroundColor: hoverChevron && enabled ? bgHover : bg }}
-          disabled={!enabled}
-          title="More Actions..."
-          onClick={() => { if (enabled) setOpen(o => !o); }}
-          onMouseEnter={() => setHoverChevron(true)}
-          onMouseLeave={() => setHoverChevron(false)}
-        >
-          <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
-        </button>
+        {items.length > 0 && (<>
+          <div style={{ width: '1px', alignSelf: 'stretch', padding: '4px 0', flexShrink: 0, display: 'flex', backgroundColor: 'inherit' }}>
+            <div style={{ flex: 1, backgroundColor: variant === 'primary' ? 'var(--vscode-button-foreground)' : 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))', opacity: 0.3 }} />
+          </div>
+          <button
+            style={{ ...childStyle, padding: '5px 7px', backgroundColor: hoverChevron && enabled ? bgHover : bg }}
+            disabled={!enabled}
+            title="More Actions..."
+            onClick={() => { if (enabled) setOpen(o => !o); }}
+            onMouseEnter={() => setHoverChevron(true)}
+            onMouseLeave={() => setHoverChevron(false)}
+          >
+            <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
+          </button>
+        </>)}
       </div>
       {open && (
         <div style={{
@@ -161,9 +173,34 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
   );
 }
 
+function syncTitle(action: SyncAction, ahead: number, behind: number): string {
+  if (action === 'publish') return 'Push this branch to the remote and start tracking it';
+  const parts: string[] = [];
+  if (behind > 0) parts.push(`pull ${behind} commit${behind === 1 ? '' : 's'}`);
+  if (ahead > 0) parts.push(`push ${ahead} commit${ahead === 1 ? '' : 's'}`);
+  return `Sync Changes — ${parts.join(' and ')}`;
+}
+
+function syncDropdownItems(
+  action: SyncAction,
+  repoIds: string[],
+  onPullRepos: (repoIds: string[]) => void,
+  onPushRepos: (repoIds: string[]) => void,
+  onForcePushRepos: (repoIds: string[]) => void,
+): DropdownButtonItem[] {
+  // Publishing has no alternative worth offering — the branch is not on the remote yet.
+  if (action === 'publish' || action === 'none') return [];
+  const pull: DropdownButtonItem = { icon: 'arrow-down', label: 'Pull', onSelect: () => onPullRepos(repoIds) };
+  const push: DropdownButtonItem = { icon: 'arrow-up', label: 'Push', onSelect: () => onPushRepos(repoIds) };
+  const forcePush: DropdownButtonItem = { icon: 'repo-force-push', label: 'Force Push', onSelect: () => onForcePushRepos(repoIds) };
+  if (action === 'pull') return [pull, push, forcePush];
+  return [push, pull, forcePush];
+}
+
 export function UnifiedCommitForm({
-  message, repoStatuses, repoMetas, amendFlags,
+  message, repoStatuses, syncRepoStatuses, repoMetas, amendFlags,
   loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
+  onSyncAction, onPullRepos, onPushRepos, onForcePushRepos,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
   activeProfile, onOpenProfiles,
 }: Props) {
@@ -180,6 +217,12 @@ export function UnifiedCommitForm({
 
   const canCommit = message.trim().length > 0 && commitTargets.length > 0 && !loading;
   const multiRepo = repoStatuses.length > 1;
+
+  // With nothing to commit the primary button turns into the remote action the branch
+  // actually needs, so publishing or syncing no longer means switching to the Push tab.
+  const syncRepos = syncRepoStatuses ?? repoStatuses;
+  const sync = computeSyncState(syncRepos);
+  const showSync = !hasWorkingChanges(syncRepos) && sync.action !== 'none' && !loading;
 
   const amendTarget = commitTargets.length === 1 ? commitTargets[0] : null;
   const showAmend = amendTarget !== null && (amendTarget.branch.aheadBehind?.ahead ?? 0) > 0;
@@ -415,6 +458,33 @@ export function UnifiedCommitForm({
         </div>
 
         <div style={styles.rightActions}>
+          {showSync ? (
+            <DropdownButton
+              variant="primary"
+              fullWidth
+              dropdownAlign="right"
+              enabled
+              icon={sync.icon}
+              label={
+                <span style={styles.syncLabel}>
+                  {sync.label}
+                  {sync.behind > 0 && (
+                    <span style={styles.syncCount}>
+                      {sync.behind}<Codicon name="arrow-down" style={styles.syncArrow} />
+                    </span>
+                  )}
+                  {sync.ahead > 0 && (
+                    <span style={styles.syncCount}>
+                      {sync.ahead}<Codicon name="arrow-up" style={styles.syncArrow} />
+                    </span>
+                  )}
+                </span>
+              }
+              title={syncTitle(sync.action, sync.ahead, sync.behind)}
+              items={syncDropdownItems(sync.action, sync.repoIds, onPullRepos, onPushRepos, onForcePushRepos)}
+              onMainClick={() => onSyncAction(sync.action, sync.repoIds)}
+            />
+          ) : (
           <DropdownButton
             variant="primary"
             fullWidth
@@ -436,6 +506,7 @@ export function UnifiedCommitForm({
             }
             onMainClick={defaultCommitAction === 'commitAndPush' ? onCommitAndPush : onCommit}
           />
+          )}
         </div>
       </div>
 
@@ -589,6 +660,20 @@ const styles = {
   rightActions: {
     flex: 1,
     minWidth: 0,
+  } as React.CSSProperties,
+  syncLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+  } as React.CSSProperties,
+  syncCount: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '1px',
+    fontVariantNumeric: 'tabular-nums',
+  } as React.CSSProperties,
+  syncArrow: {
+    fontSize: '11px',
   } as React.CSSProperties,
   stashBtn: {
     display: 'flex',

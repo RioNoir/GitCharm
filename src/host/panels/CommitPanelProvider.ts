@@ -21,10 +21,46 @@ import { pickRefQuickPick } from '../utils/refPicker';
 import type { GitProfileService } from '../git/GitProfileService';
 import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
-import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
+import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
 import type { ViewAndSortSettings } from '../types/settings';
+
+type DivergedStrategy = 'merge' | 'rebase' | 'force';
+
+/**
+ * Asks — in the command bar — how to reconcile branches that have diverged from their
+ * upstream. When the divergence looks like rewritten history (amend, rebase, squash) the
+ * force option leads, since that is almost always what the user meant to do.
+ */
+async function promptDivergedStrategy(repoNames: string[], rewritten: boolean): Promise<DivergedStrategy | undefined> {
+  const merge = {
+    label: '$(git-merge) Pull, then Push',
+    description: 'Merge the incoming commits into your branch',
+    strategy: 'merge' as const,
+  };
+  const rebase = {
+    label: '$(repo-forked) Pull (Rebase), then Push',
+    description: 'Replay your commits on top of the incoming ones',
+    strategy: 'rebase' as const,
+  };
+  const force = {
+    label: '$(repo-force-push) Force Push',
+    description: 'Overwrite the remote branch with your local history (--force-with-lease)',
+    strategy: 'force' as const,
+  };
+  const names = repoNames.join(', ');
+  const pick = await vscode.window.showQuickPick(
+    rewritten ? [force, rebase, merge] : [merge, rebase, force],
+    {
+      title: rewritten
+        ? `${names}: local history was rewritten and no longer matches the remote`
+        : `${names}: your branch and the remote have both moved on`,
+      placeHolder: 'Choose how to reconcile before syncing',
+    }
+  );
+  return pick?.strategy;
+}
 
 export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
@@ -809,6 +845,94 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             }
           }
         );
+        break;
+      }
+
+      case 'COMMIT_SYNC_REPOS': {
+        const metas = this.manager.getRepoMetas();
+        const nameOf = (repoId: string) => metas.find(m => m.id === repoId)?.name ?? repoId;
+        const targets = msg.repoIds
+          .map(repoId => ({ repoId, repo: this.manager.getRepo(repoId) }))
+          .filter((t): t is { repoId: string; repo: NonNullable<typeof t.repo> } => !!t.repo);
+        if (targets.length === 0) {
+          logWarn('sync', 'Repo not found');
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' });
+          break;
+        }
+
+        const states = await Promise.all(targets.map(async t => ({ ...t, state: await t.repo.getUpstreamState() })));
+        const diverged = states.filter(s => s.state.ahead > 0 && s.state.behind > 0);
+
+        // A diverged branch can't be reconciled without the user's call — merge, rebase, or
+        // overwrite the remote. Ask once for the whole batch, up in the command bar.
+        let strategy: DivergedStrategy | undefined;
+        if (diverged.length > 0) {
+          strategy = await promptDivergedStrategy(
+            diverged.map(d => nameOf(d.repoId)),
+            diverged.some(d => d.state.rewritten),
+          );
+          if (!strategy) {
+            this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+            break;
+          }
+        }
+
+        const errors: string[] = [];
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: targets.length === 1 ? 'Syncing' : 'Syncing repositories', cancellable: false },
+          async () => {
+            for (const { repoId, repo, state } of states) {
+              const label = nameOf(repoId);
+              try {
+                if (!state.upstream) {
+                  // No upstream yet — push sets it up (publish).
+                  await repo.push();
+                } else if (state.ahead > 0 && state.behind > 0) {
+                  if (strategy === 'force') {
+                    await repo.push(true);
+                  } else {
+                    await (strategy === 'rebase' ? repo.pullRebase() : repo.pull());
+                    await repo.push();
+                  }
+                } else if (state.behind > 0) {
+                  await repo.pull();
+                } else if (state.ahead > 0) {
+                  try {
+                    await repo.push();
+                  } catch (e: unknown) {
+                    // The remote moved between our status read and the push — same choice as above.
+                    if (!isPushRejected(e)) throw e;
+                    logWarn('sync', `${label}: push rejected — asking how to reconcile`);
+                    const fallback = await promptDivergedStrategy([label], false);
+                    if (!fallback) { errors.push(`${label}: Cancelled`); continue; }
+                    if (fallback === 'force') {
+                      await repo.push(true);
+                    } else {
+                      await (fallback === 'rebase' ? repo.pullRebase() : repo.pull());
+                      await repo.push();
+                    }
+                  }
+                }
+                logInfo('sync', `Synced ${repoId}`);
+              } catch (e: unknown) {
+                logError(`sync:${repoId}`, formatGitError(e), getRawErrorDetail(e));
+                errors.push(`${label}: ${formatGitError(e)}`);
+              }
+            }
+          }
+        );
+
+        if (errors.length > 0) {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n') });
+          void vscode.window.showWarningMessage(`Sync failed — ${errors.join('; ')}`, 'Show Log').then(choice => {
+            if (choice === 'Show Log') showLogChannel();
+          });
+        } else {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+        }
+        this.logProvider?.refresh();
+        const syncStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: syncStatus });
         break;
       }
 

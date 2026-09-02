@@ -81,6 +81,22 @@ export function formatGitError(e: unknown, maxLines = 3): string {
   return capitalizeFirst(String(e));
 }
 
+/**
+ * True when a push failed because the remote has commits we don't have — the case where
+ * the user has to choose between pulling first and overwriting the remote branch.
+ */
+export function isPushRejected(e: unknown): boolean {
+  if (!(e instanceof Error) && typeof e !== 'object') return false;
+  const err = e as { gitErrorCode?: string; stderr?: string; stdout?: string; message?: string };
+  const code = err.gitErrorCode as GitErrorCodes | undefined;
+  if (code === GitErrorCodes.PushRejected
+    || code === GitErrorCodes.ForcePushWithLeaseRejected
+    || code === GitErrorCodes.ForcePushWithLeaseIfIncludesRejected) return true;
+  // simple-git doesn't set gitErrorCode — fall back to git's own wording.
+  const text = stripAnsi([err.stderr, err.stdout, err.message].filter(Boolean).join('\n'));
+  return /\(non-fast-forward\)|\(fetch first\)|\(stale info\)|failed to push some refs/i.test(text);
+}
+
 /** Full, untruncated error detail (stderr/stdout/message) for the output log. */
 export function getRawErrorDetail(e: unknown): string | undefined {
   if (!(e instanceof Error) && typeof e !== 'object') return undefined;
