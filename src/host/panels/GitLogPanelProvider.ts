@@ -12,6 +12,13 @@ import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import {
+  getGitLogDefaultLayout,
+  getGitLogDefaultLocation,
+  setGitLogDefault,
+  type GitLogLayout,
+  type GitLogLocation,
+} from '../settings/GitLogLocationSettings';
 
 function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
   if (!current.detachedTag && !current.detachedHash) return branches; // normal branch — already in list
@@ -91,6 +98,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private pendingScrollRepoId: string | null = null;
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
+  // Scroll/filter intents queued while a freshly opened undocked panel boots up.
+  private pendingUndocked: {
+    scroll?: { hash: string; repoId: string };
+    filter?: { repoId: string; branch: string | null };
+  } | null = null;
 
   setCommitPanel(provider: CommitPanelProvider): void {
     this.commitPanel = provider;
@@ -114,6 +126,69 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     );
     if (!pick) return;
     this.undockedPanel.open(pick.value, pick.showCommit);
+  }
+
+  /**
+   * Open the Git Log where the persisted default says — bottom panel, editor tab
+   * or a separate window. Used by `gitcharm.openLog` (command + keybinding).
+   */
+  openPreferred(): void {
+    this.revealPreferred();
+  }
+
+  /**
+   * Reveal the Git Log on whichever surface the default location points at.
+   * `wasOpen` tells callers whether the surface was already live, so they know
+   * if a follow-up message can be posted right away or has to be queued until
+   * the webview has booted and asked for its first batch of commits.
+   */
+  private revealPreferred(): { target: 'sidebar' | 'undocked'; wasOpen: boolean } {
+    const location = getGitLogDefaultLocation();
+    if (location === 'panel' || !this.undockedPanel) {
+      const wasOpen = this.view?.visible === true;
+      this.focus();
+      return { target: 'sidebar', wasOpen };
+    }
+    const wasOpen = this.undockedPanel.isOpen();
+    this.undockedPanel.open(location, getGitLogDefaultLayout() === 'logAndCommit');
+    return { target: 'undocked', wasOpen };
+  }
+
+  /** Ask for — and persist — the default Git Log location, then apply it right away. */
+  async triggerDefaultLocationPick(): Promise<void> {
+    type Item = vscode.QuickPickItem & { location: GitLogLocation; layout: GitLogLayout };
+    const currentLocation = getGitLogDefaultLocation();
+    const currentLayout = getGitLogDefaultLayout();
+
+    const items: Item[] = [
+      { label: '$(layout-panel) Bottom Panel', location: 'panel', layout: currentLayout },
+      { label: '$(editor-layout) Editor Tab (Log & Commit)', location: 'editorTab', layout: 'logAndCommit' },
+      { label: '$(editor-layout) Editor Tab (Only Log)', location: 'editorTab', layout: 'logOnly' },
+      { label: '$(empty-window) New Window (Log & Commit)', location: 'newWindow', layout: 'logAndCommit' },
+      { label: '$(empty-window) New Window (Only Log)', location: 'newWindow', layout: 'logOnly' },
+    ];
+    for (const item of items) {
+      const isCurrent = item.location === currentLocation
+        && (item.location === 'panel' || item.layout === currentLayout);
+      if (isCurrent) item.description = 'current default';
+    }
+
+    const pick = await vscode.window.showQuickPick<Item>(items, {
+      title: 'Default GitCharm Log Location',
+      placeHolder: 'Where should the Git Log open from now on?',
+    });
+    if (!pick) return;
+
+    await setGitLogDefault(pick.location, pick.layout);
+
+    if (pick.location === 'panel') {
+      this.undockedPanel?.close();
+      // The view's `when` clause has just flipped back on — give the workbench a
+      // tick to re-register the panel container before focusing it.
+      setTimeout(() => this.focus(), 100);
+    } else {
+      this.undockedPanel?.open(pick.location, pick.layout === 'logAndCommit');
+    }
   }
 
   handleUndockedMessage(msg: LogToHostMsg, _provider: UndockedPanelProvider): void {
@@ -243,28 +318,47 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     vscode.commands.executeCommand(`${GitLogPanelProvider.viewType}.focus`);
   }
 
-  /** Focus the panel and scroll to a specific commit. */
+  /** Reveal the Git Log (wherever it lives) and scroll to a specific commit. */
   selectCommit(hash: string, repoId: string): void {
+    const { target, wasOpen } = this.revealPreferred();
+
+    if (target === 'undocked') {
+      if (wasOpen) {
+        // postToLog, not post(): the timeout fires after activeReplyTarget resets.
+        setTimeout(() => this.undockedPanel?.postToLog({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
+      } else {
+        this.pendingUndocked = { ...this.pendingUndocked, scroll: { hash, repoId } };
+      }
+      return;
+    }
+
+    if (wasOpen) {
+      setTimeout(() => this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
+      return;
+    }
     this.pendingScrollHash = hash;
     this.pendingScrollRepoId = repoId;
-    this.focus();
-    if (this.view?.visible) {
-      this.pendingScrollHash = null;
-      this.pendingScrollRepoId = null;
-      setTimeout(() => this.post({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId }), 150);
-    }
   }
 
-  /** Focus the panel and filter the log to a specific repository (and optionally branch). */
+  /** Reveal the Git Log and filter it to a specific repository (and optionally branch). */
   focusRepo(repoId: string, branch?: string): void {
+    const { target, wasOpen } = this.revealPreferred();
+
+    if (target === 'undocked') {
+      if (wasOpen) {
+        setTimeout(() => this.undockedPanel?.postToLog({ type: 'LOG_FILTER_BY_REPO', repoId, branch }), 150);
+      } else {
+        this.pendingUndocked = { ...this.pendingUndocked, filter: { repoId, branch: branch ?? null } };
+      }
+      return;
+    }
+
+    if (wasOpen) {
+      this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
+      return;
+    }
     this.pendingFilterRepoId = repoId;
     this.pendingFilterBranch = branch ?? null;
-    this.focus();
-    if (this.view?.visible) {
-      this.post({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
-      this.pendingFilterRepoId = null;
-      this.pendingFilterBranch = null;
-    }
   }
 
   /** Trigger a full log refresh — call this after any operation that creates new commits. */
@@ -349,9 +443,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const limit = Math.min(msg.limit, maxCommits);
 
         const repos = this.getVisibleRepos();
+        // Resolve the icon theme against the webview that asked, so the undocked
+        // panel still gets file icons when the bottom-panel view is hidden.
+        const iconWebview = this.activeReplyTarget === 'undocked'
+          ? this.undockedPanel?.webview
+          : this.view?.webview;
         const [branches, iconTheme] = await Promise.all([
           this.getFilteredBranches(),
-          this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
+          iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
 
@@ -375,6 +474,22 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           filterDateTo: msg.filterDateTo,
         });
         this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast: commits.length < limit, batchIndex: 0, requestId: msg.requestId });
+
+        // A freshly opened undocked panel is only ready once it has asked for commits.
+        if (msg.skip === 0 && this.activeReplyTarget === 'undocked' && this.pendingUndocked) {
+          const queued = this.pendingUndocked;
+          this.pendingUndocked = null;
+          setTimeout(() => {
+            if (queued.filter) {
+              const { repoId, branch } = queued.filter;
+              this.undockedPanel?.postToLog({ type: 'LOG_FILTER_BY_REPO', repoId, branch });
+            }
+            if (queued.scroll) {
+              const { hash, repoId } = queued.scroll;
+              this.undockedPanel?.postToLog({ type: 'LOG_SCROLL_TO_COMMIT', hash, repoId });
+            }
+          }, 150);
+        }
 
         // Send stashes only on first load (not on pagination)
         if (msg.skip === 0) {
@@ -1743,6 +1858,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } else {
           this.undockedPanel.open(msg.target);
         }
+        break;
+      }
+
+      case 'LOG_SET_DEFAULT_LOCATION': {
+        await this.triggerDefaultLocationPick();
         break;
       }
     }

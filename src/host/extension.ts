@@ -4,6 +4,7 @@ import { CommitPanelProvider } from './panels/CommitPanelProvider';
 import { GitLogPanelProvider } from './panels/GitLogPanelProvider';
 import { MergeEditorProvider } from './panels/MergeEditorProvider';
 import { UndockedPanelProvider } from './panels/UndockedPanelProvider';
+import { syncGitLogLocationContext, watchGitLogLocationContext } from './settings/GitLogLocationSettings';
 import { BranchStatusBar } from './ui/BranchStatusBar';
 import { BadgeController } from './ui/BadgeController';
 import { registerCommands } from './commands/registerCommands';
@@ -186,6 +187,10 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = initLogger(context);
+  // Set before any view renders: hides the bottom-panel Git Log view while the
+  // Log's default home is an editor tab or a separate window, so there is only
+  // ever one Log surface.
+  syncGitLogLocationContext();
   const manager = new WorkspaceGitManager(context);
 
   // DEV ONLY: uncomment to reset the quickpick flag
@@ -231,6 +236,11 @@ export function activate(context: vscode.ExtensionContext): void {
   commitPanel.setUndockedPanel(undockedPanel);
   logPanel.setCommitPanel(commitPanel);
   logPanel.setUndockedPanel(undockedPanel);
+  // Changing the setting from the Settings UI: switching back to the bottom
+  // panel should tear down the undocked surface, same as the QuickPick does.
+  context.subscriptions.push(
+    watchGitLogLocationContext(undocked => { if (!undocked) undockedPanel.close(); }),
+  );
 
   // Apply saved hidden repos to badge immediately (before webview opens)
   const savedHidden = commitPanel.getHiddenRepoIds();

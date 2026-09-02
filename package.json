@@ -90,7 +90,8 @@
           "type": "webview",
           "id": "gitcharm.gitLog",
           "name": "Git Log",
-          "retainContextWhenHidden": true
+          "retainContextWhenHidden": true,
+          "when": "!gitcharm.gitLogDefaultUndocked"
         }
       ]
     },
@@ -340,6 +341,12 @@
         "title": "Undock",
         "category": "GitCharm",
         "icon": "$(multiple-windows)"
+      },
+      {
+        "command": "gitcharm.setGitLogDefaultLocation",
+        "title": "Set Default Git Log Location",
+        "category": "GitCharm",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "gitcharm.showFileHistory",
@@ -631,6 +638,9 @@
           "command": "gitcharm.undock"
         },
         {
+          "command": "gitcharm.setGitLogDefaultLocation"
+        },
+        {
           "command": "gitcharm.submodule.init"
         },
         {
@@ -867,6 +877,38 @@
             "type": "boolean",
             "default": true,
             "description": "Enable inline Git ghost text in the editor."
+          },
+          "gitcharm.gitLogDefaultLocation": {
+            "order": 12,
+            "type": "string",
+            "enum": [
+              "panel",
+              "editorTab",
+              "newWindow"
+            ],
+            "enumDescriptions": [
+              "Open the GitCharm Log in the bottom panel, next to the terminal",
+              "Open the GitCharm Log as an editor tab",
+              "Open the GitCharm Log in a separate window"
+            ],
+            "default": "panel",
+            "description": "Where the Git Log opens by default: bottom panel, editor tab, or a new window.",
+            "scope": "window"
+          },
+          "gitcharm.gitLogDefaultLayout": {
+            "order": 13,
+            "type": "string",
+            "enum": [
+              "logAndCommit",
+              "logOnly"
+            ],
+            "enumDescriptions": [
+              "Show the Git Log and the Commit panel side by side",
+              "Show only the Git Log"
+            ],
+            "default": "logAndCommit",
+            "description": "What the Git Log shows when opened outside the bottom panel.",
+            "scope": "window"
           },
           "gitcharm.changesViewMode": {
             "order": 10,

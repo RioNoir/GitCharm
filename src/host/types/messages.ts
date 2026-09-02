@@ -298,6 +298,7 @@ export type LogToHostMsg =
   | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_UNDOCK'; target: 'editorTab' | 'newWindow' | 'pick' }
+  | { type: 'LOG_SET_DEFAULT_LOCATION' }
   | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }
   | { type: 'LOG_COMPARE_FILE_WITH'; repoId: string; hash: string; filePath: string };

@@ -120,6 +120,16 @@ export class UndockedPanelProvider implements vscode.Disposable {
     return this.panel !== null;
   }
 
+  /** The undocked webview, for callers that need to build webview resource URIs. */
+  get webview(): vscode.Webview | undefined {
+    return this.panel?.webview;
+  }
+
+  /** Close the undocked panel, if open. onDidDispose resets the internal state. */
+  close(): void {
+    this.panel?.dispose();
+  }
+
   dispose(): void {
     this.panel?.dispose();
     this.disposables.forEach(d => d.dispose());
