@@ -33,6 +33,7 @@ interface Props {
   onScrollTargetHandled?: () => void;
   aiEnabled?: boolean;
   themeVersion?: number;
+  activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 }
 
 interface RepoBlock {
@@ -141,7 +142,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled }: Props) {
+export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -615,8 +616,8 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
               )}
               <div style={styles.meta}>
-                <AuthorAvatar authorName={commit.isStash ? 'You' : commit.authorName} authorEmail={commit.authorEmail} size={20} isYou={commit.isStash} />
-                {containerWidth > 500 && <span style={styles.author}>{commit.isStash ? 'You' : formatAuthorName(commit.authorName)}</span>}
+                <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
+                {containerWidth > 500 && <span style={styles.author}>{commit.isStash ? (activeProfile?.gitName ?? 'You') : formatAuthorName(commit.authorName)}</span>}
               </div>
               <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
             </div>
@@ -634,6 +635,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
           popoverHoveredRef={popoverHoveredRef}
           closePopoverTimerRef={closePopoverTimerRef}
           refColors={refColors}
+          activeProfile={activeProfile}
         />
       )}
 
@@ -680,7 +682,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
   );
 }
 
-function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHoveredRef, closePopoverTimerRef, refColors }: {
+function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHoveredRef, closePopoverTimerRef, refColors, activeProfile }: {
   commit: LaidOutCommit;
   rowTop: number;
   listRect: DOMRect;
@@ -689,6 +691,7 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
   popoverHoveredRef: React.MutableRefObject<boolean>;
   closePopoverTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
   refColors?: Map<string, string>;
+  activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<{ files: number; added: number; removed: number } | null>(null);
@@ -772,8 +775,8 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
 
       {/* Author + date */}
       <div style={popoverStyles.row}>
-        <AuthorAvatar authorName={commit.isStash ? 'You' : commit.authorName} authorEmail={commit.authorEmail} size={16} isYou={commit.isStash} />
-        <span style={popoverStyles.author}>{commit.isStash ? 'You' : commit.authorName}</span>
+        <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={16} isYou={commit.isStash && !activeProfile} />
+        <span style={popoverStyles.author}>{commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName}</span>
         <span style={popoverStyles.dot}>·</span>
         <span style={popoverStyles.date}>{formatDateTime(commit.authorDate)}</span>
       </div>

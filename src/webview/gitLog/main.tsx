@@ -119,7 +119,7 @@ function App() {
 
       switch (msg.type) {
         case 'LOG_INIT_DATA':
-          store.setRepos(msg.repos, msg.hasWorkspaceFolder, msg.aiEnabled);
+          store.setRepos(msg.repos, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
           store.setBranches(msg.branches);
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           break;
@@ -526,6 +526,7 @@ function App() {
             onScrollTargetHandled={() => store.setPendingScrollTarget(null)}
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
+            activeProfile={store.activeProfile}
           />
         </div>
 
@@ -547,6 +548,7 @@ function App() {
               onClose={() => setDetailCollapsed(true)}
               refColors={graphLayout.refColors}
               themeVersion={themeVersion}
+              activeProfile={store.activeProfile}
             />
           </div>
         )}

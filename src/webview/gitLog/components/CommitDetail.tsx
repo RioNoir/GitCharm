@@ -139,6 +139,7 @@ interface Props {
   onClose?: () => void;
   refColors?: Map<string, string>;
   themeVersion?: number;
+  activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -343,7 +344,7 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function CommitDetail({ commit, range, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose, refColors }: Props) {
+export function CommitDetail({ commit, range, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose, refColors, activeProfile }: Props) {
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree');
   const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
   const [mergeCommits, setMergeCommits] = useState<MergeParentCommit[]>([]);
@@ -627,9 +628,15 @@ export function CommitDetail({ commit, range, files, selectedFile, loadingFiles,
         {commit.isStash ? (
           <>
             <div style={styles.authorRow}>
-              <AuthorAvatar authorName="You" authorEmail="" size={32} isYou />
+              <AuthorAvatar authorName={activeProfile?.gitName ?? 'You'} authorEmail={activeProfile?.gitEmail ?? ''} size={32} isYou={!activeProfile} />
               <div style={styles.meta}>
-                <span>You</span>
+                <span>{activeProfile?.gitName ?? 'You'}</span>
+                {activeProfile?.gitEmail && (
+                  <>
+                    <span style={styles.dot}>·</span>
+                    <span>{activeProfile.gitEmail}</span>
+                  </>
+                )}
                 <span style={styles.dot}>·</span>
                 <span>{formatDateTime(commit.authorDate)}</span>
               </div>

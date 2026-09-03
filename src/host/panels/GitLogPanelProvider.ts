@@ -7,6 +7,7 @@ import type { BranchInfo } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
+import type { GitProfileService } from '../git/GitProfileService';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
@@ -95,6 +96,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private pendingFilterBranch: string | null = null;
   private pendingScrollHash: string | null = null;
   private pendingScrollRepoId: string | null = null;
+  private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
   // Scroll/filter intents queued while a freshly opened undocked panel boots up.
@@ -200,6 +202,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private async pushInitData(): Promise<void> {
     const repos = this.getVisibleRepos();
     const branches = await this.getFilteredBranches();
+    await this.refreshActiveProfile();
     this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
   }
 
@@ -210,7 +213,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly manager: WorkspaceGitManager
+    private readonly manager: WorkspaceGitManager,
+    private readonly profileService?: GitProfileService
   ) {
     // The graph refresh goes out immediately: the manager has already debounced
     // the underlying file-event burst, so delaying it again only adds lag. The
@@ -229,6 +233,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       this.manager.onBranchChange(onGraphOrBranchChange),
       this.manager.onReposChange(onGraphOrBranchChange)
     );
+
+    this.profileService?.onProfileChange(async () => {
+      await this.refreshActiveProfile();
+      this.broadcast({ type: 'LOG_REFRESH' });
+      void this.pushInitData();
+    });
+  }
+
+  private async refreshActiveProfile(): Promise<void> {
+    if (!this.profileService) return;
+    const repos = this.manager.getRepoMetas();
+    const repoPath = repos.find(m => !m.isSubmodule)?.rootPath ?? repos[0]?.rootPath;
+    if (!repoPath) return;
+    const result = await this.profileService.getEffectiveProfile(repoPath);
+    if (!result) { this.cachedActiveProfile = undefined; return; }
+    const { profile } = result;
+    this.cachedActiveProfile = { name: profile.name, gitName: profile.gitName, gitEmail: profile.gitEmail, ...(profile.builtIn ? { builtIn: profile.builtIn } : {}) };
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -368,12 +389,17 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.broadcast({ type: 'LOG_REFRESH' });
   }
 
-  private post(msg: HostToLogMsg): void {
+  private enrichLogMsg(msg: HostToLogMsg): void {
     if (msg.type === 'LOG_INIT_DATA') {
       const m = msg as typeof msg & { hasWorkspaceFolder?: boolean; aiEnabled?: boolean };
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
+      if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
     }
+  }
+
+  private post(msg: HostToLogMsg): void {
+    this.enrichLogMsg(msg);
     if (this.activeReplyTarget === 'undocked') {
       this.undockedPanel?.postToLog(msg);
     } else {
@@ -383,11 +409,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   /** Broadcast a host-initiated message to both the sidebar and the undocked panel. */
   private broadcast(msg: HostToLogMsg): void {
-    if (msg.type === 'LOG_INIT_DATA') {
-      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean; aiEnabled?: boolean };
-      if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
-      if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
-    }
+    this.enrichLogMsg(msg);
     this.view?.webview.postMessage(msg);
     this.undockedPanel?.postToLog(msg);
   }
