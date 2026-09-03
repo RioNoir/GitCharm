@@ -46,6 +46,9 @@ interface RepoBlock {
 
 const REPO_LABEL_WIDTH = 6;
 const REPO_LABEL_WIDTH_EXPANDED = 110;
+/** Visual gap painted between repo blocks in multi-repo view. Purely cosmetic — an
+ * overlay drawn over the row boundary, not a real gap in row height/virtualization. */
+const BLOCK_GAP = 4;
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -386,10 +389,16 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
       <style>{BG_ANIM_STYLE}</style>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
-        {/* Repo label strips */}
-        {multiRepo && repoBlocks.map((block) => {
-          const topPx = block.startRow * ROW_HEIGHT;
-          const heightPx = block.rowCount * ROW_HEIGHT;
+        {/* Repo label strips — inset by BLOCK_GAP/2 top and bottom (except at the very
+            start/end of the list) so consecutive blocks don't touch, matching the pre-#41
+            gap. Rows themselves stay exactly ROW_HEIGHT; only this cosmetic strip shrinks,
+            so virtualization/anchor math is untouched. */}
+        {multiRepo && repoBlocks.map((block, i) => {
+          const hasGapBefore = i > 0;
+          const hasGapAfter = i < repoBlocks.length - 1;
+          const topPx = block.startRow * ROW_HEIGHT + (hasGapBefore ? BLOCK_GAP / 2 : 0);
+          const bottomPx = (block.startRow + block.rowCount) * ROW_HEIGHT - (hasGapAfter ? BLOCK_GAP / 2 : 0);
+          const heightPx = bottomPx - topPx;
           const expanded = expandedRepos.has(block.repoId);
           return (
             <div
