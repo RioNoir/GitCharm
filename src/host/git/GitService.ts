@@ -1241,26 +1241,33 @@ export class GitService {
     }
   }
 
-  async push(force = false, remote?: string): Promise<void> {
+  async push(force = false, remote?: string): Promise<string> {
     const vsRepo = this.vsRepo();
     // Only use VS Code API when it actually knows the remotes for this repo.
     // If remotes are empty VS Code would push to an unknown remote (exit 128).
     // Repos where VS Code lists no remotes are typically SSH-keyed or use a
     // system credential helper, so falling back to simple-git is safe there.
     if (vsRepo && vsRepo.state.remotes.length > 0) {
-      const branchName = vsRepo.state.HEAD?.name;
       const hasUpstream = !!vsRepo.state.HEAD?.upstream;
+      // Nothing ahead of upstream means a push would be a silent no-op — skip it
+      // so callers (e.g. the push-all notification) don't count it as pushed.
+      if (hasUpstream && !force && !vsRepo.state.HEAD?.ahead) return 'Nothing to push — skipped';
+      const branchName = vsRepo.state.HEAD?.name;
       const targetRemote = remote ?? vsRepo.state.HEAD?.upstream?.remote ?? vsRepo.state.remotes[0]?.name ?? 'origin';
       const forceMode = force ? ForcePushMode.ForceWithLease : undefined;
       // Let the original error (with its stderr/gitErrorCode intact) propagate as-is —
       // callers need the raw detail to show an accurate message (e.g. a failing hook's
       // real output), not a string pre-collapsed by formatGitError.
       await vsRepo.push(targetRemote, branchName, !hasUpstream, forceMode);
-      return;
+      return 'pushed';
     }
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
     const hasUpstream = !!tracking.trim();
     const branchName = (await this.git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+    if (hasUpstream && !force) {
+      const status = await this.git.status().catch(() => undefined);
+      if (status && !status.ahead) return 'Nothing to push — skipped';
+    }
     // Derive remote from tracking branch (e.g. "upstream/main" → "upstream"), else first available remote.
     const trackingRemote = tracking.trim().split('/')[0] || '';
     const firstRemote = (await this.getRemotes().catch(() => []))[0] ?? 'origin';
@@ -1270,6 +1277,7 @@ export class GitService {
     else if (remote) args.push(remote, branchName);
     if (force) args.push('--force-with-lease');
     await this.git.raw(args);
+    return 'pushed';
   }
 
   async pull(): Promise<string> {

@@ -993,8 +993,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const results: Array<{ repoId: string; ok: boolean; message: string }> = [];
     for (const r of repos) {
       try {
-        await r.push();
-        results.push({ repoId: r.repoId, ok: true, message: 'pushed' });
+        const message = await r.push();
+        results.push({ repoId: r.repoId, ok: true, message });
       } catch (e: unknown) {
         results.push({ repoId: r.repoId, ok: false, message: formatGitError(e) });
       }

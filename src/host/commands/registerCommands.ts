@@ -114,8 +114,11 @@ export function registerCommands(
           const results = await manager.pushAll();
           const failed = results.filter(r => !r.ok);
           const ok = results.filter(r => r.ok);
+          const pushed = ok.filter(r => r.message !== 'Nothing to push — skipped');
           if (failed.length === 0) {
-            const msg = `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} pushed.`;
+            const msg = pushed.length === 0
+              ? 'Nothing to push — all repositories up to date.'
+              : `${pushed.length} ${pushed.length === 1 ? 'repository' : 'repositories'} pushed.`;
             vscode.window.showInformationMessage(msg);
             logInfo('push', msg);
           } else {
@@ -123,7 +126,7 @@ export function registerCommands(
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            const msg = `${ok.length} pushed, ${failed.length} failed: ${failedDesc}`;
+            const msg = `${pushed.length} pushed, ${failed.length} failed: ${failedDesc}`;
             logWarn('push', msg);
             void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
               if (choice === 'Show Log') showLogChannel();
