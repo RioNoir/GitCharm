@@ -88,7 +88,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private view?: vscode.WebviewView;
   private disposables: vscode.Disposable[] = [];
   private readonly managerListeners: vscode.Disposable[] = [];
-  private refreshDebounce: ReturnType<typeof setTimeout> | null = null;
   private commitPanel?: CommitPanelProvider;
   private undockedPanel?: UndockedPanelProvider;
   private hiddenRepoIds: string[] = [];
@@ -197,35 +196,38 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.handleMessage(msg).finally(() => { this.activeReplyTarget = 'sidebar'; });
   }
 
+  /** Re-query repos and branches and push them to the webview. */
+  private async pushInitData(): Promise<void> {
+    const repos = this.getVisibleRepos();
+    const branches = await this.getFilteredBranches();
+    this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
+  }
+
   notifyHiddenReposChanged(hiddenRepoIds: string[]): void {
     this.hiddenRepoIds = hiddenRepoIds;
-    this.getFilteredBranches().then(branches => {
-      this.broadcast({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches });
-    });
+    void this.pushInitData();
   }
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly manager: WorkspaceGitManager
   ) {
+    // The graph refresh goes out immediately: the manager has already debounced
+    // the underlying file-event burst, so delaying it again only adds lag. The
+    // branch query runs in parallel rather than being awaited first, so a slow
+    // `git branch` can't hold up the commit list.
+    const onGraphOrBranchChange = () => {
+      this.broadcast({ type: 'LOG_REFRESH' });
+      void this.pushInitData();
+    };
+
     // Register manager listeners here so they fire even when the panel has never been opened.
     // this.post() silently drops messages when the webview is not yet resolved — that's fine,
     // because resolveWebviewView performs an explicit initial sync when the panel first opens.
     this.managerListeners.push(
-      this.manager.onBranchChange(async () => {
-        const repos = this.getVisibleRepos();
-        const branches = await this.getFilteredBranches();
-        this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
-        if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-        this.refreshDebounce = setTimeout(() => this.broadcast({ type: 'LOG_REFRESH' }), 300);
-      }),
-      this.manager.onReposChange(async () => {
-        const repos = this.getVisibleRepos();
-        const branches = await this.getFilteredBranches();
-        this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
-        if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-        this.refreshDebounce = setTimeout(() => this.broadcast({ type: 'LOG_REFRESH' }), 300);
-      })
+      this.manager.onGraphChange(onGraphOrBranchChange),
+      this.manager.onBranchChange(onGraphOrBranchChange),
+      this.manager.onReposChange(onGraphOrBranchChange)
     );
   }
 
@@ -2007,7 +2009,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   dispose(): void {
     this.managerListeners.forEach(d => d.dispose());
     this.disposables.forEach(d => d.dispose());
-    if (this.refreshDebounce) { clearTimeout(this.refreshDebounce); this.refreshDebounce = null; }
   }
 }
 

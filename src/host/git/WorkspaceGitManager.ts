@@ -9,6 +9,27 @@ import { PROJECT_COLORS } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
 
 const MAX_SUBMODULE_DEPTH = 5;
+/**
+ * Debounce for ref changes that affect the commit graph (HEAD, refs, reflog).
+ * Deliberately short: a single git operation writes a handful of these files
+ * within a few milliseconds, so this only needs to be long enough to collapse
+ * one operation's burst — not long enough to be felt as lag. This is the whole
+ * latency budget between a terminal `git commit` and the log view updating.
+ */
+const GRAPH_REFRESH_DEBOUNCE_MS = 120;
+/**
+ * Floor on the gap between two graph refreshes, so a run of closely spaced
+ * bursts (a rebase applying commits one at a time) doesn't trigger a `git log`
+ * per burst. Doesn't delay the first refresh after a quiet period.
+ */
+const GRAPH_REFRESH_MIN_INTERVAL_MS = 400;
+/**
+ * Ceiling on how long a pending refresh can be deferred by continuing events.
+ * A trailing debounce alone would never fire while ref writes keep arriving, so
+ * a long interactive rebase would leave the graph stale until it finished. This
+ * makes the view keep up with an operation in progress.
+ */
+const GRAPH_REFRESH_MAX_WAIT_MS = 1000;
 const DEFAULT_REPOSITORY_SCAN_MAX_DEPTH = 1;
 const DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS = ['node_modules'];
 
@@ -27,11 +48,15 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private globalListeners: vscode.Disposable[] = [];
   private statusListeners: StatusListener[] = [];
   private branchListeners: BranchListener[] = [];
+  private graphListeners: BranchListener[] = [];
   private reposListeners: BranchListener[] = [];
   private worktreeListeners: WorktreeListener[] = [];
   private refreshDebounce: NodeJS.Timeout | null = null;
   private refreshFollowUp: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
+  private graphDebounce: NodeJS.Timeout | null = null;
+  private lastGraphRefresh = 0;
+  private graphPendingSince = 0;
   /** Watchers for .git creation under workspace folders — rebuilt when folders/settings change. */
   private gitInitWatchers: vscode.Disposable[] = [];
   private prevHeads = new Map<string, string>();      // repoId → branch name
@@ -471,9 +496,78 @@ export class WorkspaceGitManager implements vscode.Disposable {
     }
   }
 
+  /**
+   * Resolve a repository's real git directory. Normally `<repo>/.git`, but for
+   * linked worktrees and submodules `.git` is a file containing a `gitdir:`
+   * pointer. Returns the git dir plus the common dir, which is where a linked
+   * worktree's shared refs actually live (its own git dir holds only HEAD and
+   * its reflog).
+   */
+  private resolveGitDirs(repoPath: string): { gitDir: string; commonDir: string } | null {
+    try {
+      const dotGit = path.join(repoPath, '.git');
+      const st = fs.statSync(dotGit);
+      let gitDir = dotGit;
+      if (st.isFile()) {
+        const match = fs.readFileSync(dotGit, 'utf8').trim().match(/^gitdir:\s*(.+)$/m);
+        if (!match) return null;
+        gitDir = path.resolve(repoPath, match[1].trim());
+      }
+      let commonDir = gitDir;
+      const commonDirFile = path.join(gitDir, 'commondir');
+      if (fs.existsSync(commonDirFile)) {
+        commonDir = path.resolve(gitDir, fs.readFileSync(commonDirFile, 'utf8').trim());
+      }
+      return { gitDir, commonDir };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Watch the ref files that determine what the commit graph shows, and report
+   * changes on their own fast path.
+   *
+   * This exists because the VS Code Git API is too slow to be the only source
+   * of graph updates: the built-in git extension debounces its own file events
+   * by a second, then runs a full status before firing onDidChange, so a commit
+   * made in a terminal took seconds to appear. Watching the refs directly cuts
+   * that to the debounce below. The API listener is still used for working-tree
+   * status, where its extra work is the point.
+   */
+  private setupGraphWatcher(repoPath: string): void {
+    const dirs = this.resolveGitDirs(repoPath);
+    if (!dirs) return;
+    const { gitDir, commonDir } = dirs;
+
+    const onGraphChanged = () => this.scheduleGraphRefresh();
+    const watch = (base: string, pattern: string) => {
+      const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(base, pattern));
+      w.onDidChange(onGraphChanged);
+      w.onDidCreate(onGraphChanged);
+      w.onDidDelete(onGraphChanged);
+      this.watchers.push(w);
+    };
+
+    // HEAD and the reflog live in the worktree's own git dir; a commit, reset,
+    // checkout or rebase always touches at least one of them.
+    watch(gitDir, 'HEAD');
+    watch(gitDir, 'logs/HEAD');
+    // Refs are shared with the main repo when this is a linked worktree.
+    watch(commonDir, 'refs/**');
+    watch(commonDir, 'packed-refs');
+    if (commonDir !== gitDir) {
+      watch(gitDir, 'refs/**');
+    }
+  }
+
   private setupWatcher(repoPath: string, repoId: string): void {
-    // Primary: VS Code Git API state changes — fired for all git operations
-    // (built-in git, GitCharm, terminal, other extensions).
+    // Fast path for graph-affecting changes, independent of the VS Code Git API.
+    this.setupGraphWatcher(repoPath);
+
+    // Primary source for working-tree status: VS Code Git API state changes —
+    // fired for all git operations (built-in git, GitCharm, terminal, other
+    // extensions), but only after its own debounce and a full status run.
     const vsRepo = getVscodeRepository(repoPath);
     if (vsRepo) {
       this.prevHeads.set(repoId, vsRepo.state.HEAD?.name ?? '');
@@ -594,6 +688,35 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.scheduleRefresh();
   }
 
+  /**
+   * Coalesce a burst of ref-file events into one graph refresh. Kept separate
+   * from scheduleRefresh (working-tree status) and scheduleBranchRefresh
+   * (branch metadata) so that graph updates aren't held up by their longer
+   * debounces, which exist to absorb working-tree churn.
+   */
+  private scheduleGraphRefresh(): void {
+    const now = Date.now();
+    if (this.graphPendingSince === 0) this.graphPendingSince = now;
+    if (this.graphDebounce) clearTimeout(this.graphDebounce);
+    // Wait out the burst, but not sooner than the rate floor allows...
+    const debounced = Math.max(GRAPH_REFRESH_DEBOUNCE_MS, GRAPH_REFRESH_MIN_INTERVAL_MS - (now - this.lastGraphRefresh));
+    // ...and never longer than the ceiling on a single pending refresh.
+    const capped = Math.max(0, GRAPH_REFRESH_MAX_WAIT_MS - (now - this.graphPendingSince));
+    this.graphDebounce = setTimeout(() => {
+      this.graphDebounce = null;
+      this.graphPendingSince = 0;
+      this.lastGraphRefresh = Date.now();
+      this.graphListeners.forEach(l => l());
+    }, Math.min(debounced, capped));
+  }
+
+  onGraphChange(listener: BranchListener): vscode.Disposable {
+    this.graphListeners.push(listener);
+    return new vscode.Disposable(() => {
+      this.graphListeners = this.graphListeners.filter(l => l !== listener);
+    });
+  }
+
   private scheduleBranchRefresh(): void {
     if (this.branchDebounce) clearTimeout(this.branchDebounce);
     this.branchDebounce = setTimeout(() => {
@@ -660,6 +783,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     if (this.refreshDebounce) { clearTimeout(this.refreshDebounce); this.refreshDebounce = null; }
     if (this.refreshFollowUp) { clearTimeout(this.refreshFollowUp); this.refreshFollowUp = null; }
     if (this.branchDebounce) { clearTimeout(this.branchDebounce); this.branchDebounce = null; }
+    if (this.graphDebounce) { clearTimeout(this.graphDebounce); this.graphDebounce = null; }
+    this.graphPendingSince = 0;
   }
 
   onStatusChange(listener: StatusListener): vscode.Disposable {
