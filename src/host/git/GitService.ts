@@ -488,7 +488,11 @@ export class GitService {
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
     const args: string[] = [
       'log',
-      '--topo-order',
+      // --date-order, not --topo-order: the log renders in committer-date order (see
+      // getInterleavedLog), and asking git for a different order than the one displayed
+      // meant a page's contents depended on where its boundaries fell. Date order is
+      // still topological — a commit never precedes its own parent.
+      '--date-order',
       // Hash search scans the full history without pagination — result is always a single commit
       ...(isHashSearch ? ['--max-count=50000'] : [`--max-count=${limit}`, `--skip=${skip}`]),
       '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full',

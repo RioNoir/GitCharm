@@ -131,7 +131,12 @@ function LogApp() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, skip: number, limit: number = PAGE_SIZE) => {
+  // Every request asks for a longer prefix of the same traversal (skip is always 0)
+  // rather than the next slice after a --skip. This keeps rows already on screen at
+  // a stable index and lane: the list only ever grows at the tail, so a refresh —
+  // which re-requests the same prefix — gets back exactly what is displayed instead
+  // of a differently ordered list assembled from independently sorted pages.
+  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, limit: number = PAGE_SIZE) => {
     if (loadingInFlightRef.current) return;
     loadingInFlightRef.current = true;
     const reqId = generateId();
@@ -141,7 +146,7 @@ function LogApp() {
       type: 'LOG_REQUEST_COMMITS',
       repoIds: f.repoId ? [f.repoId] : [],
       limit,
-      skip,
+      skip: 0,
       requestId: reqId,
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
@@ -154,14 +159,15 @@ function LogApp() {
   const loadMore = useCallback(() => {
     const s = useLogStore.getState();
     if (loadingInFlightRef.current || !s.hasMore) return;
-    sendAppendRequest(s.commitFilters, s.commits.length);
+    s.beginReload();
+    sendAppendRequest(s.commitFilters, s.commits.length + PAGE_SIZE);
   }, [sendAppendRequest]);
 
   const reloadCommits = useCallback((overrides?: Partial<import('../gitLog/store/logStore').CommitFilters>) => {
     loadingInFlightRef.current = false;
     const f = { ...useLogStore.getState().commitFilters, ...overrides };
     useLogStore.getState().resetCommits();
-    sendAppendRequest(f, 0);
+    sendAppendRequest(f);
   }, [sendAppendRequest]);
 
   // Refresh triggered by a repo change (not by the user changing filters): keep the
@@ -180,7 +186,7 @@ function LogApp() {
     // drop rows out from under the viewport.
     const limit = Math.ceil(s.commits.length / PAGE_SIZE) * PAGE_SIZE;
     s.beginReload();
-    sendAppendRequest(s.commitFilters, 0, limit);
+    sendAppendRequest(s.commitFilters, limit);
   }, [sendAppendRequest, reloadCommits]);
 
   reloadRef.current = refreshCommits;
