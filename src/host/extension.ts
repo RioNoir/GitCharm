@@ -68,16 +68,16 @@ async function maybeShowSupportNotification(globalState: vscode.Memento): Promis
   const picked = await vscode.window.showInformationMessage(
     'Do you like GitCharm?',
     'Leave a Star',
-    'Donate',
+    'Support',
     'Do Not Show Again',
   );
 
   if (picked === 'Do Not Show Again') {
     await globalState.update(DO_NOT_SHOW_KEY, true);
   } else if (picked === 'Leave a Star') {
-    await vscode.env.openExternal(vscode.Uri.parse('https://github.com/RioNoir/gitcharm'));
-  } else if (picked === 'Donate') {
-    await vscode.env.openExternal(vscode.Uri.parse('https://buymeacoffee.com/rionoir'));
+    await vscode.env.openExternal(vscode.Uri.parse('https://github.com/RioNoir/GitCharm'));
+  } else if (picked === 'Support') {
+    await vscode.env.openExternal(vscode.Uri.parse('https://ko-fi.com/rionoir'));
   }
 }
 
