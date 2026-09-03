@@ -20,7 +20,7 @@ GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused C
 
 It activates automatically when the opened workspace contains a Git repository.
 
-<a href="https://buymeacoffee.com/rionoir" target="_blank">
+<a href="https://ko-fi.com/rionoir" target="_blank">
   <img alt="Support GitCharm" src="media/banners/support-banner.png" width="100%">
 </a>
 
