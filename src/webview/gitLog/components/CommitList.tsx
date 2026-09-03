@@ -225,17 +225,6 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
   }, [commits, repoMeta, multiRepo]);
 
 
-  // First index of each repo block (except the very first) — these rows draw a
-  // separator line. It's an inset shadow, not a border or a gap, so it costs no
-  // layout height and every row stays exactly ROW_HEIGHT tall.
-  const blockStartIndex = useMemo(() => {
-    const s = new Set<number>();
-    for (const block of repoBlocks) {
-      if (block.startRow > 0) s.add(block.startRow);
-    }
-    return s;
-  }, [repoBlocks]);
-
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => parentRef.current,
@@ -429,7 +418,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
           return (
             <div
               key={commit.hash}
-              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash && contextMenu?.commit.repoId === commit.repoId, multiRepo && blockStartIndex.has(vrow.index)), paddingLeft: textStart }}
+              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash && contextMenu?.commit.repoId === commit.repoId), paddingLeft: textStart }}
               onMouseEnter={(e) => {
                 setHoveredIndex(vrow.index);
                 if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
@@ -1691,7 +1680,7 @@ const styles = {
     textOverflow: 'ellipsis' as const,
     lineHeight: `${ROW_HEIGHT}px`,
   } as React.CSSProperties,
-  row: (top: number, selected: boolean, multiSelected = false, hovered = false, ctxActive = false, blockStart = false): React.CSSProperties => ({
+  row: (top: number, selected: boolean, multiSelected = false, hovered = false, ctxActive = false): React.CSSProperties => ({
     position: 'absolute' as const,
     top,
     left: 0,
@@ -1714,8 +1703,6 @@ const styles = {
       : 'var(--vscode-editor-background)',
     color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
     fontSize: '12px',
-    // Repo-block separator: inset shadow keeps the row exactly ROW_HEIGHT tall.
-    ...(blockStart ? { boxShadow: 'inset 0 1px 0 var(--vscode-panel-border)' } : {}),
   }),
   refsMeasureRow: (labelColWidth: number): React.CSSProperties => ({
     position: 'absolute',
