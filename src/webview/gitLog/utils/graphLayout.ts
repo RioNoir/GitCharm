@@ -190,11 +190,13 @@ export function assignLanes(commits: CommitNode[], isFiltered = false): GraphLay
   // the graph shows only dots with no connecting lines between unrelated results.
   if (commits.length === 0) return { commits: [], segments: [], totalCols: 1, refColors: new Map() };
 
-  // Always filter out parents not in the visible set — without this, commits whose
-  // parent hasn't been loaded yet (or was filtered out) create dangling branches that
-  // never close, corrupting the graph layout.
-  const visibleHashes = new Set(commits.map(c => c.hash));
-  commits = commits.map(c => ({ ...c, parents: c.parents.filter(p => visibleHashes.has(p)) }));
+  // Parents outside the loaded window are deliberately kept. They resolve to the null
+  // vertex below, which holds the branch's column open and runs its line off the bottom
+  // edge — the same thing git-graph does, and what makes the layout stable while paging.
+  // Dropping them instead ends the branch early, returning its column and colour to the
+  // pool for another branch to take; when the next page arrives and the parent shows up,
+  // the branch continues and every allocation after it shifts. On this repo that moved
+  // half the rows already on screen (73 of 150) to a different lane per page loaded.
 
   const n = commits.length;
   const hashIndex = new Map<string, number>();
