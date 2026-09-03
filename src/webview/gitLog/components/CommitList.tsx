@@ -11,7 +11,7 @@ import { Codicon } from '../../shared/Codicon';
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg } from '../../../host/types/messages';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
-import { formatDateTime } from '../../shared/dateUtils';
+import { formatDateTime, formatDateOnly, formatDateCompact } from '../../shared/dateUtils';
 
 
 interface Props {
@@ -626,9 +626,13 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
               )}
               <div style={styles.meta}>
                 <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
-                {containerWidth > 500 && <span style={styles.author}>{commit.isStash ? (activeProfile?.gitName ?? 'You') : formatAuthorName(commit.authorName)}</span>}
+                {containerWidth > 550 && <span style={styles.author}>{commit.isStash ? (activeProfile?.gitName ?? 'You') : formatAuthorName(commit.authorName)}</span>}
               </div>
-              <span style={styles.date}>{formatDateTime(commit.authorDate)}</span>
+              {containerWidth > 330 && (
+                <span style={styles.date}>
+                  {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
+                </span>
+              )}
             </div>
           );
         })}
@@ -1833,7 +1837,9 @@ const styles = {
     alignItems: 'center',
     flex: '0 4 auto',
     maxWidth: '300px',
-    minWidth: 0,
+    // Never shrink below the avatar's own size (20px) — otherwise this box
+    // compresses faster than the date next to it and clips/squishes the avatar.
+    minWidth: '20px',
     fontSize: '11px',
     opacity: 0.65,
     overflow: 'hidden',
@@ -1862,8 +1868,10 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    flexShrink: 1,
-    minWidth: '40px',
+    // Never shrinks/truncates — instead the row picks a progressively shorter date
+    // format as containerWidth drops (full datetime → date only → dd/mm/yy), so the
+    // text is always short enough to fit without an ellipsis.
+    flexShrink: 0,
     fontSize: '11px',
     opacity: 0.65,
     marginLeft: '8px',

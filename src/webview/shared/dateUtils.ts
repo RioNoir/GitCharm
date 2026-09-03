@@ -16,6 +16,32 @@ export function formatDateTime(dateStr: string): string {
   }
 }
 
+export function formatDateOnly(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return new Intl.DateTimeFormat(navigator.language, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return dateStr;
+  }
+}
+
+export function formatDateCompact(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return new Intl.DateTimeFormat(navigator.language, {
+      year: '2-digit',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return dateStr;
+  }
+}
+
 export function formatDate(dateStr: string): string {
   try {
     const date = new Date(dateStr);

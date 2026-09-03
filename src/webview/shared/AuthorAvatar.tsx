@@ -105,6 +105,8 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false
         style={{
           width: size,
           height: size,
+          minWidth: size,
+          minHeight: size,
           borderRadius: '50%',
           flexShrink: 0,
           display: 'flex',
@@ -125,6 +127,8 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false
   const containerStyle: React.CSSProperties = {
     width: size,
     height: size,
+    minWidth: size,
+    minHeight: size,
     borderRadius: '50%',
     flexShrink: 0,
     overflow: 'hidden',
