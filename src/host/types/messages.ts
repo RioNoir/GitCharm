@@ -10,6 +10,10 @@ import type {
 import type { WorktreeEntry } from '../git/WorkspaceGitManager';
 import type { IconThemeData } from '../utils/IconThemeService';
 import type { ViewAndSortSettings, ViewAndSortUserPrefs } from './settings';
+import type { RepoPullRequests } from '../pullRequests/PullRequestManager';
+import type { CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary } from '../pullRequests/types';
+
+export type { RepoPullRequests, CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary };
 
 export interface MergeParentCommit {
   hash: string;
@@ -87,8 +91,10 @@ export type HostToCommitMsg =
   | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string }
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
   | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
+  | { type: 'PULLREQUEST_LIST_RESULT'; repos: RepoPullRequests[] }
+  | { type: 'PULLREQUEST_CONNECTION_STATUS'; statuses: PullRequestConnectionStatus[] }
   | ({ type: 'COMMIT_VIEW_SORT_SETTINGS_UPDATE' } & ViewAndSortSettings)
-  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' }
+  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests' }
   | { type: 'COMMIT_DESELECT_FILE'; filePath: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
@@ -185,6 +191,13 @@ export type CommitToHostMsg =
   | { type: 'WORKTREE_OPEN_IN_NEW_WINDOW'; worktreePath: string }
   | { type: 'WORKTREE_OPEN_IN_OS'; worktreePath: string }
   | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string }
+  | { type: 'PULLREQUEST_REQUEST_LIST'; forceRefresh?: boolean }
+  | { type: 'PULLREQUEST_CREATE_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_CONNECT'; repoId: string }
+  | { type: 'PULLREQUEST_CONNECT_PAT_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_DISCONNECT'; repoId: string }
+  | { type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE'; host: string; provider: ForgeProvider }
+  | { type: 'PULLREQUEST_OPEN_IN_BROWSER'; url: string }
   | { type: 'COMMIT_INIT_REPO' }
   | { type: 'COMMIT_OPEN_FOLDER' }
   | { type: 'COMMIT_CLONE_REPO' }
@@ -315,3 +328,17 @@ export type HostToMergeMsg =
 export type MergeToHostMsg =
   | { type: 'MERGE_SAVE_FILE'; requestId: string; resolvedContent: string }
   | { type: 'MERGE_OPEN_FILE'; filePath: string };
+
+// ─── Create Pull Request: Host → WebView ─────────────────────────────────────
+
+export type HostToPrCreateMsg =
+  | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider }
+  | { type: 'PRCREATE_BRANCHES_RESULT'; branches: BranchInfo[]; error?: string }
+  | { type: 'PRCREATE_SUBMIT_RESULT'; ok: boolean; pr?: PullRequestSummary; error?: string };
+
+// ─── Create Pull Request: WebView → Host ─────────────────────────────────────
+
+export type PrCreateToHostMsg =
+  | { type: 'PRCREATE_REQUEST_BRANCHES' }
+  | { type: 'PRCREATE_SUBMIT'; input: CreatePullRequestInput }
+  | { type: 'PRCREATE_CANCEL' };

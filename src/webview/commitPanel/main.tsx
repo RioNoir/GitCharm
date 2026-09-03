@@ -11,10 +11,11 @@ import { ShelvePanel } from './components/ShelvePanel';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
+import { PullRequestPanel } from './components/PullRequestPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
-import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry } from '../shared/msgTypes';
+import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
@@ -260,7 +261,7 @@ const CHANGELIST_HEADER_ITEMS_CUSTOM: ContextMenuEntry[] = [
   { id: 'refresh',     label: 'Refresh',           icon: 'refresh' },
 ];
 
-type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree';
+type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests';
 
 function App() {
   const store = useCommitStore();
@@ -283,6 +284,10 @@ function App() {
   const [worktreeRepos, setWorktreeRepos] = useState<Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }>>([]);
   const [worktreeLoading, setWorktreeLoading] = useState(false);
   const [worktreeError, setWorktreeError] = useState<string | null>(null);
+
+  // ── Pull Request state ────────────────────────────────────────────────────
+  const [pullRequestRepos, setPullRequestRepos] = useState<RepoPullRequests[]>([]);
+  const [pullRequestLoading, setPullRequestLoading] = useState(false);
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -540,9 +545,15 @@ function App() {
           if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
 
+        case 'PULLREQUEST_LIST_RESULT':
+          setPullRequestLoading(false);
+          setPullRequestRepos(msg.repos);
+          break;
+
         case 'COMMIT_SWITCH_TAB':
           setActiveTab(msg.tab);
           if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
+          if (msg.tab === 'pullrequests') requestPullRequestList();
           break;
 
         case 'COMMIT_DESELECT_FILE':
@@ -664,6 +675,33 @@ function App() {
 
   const handleWorktreeRequestCreate = useCallback((repoId: string) => {
     send({ type: 'WORKTREE_CREATE_PROMPT', repoId } as CommitToHostMsg);
+  }, [send]);
+
+  // ── Pull Request callbacks ────────────────────────────────────────────────
+
+  const requestPullRequestList = useCallback((forceRefresh?: boolean) => {
+    setPullRequestLoading(true);
+    send({ type: 'PULLREQUEST_REQUEST_LIST', forceRefresh });
+  }, [send]);
+
+  const handlePrOpenInBrowser = useCallback((url: string) => {
+    send({ type: 'PULLREQUEST_OPEN_IN_BROWSER', url });
+  }, [send]);
+
+  const handlePrConnectGitHub = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_CONNECT', repoId });
+  }, [send]);
+
+  const handlePrConnectPat = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_CONNECT_PAT_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrRequestCreate = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_CREATE_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrSetHostOverride = useCallback((host: string, provider: ForgeProvider) => {
+    send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider });
   }, [send]);
 
   // ── Push / unpushed callbacks ─────────────────────────────────────────────
@@ -1150,10 +1188,10 @@ function App() {
         }, 0);
         return (
           <div style={css.tabBar}>
-            {(['changes', 'shelf', 'stash', 'worktree', 'push'] as TabId[]).map(tab => {
+            {(['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'] as TabId[]).map(tab => {
               const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
-              const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : 'Push';
-              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : 'cloud-upload';
+              const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : tab === 'pullrequests' ? 'Pull Requests' : 'Push';
+              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload';
               return (
                 <button
                   key={tab}
@@ -1165,6 +1203,7 @@ function App() {
                     if (tab === 'stash') repos.forEach(r => requestStashList(r.repoId));
                     if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
                     if (tab === 'worktree') requestWorktreeList();
+                    if (tab === 'pullrequests') requestPullRequestList();
                   }}
                 >
                   <Codicon
@@ -1626,6 +1665,23 @@ function App() {
               onOpenInOS={handleWorktreeOpenInOS}
               onAddToWorkspace={handleWorktreeAddToWorkspace}
               onRequestCreate={handleWorktreeRequestCreate}
+            />
+          </ScrollArea>
+        )}
+
+        {activeTab === 'pullrequests' && (
+          /* Pull Requests tab */
+          <ScrollArea style={css.repoList}>
+            <PullRequestPanel
+              repos={pullRequestRepos}
+              loading={pullRequestLoading}
+              multiRepo={multiRepo}
+              onOpenInBrowser={handlePrOpenInBrowser}
+              onConnectGitHub={handlePrConnectGitHub}
+              onConnectPat={handlePrConnectPat}
+              onRequestCreate={handlePrRequestCreate}
+              onRefresh={() => requestPullRequestList(true)}
+              onSetHostOverride={handlePrSetHostOverride}
             />
           </ScrollArea>
         )}

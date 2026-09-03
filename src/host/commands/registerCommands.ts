@@ -9,6 +9,7 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
 import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
+import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -20,6 +21,7 @@ export function registerCommands(
   profileStatusBar: ProfileStatusBar,
   manager?: WorkspaceGitManager,
   extensionUri?: vscode.Uri,
+  pullRequestManager?: PullRequestManager,
 ): void {
   context.subscriptions.push(
     // Open the Git Log where the persisted default location says
@@ -659,6 +661,33 @@ export function registerCommands(
       }
       if (!repoId) return;
       commitPanel.handleSubmoduleCommand({ type: 'WORKTREE_PRUNE', requestId: Math.random().toString(36).slice(2), repoId });
+    }),
+
+    // ── Pull Request commands ─────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.pullRequests.refresh', async () => {
+      await commitPanel.requestPullRequestRefresh();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', async () => {
+      if (!pullRequestManager || !manager) return;
+      const metas = manager.getRepoMetas().filter(m => (m.depth ?? 0) === 0 && !m.isWorktree);
+      const statuses = await Promise.all(metas.map(async m => ({ meta: m, status: await pullRequestManager.getConnectionStatus(m.id) })));
+      const patHosts = statuses.filter(s => s.status.connected && s.status.provider !== 'github');
+      if (patHosts.length === 0) {
+        vscode.window.showInformationMessage('No Personal Access Token credentials are currently stored.');
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(
+        patHosts.map(s => ({ label: `${s.status.host} (${s.status.provider})`, description: s.meta.name, repoId: s.meta.id })),
+        { title: 'Manage Pull Request Credentials', placeHolder: 'Select a host to disconnect…' }
+      );
+      if (!picked) return;
+      const confirm = await vscode.window.showWarningMessage(`Remove the stored token for ${picked.label}?`, { modal: true }, 'Remove');
+      if (confirm !== 'Remove') return;
+      await pullRequestManager.disconnect(picked.repoId);
+      await commitPanel.requestPullRequestRefresh();
+      vscode.window.showInformationMessage(`Removed token for ${picked.label}`);
     }),
 
     // ── File History ──────────────────────────────────────────────────────────

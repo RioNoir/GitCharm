@@ -25,6 +25,8 @@ import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from 
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
 import type { ViewAndSortSettings } from '../types/settings';
+import type { PullRequestManager } from '../pullRequests/PullRequestManager';
+import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
@@ -74,6 +76,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  private createPullRequestPanel?: CreatePullRequestPanel;
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -89,6 +92,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   setUndockedPanel(provider: UndockedPanelProvider): void {
     this.undockedPanel = provider;
+  }
+
+  setCreatePullRequestPanel(provider: CreatePullRequestPanel): void {
+    this.createPullRequestPanel = provider;
   }
 
   setBranchStatusBar(bar: BranchStatusBar): void {
@@ -122,7 +129,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private mergeEditorProvider?: MergeEditorProvider,
     private readonly profileService?: GitProfileService,
     private readonly globalState?: vscode.Memento,
-    private readonly workspaceState?: vscode.Memento
+    private readonly workspaceState?: vscode.Memento,
+    private readonly pullRequestManager?: PullRequestManager
   ) {
     this.viewAndSortSettings = new ViewAndSortSettingsService(this.globalState, this.workspaceState);
     this.viewAndSortSettings.migrateIfNeeded().then(() => this.syncContextKeys(this.viewAndSortSettings.getAll()));
@@ -325,8 +333,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push'): void {
+  switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests'): void {
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
+  }
+
+  async requestPullRequestRefresh(): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const repos = await this.pullRequestManager.getAllPullRequests(true);
+    this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
   }
 
   /** Reads fresh status after a stage/unstage op. simple-git reads directly from the git index so it's always accurate once the op completes. */
@@ -2374,6 +2388,83 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const uri = vscode.Uri.file(msg.worktreePath);
         const folders = vscode.workspace.workspaceFolders ?? [];
         vscode.workspace.updateWorkspaceFolders(folders.length, 0, { uri });
+        break;
+      }
+
+      case 'PULLREQUEST_REQUEST_LIST': {
+        if (!this.pullRequestManager) { this.post({ type: 'PULLREQUEST_LIST_RESULT', repos: [] }); break; }
+        const repos = await this.pullRequestManager.getAllPullRequests(msg.forceRefresh);
+        this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        break;
+      }
+
+      case 'PULLREQUEST_CREATE_PROMPT': {
+        await this.createPullRequestPanel?.open(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_CONNECT': {
+        try {
+          await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+        } catch (e: unknown) {
+          logWarn('pullrequest-connect', formatGitError(e));
+        }
+        if (this.pullRequestManager) {
+          this.pullRequestManager.invalidate();
+          const repos = await this.pullRequestManager.getAllPullRequests(true);
+          this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        }
+        break;
+      }
+
+      case 'PULLREQUEST_OPEN_IN_BROWSER': {
+        vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        break;
+      }
+
+      case 'PULLREQUEST_CONNECT_PAT_PROMPT': {
+        if (!this.pullRequestManager) break;
+        const connection = await this.pullRequestManager.getConnectionStatus(msg.repoId);
+        if (connection.detectionFailed) {
+          vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
+          break;
+        }
+        const token = await vscode.window.showInputBox({
+          prompt: `Enter a Personal Access Token for ${connection.host}`,
+          placeHolder: 'Token is stored securely and never leaves this machine',
+          password: true,
+          title: `Connect to ${connection.provider} — ${connection.host}`,
+        });
+        if (!token?.trim()) break;
+        const result = await this.pullRequestManager.connectWithPat(msg.repoId, token.trim());
+        if (!result.ok) {
+          vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
+          break;
+        }
+        vscode.window.showInformationMessage(`Connected to ${connection.host}`);
+        logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
+        const repos = await this.pullRequestManager.getAllPullRequests(true);
+        this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        break;
+      }
+
+      case 'PULLREQUEST_DISCONNECT': {
+        if (!this.pullRequestManager) break;
+        await this.pullRequestManager.disconnect(msg.repoId);
+        const repos = await this.pullRequestManager.getAllPullRequests(true);
+        this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        break;
+      }
+
+      case 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE': {
+        const config = vscode.workspace.getConfiguration('gitcharm');
+        const overrides = config.get<Record<string, string>>('pullRequests.hostProviderOverrides', {});
+        await config.update('pullRequests.hostProviderOverrides', { ...overrides, [msg.host]: msg.provider }, vscode.ConfigurationTarget.Global);
+        if (this.pullRequestManager) {
+          this.pullRequestManager.invalidate();
+          const repos = await this.pullRequestManager.getAllPullRequests(true);
+          this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        }
         break;
       }
 

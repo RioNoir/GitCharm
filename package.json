@@ -327,6 +327,16 @@
         "category": "GitCharm"
       },
       {
+        "command": "gitcharm.pullRequests.manageCredentials",
+        "title": "Manage Pull Request Credentials",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.pullRequests.refresh",
+        "title": "Refresh Pull Requests",
+        "category": "GitCharm"
+      },
+      {
         "command": "gitcharm.selectAiModel",
         "title": "Select AI Model",
         "category": "GitCharm"
@@ -1108,6 +1118,23 @@
             "minimum": 1000,
             "maximum": 100000,
             "description": "Maximum characters of git diff to send to the AI model. Larger values give more context but consume more tokens."
+          }
+        }
+      },
+      {
+        "title": "Pull Requests",
+        "properties": {
+          "gitcharm.pullRequests.hostProviderOverrides": {
+            "order": 1,
+            "type": "object",
+            "default": {},
+            "description": "Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. { \"git.mycompany.com\": \"gitea\" }. Valid values: github, gitlab, bitbucket, gitea."
+          },
+          "gitcharm.pullRequests.defaultTargetBranch": {
+            "order": 2,
+            "type": "string",
+            "default": "",
+            "description": "Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master)."
           }
         }
       },

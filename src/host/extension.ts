@@ -13,6 +13,9 @@ import { FileAnnotationController } from './ui/FileAnnotationController';
 import { GitProfileService } from './git/GitProfileService';
 import { ProfileStatusBar } from './ui/ProfileStatusBar';
 import { initLogger, logInfo, logWarn, showLogChannel } from './utils/Logger';
+import { PullRequestManager } from './pullRequests/PullRequestManager';
+import { PatCredentialStore } from './pullRequests/PatCredentialStore';
+import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 
 async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void> {
   const SHOWN_KEY = 'hasShownViewModeQuickpick';
@@ -214,7 +217,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();
 
-  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState);
+  const patCredentialStore = new PatCredentialStore(context.secrets);
+  const pullRequestManager = new PullRequestManager(manager, patCredentialStore);
+
+  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState, pullRequestManager);
 
   let startupNotificationsDone = false;
   const badgeDisposable = manager.onStatusChange(status => { badge.update(status); });
@@ -230,10 +236,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager, profileService);
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   const undockedPanel = new UndockedPanelProvider(context.extensionUri, commitPanel, logPanel);
+  const createPullRequestPanel = new CreatePullRequestPanel(context.extensionUri, manager, pullRequestManager, () => {
+    commitPanel.requestPullRequestRefresh();
+  });
   commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
   commitPanel.setBadgeController(badge);
   commitPanel.setUndockedPanel(undockedPanel);
+  commitPanel.setCreatePullRequestPanel(createPullRequestPanel);
   logPanel.setCommitPanel(commitPanel);
   logPanel.setUndockedPanel(undockedPanel);
   // Changing the setting from the Settings UI: switching back to the bottom
@@ -282,7 +292,7 @@ export function activate(context: vscode.ExtensionContext): void {
     annotationController,
   );
 
-  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri);
+  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, pullRequestManager);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gitcharm.undock', () => {
