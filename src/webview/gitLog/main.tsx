@@ -18,7 +18,10 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-const LOAD_STEP = 150;
+// Commits per page. The ceiling on the graph as a whole is the host's
+// gitcharm.graphMaxCommits, which clamps every request and reports the last batch,
+// so there is nothing to bound here.
+const PAGE_SIZE = 150;
 
 
 function App() {
@@ -175,7 +178,7 @@ function App() {
     send({
       type: 'LOG_REQUEST_COMMITS',
       repoIds: [],
-      limit: LOAD_STEP,
+      limit: PAGE_SIZE,
       skip: 0,
       requestId: initReqId,
     });
@@ -184,7 +187,7 @@ function App() {
   }, []);
 
 
-  const sendAppendRequest = useCallback((f: import('./store/logStore').CommitFilters, skip: number) => {
+  const sendAppendRequest = useCallback((f: import('./store/logStore').CommitFilters, skip: number, limit: number = PAGE_SIZE) => {
     if (loadingInFlightRef.current) return;
     loadingInFlightRef.current = true;
     const reqId = generateId();
@@ -193,7 +196,7 @@ function App() {
     getVsCodeApi().postMessage({
       type: 'LOG_REQUEST_COMMITS',
       repoIds: f.repoId ? [f.repoId] : [],
-      limit: LOAD_STEP,
+      limit,
       skip,
       requestId: reqId,
       filterText: f.text || undefined,
@@ -218,8 +221,27 @@ function App() {
     sendAppendRequest(f, 0);
   }, [sendAppendRequest]);
 
+  // Refresh triggered by a repo change (not by the user changing filters): keep the
+  // existing rows visible and swap them for the fresh ones when they arrive, so the
+  // skeleton only ever appears on a cold start. Re-request as many commits as are
+  // currently loaded, so a deep-scrolled list doesn't shrink and jump under the user.
+  const refreshCommits = useCallback(() => {
+    loadingInFlightRef.current = false;
+    const s = useLogStore.getState();
+    if (s.commits.length === 0) {
+      reloadCommits();
+      return;
+    }
+    // Round up to whole pages. Asking for more than the ceiling allows is fine — the
+    // host clamps it — but asking for less than is loaded would truncate the list and
+    // drop rows out from under the viewport.
+    const limit = Math.ceil(s.commits.length / PAGE_SIZE) * PAGE_SIZE;
+    s.beginReload();
+    sendAppendRequest(s.commitFilters, 0, limit);
+  }, [sendAppendRequest, reloadCommits]);
+
   // Keep reloadRef current so the message handler (mounted once) always calls the latest version
-  reloadRef.current = reloadCommits;
+  reloadRef.current = refreshCommits;
 
   const handleLoadMore = useCallback(() => {
     loadMore();

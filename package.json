@@ -814,7 +814,7 @@
             "default": 1000,
             "minimum": 100,
             "maximum": 10000,
-            "description": "Maximum commits to load in the Git Log graph"
+            "description": "Maximum commits to load in the Git Log graph. Scrolling stops paging in more once this many are loaded."
           },
           "gitcharm.repositoryScanMaxDepth": {
             "order": 60,

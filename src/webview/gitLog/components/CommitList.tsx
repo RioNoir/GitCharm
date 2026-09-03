@@ -45,7 +45,6 @@ interface RepoBlock {
 
 const REPO_LABEL_WIDTH = 6;
 const REPO_LABEL_WIDTH_EXPANDED = 110;
-const BLOCK_GAP = 4;
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -78,6 +77,67 @@ function CommitSkeleton() {
     </div>
   );
 }
+
+export interface ScrollAnchor {
+  /** Index the anchor commit occupied in `list`. */
+  index: number;
+  hash: string;
+  /** Pixels the anchor row was scrolled past, i.e. scrollTop - index * ROW_HEIGHT. */
+  offset: number;
+  /** The array the anchor was captured from, for walking to predecessors. */
+  list: ReadonlyArray<{ hash: string }>;
+}
+
+/**
+ * Work out where a captured scroll anchor lives in a freshly swapped-in commit
+ * list, so the viewport can be put back over the same commit.
+ *
+ * Returns null when no scrolling is needed — which is the common case, and is
+ * reached in O(1).
+ *
+ * Ordered by how often each case actually happens:
+ *  1. Same array, or anchor still at its old index (every append, and every
+ *     refresh that changed nothing above the viewport) — no work.
+ *  2. Anchor shifted a little, because a few commits arrived at the top —
+ *     found by probing outward from the old index.
+ *  3. Anchor shifted a lot, or vanished (amend, rebase, branch switch) — one
+ *     hash->index map, then the anchor, then its predecessors walking toward
+ *     HEAD, so the user stays in the same neighbourhood of history.
+ *  4. Nothing that was on screen survived — go to the top.
+ */
+export function resolveAnchor(
+  a: ScrollAnchor,
+  commits: ReadonlyArray<{ hash: string }>,
+): { index: number; offset: number } | null {
+  if (commits.length === 0) return null;
+  if (a.list === commits) return null;
+  if (commits[a.index]?.hash === a.hash) return null;
+
+  for (let d = 1; d <= ANCHOR_PROBE; d++) {
+    if (commits[a.index + d]?.hash === a.hash) return { index: a.index + d, offset: a.offset };
+    if (commits[a.index - d]?.hash === a.hash) return { index: a.index - d, offset: a.offset };
+  }
+
+  const pos = new Map<string, number>();
+  for (let i = 0; i < commits.length; i++) pos.set(commits[i].hash, i);
+
+  const found = pos.get(a.hash);
+  if (found !== undefined) return { index: found, offset: a.offset };
+
+  for (let i = a.index - 1; i >= 0; i--) {
+    const p = pos.get(a.list[i].hash);
+    if (p !== undefined) return { index: p, offset: a.offset };
+  }
+
+  return { index: 0, offset: 0 };
+}
+
+/**
+ * How far to probe either side of the old index before falling back to a map.
+ * A refresh normally only prepends the commits that landed since the last one,
+ * so the anchor is almost always within a row or two of where it was.
+ */
+const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
@@ -172,28 +232,17 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
   }, [commits, repoMeta, multiRepo]);
 
 
-  // Last index of each block — the gap is added after these rows.
-  const blockLastIndex = useMemo(() => {
-    const s = new Set<number>();
-    for (const block of repoBlocks) {
-      if (block.startRow > 0) s.add(block.startRow - 1);
-    }
-    return s;
-  }, [repoBlocks]);
-
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => parentRef.current,
-    // Tell the virtualizer the true height of each row, including the gap
-    // that follows the last row of each block.
-    estimateSize: (i) => ROW_HEIGHT + (multiRepo && blockLastIndex.has(i) ? BLOCK_GAP : 0),
+    // Every row is exactly ROW_HEIGHT. This is load-bearing, not just a hint:
+    // it makes index <-> pixel an exact multiplication, which is what lets
+    // scroll anchoring below restore a position without measuring anything.
+    estimateSize: () => ROW_HEIGHT,
     overscan: 10,
   });
 
-  const rawItems = virtualizer.getVirtualItems();
-  // Use the virtualizer's own start positions — they already account for the
-  // variable sizes above, so no manual offset calculation is needed.
-  const items = rawItems;
+  const items = virtualizer.getVirtualItems();
 
   const hasMoreRef = useRef(hasMore);
   hasMoreRef.current = hasMore;
@@ -201,6 +250,24 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
   onLoadMoreRef.current = onLoadMore;
 
   const scrollRafRef = useRef<number | null>(null);
+
+  // Scroll anchor: which commit sits at the top of the viewport, and by how many
+  // pixels it is scrolled past. Captured continuously as the user scrolls (one
+  // array index + two subtractions per animation frame) so that when the list is
+  // swapped out by a refresh, the restore below needs no cooperation from the
+  // store, no signalling, and no ordering assumptions — the anchor is simply
+  // always current. `list` is a reference to the array the anchor was taken
+  // from, kept so a vanished anchor can walk back to its predecessors.
+  const anchorRef = useRef<ScrollAnchor | null>(null);
+  const commitsRef = useRef(commits);
+  commitsRef.current = commits;
+
+  const captureAnchor = useCallback((scrollTop: number) => {
+    const list = commitsRef.current;
+    if (list.length === 0) { anchorRef.current = null; return; }
+    const index = Math.max(0, Math.min(list.length - 1, Math.floor(scrollTop / ROW_HEIGHT)));
+    anchorRef.current = { index, hash: list[index].hash, offset: scrollTop - index * ROW_HEIGHT, list };
+  }, []);
 
   // Attach scroll listener once via callback ref — avoids dependency on parentRef timing
   const scrollListenerRef = useRef<(() => void) | null>(null);
@@ -222,19 +289,57 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
       if (scrollRafRef.current !== null) return;
       scrollRafRef.current = requestAnimationFrame(() => {
         scrollRafRef.current = null;
+        captureAnchor(el.scrollTop);
         const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_HEIGHT * 15;
         if (hasMoreRef.current && nearBottom) onLoadMoreRef.current();
       });
     };
     scrollListenerRef.current = listener;
     el.addEventListener('scroll', listener, { passive: true });
-  }, []);
+  }, [captureAnchor]);
+
+  const scrollToIndexExact = useCallback((index: number, offset: number) => {
+    const el = parentRef.current;
+    if (!el) return;
+    el.scrollTop = Math.max(0, index * ROW_HEIGHT + offset);
+    // Read back rather than reusing the requested value: the browser clamps at
+    // both ends, and `offset` may be negative when centring a row. Re-capturing
+    // from the real scrollTop keeps the anchor normalised (offset always within
+    // one row) so a later restore can't derive an out-of-range index.
+    captureAnchor(el.scrollTop);
+  }, [captureAnchor]);
+
+  // Restore the scroll anchor whenever the commit array is replaced under us.
+  //
+  // A layout effect, so it lands before the browser paints — the swap is never
+  // visible as a jump. Appends hit the O(1) early-out on the first check: the
+  // list only grew at the tail, so the anchor row is still at its old index and
+  // there is nothing to do. Only a genuine reshuffle pays for a lookup.
+  //
+  // Runs before the scrollToHash effect below (layout effects precede passive
+  // ones), which is the precedence we want: an explicit navigation request from
+  // the host always overrides a passive anchor restore.
+  useLayoutEffect(() => {
+    const a = anchorRef.current;
+    if (!a || !parentRef.current) return;
+    const resolved = resolveAnchor(a, commits);
+    if (resolved) {
+      scrollToIndexExact(resolved.index, resolved.offset);
+    } else if (a.list !== commits && commits.length > 0) {
+      // No scrolling needed, but re-point the anchor at the current array so the
+      // next swap short-circuits on identity and the old array can be collected.
+      a.list = commits;
+    }
+  }, [commits, scrollToIndexExact]);
 
   useEffect(() => {
     if (!scrollTarget || showSkeleton) return;
     const idx = commits.findIndex(c => c.hash === scrollTarget.hash && c.repoId === scrollTarget.repoId);
     if (idx >= 0) {
-      virtualizer.scrollToIndex(idx, { align: 'center' });
+      // Centre the target row: exact arithmetic, since every row is ROW_HEIGHT.
+      const el = parentRef.current;
+      const centreOffset = el ? -Math.max(0, (el.clientHeight - ROW_HEIGHT) / 2) : 0;
+      scrollToIndexExact(idx, centreOffset);
       setMultiSelectHashes(new Set());
       onSelect(commits[idx]);
       onScrollTargetHandled?.();
@@ -246,17 +351,11 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
     } else if (!hasMore && !loading) {
       onScrollTargetHandled?.();
     }
-  }, [scrollTarget, commits, hasMore, loading, showSkeleton]);
+  }, [scrollTarget, commits, hasMore, loading, showSkeleton, scrollToIndexExact]);
 
   const anyExpanded = expandedRepos.size > 0;
   const labelColWidth = multiRepo ? (anyExpanded ? REPO_LABEL_WIDTH_EXPANDED + 6 : REPO_LABEL_WIDTH + 8) : 0;
 
-  // Map from commit index → virtualizer start position, for strip positioning.
-  const itemStartByIndex = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const item of virtualizer.getVirtualItems()) map.set(item.index, item.start);
-    return map;
-  }, [virtualizer.getVirtualItems()]);
 
   function toggleRepo(repoId: string) {
     setExpandedRepos(prev => {
@@ -288,9 +387,8 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
 
         {/* Repo label strips */}
         {multiRepo && repoBlocks.map((block) => {
-          const topPx = itemStartByIndex.get(block.startRow) ?? block.startRow * ROW_HEIGHT;
-          const lastRowStart = itemStartByIndex.get(block.startRow + block.rowCount - 1) ?? ((block.startRow + block.rowCount - 1) * ROW_HEIGHT);
-          const heightPx = lastRowStart + ROW_HEIGHT - topPx;
+          const topPx = block.startRow * ROW_HEIGHT;
+          const heightPx = block.rowCount * ROW_HEIGHT;
           const expanded = expandedRepos.has(block.repoId);
           return (
             <div

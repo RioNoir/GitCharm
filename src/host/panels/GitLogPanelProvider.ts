@@ -439,8 +439,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private async handleMessage(msg: LogToHostMsg): Promise<void> {
     switch (msg.type) {
       case 'LOG_REQUEST_COMMITS': {
+        // graphMaxCommits is a ceiling on how many commits the graph holds, not a page
+        // size: pagination adds to what is already loaded, so the cap belongs on
+        // skip + limit. Capping the page size alone let a deep scroll grow the list past
+        // the ceiling, and the next refresh — one request covering every loaded row — came
+        // back truncated, dropping rows out from under the viewport.
         const maxCommits = vscode.workspace.getConfiguration('gitcharm').get<number>('graphMaxCommits', 1000);
-        const limit = Math.min(msg.limit, maxCommits);
+        const limit = Math.min(msg.limit, Math.max(0, maxCommits - msg.skip));
 
         const repos = this.getVisibleRepos();
         // Resolve the icon theme against the webview that asked, so the undocked
@@ -466,14 +471,19 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const logRepoIds = msg.repoIds.length > 0
           ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
           : this.getVisibleRepos().map(r => r.id);
-        const commits = await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
-          filterText: msg.filterText,
-          filterAuthor: msg.filterAuthor,
-          filterBranch: msg.filterBranch,
-          filterDateFrom: msg.filterDateFrom,
-          filterDateTo: msg.filterDateTo,
-        });
-        this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast: commits.length < limit, batchIndex: 0, requestId: msg.requestId });
+        const commits = limit > 0
+          ? await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
+            filterText: msg.filterText,
+            filterAuthor: msg.filterAuthor,
+            filterBranch: msg.filterBranch,
+            filterDateFrom: msg.filterDateFrom,
+            filterDateTo: msg.filterDateTo,
+          })
+          : [];
+        // Last batch when git ran out of commits, or when the ceiling is reached — either
+        // way there is nothing further to page in, and the client stops asking.
+        const isLast = commits.length < limit || msg.skip + commits.length >= maxCommits;
+        this.post({ type: 'LOG_COMMITS_BATCH', commits, isLast, batchIndex: 0, requestId: msg.requestId });
 
         // A freshly opened undocked panel is only ready once it has asked for commits.
         if (msg.skip === 0 && this.activeReplyTarget === 'undocked' && this.pendingUndocked) {
