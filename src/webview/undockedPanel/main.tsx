@@ -42,9 +42,10 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-const LOAD_STEP = 150;
-// Upper bound on how many commits a warm refresh re-requests in one go.
-const REFRESH_LIMIT_MAX = 3000;
+// Commits per page. The ceiling on the graph as a whole is the host's
+// gitcharm.graphMaxCommits, which clamps every request and reports the last batch,
+// so there is nothing to bound here.
+const PAGE_SIZE = 150;
 
 // ── Log sub-app ───────────────────────────────────────────────────────────────
 
@@ -125,12 +126,12 @@ function LogApp() {
 
     const initReqId = generateId();
     activeRequestIdRef.current = initReqId;
-    send({ type: 'LOG_REQUEST_COMMITS', repoIds: [], limit: LOAD_STEP, skip: 0, requestId: initReqId });
+    send({ type: 'LOG_REQUEST_COMMITS', repoIds: [], limit: PAGE_SIZE, skip: 0, requestId: initReqId });
 
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, skip: number, limit: number = LOAD_STEP) => {
+  const sendAppendRequest = useCallback((f: import('../gitLog/store/logStore').CommitFilters, skip: number, limit: number = PAGE_SIZE) => {
     if (loadingInFlightRef.current) return;
     loadingInFlightRef.current = true;
     const reqId = generateId();
@@ -174,7 +175,10 @@ function LogApp() {
       reloadCommits();
       return;
     }
-    const limit = Math.min(REFRESH_LIMIT_MAX, Math.ceil(s.commits.length / LOAD_STEP) * LOAD_STEP);
+    // Round up to whole pages. Asking for more than the ceiling allows is fine — the
+    // host clamps it — but asking for less than is loaded would truncate the list and
+    // drop rows out from under the viewport.
+    const limit = Math.ceil(s.commits.length / PAGE_SIZE) * PAGE_SIZE;
     s.beginReload();
     sendAppendRequest(s.commitFilters, 0, limit);
   }, [sendAppendRequest, reloadCommits]);
