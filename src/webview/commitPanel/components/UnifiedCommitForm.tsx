@@ -39,6 +39,7 @@ interface Props {
   generatingMessage: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   onOpenProfiles: () => void;
+  onRebaseAction: (repoId: string, action: 'continue' | 'abort') => void;
 }
 
 interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; }
@@ -202,7 +203,7 @@ export function UnifiedCommitForm({
   loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   onSyncAction, onPullRepos, onPushRepos, onForcePushRepos,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
-  activeProfile, onOpenProfiles,
+  activeProfile, onOpenProfiles, onRebaseAction,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const [textareaFocused, setTextareaFocused] = useState(false);
@@ -223,6 +224,14 @@ export function UnifiedCommitForm({
   const syncRepos = syncRepoStatuses ?? repoStatuses;
   const sync = computeSyncState(syncRepos);
   const showSync = !hasWorkingChanges(syncRepos) && sync.action !== 'none' && !loading;
+
+  // A plain commit does not finish a rebase — git still needs `rebase --continue`, so
+  // the primary action becomes Continue until the rebase is done. A merge needs no
+  // special case: `git commit` completes it, which is what VS Code does too.
+  // Only the repo the user is about to commit takes over the button; a rebase open in
+  // some other repo of the workspace must not block committing this one.
+  const rebasing = commitTargets.find(r => r.mergeRebaseState === 'rebase')
+    ?? (commitTargets.length === 0 ? syncRepos.find(r => r.mergeRebaseState === 'rebase') : undefined);
 
   const amendTarget = commitTargets.length === 1 ? commitTargets[0] : null;
   const showAmend = amendTarget !== null && (amendTarget.branch.aheadBehind?.ahead ?? 0) > 0;
@@ -458,7 +467,22 @@ export function UnifiedCommitForm({
         </div>
 
         <div style={styles.rightActions}>
-          {showSync ? (
+          {rebasing ? (
+            <DropdownButton
+              variant="primary"
+              fullWidth
+              dropdownAlign="right"
+              enabled={!loading}
+              icon="debug-continue"
+              label="Continue Rebase"
+              title={`Continue the rebase in ${metaMap.get(rebasing.repoId)?.name ?? rebasing.repoId}`}
+              items={[
+                { icon: 'debug-continue', label: 'Continue Rebase', onSelect: () => onRebaseAction(rebasing.repoId, 'continue') },
+                { icon: 'error',          label: 'Abort Rebase',    onSelect: () => onRebaseAction(rebasing.repoId, 'abort')    },
+              ]}
+              onMainClick={() => onRebaseAction(rebasing.repoId, 'continue')}
+            />
+          ) : showSync ? (
             <DropdownButton
               variant="primary"
               fullWidth

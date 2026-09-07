@@ -731,6 +731,25 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_REBASE_ACTION': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { logWarn('rebase-action', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          if (msg.action === 'continue') await repo.rebaseContinue();
+          else await repo.abortRebase();
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          logInfo('rebase-action', `Rebase ${msg.action} in ${msg.repoId}`);
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          logError('rebase-action', formatGitError(e), getRawErrorDetail(e));
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+        }
+        const rebaseStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: rebaseStatus });
+        this.postChangelistsUpdate(rebaseStatus);
+        break;
+      }
+
       case 'OPEN_PROFILES_MENU': {
         vscode.commands.executeCommand('gitcharm.manageProfiles');
         break;

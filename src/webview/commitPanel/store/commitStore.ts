@@ -85,6 +85,19 @@ function savePersistedSelection(mode: 'simplified' | 'changelists', repoId: stri
   } catch { /* ignore */ }
 }
 
+const COMMIT_MESSAGE_KEY = 'gitcharm:commitMessage';
+
+function loadPersistedCommitMessage(): string {
+  try { return localStorage.getItem(COMMIT_MESSAGE_KEY) ?? ''; } catch { return ''; }
+}
+
+function savePersistedCommitMessage(msg: string) {
+  try {
+    if (msg) localStorage.setItem(COMMIT_MESSAGE_KEY, msg);
+    else localStorage.removeItem(COMMIT_MESSAGE_KEY);
+  } catch { /* ignore */ }
+}
+
 export const useCommitStore = create<CommitState>((set, get) => ({
   status: null,
   repoMetas: [],
@@ -96,7 +109,8 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   selectedFile: null,
   currentDiff: null,
   loadingDiff: false,
-  commitMessage: '',
+  // Survives a window reload, the way VS Code's Source Control input does.
+  commitMessage: loadPersistedCommitMessage(),
   amendFlags: {},
   viewAndSort: DEFAULT_VIEW_AND_SORT_SETTINGS,
   shelveCollapsedKeys: new Set(),
@@ -206,7 +220,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
 
   setDiff: (diff) => set({ currentDiff: diff, loadingDiff: false }),
   setLoadingDiff: (v) => set({ loadingDiff: v }),
-  setCommitMessage: (msg) => set({ commitMessage: msg }),
+  setCommitMessage: (msg) => { savePersistedCommitMessage(msg); set({ commitMessage: msg }); },
   setAmend: (repoId, v) => set(s => ({ amendFlags: { ...s.amendFlags, [repoId]: v } })),
   clearAmend: (repoId) => set(s => {
     if (!(repoId in s.amendFlags)) return s;

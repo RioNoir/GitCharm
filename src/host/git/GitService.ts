@@ -122,7 +122,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
   }
 
   private async getShortHash(): Promise<string | undefined> {
@@ -293,6 +293,7 @@ export class GitService {
         unstagedFiles,
         isDetachedHead: isDetached,
         conflictCount,
+        mergeRebaseState: await this.getMergeRebaseState() ?? undefined,
       };
     }
 
@@ -326,7 +327,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
   }
 
   async getCurrentBranch(): Promise<BranchInfo> {
@@ -1156,20 +1157,27 @@ export class GitService {
     return this.commitTemplate();
   }
 
+  /**
+   * Whether a merge or rebase is still open. Read off the git dir rather than the
+   * VS Code API, which only reports a merge while conflicts are unresolved — the
+   * operation is still in progress after they are staged, and that is exactly when
+   * the panel needs to offer Continue. Cheap enough for every status refresh.
+   */
   async getMergeRebaseState(): Promise<'merge' | 'rebase' | null> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) {
-      if (vsRepo.state.rebaseCommit !== undefined) return 'rebase';
-      if (vsRepo.state.mergeChanges.length > 0) return 'merge';
-      return null;
-    }
-    const mergeHead = await this.git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).catch(() => '');
-    if (mergeHead.trim()) return 'merge';
-    const rebaseDir = await this.git.raw(['rev-parse', '--git-path', 'rebase-merge']).catch(() => '');
-    try {
-      if (rebaseDir.trim() && fs.existsSync(rebaseDir.trim())) return 'rebase';
-    } catch { /* */ }
+    const dir = await this.gitDir();
+    const exists = (name: string) => { try { return fs.existsSync(path.join(dir, name)); } catch { return false; } };
+    // Rebase wins: an interactive rebase can leave MERGE_HEAD behind on a conflicted pick.
+    if (exists('rebase-merge') || exists('rebase-apply')) return 'rebase';
+    if (exists('MERGE_HEAD')) return 'merge';
     return null;
+  }
+
+  async rebaseContinue(): Promise<void> {
+    // `rebase --continue` opens an editor for the commit being replayed. core.editor=true
+    // is the no-op shell builtin, so the stored message is accepted unchanged and the
+    // command never blocks — simple-git needs allowUnsafeEditor to let the override past.
+    await simpleGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+      .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
   }
 
   async abortMerge(): Promise<void> {
