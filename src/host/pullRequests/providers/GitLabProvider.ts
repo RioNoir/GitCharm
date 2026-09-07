@@ -1,7 +1,26 @@
-import type { CreatePullRequestInput, CreatePullRequestResult, PullRequestProvider, PullRequestSummary } from '../types';
+import type {
+  ActionResult, ChangedFile, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent,
+  ListPullRequestsOptions, ListPullRequestsResult, PostCommentResult, PullRequestCapabilities,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestProvider, PullRequestSummary, UnsupportedResult,
+} from '../types';
 import { httpJson } from '../httpJson';
 
-const MAX_PAGES = 20;
+const PAGE_SIZE = 30;
+
+const CAPABILITIES: PullRequestCapabilities = {
+  canMerge: true,
+  mergeStrategies: ['merge', 'squash'],
+  canClose: true,
+  canReopen: true,
+  hasMergeableState: true,
+  canApprove: true,
+  canRequestChanges: false,
+  canCommentReview: false,
+  hasUnifiedDiffText: false,
+};
+
+/** Detail/comment/merge/review methods below are implemented in Phase D — Phase A-C only target GitHub. */
+const NOT_YET_IMPLEMENTED = 'GitLab pull request detail is not yet implemented';
 
 interface RawGitLabMr {
   id: number;
@@ -17,6 +36,10 @@ interface RawGitLabMr {
   created_at: string;
   updated_at: string;
   user_notes_count?: number;
+}
+
+interface RawGitLabUser {
+  username: string;
 }
 
 function mapState(mr: RawGitLabMr): PullRequestSummary['state'] {
@@ -43,8 +66,14 @@ function mapMr(mr: RawGitLabMr): PullRequestSummary {
   };
 }
 
+function apiState(state: ListPullRequestsOptions['state']): 'opened' | 'closed' | 'merged' | 'all' {
+  if (state === 'open') return 'opened';
+  return state;
+}
+
 export class GitLabProvider implements PullRequestProvider {
   readonly kind = 'gitlab' as const;
+  private cachedUsername: string | undefined;
 
   constructor(
     private readonly host: string,
@@ -66,20 +95,33 @@ export class GitLabProvider implements PullRequestProvider {
     return (await this.getToken()) !== undefined;
   }
 
-  async listPullRequests(owner: string, repo: string): Promise<PullRequestSummary[]> {
+  async getCurrentUsername(): Promise<string | undefined> {
+    if (this.cachedUsername) return this.cachedUsername;
+    const headers = await this.headers();
+    try {
+      const { data } = await httpJson<RawGitLabUser>(`${this.apiBase()}/user`, { headers });
+      this.cachedUsername = data.username;
+      return data.username;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
     const headers = await this.headers();
     const projectId = encodeURIComponent(`${owner}/${repo}`);
-    const results: PullRequestSummary[] = [];
-    let page = 1;
-    while (page <= MAX_PAGES) {
-      const url = `${this.apiBase()}/projects/${projectId}/merge_requests?state=opened&per_page=100&page=${page}`;
-      const { data, headers: resHeaders } = await httpJson<RawGitLabMr[]>(url, { headers });
-      results.push(...data.map(mapMr));
-      const nextPage = resHeaders.get('X-Next-Page');
-      if (!nextPage) break;
-      page = Number(nextPage);
+    const params = new URLSearchParams({
+      state: apiState(options.state),
+      per_page: String(PAGE_SIZE),
+      page: String(options.page),
+    });
+    if (options.author === 'mine') {
+      const username = await this.getCurrentUsername();
+      if (username) params.set('author_username', username);
     }
-    return results;
+    const url = `${this.apiBase()}/projects/${projectId}/merge_requests?${params.toString()}`;
+    const { data } = await httpJson<RawGitLabMr[]>(url, { headers });
+    return { items: data.map(mapMr), hasMore: data.length === PAGE_SIZE };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
@@ -100,5 +142,57 @@ export class GitLabProvider implements PullRequestProvider {
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  getCapabilities(): PullRequestCapabilities {
+    return CAPABILITIES;
+  }
+
+  getCheckoutRefspec(number: number): string {
+    return `merge-requests/${number}/head`;
+  }
+
+  async getPullRequestDetail(): Promise<PullRequestDetail> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async listComments(): Promise<PullRequestComment[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async postComment(): Promise<PostCommentResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async listChangedFiles(): Promise<ChangedFile[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async getFileDiff(): Promise<FileDiffContent> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async listCommits(): Promise<PullRequestCommit[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async listCommitFiles(): Promise<ChangedFile[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async mergePullRequest(): Promise<ActionResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async closePullRequest(): Promise<ActionResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async reopenPullRequest(): Promise<ActionResult | UnsupportedResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async submitReview(): Promise<ActionResult | UnsupportedResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
   }
 }

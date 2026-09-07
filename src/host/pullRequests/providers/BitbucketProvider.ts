@@ -1,7 +1,27 @@
-import type { CreatePullRequestInput, CreatePullRequestResult, PullRequestProvider, PullRequestSummary } from '../types';
+import type {
+  ActionResult, ChangedFile, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent,
+  ListPullRequestsOptions, ListPullRequestsResult, PostCommentResult, PullRequestCapabilities,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestProvider, PullRequestSummary, UnsupportedResult,
+} from '../types';
+import type { BitbucketCredentials } from '../PatCredentialStore';
 import { httpJson } from '../httpJson';
 
-const MAX_PAGES = 20;
+const PAGE_SIZE = 30;
+
+const CAPABILITIES: PullRequestCapabilities = {
+  canMerge: true,
+  mergeStrategies: ['merge', 'squash', 'fastForward'],
+  canClose: true,
+  canReopen: false,
+  hasMergeableState: false,
+  canApprove: true,
+  canRequestChanges: true,
+  canCommentReview: false,
+  hasUnifiedDiffText: true,
+};
+
+/** Detail/comment/merge/review methods below are implemented in Phase D — Phase A-C only target GitHub. */
+const NOT_YET_IMPLEMENTED = 'Bitbucket pull request detail is not yet implemented';
 
 interface RawBitbucketPr {
   id: number;
@@ -11,7 +31,7 @@ interface RawBitbucketPr {
   draft?: boolean;
   source: { branch: { name: string } };
   destination: { branch: { name: string } };
-  author: { display_name: string; nickname?: string; links: { avatar: { href: string } } } | null;
+  author: { display_name: string; nickname?: string; uuid?: string; links: { avatar: { href: string } } } | null;
   created_on: string;
   updated_on: string;
   comment_count?: number;
@@ -20,6 +40,12 @@ interface RawBitbucketPr {
 interface RawBitbucketPage {
   values: RawBitbucketPr[];
   next?: string;
+}
+
+interface RawBitbucketUser {
+  username?: string;
+  nickname?: string;
+  uuid: string;
 }
 
 function mapState(pr: RawBitbucketPr): PullRequestSummary['state'] {
@@ -46,11 +72,20 @@ function mapPr(pr: RawBitbucketPr): PullRequestSummary {
   };
 }
 
+/** Bitbucket Cloud has no single "all" state — the query filter is repeated per accepted value, or omitted entirely for "all". */
+function apiStates(state: ListPullRequestsOptions['state']): string[] {
+  if (state === 'open') return ['OPEN'];
+  if (state === 'merged') return ['MERGED'];
+  if (state === 'closed') return ['DECLINED', 'SUPERSEDED'];
+  return [];
+}
+
 export class BitbucketProvider implements PullRequestProvider {
   readonly kind = 'bitbucket' as const;
+  private cachedUsername: string | undefined;
 
   constructor(
-    private readonly getToken: () => Promise<string | undefined>,
+    private readonly getCredentials: () => Promise<BitbucketCredentials | undefined>,
   ) {}
 
   private apiBase(): string {
@@ -58,28 +93,42 @@ export class BitbucketProvider implements PullRequestProvider {
   }
 
   private async headers(): Promise<Record<string, string>> {
-    const token = await this.getToken();
+    const credentials = await this.getCredentials();
     const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (credentials) {
+      const basic = Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString('base64');
+      headers.Authorization = `Basic ${basic}`;
+    }
     return headers;
   }
 
   async hasCredentials(): Promise<boolean> {
-    return (await this.getToken()) !== undefined;
+    return (await this.getCredentials()) !== undefined;
   }
 
-  async listPullRequests(owner: string, repo: string): Promise<PullRequestSummary[]> {
+  async getCurrentUsername(): Promise<string | undefined> {
+    if (this.cachedUsername) return this.cachedUsername;
     const headers = await this.headers();
-    const results: PullRequestSummary[] = [];
-    let url: string | null = `${this.apiBase()}/repositories/${owner}/${repo}/pullrequests?state=OPEN&pagelen=50`;
-    let page = 0;
-    while (url && page < MAX_PAGES) {
-      const result: { data: RawBitbucketPage } = await httpJson<RawBitbucketPage>(url, { headers });
-      results.push(...result.data.values.map(mapPr));
-      url = result.data.next ?? null;
-      page++;
+    try {
+      const { data } = await httpJson<RawBitbucketUser>(`${this.apiBase()}/user`, { headers });
+      this.cachedUsername = data.username ?? data.nickname ?? data.uuid;
+      return this.cachedUsername;
+    } catch {
+      return undefined;
     }
-    return results;
+  }
+
+  async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
+    const headers = await this.headers();
+    const params = new URLSearchParams({ pagelen: String(PAGE_SIZE), page: String(options.page) });
+    for (const s of apiStates(options.state)) params.append('state', s);
+    if (options.author === 'mine') {
+      const username = await this.getCurrentUsername();
+      if (username) params.set('q', `author.username="${username}"`);
+    }
+    const url = `${this.apiBase()}/repositories/${owner}/${repo}/pullrequests?${params.toString()}`;
+    const result: { data: RawBitbucketPage } = await httpJson<RawBitbucketPage>(url, { headers });
+    return { items: result.data.values.map(mapPr), hasMore: !!result.data.next };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
@@ -99,5 +148,58 @@ export class BitbucketProvider implements PullRequestProvider {
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  getCapabilities(): PullRequestCapabilities {
+    return CAPABILITIES;
+  }
+
+  getCheckoutRefspec(number: number): string {
+    // Bitbucket Cloud exposes PR branches as regular refs under refs/pull-requests/{id}/from.
+    return `pull-requests/${number}/from`;
+  }
+
+  async getPullRequestDetail(): Promise<PullRequestDetail> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async listComments(): Promise<PullRequestComment[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async postComment(): Promise<PostCommentResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async listChangedFiles(): Promise<ChangedFile[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async getFileDiff(): Promise<FileDiffContent> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async listCommits(): Promise<PullRequestCommit[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async listCommitFiles(): Promise<ChangedFile[]> {
+    throw new Error(NOT_YET_IMPLEMENTED);
+  }
+
+  async mergePullRequest(): Promise<ActionResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async closePullRequest(): Promise<ActionResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
+  }
+
+  async reopenPullRequest(): Promise<ActionResult | UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'Bitbucket does not support reopening a declined pull request. This is a permanent platform limitation.' };
+  }
+
+  async submitReview(): Promise<ActionResult | UnsupportedResult> {
+    return { ok: false, error: NOT_YET_IMPLEMENTED };
   }
 }

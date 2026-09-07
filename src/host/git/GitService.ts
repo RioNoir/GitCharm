@@ -1424,6 +1424,56 @@ export class GitService {
     await this.git.raw(args);
   }
 
+  async localBranchExists(branch: string): Promise<boolean> {
+    try {
+      await this.git.raw(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Fetches a forge PR's head ref into a local branch (creating or force-updating it) and checks it out.
+   * `remoteRef` is provider-specific — e.g. GitHub's `pull/{number}/head`.
+   * Mirrors merge()'s dirty-tree stash/retry pattern, since a force-updating fetch can't move the
+   * ref of the currently checked-out branch while the working tree has uncommitted changes.
+   */
+  async checkoutPullRequest(remote: string, remoteRef: string, localBranch: string): Promise<void> {
+    const currentBranch = await this.getCurrentBranch().catch(() => null);
+    const isCurrent = currentBranch?.name === localBranch;
+
+    const fetchAndMove = () => this.git.raw(['fetch', remote, `+${remoteRef}:refs/heads/${localBranch}`]);
+
+    if (!isCurrent) {
+      // Not checked out anywhere — force-updating the ref directly is always safe.
+      await fetchAndMove();
+      await this.checkout(localBranch);
+      return;
+    }
+
+    // Currently checked out: fetch into a temp ref first, then reset the branch onto it,
+    // so a dirty tree fails at the reset step (catchable) rather than corrupting refs mid-fetch.
+    await this.git.raw(['fetch', remote, `${remoteRef}:refs/pr-checkout-fetch-tmp`]);
+    try {
+      await this.git.reset(['--hard', 'refs/pr-checkout-fetch-tmp']);
+    } catch (e: unknown) {
+      const isDirty = (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree'
+        || String(e).includes('overwritten by checkout')
+        || String(e).includes('Your local changes');
+      if (!isDirty) throw e;
+      const stashRef = `WIP before checking out PR branch ${localBranch}`;
+      await this.git.stash(['push', '-m', stashRef]);
+      try {
+        await this.git.reset(['--hard', 'refs/pr-checkout-fetch-tmp']);
+      } finally {
+        await this.git.stash(['pop']).catch(() => {});
+      }
+    } finally {
+      await this.git.raw(['update-ref', '-d', 'refs/pr-checkout-fetch-tmp']).catch(() => {});
+    }
+  }
+
   async cherryPick(hash: string): Promise<void> {
     await this.git.raw(['cherry-pick', hash]);
   }

@@ -13,6 +13,7 @@ const apps = [
   { name: 'mergeEditor',       entry: 'src/webview/mergeEditor/main.tsx' },
   { name: 'undockedPanel',     entry: 'src/webview/undockedPanel/main.tsx' },
   { name: 'pullRequestCreate', entry: 'src/webview/pullRequestCreate/main.tsx' },
+  { name: 'pullRequestDetail', entry: 'src/webview/pullRequestDetail/main.tsx' },
 ];
 
 /** @returns {import('esbuild').BuildOptions} */

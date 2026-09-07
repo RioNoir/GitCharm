@@ -15,7 +15,7 @@ import { PullRequestPanel } from './components/PullRequestPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
-import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider } from '../shared/msgTypes';
+import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestFilters, PullRequestSummary } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
@@ -288,6 +288,11 @@ function App() {
   // ── Pull Request state ────────────────────────────────────────────────────
   const [pullRequestRepos, setPullRequestRepos] = useState<RepoPullRequests[]>([]);
   const [pullRequestLoading, setPullRequestLoading] = useState(false);
+  const [pullRequestFilters, setPullRequestFilters] = useState<PullRequestFilters>({ state: 'open', author: 'all' });
+  const [pullRequestLoadingMore, setPullRequestLoadingMore] = useState<Record<string, boolean>>({});
+  const [expandedPrRepoIds, setExpandedPrRepoIds] = useState<Set<string>>(new Set());
+  const pullRequestFiltersRef = useRef(pullRequestFilters);
+  pullRequestFiltersRef.current = pullRequestFilters;
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -550,10 +555,21 @@ function App() {
           setPullRequestRepos(msg.repos);
           break;
 
+        case 'PULLREQUEST_LOAD_MORE_RESULT':
+          setPullRequestLoadingMore(prev => ({ ...prev, [msg.repoId]: false }));
+          if (msg.repo) {
+            setPullRequestRepos(prev => prev.map(r => r.repoId === msg.repoId ? msg.repo! : r));
+          }
+          break;
+
+        case 'PULLREQUEST_INVALIDATED':
+          requestPullRequestList(pullRequestFiltersRef.current, true);
+          break;
+
         case 'COMMIT_SWITCH_TAB':
           setActiveTab(msg.tab);
           if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
-          if (msg.tab === 'pullrequests') requestPullRequestList();
+          if (msg.tab === 'pullrequests') requestPullRequestList(pullRequestFiltersRef.current);
           break;
 
         case 'COMMIT_DESELECT_FILE':
@@ -679,21 +695,43 @@ function App() {
 
   // ── Pull Request callbacks ────────────────────────────────────────────────
 
-  const requestPullRequestList = useCallback((forceRefresh?: boolean) => {
+  const requestPullRequestList = useCallback((filters: PullRequestFilters, forceRefresh?: boolean) => {
     setPullRequestLoading(true);
-    send({ type: 'PULLREQUEST_REQUEST_LIST', forceRefresh });
+    send({ type: 'PULLREQUEST_REQUEST_LIST', filters, forceRefresh });
   }, [send]);
+
+  const handlePrSetFilters = useCallback((filters: PullRequestFilters) => {
+    setPullRequestFilters(filters);
+    requestPullRequestList(filters, true);
+  }, [requestPullRequestList]);
+
+  const handlePrLoadMore = useCallback((repoId: string) => {
+    setPullRequestLoadingMore(prev => ({ ...prev, [repoId]: true }));
+    send({ type: 'PULLREQUEST_LOAD_MORE', repoId, filters: pullRequestFiltersRef.current });
+  }, [send]);
+
+  const handlePrToggleExpanded = useCallback((repoId: string) => {
+    setExpandedPrRepoIds(prev => {
+      const next = new Set(prev);
+      if (next.has(repoId)) next.delete(repoId); else next.add(repoId);
+      return next;
+    });
+  }, []);
 
   const handlePrOpenInBrowser = useCallback((url: string) => {
     send({ type: 'PULLREQUEST_OPEN_IN_BROWSER', url });
   }, [send]);
 
+  const handlePrOpenDetail = useCallback((repoId: string, pr: PullRequestSummary) => {
+    send({ type: 'PULLREQUEST_OPEN_DETAIL', repoId, pr });
+  }, [send]);
+
   const handlePrConnectGitHub = useCallback((repoId: string) => {
-    send({ type: 'PULLREQUEST_CONNECT', repoId });
+    send({ type: 'PULLREQUEST_CONNECT', repoId, filters: pullRequestFiltersRef.current });
   }, [send]);
 
   const handlePrConnectPat = useCallback((repoId: string) => {
-    send({ type: 'PULLREQUEST_CONNECT_PAT_PROMPT', repoId });
+    send({ type: 'PULLREQUEST_CONNECT_PAT_PROMPT', repoId, filters: pullRequestFiltersRef.current });
   }, [send]);
 
   const handlePrRequestCreate = useCallback((repoId: string) => {
@@ -701,7 +739,7 @@ function App() {
   }, [send]);
 
   const handlePrSetHostOverride = useCallback((host: string, provider: ForgeProvider) => {
-    send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider });
+    send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider, filters: pullRequestFiltersRef.current });
   }, [send]);
 
   // ── Push / unpushed callbacks ─────────────────────────────────────────────
@@ -1203,7 +1241,7 @@ function App() {
                     if (tab === 'stash') repos.forEach(r => requestStashList(r.repoId));
                     if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
                     if (tab === 'worktree') requestWorktreeList();
-                    if (tab === 'pullrequests') requestPullRequestList();
+                    if (tab === 'pullrequests') requestPullRequestList(pullRequestFiltersRef.current);
                   }}
                 >
                   <Codicon
@@ -1671,17 +1709,35 @@ function App() {
 
         {activeTab === 'pullrequests' && (
           /* Pull Requests tab */
-          <ScrollArea style={css.repoList}>
+          <ScrollArea
+            style={css.repoList}
+            onScroll={e => {
+              const el = e.currentTarget;
+              const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 200;
+              if (!nearBottom) return;
+              const singleRepo = pullRequestRepos.length === 1;
+              for (const repo of pullRequestRepos) {
+                const isExpanded = singleRepo || expandedPrRepoIds.has(repo.repoId);
+                if (isExpanded && repo.hasMore && !pullRequestLoadingMore[repo.repoId]) handlePrLoadMore(repo.repoId);
+              }
+            }}
+          >
             <PullRequestPanel
               repos={pullRequestRepos}
               loading={pullRequestLoading}
+              loadingMore={pullRequestLoadingMore}
+              filters={pullRequestFilters}
               multiRepo={multiRepo}
+              expandedRepoIds={expandedPrRepoIds}
+              onToggleExpanded={handlePrToggleExpanded}
               onOpenInBrowser={handlePrOpenInBrowser}
+              onOpenDetail={handlePrOpenDetail}
               onConnectGitHub={handlePrConnectGitHub}
               onConnectPat={handlePrConnectPat}
               onRequestCreate={handlePrRequestCreate}
-              onRefresh={() => requestPullRequestList(true)}
+              onRefresh={() => requestPullRequestList(pullRequestFilters, true)}
               onSetHostOverride={handlePrSetHostOverride}
+              onSetFilters={handlePrSetFilters}
             />
           </ScrollArea>
         )}

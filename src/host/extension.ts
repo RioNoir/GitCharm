@@ -16,6 +16,8 @@ import { initLogger, logInfo, logWarn, showLogChannel } from './utils/Logger';
 import { PullRequestManager } from './pullRequests/PullRequestManager';
 import { PatCredentialStore } from './pullRequests/PatCredentialStore';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
+import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
+import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
 
 async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void> {
   const SHOWN_KEY = 'hasShownViewModeQuickpick';
@@ -211,6 +213,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.registerTextDocumentContentProvider(ShelveDocumentProvider.scheme, shelveDocProvider)
   );
 
+  const prDocProvider = new PullRequestDocumentProvider();
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(PullRequestDocumentProvider.scheme, prDocProvider)
+  );
+
   const badge = new BadgeController();
   badge.startLoading();
 
@@ -239,11 +246,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const createPullRequestPanel = new CreatePullRequestPanel(context.extensionUri, manager, pullRequestManager, () => {
     commitPanel.requestPullRequestRefresh();
   });
+  const pullRequestDetailPanel = new PullRequestDetailPanel(context.extensionUri, manager, pullRequestManager, prDocProvider, () => {
+    commitPanel.requestPullRequestRefresh();
+  });
   commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
   commitPanel.setBadgeController(badge);
   commitPanel.setUndockedPanel(undockedPanel);
   commitPanel.setCreatePullRequestPanel(createPullRequestPanel);
+  commitPanel.setPullRequestDetailPanel(pullRequestDetailPanel);
   logPanel.setCommitPanel(commitPanel);
   logPanel.setUndockedPanel(undockedPanel);
   // Changing the setting from the Settings UI: switching back to the bottom

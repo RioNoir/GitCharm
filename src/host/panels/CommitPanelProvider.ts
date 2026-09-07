@@ -27,6 +27,7 @@ import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsServi
 import type { ViewAndSortSettings } from '../types/settings';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
+import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
@@ -77,6 +78,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   private createPullRequestPanel?: CreatePullRequestPanel;
+  private pullRequestDetailPanel?: PullRequestDetailPanel;
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -96,6 +98,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   setCreatePullRequestPanel(provider: CreatePullRequestPanel): void {
     this.createPullRequestPanel = provider;
+  }
+
+  setPullRequestDetailPanel(provider: PullRequestDetailPanel): void {
+    this.pullRequestDetailPanel = provider;
   }
 
   setBranchStatusBar(bar: BranchStatusBar): void {
@@ -337,10 +343,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
   }
 
-  async requestPullRequestRefresh(): Promise<void> {
+  /** Invalidates the PR cache and asks the webview to re-request the list with its current filters. */
+  requestPullRequestRefresh(): void {
     if (!this.pullRequestManager) return;
-    const repos = await this.pullRequestManager.getAllPullRequests(true);
-    this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+    this.pullRequestManager.invalidate();
+    this.post({ type: 'PULLREQUEST_INVALIDATED' });
   }
 
   /** Reads fresh status after a stage/unstage op. simple-git reads directly from the git index so it's always accurate once the op completes. */
@@ -2393,8 +2400,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PULLREQUEST_REQUEST_LIST': {
         if (!this.pullRequestManager) { this.post({ type: 'PULLREQUEST_LIST_RESULT', repos: [] }); break; }
-        const repos = await this.pullRequestManager.getAllPullRequests(msg.forceRefresh);
+        const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, msg.forceRefresh);
         this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        break;
+      }
+
+      case 'PULLREQUEST_LOAD_MORE': {
+        if (!this.pullRequestManager) break;
+        const repo = await this.pullRequestManager.loadMore(msg.repoId, msg.filters);
+        this.post({ type: 'PULLREQUEST_LOAD_MORE_RESULT', repoId: msg.repoId, repo });
         break;
       }
 
@@ -2411,7 +2425,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         }
         if (this.pullRequestManager) {
           this.pullRequestManager.invalidate();
-          const repos = await this.pullRequestManager.getAllPullRequests(true);
+          const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
           this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         }
         break;
@@ -2422,6 +2436,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'PULLREQUEST_OPEN_DETAIL': {
+        await this.pullRequestDetailPanel?.open(msg.repoId, msg.pr);
+        break;
+      }
+
       case 'PULLREQUEST_CONNECT_PAT_PROMPT': {
         if (!this.pullRequestManager) break;
         const connection = await this.pullRequestManager.getConnectionStatus(msg.repoId);
@@ -2429,21 +2448,43 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
           break;
         }
-        const token = await vscode.window.showInputBox({
-          prompt: `Enter a Personal Access Token for ${connection.host}`,
-          placeHolder: 'Token is stored securely and never leaves this machine',
-          password: true,
-          title: `Connect to ${connection.provider} — ${connection.host}`,
-        });
-        if (!token?.trim()) break;
-        const result = await this.pullRequestManager.connectWithPat(msg.repoId, token.trim());
+
+        let result: { ok: boolean; error?: string };
+        if (connection.provider === 'bitbucket') {
+          // Bitbucket Cloud retired App Passwords in favor of API Tokens, which authenticate
+          // via Basic auth using the Atlassian account email — so two prompts are needed here.
+          const email = await vscode.window.showInputBox({
+            prompt: 'Enter your Atlassian account email',
+            placeHolder: 'you@example.com',
+            title: 'Connect to Bitbucket — Account Email',
+          });
+          if (!email?.trim()) break;
+          const apiToken = await vscode.window.showInputBox({
+            prompt: 'Enter a Bitbucket API Token (id.atlassian.com → API tokens)',
+            placeHolder: 'Token is stored securely and never leaves this machine',
+            password: true,
+            title: 'Connect to Bitbucket — API Token',
+          });
+          if (!apiToken?.trim()) break;
+          result = await this.pullRequestManager.connectBitbucket(msg.repoId, { email: email.trim(), apiToken: apiToken.trim() });
+        } else {
+          const token = await vscode.window.showInputBox({
+            prompt: `Enter a Personal Access Token for ${connection.host}`,
+            placeHolder: 'Token is stored securely and never leaves this machine',
+            password: true,
+            title: `Connect to ${connection.provider} — ${connection.host}`,
+          });
+          if (!token?.trim()) break;
+          result = await this.pullRequestManager.connectWithPat(msg.repoId, token.trim());
+        }
+
         if (!result.ok) {
           vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
           break;
         }
         vscode.window.showInformationMessage(`Connected to ${connection.host}`);
         logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
-        const repos = await this.pullRequestManager.getAllPullRequests(true);
+        const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
         this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         break;
       }
@@ -2451,7 +2492,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'PULLREQUEST_DISCONNECT': {
         if (!this.pullRequestManager) break;
         await this.pullRequestManager.disconnect(msg.repoId);
-        const repos = await this.pullRequestManager.getAllPullRequests(true);
+        const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
         this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         break;
       }
@@ -2462,7 +2503,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         await config.update('pullRequests.hostProviderOverrides', { ...overrides, [msg.host]: msg.provider }, vscode.ConfigurationTarget.Global);
         if (this.pullRequestManager) {
           this.pullRequestManager.invalidate();
-          const repos = await this.pullRequestManager.getAllPullRequests(true);
+          const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
           this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         }
         break;
