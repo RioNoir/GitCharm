@@ -460,6 +460,7 @@ function App() {
           }
           break;
         case 'COMMIT_SET_MESSAGE':
+          if (msg.ifEmpty && useCommitStore.getState().commitMessage.trim()) break;
           store.setCommitMessage(msg.message);
           break;
         case 'SHELVE_LIST_RESULT':

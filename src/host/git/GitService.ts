@@ -47,6 +47,11 @@ function vsStatusToGitFileStatus(s: Status): GitFileStatus {
   }
 }
 
+/** Drops the comment lines git adds to prepared commit messages, the way `git commit` would. */
+function stripCommitComments(raw: string): string {
+  return raw.replace(/^\s*#.*$\n?/gm, '').trim();
+}
+
 export class GitService {
   private git: SimpleGit;
   // Set immediately after a tag checkout, cleared when VS Code API confirms the update.
@@ -1097,6 +1102,58 @@ export class GitService {
     }
     const result = await this.git.commit(message, undefined, amend ? { '--amend': null } : {});
     return result.summary.changes.toString();
+  }
+
+  /**
+   * Absolute path of the repo's git dir. It is a plain file for worktrees and
+   * submodules, so resolve it through git once and cache it.
+   */
+  private gitDirPromise?: Promise<string>;
+  private gitDir(): Promise<string> {
+    return this.gitDirPromise ??= this.git
+      .raw(['rev-parse', '--absolute-git-dir'])
+      .then(out => out.trim() || path.join(this.rootPath, '.git'))
+      .catch(() => path.join(this.rootPath, '.git'));
+  }
+
+  // ponytail: commit.template is resolved once per session; a mid-session config
+  // change needs a window reload. Watch .git/config if that ever matters.
+  private commitTemplatePromise?: Promise<string>;
+  private commitTemplate(): Promise<string> {
+    return this.commitTemplatePromise ??= (async () => {
+      const configured = (await this.git.raw(['config', '--get', 'commit.template']).catch(() => '')).trim();
+      if (!configured) return '';
+      // git expands a leading ~ / ~user itself — mirror that before reading.
+      let templatePath = configured.replace(/^~([^/]*)\//, (_m, user: string) =>
+        `${user ? path.join(path.dirname(os.homedir()), user) : os.homedir()}/`);
+      if (!path.isAbsolute(templatePath)) templatePath = path.join(this.rootPath, templatePath);
+      try {
+        return stripCommitComments(fs.readFileSync(templatePath, 'utf8'));
+      } catch {
+        return '';
+      }
+    })();
+  }
+
+  /**
+   * The message the commit box should seed itself with when empty — the same sources
+   * VS Code's Source Control input uses: the message git prepared for an in-progress
+   * merge or squash, otherwise the configured commit.template. Empty when there is
+   * nothing to seed.
+   */
+  async getInputTemplate(): Promise<string> {
+    const dir = await this.gitDir();
+    for (const name of ['MERGE_MSG', 'SQUASH_MSG']) {
+      let raw: string;
+      try {
+        raw = fs.readFileSync(path.join(dir, name), 'utf8');
+      } catch {
+        continue; // no merge / squash in progress
+      }
+      const message = stripCommitComments(raw);
+      if (message) return message;
+    }
+    return this.commitTemplate();
   }
 
   async getMergeRebaseState(): Promise<'merge' | 'rebase' | null> {

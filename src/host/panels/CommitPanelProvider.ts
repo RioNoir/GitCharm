@@ -100,8 +100,19 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.handleMessage(msg, undefined as unknown as vscode.Webview).finally(() => { this.activeReplyTarget = 'sidebar'; });
   }
 
-  prefillCommitMessage(message: string): void {
-    this.post({ type: 'COMMIT_SET_MESSAGE', message });
+  /**
+   * Seeds the commit box with the message git prepared for an in-progress merge or
+   * squash (or the configured commit.template), matching VS Code's Source Control
+   * input. Only fills an empty box, so a message the user typed is never clobbered.
+   */
+  async seedCommitMessage(): Promise<void> {
+    for (const meta of this.manager.getRepoMetas()) {
+      const message = await this.manager.getRepo(meta.id)?.getInputTemplate().catch(() => '');
+      if (message) {
+        this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
+        return;
+      }
+    }
   }
   private shelveServices = new Map<string, ShelveService>();
 
@@ -322,6 +333,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private syncBadgeFromMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
       this.badgeController?.update(msg.status);
+      // A merge can start anywhere (terminal, VS Code's own panel, a pull), so re-seed
+      // off every status refresh rather than only from GitCharm's own merge command.
+      void this.seedCommitMessage();
     }
   }
 
