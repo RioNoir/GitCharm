@@ -19,6 +19,15 @@ const STRATEGY_LABEL: Record<MergeStrategy, string> = {
   fastForward: 'Fast-forward merge',
 };
 
+/** Whether `MergeActions` would render anything for this detail/error state — lets callers decide whether to show the surrounding box at all, without duplicating the visibility rules. */
+export function hasMergeActionsContent(detail: PullRequestDetail, mergeError?: string, reopenError?: string): boolean {
+  if (detail.merged) return true;
+  const isOpen = detail.state === 'open' || detail.state === 'draft';
+  const canShowMerge = isOpen && detail.capabilities.canMerge && detail.canWrite && detail.capabilities.mergeStrategies.length > 0;
+  const canShowReopen = !isOpen && detail.capabilities.canReopen && detail.canWrite;
+  return canShowMerge || canShowReopen || !!mergeError || !!reopenError;
+}
+
 export function MergeActions({ detail, merging, mergeError, reopening, reopenError, onMerge, onReopen }: Props) {
   const strategies = detail.capabilities.mergeStrategies;
   const [strategy, setStrategy] = useState<MergeStrategy>(strategies[0] ?? 'merge');
@@ -34,17 +43,21 @@ export function MergeActions({ detail, merging, mergeError, reopening, reopenErr
 
   const isOpen = detail.state === 'open' || detail.state === 'draft';
   const isConflicting = detail.capabilities.hasMergeableState && detail.mergeableState === 'conflicting';
+  const canShowMerge = isOpen && detail.capabilities.canMerge && detail.canWrite && strategies.length > 0;
+  const canShowReopen = !isOpen && detail.capabilities.canReopen && detail.canWrite;
+
+  if (!canShowMerge && !canShowReopen && !mergeError && !reopenError) return null;
 
   return (
     <div style={css.root}>
-      {detail.capabilities.hasMergeableState && (
+      {canShowMerge && detail.capabilities.hasMergeableState && (
         <div style={isConflicting ? css.conflictBanner : css.cleanBanner}>
           <Codicon name={isConflicting ? 'warning' : 'check'} style={{ fontSize: '14px', flexShrink: 0 }} />
           <span>{isConflicting ? 'This branch has conflicts that must be resolved.' : 'This branch has no conflicts with the base branch.'}</span>
         </div>
       )}
 
-      {isOpen && detail.capabilities.canMerge && strategies.length > 0 && (
+      {canShowMerge && (
         <div style={css.mergeRow}>
           <button
             style={{ ...css.mergeBtn, opacity: merging || isConflicting ? 0.6 : 1 }}
@@ -68,7 +81,7 @@ export function MergeActions({ detail, merging, mergeError, reopening, reopenErr
       )}
       {mergeError && <div style={css.errorText}>{mergeError}</div>}
 
-      {!isOpen && detail.capabilities.canReopen && (
+      {canShowReopen && (
         <button style={css.reopenBtn} disabled={reopening} onClick={onReopen}>
           <Codicon name="git-pull-request" style={{ fontSize: '13px' }} />
           {reopening ? 'Reopening…' : 'Reopen pull request'}

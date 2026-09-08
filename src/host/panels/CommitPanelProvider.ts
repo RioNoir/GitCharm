@@ -2445,6 +2445,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!this.pullRequestManager) break;
         const connection = await this.pullRequestManager.getConnectionStatus(msg.repoId);
         if (connection.detectionFailed) {
+          logWarn('pullrequest-connect-pat', `Cannot connect a token for repo ${msg.repoId} — provider detection failed`);
           vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
           break;
         }
@@ -2466,7 +2467,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             title: 'Connect to Bitbucket — API Token',
           });
           if (!apiToken?.trim()) break;
-          result = await this.pullRequestManager.connectBitbucket(msg.repoId, { email: email.trim(), apiToken: apiToken.trim() });
+          result = await this.pullRequestManager.connectBitbucket(msg.repoId, email.trim(), { email: email.trim(), apiToken: apiToken.trim() });
         } else {
           const token = await vscode.window.showInputBox({
             prompt: `Enter a Personal Access Token for ${connection.host}`,
@@ -2475,7 +2476,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             title: `Connect to ${connection.provider} — ${connection.host}`,
           });
           if (!token?.trim()) break;
-          result = await this.pullRequestManager.connectWithPat(msg.repoId, token.trim());
+          const label = await vscode.window.showInputBox({
+            prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
+            placeHolder: connection.host,
+            title: `Connect to ${connection.provider} — Account Label`,
+          });
+          result = await this.pullRequestManager.connectWithPat(msg.repoId, token.trim(), label?.trim() || connection.host);
         }
 
         if (!result.ok) {

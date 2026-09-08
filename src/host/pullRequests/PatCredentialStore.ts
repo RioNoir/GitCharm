@@ -6,40 +6,80 @@ export interface BitbucketCredentials {
   apiToken: string;
 }
 
+export interface PatAccount {
+  id: string;
+  provider: ForgeProvider;
+  host: string;
+  label: string;
+}
+
+const ACCOUNTS_INDEX_KEY = 'gitcharm.pullRequests.patAccounts';
+
 export class PatCredentialStore {
-  constructor(private readonly secrets: vscode.SecretStorage) {}
+  constructor(
+    private readonly secrets: vscode.SecretStorage,
+    private readonly globalState: vscode.Memento,
+  ) {}
 
-  private key(provider: ForgeProvider, host: string): string {
-    return `gitcharm.pat.${provider}.${host}`;
+  private key(provider: ForgeProvider, host: string, accountId: string): string {
+    return `gitcharm.pat.${provider}.${host}.${accountId}`;
   }
 
-  async get(provider: ForgeProvider, host: string): Promise<string | undefined> {
-    return this.secrets.get(this.key(provider, host));
+  private index(): PatAccount[] {
+    return this.globalState.get<PatAccount[]>(ACCOUNTS_INDEX_KEY, []);
   }
 
-  async set(provider: ForgeProvider, host: string, token: string): Promise<void> {
-    await this.secrets.store(this.key(provider, host), token);
+  private async saveIndex(accounts: PatAccount[]): Promise<void> {
+    await this.globalState.update(ACCOUNTS_INDEX_KEY, accounts);
   }
 
-  async delete(provider: ForgeProvider, host: string): Promise<void> {
-    await this.secrets.delete(this.key(provider, host));
+  /** All saved accounts, optionally filtered to a single (provider, host) pair. */
+  listAccounts(provider?: ForgeProvider, host?: string): PatAccount[] {
+    const accounts = this.index();
+    if (!provider) return accounts;
+    return accounts.filter(a => a.provider === provider && (!host || a.host === host));
+  }
+
+  getAccount(accountId: string): PatAccount | undefined {
+    return this.index().find(a => a.id === accountId);
+  }
+
+  async get(accountId: string): Promise<string | undefined> {
+    const account = this.getAccount(accountId);
+    if (!account) return undefined;
+    return this.secrets.get(this.key(account.provider, account.host, accountId));
+  }
+
+  /** Adds a new account (token already validated by the caller) and returns its generated id. */
+  async addAccount(provider: ForgeProvider, host: string, label: string, token: string): Promise<string> {
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    await this.secrets.store(this.key(provider, host, id), token);
+    await this.saveIndex([...this.index(), { id, provider, host, label }]);
+    return id;
+  }
+
+  async removeAccount(accountId: string): Promise<void> {
+    const account = this.getAccount(accountId);
+    if (!account) return;
+    await this.secrets.delete(this.key(account.provider, account.host, accountId));
+    await this.saveIndex(this.index().filter(a => a.id !== accountId));
   }
 
   /**
    * Bitbucket Cloud API Tokens authenticate via Basic auth with the account email as
    * username (unlike App Passwords, which used the Bitbucket username with Basic auth,
    * or a bearer-only token) — so Bitbucket needs both an email and a token, stored
-   * together as "email\0token" under the same secret used by get/set/delete.
+   * together as "email\0token" under the same secret used by get/addAccount.
    */
-  async getBitbucketCredentials(host: string): Promise<BitbucketCredentials | undefined> {
-    const raw = await this.get('bitbucket', host);
+  async getBitbucketCredentials(accountId: string): Promise<BitbucketCredentials | undefined> {
+    const raw = await this.get(accountId);
     if (!raw) return undefined;
     const [email, apiToken] = raw.split('\0');
     if (!email || !apiToken) return undefined;
     return { email, apiToken };
   }
 
-  async setBitbucketCredentials(host: string, credentials: BitbucketCredentials): Promise<void> {
-    await this.set('bitbucket', host, `${credentials.email}\0${credentials.apiToken}`);
+  async addBitbucketAccount(host: string, label: string, credentials: BitbucketCredentials): Promise<string> {
+    return this.addAccount('bitbucket', host, label, `${credentials.email}\0${credentials.apiToken}`);
   }
 }

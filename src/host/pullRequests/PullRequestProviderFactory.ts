@@ -1,4 +1,4 @@
-import type { ForgeProvider, ParsedRemote } from './remoteUrlParser';
+import type { ParsedRemote } from './remoteUrlParser';
 import type { PullRequestProvider } from './types';
 import type { BitbucketCredentials } from './PatCredentialStore';
 import { GitHubProvider } from './providers/GitHubProvider';
@@ -8,8 +8,9 @@ import { GiteaProvider } from './providers/GiteaProvider';
 
 export interface ProviderFactoryDeps {
   getGitHubToken: () => Promise<string | undefined>;
-  getPatToken: (provider: ForgeProvider, host: string) => Promise<string | undefined>;
-  getBitbucketCredentials: (host: string) => Promise<BitbucketCredentials | undefined>;
+  /** Already resolved to the specific account bound to (or inferred for) the calling repo — see PullRequestManager.resolveAccountId(). */
+  getPatToken: () => Promise<string | undefined>;
+  getBitbucketCredentials: () => Promise<BitbucketCredentials | undefined>;
 }
 
 export function createProvider(parsed: ParsedRemote, deps: ProviderFactoryDeps): PullRequestProvider | null {
@@ -17,11 +18,11 @@ export function createProvider(parsed: ParsedRemote, deps: ProviderFactoryDeps):
     case 'github':
       return new GitHubProvider(parsed.host, deps.getGitHubToken);
     case 'gitlab':
-      return new GitLabProvider(parsed.host, () => deps.getPatToken('gitlab', parsed.host));
+      return new GitLabProvider(parsed.host, deps.getPatToken);
     case 'bitbucket':
-      return new BitbucketProvider(() => deps.getBitbucketCredentials(parsed.host));
+      return new BitbucketProvider(deps.getBitbucketCredentials);
     case 'gitea':
-      return new GiteaProvider(parsed.host, () => deps.getPatToken('gitea', parsed.host));
+      return new GiteaProvider(parsed.host, deps.getPatToken);
     default:
       return null;
   }

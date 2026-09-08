@@ -69,12 +69,41 @@ export interface PullRequestCapabilities {
   canRequestChanges: boolean;
   canCommentReview: boolean;
   hasUnifiedDiffText: boolean;
+  canManageReviewers: boolean;
+  /** false for Bitbucket Cloud — it has no "assignee" concept on pull requests, only reviewers. */
+  canManageAssignees: boolean;
+  /** false for Bitbucket Cloud — it has no labels concept on pull requests. */
+  canManageLabels: boolean;
+}
+
+/** A user reference normalized across forges — `id` is each provider's own write-identifier (GitHub/Gitea: login, GitLab: numeric user id as a string, Bitbucket: account uuid), opaque to callers. */
+export interface PullRequestUser {
+  id: string;
+  username: string;
+  avatarUrl?: string;
+}
+
+/** A label reference normalized across forges — `id` is each provider's own write-identifier (GitHub/GitLab: the label name itself, Gitea: numeric label id as a string), opaque to callers. `color` is a hex string without a leading '#'. */
+export interface PullRequestLabel {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface CiStatus {
   state: 'pending' | 'success' | 'failure' | 'unknown';
   url?: string;
   label?: string;
+}
+
+/** One individual check/job/pipeline-stage for a PR's head commit — the detail behind the aggregate `CiStatus` badge. */
+export interface CiCheck {
+  id: string;
+  name: string;
+  state: 'pending' | 'success' | 'failure' | 'unknown';
+  url?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface PullRequestDetail extends PullRequestSummary {
@@ -85,6 +114,11 @@ export interface PullRequestDetail extends PullRequestSummary {
   baseSha: string;
   ciStatus?: CiStatus;
   capabilities: PullRequestCapabilities;
+  /** Whether the currently authenticated user has write access to the base repo — gates merge/close/edit-title/edit-target-branch actions beyond what the provider generally supports. Approve/review is gated separately (read access is enough on every provider). */
+  canWrite: boolean;
+  reviewers: PullRequestUser[];
+  assignees: PullRequestUser[];
+  labels: PullRequestLabel[];
 }
 
 export interface PullRequestComment {
@@ -151,6 +185,11 @@ export interface UnsupportedResult {
   error: string;
 }
 
+export interface UpdatePullRequestInput {
+  title?: string;
+  targetBranch?: string;
+}
+
 export interface PullRequestProvider {
   readonly kind: ForgeProvider;
   listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult>;
@@ -158,12 +197,31 @@ export interface PullRequestProvider {
   hasCredentials(): Promise<boolean>;
   /** Current authenticated username, used to implement the "mine" author filter. Cached by the caller. */
   getCurrentUsername(): Promise<string | undefined>;
+  /** Branch names for a repo, used to populate the target-branch editor — always a remote API call, since the base repo may not be the local `origin` (e.g. a fork's upstream). */
+  listBranches(owner: string, repo: string): Promise<string[]>;
+  /** Candidate users for reviewer/assignee pickers — repo collaborators (GitHub/Gitea), project members (GitLab), or workspace members (Bitbucket). */
+  listCollaborators(owner: string, repo: string): Promise<PullRequestUser[]>;
+  /** Every label defined on the repo, for the label picker — not just the ones already applied to this PR. Empty for Bitbucket (no labels concept). */
+  listAvailableLabels(owner: string, repo: string): Promise<PullRequestLabel[]>;
 
   /** Static per provider kind — no network call. */
   getCapabilities(): PullRequestCapabilities;
-  /** The remote refspec that fetches this PR's head commit into a local ref, e.g. GitHub's "pull/{number}/head". */
-  getCheckoutRefspec(number: number): string;
+  /**
+   * How to fetch this PR's head commit for a local checkout. Most forges (GitHub, GitLab, Gitea) expose a
+   * dedicated PR ref fetchable from the existing `origin` remote (e.g. GitHub's "pull/{number}/head") — for
+   * those, `remote` is the name of an existing git remote (typically "origin"). Bitbucket Cloud exposes no
+   * such ref (confirmed: only Bitbucket Server has `refs/pull-requests/*`, not Cloud) — its `remote` is
+   * instead a literal fetch URL for the PR's source repo (which may be a fork), and `refspec` names the
+   * PR's actual source branch directly.
+   */
+  getCheckoutSource(pr: PullRequestSummary): Promise<{ remote: string; refspec: string }>;
   getPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetail>;
+  updatePullRequest(owner: string, repo: string, number: number, input: UpdatePullRequestInput): Promise<ActionResult>;
+  /** Replaces the full reviewer/assignee list with `userIds` (each a `PullRequestUser.id`) — not an incremental add/remove, always the whole target set. */
+  updateReviewers(owner: string, repo: string, number: number, userIds: string[]): Promise<ActionResult>;
+  updateAssignees(owner: string, repo: string, number: number, userIds: string[]): Promise<ActionResult | UnsupportedResult>;
+  /** Replaces the full label list with `labelIds` (each a `PullRequestLabel.id`). */
+  updateLabels(owner: string, repo: string, number: number, labelIds: string[]): Promise<ActionResult | UnsupportedResult>;
   listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]>;
   postComment(owner: string, repo: string, number: number, body: string): Promise<PostCommentResult>;
   listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]>;
@@ -174,4 +232,6 @@ export interface PullRequestProvider {
   closePullRequest(owner: string, repo: string, number: number): Promise<ActionResult>;
   reopenPullRequest(owner: string, repo: string, number: number): Promise<ActionResult | UnsupportedResult>;
   submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult>;
+  /** Every individual check/job for the PR's head commit — the detail behind the `ciStatus` aggregate badge. */
+  listChecks(owner: string, repo: string, headSha: string): Promise<CiCheck[]>;
 }

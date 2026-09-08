@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ChangedFile, IconThemeData, PullRequestCommit } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileTreeView } from './FileTreeView';
 import { formatRelativeTime } from '../formatRelativeTime';
+import { renderMarkdown } from '../renderMarkdown';
+import { SkeletonList } from '../../shared/Skeleton';
 
 interface Props {
   commits: PullRequestCommit[];
@@ -30,7 +32,10 @@ function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle,
   onOpenFileDiff: (file: ChangedFile) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const hasExtendedMessage = commit.message.includes('\n') && commit.message.split('\n').slice(1).join('').trim().length > 0;
+  const [messageExpanded, setMessageExpanded] = useState(false);
+  const extendedMessage = commit.message.split('\n').slice(1).join('\n').trim();
+  const hasExtendedMessage = extendedMessage.length > 0;
+  const extendedMessageHtml = useMemo(() => renderMarkdown(extendedMessage), [extendedMessage]);
 
   return (
     <div style={css.commitWrapper}>
@@ -46,7 +51,18 @@ function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle,
           : <span style={css.avatarFallback}>{initials(commit.authorName)}</span>
         }
         <div style={css.commitMain}>
-          <span style={css.commitMessage}>{commit.message.split('\n')[0]}</span>
+          <span style={css.commitMessage}>
+            {commit.message.split('\n')[0]}
+            {hasExtendedMessage && (
+              <button
+                style={css.viewMoreBtn}
+                onClick={e => { e.stopPropagation(); setMessageExpanded(o => !o); }}
+                title={messageExpanded ? 'Hide full message' : 'Show full message'}
+              >
+                <Codicon name="ellipsis" style={{ fontSize: '15px' }} />
+              </button>
+            )}
+          </span>
           <span style={css.commitMeta}>
             <strong style={css.commitAuthor}>{commit.authorName}</strong>
             <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString()}>
@@ -59,13 +75,13 @@ function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle,
           {commit.shortSha}
         </span>
       </div>
+      {messageExpanded && hasExtendedMessage && (
+        <div className="markdown-body" style={css.commitMessageExpanded} dangerouslySetInnerHTML={{ __html: extendedMessageHtml }} />
+      )}
       {expanded && (
         <div style={css.commitDetail}>
-          {hasExtendedMessage && (
-            <pre style={css.commitDetailMessage}>{commit.message.split('\n').slice(1).join('\n').trim()}</pre>
-          )}
           {filesLoading ? (
-            <div style={css.empty}>Loading files…</div>
+            <SkeletonList rows={3} withAvatar={false} />
           ) : (
             <FileTreeView
               files={files ?? []}
@@ -82,7 +98,7 @@ function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle,
 export function CommitsList({ commits, loading, iconTheme, commitFiles, commitFilesLoading, onRequestCommitFiles, onOpenCommitFileDiff }: Props) {
   const [expandedSha, setExpandedSha] = useState<string | null>(null);
 
-  if (loading) return <div style={css.empty}>Loading commits…</div>;
+  if (loading) return <SkeletonList rows={5} />;
   if (commits.length === 0) return <div style={css.empty}>No commits.</div>;
 
   const handleToggle = (sha: string) => {
@@ -129,6 +145,14 @@ const css = {
   commitMessage: {
     fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
+  viewMoreBtn: {
+    marginLeft: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', verticalAlign: 'middle',
+    color: 'inherit', opacity: 0.7, background: 'transparent', border: '1px solid var(--vscode-panel-border)',
+    borderRadius: '4px', padding: '3px', cursor: 'pointer',
+  } as React.CSSProperties,
+  commitMessageExpanded: {
+    fontSize: '12px', margin: '0 12px 10px 46px', lineHeight: 1.5, opacity: 0.85,
+  } as React.CSSProperties,
   commitMeta: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', opacity: 0.65 } as React.CSSProperties,
   commitAuthor: { fontWeight: 600 },
   commitDate: {},
@@ -140,8 +164,5 @@ const css = {
   commitDetail: {
     padding: '4px 12px 14px 46px', display: 'flex', flexDirection: 'column' as const, gap: '10px',
     background: 'color-mix(in srgb, var(--vscode-foreground) 3%, transparent)',
-  } as React.CSSProperties,
-  commitDetailMessage: {
-    fontSize: '11px', margin: 0, whiteSpace: 'pre-wrap' as const, fontFamily: 'inherit', opacity: 0.85,
   } as React.CSSProperties,
 };

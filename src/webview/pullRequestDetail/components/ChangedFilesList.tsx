@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ChangedFile, IconThemeData } from '../../../host/types/messages';
 import { FileTreeView } from './FileTreeView';
+import { SkeletonList } from '../../shared/Skeleton';
 
 interface Props {
   files: ChangedFile[];
@@ -10,10 +11,6 @@ interface Props {
 }
 
 export function ChangedFilesList({ files, loading, iconTheme, onOpenFile }: Props) {
-  if (loading) return <div style={css.empty}>Loading files…</div>;
+  if (loading) return <SkeletonList rows={6} withAvatar={false} />;
   return <FileTreeView files={files} iconTheme={iconTheme} onOpenFile={onOpenFile} />;
 }
-
-const css = {
-  empty: { fontSize: '12px', opacity: 0.5, fontStyle: 'italic' as const },
-};

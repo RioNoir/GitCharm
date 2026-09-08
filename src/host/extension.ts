@@ -224,8 +224,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();
 
-  const patCredentialStore = new PatCredentialStore(context.secrets);
-  const pullRequestManager = new PullRequestManager(manager, patCredentialStore);
+  const patCredentialStore = new PatCredentialStore(context.secrets, context.globalState);
+  const pullRequestManager = new PullRequestManager(manager, patCredentialStore, context.workspaceState);
 
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState, pullRequestManager);
 

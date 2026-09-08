@@ -10,7 +10,7 @@
     "url": "https://github.com/RioNoir/GitCharm.git"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "SCM Providers",
@@ -1178,7 +1178,7 @@
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-react": "^4.2.0",

@@ -152,7 +152,12 @@ function TreeDir({ node, depth, allExpanded, iconTheme, onOpen }: {
 
   return (
     <>
-      <div style={css.dirRow} onClick={() => { if (allExpanded === null) setLocalOpen(o => !o); }}>
+      <div
+        style={css.dirRow(hovered)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => { if (allExpanded === null) setLocalOpen(o => !o); }}
+      >
         <div style={{ width: indent, flexShrink: 0 }} />
         <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={css.chevron} />
         <FileIcon name={folderBaseName} isFolder isOpen={open} theme={iconTheme} size={16} style={css.folderIconBase} />
@@ -194,18 +199,18 @@ export function FileTreeView({ files, iconTheme, onOpenFile }: Props) {
         {viewMode === 'tree' && (
           <>
             <button style={css.toolbarBtn(false)} onClick={() => setAllExpanded(true)} title="Expand all">
-              <Codicon name="expand-all" style={{ fontSize: '16px' }} />
+              <Codicon name="expand-all" style={{ fontSize: '14px' }} />
             </button>
             <button style={css.toolbarBtn(false)} onClick={() => setAllExpanded(false)} title="Collapse all">
-              <Codicon name="collapse-all" style={{ fontSize: '16px' }} />
+              <Codicon name="collapse-all" style={{ fontSize: '14px' }} />
             </button>
           </>
         )}
         <button style={css.toolbarBtn(viewMode === 'tree')} onClick={() => setViewMode('tree')} title="Tree view">
-          <Codicon name="list-tree" style={{ fontSize: '16px' }} />
+          <Codicon name="list-tree" style={{ fontSize: '14px' }} />
         </button>
         <button style={css.toolbarBtn(viewMode === 'flat')} onClick={() => setViewMode('flat')} title="Flat view">
-          <Codicon name="list-flat" style={{ fontSize: '16px' }} />
+          <Codicon name="list-flat" style={{ fontSize: '14px' }} />
         </button>
       </div>
       <div style={css.root}>
@@ -232,7 +237,7 @@ const css = {
   toolbar: { display: 'flex', alignItems: 'center', gap: '6px' } as React.CSSProperties,
   fileCountLabel: { fontSize: '12px', opacity: 0.6 },
   toolbarBtn: (active: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px',
     background: active ? 'var(--vscode-toolbar-activeBackground)' : 'transparent',
     border: '1px solid transparent', borderColor: active ? 'var(--vscode-panel-border)' : 'transparent',
     borderRadius: '4px', cursor: 'pointer', color: 'inherit', opacity: 0.9,
@@ -245,13 +250,12 @@ const css = {
     display: 'flex', alignItems: 'center', gap: '4px', paddingRight: '10px', paddingTop: '2px', paddingBottom: '2px',
     cursor: 'pointer', minHeight: '24px', userSelect: 'none' as const,
     background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
-    borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)',
   }),
-  dirRow: {
+  dirRow: (hovered: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 10px 2px 0', cursor: 'pointer',
     minHeight: '24px', userSelect: 'none' as const,
-    borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)',
-  } as React.CSSProperties,
+    background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
+  }),
   chevron: { fontSize: '10px', opacity: 0.5, flexShrink: 0, width: '14px' } as React.CSSProperties,
   fileIconBase: { opacity: 0.9 } as React.CSSProperties,
   folderIconBase: { color: 'var(--vscode-symbolIcon-folderForeground, #dcb67a)' } as React.CSSProperties,

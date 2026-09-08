@@ -3,6 +3,7 @@ import type { PullRequestComment, PullRequestCommit } from '../../../host/types/
 import { Codicon } from '../../shared/Codicon';
 import { renderMarkdown } from '../renderMarkdown';
 import { formatRelativeTime } from '../formatRelativeTime';
+import { SkeletonList } from '../../shared/Skeleton';
 
 interface Props {
   comments: PullRequestComment[];
@@ -39,14 +40,13 @@ function CommentRow({ comment }: { comment: PullRequestComment }) {
         }
         <span>
           <strong style={css.commentAuthor}>{comment.authorName}</strong>
-          <span style={css.commentedLabel}> commented</span>
         </span>
         <span style={css.commentDate} title={new Date(comment.createdAt).toLocaleString()}>
           {formatRelativeTime(comment.createdAt)}
         </span>
       </div>
       <div style={css.commentBodyWrap}>
-        <div style={css.commentBody} dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="markdown-body" style={css.commentBody} dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     </div>
   );
@@ -62,8 +62,11 @@ function CommitRow({ commit, onOpen }: { commit: PullRequestCommit; onOpen: () =
       onClick={onOpen}
       title="Open changes for this commit"
     >
-      <Codicon name="git-commit" style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
-      <Codicon name="github" style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
+      <Codicon name="git-commit" style={{ fontSize: '18px', opacity: 0.6, flexShrink: 0 }} />
+      {commit.authorAvatarUrl
+        ? <img src={commit.authorAvatarUrl} alt={commit.authorName} style={css.commitAvatarImg} />
+        : <span style={css.commitAvatarFallback}>{initials(commit.authorName)}</span>
+      }
       <span style={css.commitLink}>{commit.message.split('\n')[0]}</span>
       <span style={css.commitSha}>{commit.shortSha}</span>
       <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString()}>
@@ -87,7 +90,7 @@ export function CommentsThread({ comments, commits, loading, posting, canClose, 
   return (
     <div style={css.root}>
       {loading ? (
-        <div style={css.empty}>Loading…</div>
+        <SkeletonList rows={3} />
       ) : timeline.length === 0 ? (
         <div style={css.empty}>No activity yet.</div>
       ) : (
@@ -125,6 +128,7 @@ export function CommentsThread({ comments, commits, loading, posting, canClose, 
           disabled={!draft.trim() || posting}
           onClick={() => { onPostComment(draft.trim()); setDraft(''); }}
         >
+          <Codicon name="comment" style={{ fontSize: '13px' }} />
           {posting ? 'Posting…' : 'Comment'}
         </button>
       </div>
@@ -141,6 +145,7 @@ const css = {
     border: '1px solid var(--vscode-panel-border)', borderRadius: '6px', overflow: 'hidden',
   } as React.CSSProperties,
   mergeActionsBox: {
+    display: 'flex', flexDirection: 'column' as const, gap: '14px',
     border: '1px solid var(--vscode-panel-border)', borderRadius: '6px', padding: '14px',
   } as React.CSSProperties,
   commentHeader: {
@@ -154,13 +159,18 @@ const css = {
     fontSize: '9px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
   } as React.CSSProperties,
   commentAuthor: { fontWeight: 600 },
-  commentedLabel: { opacity: 0.6 },
   commentDate: { opacity: 0.5, marginLeft: 'auto', flexShrink: 0 },
   commentBodyWrap: { padding: '12px' } as React.CSSProperties,
   commentBody: { fontSize: '13px', lineHeight: 1.5 } as React.CSSProperties,
   commitRow: {
     display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer',
     borderRadius: '4px',
+  } as React.CSSProperties,
+  commitAvatarImg: { width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0 } as React.CSSProperties,
+  commitAvatarFallback: {
+    width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: '8px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
   } as React.CSSProperties,
   commitLink: {
     color: 'var(--vscode-textLink-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flex: 1,
@@ -181,6 +191,7 @@ const css = {
     background: 'transparent', color: 'var(--vscode-foreground)', border: '1px solid var(--vscode-panel-border)', cursor: 'pointer',
   } as React.CSSProperties,
   submitBtn: {
+    display: 'flex', alignItems: 'center', gap: '6px',
     fontSize: '12px', padding: '6px 16px', borderRadius: '3px', background: 'var(--vscode-button-background)',
     color: 'var(--vscode-button-foreground)', border: 'none', cursor: 'pointer',
   } as React.CSSProperties,

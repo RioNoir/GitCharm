@@ -1,8 +1,8 @@
 import type {
-  ActionResult, ChangedFile, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
+  ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestProvider, PullRequestSummary,
-  SubmitReviewInput, UnsupportedResult,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestSummary, PullRequestUser,
+  SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
 
@@ -18,6 +18,9 @@ const CAPABILITIES: PullRequestCapabilities = {
   canRequestChanges: true,
   canCommentReview: true,
   hasUnifiedDiffText: true,
+  canManageReviewers: true,
+  canManageAssignees: true,
+  canManageLabels: true,
 };
 
 interface RawGitHubPr {
@@ -32,12 +35,15 @@ interface RawGitHubPr {
   mergeable: boolean | null;
   mergeable_state?: string;
   head: { ref: string; sha: string; repo: { full_name: string } | null };
-  base: { ref: string; sha: string; repo: { full_name: string } | null };
+  base: { ref: string; sha: string; repo: { full_name: string; permissions?: { push: boolean } } | null };
   user: { login: string; avatar_url: string } | null;
   body?: string | null;
   created_at: string;
   updated_at: string;
   comments?: number;
+  requested_reviewers?: { login: string; avatar_url: string }[];
+  assignees?: { login: string; avatar_url: string }[];
+  labels?: { name: string; color: string }[];
 }
 
 interface RawGitHubUser {
@@ -66,10 +72,23 @@ interface RawGitHubContent {
 }
 
 interface RawGitHubCheckRun {
+  id: number;
   status: 'queued' | 'in_progress' | 'completed';
   conclusion: string | null;
   html_url: string;
   name: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+/** GitHub's legacy "commit status" API (external CI not integrated with Checks/Actions) — a separate system from check-runs, no single endpoint merges both. */
+interface RawGitHubLegacyStatus {
+  id: number;
+  state: string;
+  context: string;
+  target_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface RawGitHubCommit {
@@ -180,8 +199,53 @@ export class GitHubProvider implements PullRequestProvider {
     return CAPABILITIES;
   }
 
-  getCheckoutRefspec(number: number): string {
-    return `pull/${number}/head`;
+  async getCheckoutSource(pr: PullRequestSummary): Promise<{ remote: string; refspec: string }> {
+    return { remote: 'origin', refspec: `pull/${pr.number}/head` };
+  }
+
+  async listBranches(owner: string, repo: string): Promise<string[]> {
+    const headers = await this.headers();
+    const names: string[] = [];
+    let page = 1;
+    for (;;) {
+      const { data } = await httpJson<{ name: string }[]>(
+        `${this.apiBase()}/repos/${owner}/${repo}/branches?per_page=100&page=${page}`, { headers },
+      );
+      names.push(...data.map(b => b.name));
+      if (data.length < 100) break;
+      page++;
+    }
+    return names;
+  }
+
+  async listCollaborators(owner: string, repo: string): Promise<PullRequestUser[]> {
+    const headers = await this.headers();
+    const users: PullRequestUser[] = [];
+    let page = 1;
+    for (;;) {
+      const { data } = await httpJson<{ login: string; avatar_url: string }[]>(
+        `${this.apiBase()}/repos/${owner}/${repo}/collaborators?per_page=100&page=${page}`, { headers },
+      );
+      users.push(...data.map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })));
+      if (data.length < 100) break;
+      page++;
+    }
+    return users;
+  }
+
+  async listAvailableLabels(owner: string, repo: string): Promise<PullRequestLabel[]> {
+    const headers = await this.headers();
+    const labels: PullRequestLabel[] = [];
+    let page = 1;
+    for (;;) {
+      const { data } = await httpJson<{ name: string; color: string }[]>(
+        `${this.apiBase()}/repos/${owner}/${repo}/labels?per_page=100&page=${page}`, { headers },
+      );
+      labels.push(...data.map(l => ({ id: l.name, name: l.name, color: l.color })));
+      if (data.length < 100) break;
+      page++;
+    }
+    return labels;
   }
 
   async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
@@ -253,7 +317,119 @@ export class GitHubProvider implements PullRequestProvider {
       baseSha: data.base.sha,
       ciStatus,
       capabilities: CAPABILITIES,
+      canWrite: data.base.repo?.permissions?.push ?? false,
+      reviewers: (data.requested_reviewers ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+      assignees: (data.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+      labels: (data.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color })),
     };
+  }
+
+  /** Unions two separate systems GitHub never merges into one list: check-runs (Actions/Checks-integrated apps) and legacy commit statuses (external CI not using Checks). */
+  async listChecks(owner: string, repo: string, headSha: string): Promise<CiCheck[]> {
+    const headers = await this.headers();
+    const [checkRuns, legacyStatuses] = await Promise.all([
+      httpJson<{ check_runs: RawGitHubCheckRun[] }>(
+        `${this.apiBase()}/repos/${owner}/${repo}/commits/${headSha}/check-runs?per_page=100`, { headers },
+      ).then(({ data }) => data.check_runs).catch(() => []),
+      httpJson<RawGitHubLegacyStatus[]>(
+        `${this.apiBase()}/repos/${owner}/${repo}/commits/${headSha}/statuses?per_page=100`, { headers },
+      ).then(({ data }) => data).catch(() => []),
+    ]);
+
+    const fromCheckRuns: CiCheck[] = checkRuns.map(r => ({
+      id: String(r.id),
+      name: r.name,
+      state: r.conclusion === 'success' || r.conclusion === 'neutral' || r.conclusion === 'skipped' ? 'success'
+        : r.status !== 'completed' ? 'pending'
+        : 'failure',
+      url: r.html_url,
+      startedAt: r.started_at ?? undefined,
+      completedAt: r.completed_at ?? undefined,
+    }));
+    const fromLegacyStatuses: CiCheck[] = legacyStatuses.map(s => ({
+      id: String(s.id),
+      name: s.context,
+      state: s.state === 'success' ? 'success' : s.state === 'pending' ? 'pending' : 'failure',
+      url: s.target_url ?? undefined,
+      startedAt: s.created_at,
+      completedAt: s.updated_at,
+    }));
+    return [...fromCheckRuns, ...fromLegacyStatuses];
+  }
+
+  async updatePullRequest(owner: string, repo: string, number: number, input: UpdatePullRequestInput): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: input.title, base: input.targetBranch }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** GitHub has no "set reviewers" endpoint, only add/remove — diffs against the PR's current requested_reviewers first. */
+  async updateReviewers(owner: string, repo: string, number: number, userIds: string[]): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      const { data } = await httpJson<RawGitHubPr>(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}`, { headers });
+      const current = (data.requested_reviewers ?? []).map(u => u.login);
+      const toAdd = userIds.filter(id => !current.includes(id));
+      const toRemove = current.filter(id => !userIds.includes(id));
+      if (toAdd.length > 0) {
+        await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}/requested_reviewers`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewers: toAdd }),
+        });
+      }
+      if (toRemove.length > 0) {
+        await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}/requested_reviewers`, {
+          method: 'DELETE', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewers: toRemove }),
+        });
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** GitHub PRs are issues under the hood — assignees have their own add/remove endpoints, same diff-against-current approach as reviewers. */
+  async updateAssignees(owner: string, repo: string, number: number, userIds: string[]): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      const { data } = await httpJson<RawGitHubPr>(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}`, { headers });
+      const current = (data.assignees ?? []).map(u => u.login);
+      const toAdd = userIds.filter(id => !current.includes(id));
+      const toRemove = current.filter(id => !userIds.includes(id));
+      if (toAdd.length > 0) {
+        await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/assignees`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ assignees: toAdd }),
+        });
+      }
+      if (toRemove.length > 0) {
+        await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/assignees`, {
+          method: 'DELETE', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ assignees: toRemove }),
+        });
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** GitHub's issue labels endpoint (PRs are issues under the hood) does a true replace with a single PUT, unlike reviewers/assignees which only have add/remove. */
+  async updateLabels(owner: string, repo: string, number: number, labelIds: string[]): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/labels`, {
+        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ labels: labelIds }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {

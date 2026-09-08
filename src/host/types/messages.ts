@@ -12,15 +12,16 @@ import type { IconThemeData } from '../utils/IconThemeService';
 import type { ViewAndSortSettings, ViewAndSortUserPrefs } from './settings';
 import type { PullRequestFilters, RepoPullRequests } from '../pullRequests/PullRequestManager';
 import type {
-  ChangedFile, CreatePullRequestInput, FileDiffRefs, ForgeProvider, MergeStrategy, PullRequestAuthorFilter,
-  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestStateFilter,
-  PullRequestSummary, SubmitReviewInput,
+  ChangedFile, CiCheck, CreatePullRequestInput, FileDiffContent, FileDiffRefs, ForgeProvider, MergeStrategy, PullRequestAuthorFilter,
+  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestLabel, PullRequestStateFilter,
+  PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput,
 } from '../pullRequests/types';
 
 export type {
   RepoPullRequests, CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary,
   PullRequestFilters, PullRequestStateFilter, PullRequestAuthorFilter, PullRequestDetail, ChangedFile,
-  MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, FileDiffRefs,
+  MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, FileDiffContent, FileDiffRefs, ReviewEvent,
+  PullRequestUser, PullRequestLabel, CiCheck,
 };
 
 export interface MergeParentCommit {
@@ -358,7 +359,7 @@ export type PrCreateToHostMsg =
 // ─── Pull Request Detail: Host → WebView ─────────────────────────────────────
 
 export type HostToPrDetailMsg =
-  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary }
+  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string }
   | { type: 'PRDETAIL_ICON_THEME'; iconTheme: IconThemeData }
   | { type: 'PRDETAIL_LOADED'; detail: PullRequestDetail }
   | { type: 'PRDETAIL_LOAD_ERROR'; error: string }
@@ -372,7 +373,15 @@ export type HostToPrDetailMsg =
   | { type: 'PRDETAIL_CLOSE_RESULT'; ok: boolean; error?: string }
   | { type: 'PRDETAIL_REOPEN_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
   | { type: 'PRDETAIL_REVIEW_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
-  | { type: 'PRDETAIL_CHECKOUT_RESULT'; ok: boolean; branchName?: string; error?: string };
+  | { type: 'PRDETAIL_CHECKOUT_RESULT'; ok: boolean; branchName?: string; error?: string }
+  | { type: 'PRDETAIL_TARGET_BRANCHES_RESULT'; branches: string[]; error?: string }
+  | { type: 'PRDETAIL_UPDATE_RESULT'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_COLLABORATORS_RESULT'; collaborators: PullRequestUser[]; error?: string }
+  | { type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_AVAILABLE_LABELS_RESULT'; labels: PullRequestLabel[]; error?: string }
+  | { type: 'PRDETAIL_UPDATE_LABELS_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_CHECKS_RESULT'; checks: CiCheck[]; error?: string };
 
 // ─── Pull Request Detail: WebView → Host ─────────────────────────────────────
 
@@ -392,4 +401,13 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_SUBMIT_REVIEW'; input: SubmitReviewInput }
   | { type: 'PRDETAIL_OPEN_IN_BROWSER' }
   | { type: 'PRDETAIL_VIEW_ALL_CHANGES' }
-  | { type: 'PRDETAIL_CHECKOUT' };
+  | { type: 'PRDETAIL_CHECKOUT_PR' }
+  | { type: 'PRDETAIL_CHECKOUT_BRANCH' }
+  | { type: 'PRDETAIL_REQUEST_TARGET_BRANCHES' }
+  | { type: 'PRDETAIL_UPDATE'; title?: string; targetBranch?: string }
+  | { type: 'PRDETAIL_REQUEST_COLLABORATORS' }
+  | { type: 'PRDETAIL_UPDATE_REVIEWERS'; userIds: string[] }
+  | { type: 'PRDETAIL_UPDATE_ASSIGNEES'; userIds: string[] }
+  | { type: 'PRDETAIL_REQUEST_AVAILABLE_LABELS' }
+  | { type: 'PRDETAIL_UPDATE_LABELS'; labelIds: string[] }
+  | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string };
