@@ -565,10 +565,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
               }));
             } catch { return []; }
           })).then(all => {
-            const stashCommits = all.flat();
-            if (stashCommits.length > 0) {
-              post({ type: 'LOG_STASHES_BATCH', stashCommits });
-            }
+            // Always post, empty included: an empty list is how the last stash
+            // disappearing is reported. Skipping it left a stash dropped elsewhere on
+            // screen until the webview remounted. The store bails on an unchanged list,
+            // so the repeated empty batch of a stash-less repo costs nothing.
+            post({ type: 'LOG_STASHES_BATCH', stashCommits: all.flat() });
           }).catch(() => {});
         }
         break;
