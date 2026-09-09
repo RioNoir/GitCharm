@@ -33,7 +33,9 @@
   "activationEvents": [
     "workspaceContains:**/.git",
     "onStartupFinished",
-    "onWebviewPanel:gitcharm.undocked"
+    "onWebviewPanel:gitcharm.undocked",
+    "onWebviewPanel:gitcharmCommitDetail",
+    "onWebviewPanel:gitcharm.pullRequestDetail"
   ],
   "main": "./out/host/extension.js",
   "contributes": {

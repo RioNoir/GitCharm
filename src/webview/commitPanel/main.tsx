@@ -274,6 +274,10 @@ function App() {
 
   // ── Tab ───────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('changes');
+  const [tabBarCollapsed, setTabBarCollapsed] = useState(false);
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number } | null>(null);
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
+  const tabBarContentRef = useRef<HTMLDivElement | null>(null);
 
   // ── Shelve state ──────────────────────────────────────────────────────────
   const [shelveMap, setShelveMap]       = useState<Record<string, ShelveEntry[]>>({});
@@ -369,6 +373,43 @@ function App() {
     s.textContent = `[data-action-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; }`;
     document.head.appendChild(s);
   }, []);
+
+  useEffect(() => {
+    const id = 'gitcharm-tab-dropdown-hover';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `[data-tab-dropdown-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; }`;
+    document.head.appendChild(s);
+  }, []);
+
+  // Collapse the tab bar into a single dropdown button once it no longer fits in the
+  // available width (checked against the natural, unwrapped content width). The tab bar
+  // only mounts once the loading/empty-state early returns below have passed, so the
+  // observer is (re)installed via callback refs rather than a mount-only useEffect —
+  // otherwise it would run once against null refs (during the loading state) and never again.
+  const tabBarObserverRef = useRef<ResizeObserver | null>(null);
+  const setTabBarRefs = useCallback(() => {
+    const bar = tabBarRef.current;
+    const content = tabBarContentRef.current;
+    tabBarObserverRef.current?.disconnect();
+    tabBarObserverRef.current = null;
+    if (!bar || !content) return;
+    const check = () => setTabBarCollapsed(content.scrollWidth > bar.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(bar);
+    observer.observe(content);
+    tabBarObserverRef.current = observer;
+  }, []);
+  const tabBarRefCb = useCallback((el: HTMLDivElement | null) => {
+    tabBarRef.current = el;
+    setTabBarRefs();
+  }, [setTabBarRefs]);
+  const tabBarContentRefCb = useCallback((el: HTMLDivElement | null) => {
+    tabBarContentRef.current = el;
+    setTabBarRefs();
+  }, [setTabBarRefs]);
 
   // ── Autopilot ─────────────────────────────────────────────────────────────
   const [generatingMessage, setGeneratingMessage]   = useState(false);
@@ -1252,7 +1293,6 @@ function App() {
 
   return (
     <div style={css.app} onContextMenu={e => e.preventDefault()}>
-
       {/* ── Tab bar ── */}
       {(() => {
         const totalToPush = repos.reduce((sum, r) => {
@@ -1264,49 +1304,91 @@ function App() {
           return sum + paths.size;
         }, 0);
         const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + r.pullRequests.length, 0);
+        const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
+        const tabMeta = (tab: TabId) => ({
+          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : tab === 'pullrequests' ? 'Pull Requests' : 'Push',
+          iconName: tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload',
+          badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalToPush : tab === 'pullrequests' ? totalPullRequests : 0,
+        });
+        const selectTab = (tab: TabId) => {
+          setActiveTab(tab);
+          // Skip refetching data that's already loaded — avoids a jarring loading flash every time the
+          // tab is reopened; an explicit refresh (per-tab or per-repo) stays available for real refetches.
+          if (tab === 'shelf') repos.forEach(r => { if (!(r.repoId in shelveMap)) requestShelveList(r.repoId); });
+          if (tab === 'stash') repos.forEach(r => { if (!(r.repoId in stashMap)) requestStashList(r.repoId); });
+          if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
+          if (tab === 'worktree' && worktreeRepos.length === 0) requestWorktreeList();
+          if (tab === 'pullrequests' && pullRequestRepos.length === 0) requestPullRequestList();
+        };
+        const allTabs: TabId[] = ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
+        const activeMeta = tabMeta(activeTab);
         return (
-          <div style={css.tabBar}>
-            {(['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'] as TabId[]).map(tab => {
-              const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
-              const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : tab === 'pullrequests' ? 'Pull Requests' : 'Push';
-              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload';
-              return (
-                <button
-                  key={tab}
-                  style={css.tab(activeTab === tab)}
-                  title={label}
-                  onClick={() => {
-                    setActiveTab(tab);
-                    // Skip refetching data that's already loaded — avoids a jarring loading flash every time the
-                    // tab is reopened; an explicit refresh (per-tab or per-repo) stays available for real refetches.
-                    if (tab === 'shelf') repos.forEach(r => { if (!(r.repoId in shelveMap)) requestShelveList(r.repoId); });
-                    if (tab === 'stash') repos.forEach(r => { if (!(r.repoId in stashMap)) requestStashList(r.repoId); });
-                    if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
-                    if (tab === 'worktree' && worktreeRepos.length === 0) requestWorktreeList();
-                    if (tab === 'pullrequests' && pullRequestRepos.length === 0) requestPullRequestList();
-                  }}
-                >
-                  <Codicon
-                    name={iconName}
-                    style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
-                  />
-                  {activeTab === tab && (
-                    <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
-                      {label}
-                    </span>
-                  )}
-                  {tab === 'changes' && totalChanges > 0 && (
-                    <span style={css.pushBadge}>{formatBadgeCount(totalChanges)}</span>
-                  )}
-                  {tab === 'push' && totalToPush > 0 && (
-                    <span style={css.pushBadge}>{formatBadgeCount(totalToPush)}</span>
-                  )}
-                  {tab === 'pullrequests' && totalPullRequests > 0 && (
-                    <span style={css.pushBadge}>{formatBadgeCount(totalPullRequests)}</span>
-                  )}
-                </button>
-              );
-            })}
+          <div ref={tabBarRefCb} style={css.tabBar}>
+            {/* Real tab strip — always mounted (off-screen when collapsed) so its natural width keeps driving the ResizeObserver check. */}
+            <div
+              ref={tabBarContentRefCb}
+              style={tabBarCollapsed
+                ? { display: 'flex', position: 'fixed', left: '-9999px', top: '-9999px', visibility: 'hidden' }
+                : { display: 'flex', minWidth: 0 }}
+            >
+              {allTabs.map(tab => {
+                const { label, iconName, badge } = tabMeta(tab);
+                return (
+                  <button
+                    key={tab}
+                    style={css.tab(activeTab === tab)}
+                    title={label}
+                    onClick={() => selectTab(tab)}
+                  >
+                    <Codicon
+                      name={iconName}
+                      style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
+                    />
+                    {activeTab === tab && (
+                      <span style={{ animation: tabBarCollapsed ? 'none' : 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
+                        {label}
+                      </span>
+                    )}
+                    {badge > 0 && (
+                      <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Collapsed fallback — single dropdown button showing the active tab. */}
+            {tabBarCollapsed && (
+              <button
+                data-tab-dropdown-btn
+                style={css.tabDropdownBtn}
+                title={activeMeta.label}
+                onClick={e => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setTabMenu({ x: rect.left, y: rect.bottom });
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                  <Codicon name={activeMeta.iconName} style={{ marginRight: '5px', fontSize: '13px', flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{activeMeta.label}</span>
+                </span>
+                {activeMeta.badge > 0 && <span style={{ ...css.pushBadge, flexShrink: 0 }}>{formatBadgeCount(activeMeta.badge)}</span>}
+                <Codicon name="chevron-down" style={{ marginLeft: 'auto', paddingLeft: '5px', fontSize: '13px', flexShrink: 0 }} />
+              </button>
+            )}
+
+            {tabMenu && (
+              <ContextMenu
+                x={tabMenu.x}
+                y={tabMenu.y}
+                items={allTabs.map(tab => {
+                  const { label, iconName, badge } = tabMeta(tab);
+                  return { id: tab, label: badge > 0 ? `${label} (${formatBadgeCount(badge)})` : label, icon: iconName };
+                })}
+                onSelect={id => selectTab(id as TabId)}
+                onClose={() => setTabMenu(null)}
+              />
+            )}
           </div>
         );
       })()}
@@ -2097,7 +2179,7 @@ const css = {
   tabBar: {
     display: 'flex', borderBottom: '1px solid var(--vscode-panel-border)',
     background: 'var(--vscode-sideBar-background)', flexShrink: 0,
-    overflowX: 'auto' as const, overflowY: 'hidden' as const,
+    position: 'relative' as const, overflow: 'hidden' as const,
   } as React.CSSProperties,
   tab: (active: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', flexShrink: 0,
@@ -2109,6 +2191,14 @@ const css = {
     fontWeight: active ? '600' : 'normal', whiteSpace: 'nowrap' as const,
     transition: 'opacity 0.1s, border-color 0.1s', color: 'var(--vscode-foreground)',
   }),
+  tabDropdownBtn: {
+    display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
+    padding: '5px 10px', fontSize: '12px',
+    cursor: 'pointer', background: 'transparent', border: 'none',
+    borderBottom: '2px solid transparent',
+    fontFamily: 'var(--vscode-font-family)', fontWeight: '600',
+    color: 'var(--vscode-foreground)', transition: 'background 0.1s',
+  } as React.CSSProperties,
   pushBadge: {
     background: 'var(--vscode-badge-background)',
     color: 'var(--vscode-badge-foreground)',

@@ -104,6 +104,8 @@ function App() {
         case 'PRDETAIL_INIT':
           setSummary(msg.summary);
           setCurrentUsername(msg.currentUsername);
+          // Persisted so VS Code can restore this panel (via registerWebviewPanelSerializer) after a window reload/restart.
+          getVsCodeApi().setState({ repoId: msg.repoId, number: msg.number });
           send({ type: 'PRDETAIL_REQUEST_DETAIL' });
           send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
           send({ type: 'PRDETAIL_REQUEST_FILES' });

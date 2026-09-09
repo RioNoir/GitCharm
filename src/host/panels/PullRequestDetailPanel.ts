@@ -33,13 +33,6 @@ export class PullRequestDetailPanel {
       return;
     }
 
-    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
-    if (!meta) {
-      logWarn('pullrequest-detail-open', `Repository not found for repoId ${repoId}`);
-      vscode.window.showErrorMessage('Repository not found');
-      return;
-    }
-
     const localResourceRoots: vscode.Uri[] = [this.extensionUri];
     for (const ext of vscode.extensions.all) {
       const themes: Array<{ id: string }> = ext.packageJSON?.contributes?.iconThemes ?? [];
@@ -54,6 +47,39 @@ export class PullRequestDetailPanel {
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
     );
+    await this.setupPanel(panel, repoId, pr);
+  }
+
+  /** Re-hydrates a Pull Request Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharm.pullRequestDetail', ...) in extension.ts. */
+  async restore(panel: vscode.WebviewPanel, state: unknown): Promise<void> {
+    const s = state as { repoId?: unknown; number?: unknown } | null;
+    if (!s || typeof s.repoId !== 'string' || typeof s.number !== 'number') {
+      panel.dispose();
+      return;
+    }
+    const result = await this.pullRequestManager.getPullRequestDetail(s.repoId, s.number);
+    if ('error' in result) {
+      logWarn('pullrequest-detail-restore', `Failed to restore PR detail panel: ${result.error}`);
+      vscode.window.showWarningMessage(`Could not restore pull request #${s.number}: ${result.error}`);
+      panel.dispose();
+      return;
+    }
+    await this.setupPanel(panel, s.repoId, result);
+  }
+
+  private async setupPanel(panel: vscode.WebviewPanel, repoId: string, pr: PullRequestSummary): Promise<void> {
+    const key = `${repoId}:${pr.number}`;
+
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) {
+      logWarn('pullrequest-detail-open', `Repository not found for repoId ${repoId}`);
+      vscode.window.showErrorMessage('Repository not found');
+      panel.dispose();
+      return;
+    }
+
+    const panelTitle = pr.title ? `PR #${pr.number} - ${truncateTitle(pr.title)}` : `PR #${pr.number}`;
+    panel.title = panelTitle;
     panel.iconPath = new vscode.ThemeIcon('git-pull-request');
 
     panel.webview.html = getWebviewHtml(

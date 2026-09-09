@@ -27,6 +27,66 @@ export async function openCommitDetailPanel(
     return;
   }
 
+  const panel = vscode.window.createWebviewPanel(
+    'gitcharmCommitDetail',
+    `Commit ${hash.slice(0, 7)}`,
+    vscode.ViewColumn.One,
+    {
+      enableScripts: true,
+      retainContextWhenHidden: false,
+      localResourceRoots: getLocalResourceRoots(extensionUri),
+    }
+  );
+  await setupPanel(panel, extensionUri, manager, repoId, hash, opts);
+}
+
+function getLocalResourceRoots(extensionUri: vscode.Uri): vscode.Uri[] {
+  const localResourceRoots: vscode.Uri[] = [vscode.Uri.joinPath(extensionUri, 'media')];
+  // Add all icon theme extension roots so switching themes live doesn't break CSP
+  for (const ext of vscode.extensions.all) {
+    const themes: Array<{ id: string }> = ext.packageJSON?.contributes?.iconThemes ?? [];
+    if (themes.length > 0) localResourceRoots.push(vscode.Uri.file(ext.extensionPath));
+  }
+  return localResourceRoots;
+}
+
+/** Re-hydrates a Commit Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharmCommitDetail', ...) in extension.ts. */
+export async function deserializeCommitDetailPanel(
+  panel: vscode.WebviewPanel,
+  state: unknown,
+  extensionUri: vscode.Uri,
+  manager: WorkspaceGitManager,
+): Promise<void> {
+  const s = state as { repoId?: unknown; hash?: unknown } | null;
+  if (!s || typeof s.repoId !== 'string' || typeof s.hash !== 'string') {
+    panel.dispose();
+    return;
+  }
+  const repo = manager.getRepo(s.repoId);
+  if (!repo) {
+    logWarn('commitDetail', 'Repository not found while restoring commit detail panel.');
+    panel.dispose();
+    return;
+  }
+  await setupPanel(panel, extensionUri, manager, s.repoId, s.hash, {});
+}
+
+async function setupPanel(
+  panel: vscode.WebviewPanel,
+  extensionUri: vscode.Uri,
+  manager: WorkspaceGitManager,
+  repoId: string,
+  hash: string,
+  opts: { autoExplain?: boolean },
+): Promise<void> {
+  const repo = manager.getRepo(repoId);
+  if (!repo) {
+    logWarn('commitDetail', 'Repository not found.');
+    vscode.window.showErrorMessage('Repository not found.');
+    panel.dispose();
+    return;
+  }
+
   let commitInfo: Awaited<ReturnType<typeof repo.getCommitMeta>> | null = null;
   let files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
   let fullMessage = '';
@@ -52,23 +112,14 @@ export async function openCommitDetailPanel(
 
   const nonce = generateNonce();
 
-  const localResourceRoots: vscode.Uri[] = [vscode.Uri.joinPath(extensionUri, 'media')];
-  // Add all icon theme extension roots so switching themes live doesn't break CSP
-  for (const ext of vscode.extensions.all) {
-    const themes: Array<{ id: string }> = ext.packageJSON?.contributes?.iconThemes ?? [];
-    if (themes.length > 0) localResourceRoots.push(vscode.Uri.file(ext.extensionPath));
-  }
+  // Re-applied here (not just at createWebviewPanel time) so a panel restored via
+  // registerWebviewPanelSerializer also gets the icon theme extension roots.
+  panel.webview.options = {
+    enableScripts: true,
+    localResourceRoots: getLocalResourceRoots(extensionUri),
+  };
 
-  const panel = vscode.window.createWebviewPanel(
-    'gitcharmCommitDetail',
-    commitInfo.message ? `Commit ${commitInfo.shortHash} - ${truncateTitle(commitInfo.message)}` : `Commit ${commitInfo.shortHash}`,
-    vscode.ViewColumn.One,
-    {
-      enableScripts: true,
-      retainContextWhenHidden: false,
-      localResourceRoots,
-    }
-  );
+  panel.title = commitInfo.message ? `Commit ${commitInfo.shortHash} - ${truncateTitle(commitInfo.message)}` : `Commit ${commitInfo.shortHash}`;
   panel.iconPath = new vscode.ThemeIcon('git-commit');
 
   const codiconUri = panel.webview.asWebviewUri(
@@ -732,6 +783,8 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     // ── Load all dynamic data from JSON data block ──
     const __d = JSON.parse(document.getElementById('__data').textContent);
     const FILES = __d.files;
+    // Persisted so VS Code can restore this panel (via registerWebviewPanelSerializer) after a window reload/restart.
+    vscode.setState({ repoId: __d.repoId, hash: __d.hash });
 
     // ── Escape helpers ──
     function escText(s) {
