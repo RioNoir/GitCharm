@@ -127,6 +127,11 @@ const styles = {
   repoName: {
     fontWeight: 'bold' as const,
     fontSize: '12px',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    flexShrink: 1,
   },
   branch: {
     display: 'flex',

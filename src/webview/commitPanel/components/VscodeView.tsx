@@ -259,6 +259,8 @@ interface RepoSubGroupProps {
   repoColor: string;
   staged: boolean;
   isFirst?: boolean;
+  /** Suppresses the group's bottom border when it's the last repo group in its section — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
   files: FileStatus[];
   viewMode: ViewMode;
   selectedFile: { repoId: string; path: string } | null;
@@ -291,7 +293,7 @@ interface RepoSubGroupProps {
   multiSelectedFiles?: FileStatus[];
 }
 
-function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
+function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, isLast = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
   const dirKeys: string[] = [];
@@ -305,6 +307,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
   const collapsed = isEmpty ? !isCollapsed(collapseKey) : isCollapsed(collapseKey);
   const branchClr = repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, false);
   const [hovered, setHovered] = useState(false);
+  const [branchHovered, setBranchHovered] = useState(false);
 
   const onStage   = (file: FileStatus) => onStageFiles([file.path]);
   const onUnstage = (file: FileStatus) => onUnstageFiles([file.path]);
@@ -355,8 +358,10 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               <span style={submoduleBadgeStyle} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
             )}
             <span
-              style={branchBadgeStyle(branchClr)}
+              style={branchBadgeStyle(branchClr, branchHovered)}
               onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
+              onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
+              onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
               title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
             >
               <Codicon name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
@@ -391,7 +396,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
         <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
       )}
       {!collapsed && !isEmpty && <div>{renderFiles()}</div>}
-      <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
+      {!isLast && <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />}
     </div>
   );
 }
@@ -505,49 +510,53 @@ export function VscodeView({
         openChangesTitle={isSingleRepo ? 'Open Staged Changes' : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenStagedChanges(singleRepoStatus.repoId) : undefined}
       />
-      {!stagedCollapsed && repos.filter(r => r.stagedFiles.length > 0).map((r, idx) => {
-        const meta = metaMap.get(r.repoId);
-        return (
-          <VscodeRepoGroup
-            key={r.repoId}
-            isFirst={idx === 0}
-            repoStatus={r}
-            repoName={meta?.name ?? r.repoId.split('/').pop() ?? r.repoId}
-            repoColor={meta?.color ?? '#4ec9b0'}
-            staged={true}
-            files={r.stagedFiles}
-            viewMode={viewMode}
-            selectedFile={selectedFile}
-            ctxFile={ctxFile}
-            iconTheme={iconTheme}
-            isCollapsed={isCollapsed}
-            toggleCollapsed={toggleCollapsed}
-            hasExpandedDirs={hasExpandedDirs}
-            setDirsCollapsed={setDirsCollapsed}
-            activeFolderPath={activeFolderPath}
-            onSelectFile={onSelectFile}
-            onContextMenu={(e, file) => onContextMenu(e, file, true)}
-            onFolderContextMenu={(e, rid, fp, fs) => onFolderContextMenu(e, rid, fp, fs, true)}
-            onOpenFile={onOpenFile}
-            onRollback={onRollback}
-            onResolveMerge={onResolveMerge}
-            onStageFiles={paths => onStageFiles(r.repoId, paths)}
-            onUnstageFiles={paths => onUnstageFiles(r.repoId, paths)}
-            onRepoContextMenu={e => onRepoContextMenu(e, r.repoId, true)}
-            onBranchClick={onBranchClick}
-            onOpenChanges={() => onOpenStagedChanges(r.repoId)}
-            repoSelected={selectedRepos.has(r.repoId)}
-            onToggleRepoSelection={() => onToggleRepoSelection(r.repoId)}
-            singleRepo={isSingleRepo}
-            isSubmodule={meta?.isSubmodule}
-            submodulePath={meta?.submodulePath}
-            isWorktree={meta?.isWorktree}
-            mainWorktreePath={meta?.mainWorktreePath}
-            onMultiSelect={onMultiSelect}
-            multiSelectedFiles={multiSelectedFiles}
-          />
-        );
-      })}
+      {!stagedCollapsed && (() => {
+        const stagedRepos = repos.filter(r => r.stagedFiles.length > 0);
+        return stagedRepos.map((r, idx) => {
+          const meta = metaMap.get(r.repoId);
+          return (
+            <VscodeRepoGroup
+              key={r.repoId}
+              isFirst={idx === 0}
+              isLast={idx === stagedRepos.length - 1}
+              repoStatus={r}
+              repoName={meta?.name ?? r.repoId.split('/').pop() ?? r.repoId}
+              repoColor={meta?.color ?? '#4ec9b0'}
+              staged={true}
+              files={r.stagedFiles}
+              viewMode={viewMode}
+              selectedFile={selectedFile}
+              ctxFile={ctxFile}
+              iconTheme={iconTheme}
+              isCollapsed={isCollapsed}
+              toggleCollapsed={toggleCollapsed}
+              hasExpandedDirs={hasExpandedDirs}
+              setDirsCollapsed={setDirsCollapsed}
+              activeFolderPath={activeFolderPath}
+              onSelectFile={onSelectFile}
+              onContextMenu={(e, file) => onContextMenu(e, file, true)}
+              onFolderContextMenu={(e, rid, fp, fs) => onFolderContextMenu(e, rid, fp, fs, true)}
+              onOpenFile={onOpenFile}
+              onRollback={onRollback}
+              onResolveMerge={onResolveMerge}
+              onStageFiles={paths => onStageFiles(r.repoId, paths)}
+              onUnstageFiles={paths => onUnstageFiles(r.repoId, paths)}
+              onRepoContextMenu={e => onRepoContextMenu(e, r.repoId, true)}
+              onBranchClick={onBranchClick}
+              onOpenChanges={() => onOpenStagedChanges(r.repoId)}
+              repoSelected={selectedRepos.has(r.repoId)}
+              onToggleRepoSelection={() => onToggleRepoSelection(r.repoId)}
+              singleRepo={isSingleRepo}
+              isSubmodule={meta?.isSubmodule}
+              submodulePath={meta?.submodulePath}
+              isWorktree={meta?.isWorktree}
+              mainWorktreePath={meta?.mainWorktreePath}
+              onMultiSelect={onMultiSelect}
+              multiSelectedFiles={multiSelectedFiles}
+            />
+          );
+        });
+      })()}
 
       {/* ── Changes ── */}
       <SectionHeader
@@ -567,47 +576,51 @@ export function VscodeView({
         openChangesTitle={isSingleRepo ? 'Open Changes' : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenUnstagedChanges(singleRepoStatus.repoId) : undefined}
       />
-      {!unstagedCollapsed && repos.filter(r => r.stagedFiles.length === 0 || r.unstagedFiles.length > 0).map((r, idx) => {
-        const meta = metaMap.get(r.repoId);
-        return (
-          <VscodeRepoGroup
-            key={r.repoId}
-            isFirst={idx === 0}
-            repoStatus={r}
-            repoName={meta?.name ?? r.repoId.split('/').pop() ?? r.repoId}
-            repoColor={meta?.color ?? '#4ec9b0'}
-            staged={false}
-            files={r.unstagedFiles}
-            viewMode={viewMode}
-            selectedFile={selectedFile}
-            ctxFile={ctxFile}
-            iconTheme={iconTheme}
-            isCollapsed={isCollapsed}
-            toggleCollapsed={toggleCollapsed}
-            hasExpandedDirs={hasExpandedDirs}
-            setDirsCollapsed={setDirsCollapsed}
-            activeFolderPath={activeFolderPath}
-            onSelectFile={onSelectFile}
-            onContextMenu={(e, file) => onContextMenu(e, file, false)}
-            onFolderContextMenu={(e, rid, fp, fs) => onFolderContextMenu(e, rid, fp, fs, false)}
-            onOpenFile={onOpenFile}
-            onRollback={onRollback}
-            onResolveMerge={onResolveMerge}
-            onStageFiles={paths => onStageFiles(r.repoId, paths)}
-            onUnstageFiles={paths => onUnstageFiles(r.repoId, paths)}
-            onRepoContextMenu={e => onRepoContextMenu(e, r.repoId, false)}
-            onBranchClick={onBranchClick}
-            onOpenChanges={() => onOpenUnstagedChanges(r.repoId)}
-            singleRepo={isSingleRepo}
-            isSubmodule={meta?.isSubmodule}
-            submodulePath={meta?.submodulePath}
-            isWorktree={meta?.isWorktree}
-            mainWorktreePath={meta?.mainWorktreePath}
-            onMultiSelect={onMultiSelect}
-            multiSelectedFiles={multiSelectedFiles}
-          />
-        );
-      })}
+      {!unstagedCollapsed && (() => {
+        const unstagedRepos = repos.filter(r => r.stagedFiles.length === 0 || r.unstagedFiles.length > 0);
+        return unstagedRepos.map((r, idx) => {
+          const meta = metaMap.get(r.repoId);
+          return (
+            <VscodeRepoGroup
+              key={r.repoId}
+              isFirst={idx === 0}
+              isLast={idx === unstagedRepos.length - 1}
+              repoStatus={r}
+              repoName={meta?.name ?? r.repoId.split('/').pop() ?? r.repoId}
+              repoColor={meta?.color ?? '#4ec9b0'}
+              staged={false}
+              files={r.unstagedFiles}
+              viewMode={viewMode}
+              selectedFile={selectedFile}
+              ctxFile={ctxFile}
+              iconTheme={iconTheme}
+              isCollapsed={isCollapsed}
+              toggleCollapsed={toggleCollapsed}
+              hasExpandedDirs={hasExpandedDirs}
+              setDirsCollapsed={setDirsCollapsed}
+              activeFolderPath={activeFolderPath}
+              onSelectFile={onSelectFile}
+              onContextMenu={(e, file) => onContextMenu(e, file, false)}
+              onFolderContextMenu={(e, rid, fp, fs) => onFolderContextMenu(e, rid, fp, fs, false)}
+              onOpenFile={onOpenFile}
+              onRollback={onRollback}
+              onResolveMerge={onResolveMerge}
+              onStageFiles={paths => onStageFiles(r.repoId, paths)}
+              onUnstageFiles={paths => onUnstageFiles(r.repoId, paths)}
+              onRepoContextMenu={e => onRepoContextMenu(e, r.repoId, false)}
+              onBranchClick={onBranchClick}
+              onOpenChanges={() => onOpenUnstagedChanges(r.repoId)}
+              singleRepo={isSingleRepo}
+              isSubmodule={meta?.isSubmodule}
+              submodulePath={meta?.submodulePath}
+              isWorktree={meta?.isWorktree}
+              mainWorktreePath={meta?.mainWorktreePath}
+              onMultiSelect={onMultiSelect}
+              multiSelectedFiles={multiSelectedFiles}
+            />
+          );
+        });
+      })()}
 
       <div style={{ flex: 1, minHeight: '40px' }} />
     </div>
@@ -667,10 +680,12 @@ const repoGroupStyle = (_isFirst: boolean): React.CSSProperties => ({
 const repoHeaderStyle = (color: string): React.CSSProperties => ({
   display: 'flex',
   alignItems: 'center',
-  background: color + '14',
+  background: `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
   height: '26px',
   boxSizing: 'border-box',
   minWidth: 0,
+  // Sticks just below the section header (Staged Changes / Changes) above it, which is itself sticky at top:0.
+  position: 'sticky', top: '26px', zIndex: 1,
 });
 
 const repoHeaderMainStyle: React.CSSProperties = {
@@ -698,10 +713,13 @@ const repoNameStyle: React.CSSProperties = {
   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 10, minWidth: '20px',
 };
 
-const branchBadgeStyle = (color: string): React.CSSProperties => ({
+/** `hovered` mirrors the Log panel's "selected row" badge look — solid background instead of the usual 20%-tint. */
+const branchBadgeStyle = (color: string, hovered = false): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: '3px',
   fontSize: '10px', fontWeight: 600, textTransform: 'none', letterSpacing: 0,
-  background: `${color}33`, color, border: `1px solid ${color}88`,
+  background: hovered ? color : `${color}33`,
+  color: hovered ? 'var(--vscode-editor-background)' : color,
+  border: `1px solid ${hovered ? color : `${color}88`}`,
   borderRadius: '3px', padding: '1px 5px', flexShrink: 1, minWidth: 0, maxWidth: '160px',
   marginLeft: '4px', cursor: 'pointer', overflow: 'hidden',
 });

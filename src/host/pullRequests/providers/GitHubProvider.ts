@@ -1,8 +1,8 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestSummary, PullRequestUser,
-  SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestStateFilter,
+  PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
 
@@ -21,6 +21,9 @@ const CAPABILITIES: PullRequestCapabilities = {
   canManageReviewers: true,
   canManageAssignees: true,
   canManageLabels: true,
+  canFilterAssignee: true,
+  canFilterReviewRequested: true,
+  canFilterMentions: true,
 };
 
 interface RawGitHubPr {
@@ -48,6 +51,28 @@ interface RawGitHubPr {
 
 interface RawGitHubUser {
   login: string;
+}
+
+/** GitHub's Search API returns "issue"-shaped results — no `head`/`base`, so no branch info is available without an extra per-item fetch (deliberately not done, see mapSearchIssue). */
+interface RawGitHubSearchIssue {
+  id: number;
+  number: number;
+  title: string;
+  html_url: string;
+  state: 'open' | 'closed';
+  draft?: boolean;
+  pull_request?: { merged_at: string | null };
+  user: { login: string; avatar_url: string } | null;
+  created_at: string;
+  updated_at: string;
+  comments?: number;
+  labels?: { name: string; color: string }[];
+  assignees?: { login: string; avatar_url: string }[];
+}
+
+interface RawGitHubSearchResult {
+  items: RawGitHubSearchIssue[];
+  total_count: number;
 }
 
 interface RawGitHubIssueComment {
@@ -126,6 +151,36 @@ function mapPr(pr: RawGitHubPr): PullRequestSummary {
     createdAt: pr.created_at,
     updatedAt: pr.updated_at,
     commentCount: pr.comments,
+    assignees: (pr.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+    reviewers: (pr.requested_reviewers ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+    labels: (pr.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color })),
+  };
+}
+
+function mapSearchState(issue: RawGitHubSearchIssue): PullRequestSummary['state'] {
+  if (issue.pull_request?.merged_at) return 'merged';
+  if (issue.state === 'closed') return 'closed';
+  if (issue.draft) return 'draft';
+  return 'open';
+}
+
+/** Search API results have no branch info (see RawGitHubSearchIssue) — sourceBranch/targetBranch are left empty, which the list UI hides rather than showing a bare "→". */
+function mapSearchIssue(issue: RawGitHubSearchIssue): PullRequestSummary {
+  return {
+    id: String(issue.id),
+    number: issue.number,
+    title: issue.title,
+    url: issue.html_url,
+    state: mapSearchState(issue),
+    sourceBranch: '',
+    targetBranch: '',
+    authorName: issue.user?.login ?? 'unknown',
+    authorAvatarUrl: issue.user?.avatar_url,
+    createdAt: issue.created_at,
+    updatedAt: issue.updated_at,
+    commentCount: issue.comments,
+    assignees: (issue.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+    labels: (issue.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color })),
   };
 }
 
@@ -142,12 +197,18 @@ function mapFileStatus(status: RawGitHubFile['status']): ChangedFile['status'] {
   return 'modified';
 }
 
-/** GitHub's PR list endpoint only supports state=open|closed|all — "merged" is a client-side refinement of "closed". */
-function apiState(state: ListPullRequestsOptions['state']): 'open' | 'closed' | 'all' {
-  if (state === 'merged') return 'closed';
-  if (state === 'all') return 'all';
-  if (state === 'closed') return 'closed';
-  return 'open';
+/**
+ * GitHub's PR list endpoint only supports state=open|closed|all — "merged" is a client-side refinement of
+ * "closed" (a merged PR is also `state: 'closed'` on GitHub), and an arbitrary subset of states (e.g. just
+ * open+merged, excluding closed-unmerged) is likewise resolved client-side after fetching the broadest state
+ * that covers the requested set.
+ */
+function apiState(states: PullRequestStateFilter[]): 'open' | 'closed' | 'all' {
+  // GitHub has no server-side "draft" state — drafts are just open PRs with a flag, so wanting drafts means fetching "open".
+  const wantsOpen = states.includes('open') || states.includes('draft');
+  const wantsClosedLike = states.includes('closed') || states.includes('merged');
+  if (wantsOpen && wantsClosedLike) return 'all';
+  return wantsOpen ? 'open' : 'closed';
 }
 
 const REVIEW_EVENT_MAP: Record<SubmitReviewInput['event'], string> = {
@@ -250,8 +311,40 @@ export class GitHubProvider implements PullRequestProvider {
 
   async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
     const headers = await this.headers();
+
+    // A bare PR number goes straight to a single get-by-number call — precise, and far cheaper than a search.
+    const numberMatch = options.search?.trim().match(/^#?(\d+)$/);
+    if (numberMatch) {
+      try {
+        const { data } = await httpJson<RawGitHubPr>(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${numberMatch[1]}`, { headers });
+        const pr = mapPr(data);
+        return { items: options.states.includes(pr.state) ? [pr] : [], hasMore: false };
+      } catch (err) {
+        if (err instanceof HttpJsonError && err.status === 404) return { items: [], hasMore: false };
+        throw err;
+      }
+    }
+
+    const needsSearch = options.assignedToMe || options.reviewRequestedToMe || options.mentioningMe || !!options.search;
+    if (needsSearch) {
+      const username = (options.assignedToMe || options.reviewRequestedToMe || options.mentioningMe) ? await this.getCurrentUsername() : undefined;
+      const qParts = [`repo:${owner}/${repo}`, 'is:pr'];
+      qParts.push(...options.states.map(s => `is:${s}`));
+      if (options.assignedToMe && username) qParts.push(`assignee:${username}`);
+      if (options.reviewRequestedToMe && username) qParts.push(`review-requested:${username}`);
+      if (options.mentioningMe && username) qParts.push(`mentions:${username}`);
+      if (options.author === 'mine') {
+        const authorUsername = username ?? await this.getCurrentUsername();
+        if (authorUsername) qParts.push(`author:${authorUsername}`);
+      }
+      if (options.search) qParts.push(options.search);
+      const params = new URLSearchParams({ q: qParts.join(' '), per_page: String(PAGE_SIZE), page: String(options.page) });
+      const { data } = await httpJson<RawGitHubSearchResult>(`${this.apiBase()}/search/issues?${params.toString()}`, { headers });
+      return { items: data.items.map(mapSearchIssue), hasMore: data.items.length === PAGE_SIZE };
+    }
+
     const params = new URLSearchParams({
-      state: apiState(options.state),
+      state: apiState(options.states),
       per_page: String(PAGE_SIZE),
       page: String(options.page),
     });
@@ -261,9 +354,7 @@ export class GitHubProvider implements PullRequestProvider {
     }
     const url = `${this.apiBase()}/repos/${owner}/${repo}/pulls?${params.toString()}`;
     const { data } = await httpJson<RawGitHubPr[]>(url, { headers });
-    let items = data.map(mapPr);
-    // "merged" isn't a real API state — filter the closed page down to merged-only PRs.
-    if (options.state === 'merged') items = items.filter(pr => pr.state === 'merged');
+    const items = data.map(mapPr).filter(pr => options.states.includes(pr.state));
     return { items, hasMore: data.length === PAGE_SIZE };
   }
 

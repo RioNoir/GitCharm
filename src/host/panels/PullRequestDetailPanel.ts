@@ -8,6 +8,12 @@ import type { ChangedFile, FileDiffContent, HostToPrDetailMsg, PrDetailToHostMsg
 import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 
+const TAB_TITLE_MAX_LENGTH = 40;
+
+function truncateTitle(title: string): string {
+  return title.length > TAB_TITLE_MAX_LENGTH ? `${title.slice(0, TAB_TITLE_MAX_LENGTH)}…` : title;
+}
+
 export class PullRequestDetailPanel {
   private panels = new Map<string, vscode.WebviewPanel>();
   private diffCache = new Map<string, FileDiffContent>();
@@ -40,9 +46,11 @@ export class PullRequestDetailPanel {
       if (themes.length > 0) localResourceRoots.push(vscode.Uri.file(ext.extensionPath));
     }
 
+    const panelTitle = pr.title ? `PR #${pr.number} - ${truncateTitle(pr.title)}` : `PR #${pr.number}`;
+
     const panel = vscode.window.createWebviewPanel(
       'gitcharm.pullRequestDetail',
-      `PR #${pr.number}`,
+      panelTitle,
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
     );
@@ -52,7 +60,7 @@ export class PullRequestDetailPanel {
       panel.webview,
       this.extensionUri,
       'pullRequestDetail',
-      `PR #${pr.number}`
+      panelTitle
     );
 
     panel.webview.onDidReceiveMessage((msg: PrDetailToHostMsg) => this.handleMessage(msg, repoId, pr, panel));

@@ -1972,7 +1972,7 @@ export class GitService {
     // then get full messages separately per hash.
     // GS before each record; fields separated by NUL.
     const GS = '\x1D';
-    const FORMAT = `%x1D%H%x00%h%x00%s%x00%an%x00%ci`;
+    const FORMAT = `%x1D%H%x00%h%x00%s%x00%an%x00%ae%x00%ci`;
 
     const parseRecords = (raw: string): UnpushedCommit[] => {
       const commits: UnpushedCommit[] = [];
@@ -1981,13 +1981,14 @@ export class GitService {
         if (!trimmed) continue;
         const lines = trimmed.split('\n');
         const parts = lines[0].split('\x00');
-        if (parts.length < 5) continue;
+        if (parts.length < 6) continue;
         const commit: UnpushedCommit = {
           hash: parts[0].trim(),
           shortHash: parts[1].trim(),
           message: parts[2].trim(),
           author: parts[3].trim(),
-          date: parts.slice(4).join('\x00').trim(),
+          authorEmail: parts[4].trim(),
+          date: parts.slice(5).join('\x00').trim(),
         };
         const statLine = lines.find(l => l.includes('changed'));
         if (statLine) {

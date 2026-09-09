@@ -1,8 +1,8 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestSummary, PullRequestUser,
-  SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestStateFilter,
+  PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
 
@@ -21,6 +21,9 @@ const CAPABILITIES: PullRequestCapabilities = {
   canManageReviewers: true,
   canManageAssignees: true,
   canManageLabels: true,
+  canFilterAssignee: true,
+  canFilterReviewRequested: true,
+  canFilterMentions: false,
 };
 
 interface RawGiteaPr {
@@ -137,15 +140,23 @@ function mapPr(pr: RawGiteaPr): PullRequestSummary {
     createdAt: pr.created_at,
     updatedAt: pr.updated_at,
     commentCount: pr.comments,
+    assignees: (pr.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+    reviewers: (pr.requested_reviewers ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
+    labels: (pr.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color.replace(/^#/, '') })),
   };
 }
 
-/** Gitea's PR list endpoint only supports state=open|closed|all — "merged" is a client-side refinement of "closed". */
-function apiState(state: ListPullRequestsOptions['state']): 'open' | 'closed' | 'all' {
-  if (state === 'merged') return 'closed';
-  if (state === 'all') return 'all';
-  if (state === 'closed') return 'closed';
-  return 'open';
+/**
+ * Gitea's PR list endpoint only supports state=open|closed|all — "merged" is a client-side refinement of
+ * "closed", and an arbitrary subset of states is likewise resolved client-side after fetching the broadest
+ * state that covers the requested set.
+ */
+function apiState(states: PullRequestStateFilter[]): 'open' | 'closed' | 'all' {
+  // Gitea has no server-side "draft" state — drafts are just open PRs with a flag, so wanting drafts means fetching "open".
+  const wantsOpen = states.includes('open') || states.includes('draft');
+  const wantsClosedLike = states.includes('closed') || states.includes('merged');
+  if (wantsOpen && wantsClosedLike) return 'all';
+  return wantsOpen ? 'open' : 'closed';
 }
 
 export class GiteaProvider implements PullRequestProvider {
@@ -186,16 +197,59 @@ export class GiteaProvider implements PullRequestProvider {
 
   async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
     const headers = await this.headers();
+
+    // A bare PR number goes straight to a single get-by-number call — precise, and far cheaper than a search.
+    const numberMatch = options.search?.trim().match(/^#?(\d+)$/);
+    if (numberMatch) {
+      try {
+        const { data } = await httpJson<RawGiteaPr>(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${numberMatch[1]}`, { headers });
+        const pr = mapPr(data);
+        return { items: options.states.includes(pr.state) ? [pr] : [], hasMore: false };
+      } catch (err) {
+        if (err instanceof HttpJsonError && err.status === 404) return { items: [], hasMore: false };
+        throw err;
+      }
+    }
+
+    // Assigned/review-requested/search deviate to the issues endpoint (Gitea PRs are issues under the hood, same
+    // trick already used elsewhere in this provider for assignees/labels) — the plain /pulls list has no such filters.
+    if (options.assignedToMe || options.reviewRequestedToMe || options.search) {
+      const params = new URLSearchParams({
+        type: 'pulls', state: apiState(options.states), limit: String(PAGE_SIZE), page: String(options.page),
+      });
+      if (options.assignedToMe) params.set('assigned', 'true');
+      if (options.search) params.set('q', options.search);
+      if (options.reviewRequestedToMe) params.set('review_requested', 'true');
+      let data: RawGiteaPr[];
+      try {
+        ({ data } = await httpJson<RawGiteaPr[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues?${params.toString()}`, { headers }));
+      } catch (err) {
+        // review_requested isn't supported on older Gitea/Forgejo versions — retry once without it rather than failing the whole list.
+        if (options.reviewRequestedToMe && err instanceof HttpJsonError && err.status >= 400 && err.status < 500) {
+          params.delete('review_requested');
+          ({ data } = await httpJson<RawGiteaPr[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues?${params.toString()}`, { headers }));
+        } else {
+          throw err;
+        }
+      }
+      let items = data.map(mapPr).filter(pr => options.states.includes(pr.state));
+      if (options.author === 'mine') {
+        const username = await this.getCurrentUsername();
+        if (username) items = items.filter(pr => pr.authorName === username);
+      }
+      return { items, hasMore: data.length === PAGE_SIZE };
+    }
+
     const params = new URLSearchParams({
-      state: apiState(options.state),
+      state: apiState(options.states),
       limit: String(PAGE_SIZE),
       page: String(options.page),
     });
     // Gitea's PR list has no server-side author filter — apply it client-side on this page.
     const url = `${this.apiBase()}/repos/${owner}/${repo}/pulls?${params.toString()}`;
     const { data } = await httpJson<RawGiteaPr[]>(url, { headers });
-    let items = data.map(mapPr);
-    if (options.state === 'merged') items = items.filter(pr => pr.state === 'merged');
+    // Drafts have no dedicated filter state — they fall under "open".
+    let items = data.map(mapPr).filter(pr => options.states.includes(pr.state));
     if (options.author === 'mine') {
       const username = await this.getCurrentUsername();
       if (username) items = items.filter(pr => pr.authorName === username);

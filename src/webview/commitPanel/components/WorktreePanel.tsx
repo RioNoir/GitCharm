@@ -3,6 +3,9 @@ import type { WorktreeEntry } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
+import { useCommitStore } from '../store/commitStore';
+
+const SECTION_COLLAPSE_THRESHOLD = 5;
 
 interface RepoWorktrees {
   repoId: string;
@@ -86,9 +89,10 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
         />
         <div style={row.info}>
           <span style={row.name}>
+            {!entry.isMain && entry.isInWorkspace && (
+              <Codicon name="folder" style={{ fontSize: '11px', color: 'var(--vscode-gitDecoration-addedResourceForeground)', flexShrink: 0 }} title="In workspace" />
+            )}
             <span style={row.nameText}>{dirName}</span>
-            {entry.isMain && <span style={row.mainBadge}>primary</span>}
-            {!entry.isMain && entry.isInWorkspace && <span style={row.workspaceBadge}>in workspace</span>}
             {entry.isLocked && (
               <Codicon name="lock" style={{ fontSize: '11px', opacity: 0.6 }} />
             )}
@@ -99,25 +103,25 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
               {branchLabel}
             </span>
             {entry.isPrunable && (
-              <span style={row.prunableBadge}>prunable</span>
+              <Codicon name="warning" style={{ fontSize: '11px', color: 'var(--vscode-inputValidation-warningForeground, #cca700)', flexShrink: 0 }} title="Prunable" />
             )}
           </span>
         </div>
-        {!entry.isMain && (
+        {!entry.isMain && hovered && (
           <div style={row.actions}>
             {!entry.isInWorkspace && (
-              <InlineIconBtn icon="add" title="Add Folder to Workspace" visible={hovered} onClick={e => { e.stopPropagation(); onAddToWorkspace(entry.path); }} />
+              <InlineIconBtn icon="add" title="Add Folder to Workspace" visible onClick={e => { e.stopPropagation(); onAddToWorkspace(entry.path); }} />
             )}
             {entry.isInWorkspace && (
-              <InlineIconBtn icon="folder-opened" title="Reveal in Explorer" visible={hovered} onClick={e => { e.stopPropagation(); onOpenInExplorer(repoId, entry.path); }} />
+              <InlineIconBtn icon="folder-opened" title="Reveal in Explorer" visible onClick={e => { e.stopPropagation(); onOpenInExplorer(repoId, entry.path); }} />
             )}
-            <InlineIconBtn icon="link-external" title="Open in New Window" visible={hovered} onClick={e => { e.stopPropagation(); onOpenInNewWindow(entry.path); }} />
+            <InlineIconBtn icon="link-external" title="Open in New Window" visible onClick={e => { e.stopPropagation(); onOpenInNewWindow(entry.path); }} />
             {entry.isLocked ? (
-              <InlineIconBtn icon="unlock" title="Unlock worktree" visible={hovered} onClick={e => { e.stopPropagation(); onUnlock(repoId, entry.path); }} />
+              <InlineIconBtn icon="unlock" title="Unlock worktree" visible onClick={e => { e.stopPropagation(); onUnlock(repoId, entry.path); }} />
             ) : (
-              <InlineIconBtn icon="lock" title="Lock worktree" visible={hovered} onClick={e => { e.stopPropagation(); onLock(repoId, entry.path); }} />
+              <InlineIconBtn icon="lock" title="Lock worktree" visible onClick={e => { e.stopPropagation(); onLock(repoId, entry.path); }} />
             )}
-            <InlineIconBtn icon="trash" title="Remove worktree" visible={hovered} danger onClick={e => { e.stopPropagation(); onDelete(repoId, entry.path, false); }} />
+            <InlineIconBtn icon="trash" title="Remove worktree" visible danger onClick={e => { e.stopPropagation(); onDelete(repoId, entry.path, false); }} />
           </div>
         )}
       </div>
@@ -162,16 +166,27 @@ function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, 
 }) {
   const hasPrunable = repo.worktrees.some(w => w.isPrunable);
 
+  const { isCollapsed, toggleCollapsed } = useCommitStore();
+  const sectionKey = `worktree-repo:${repo.repoId}`;
+  const isCollapsible = !singleRepo && repo.worktrees.length > SECTION_COLLAPSE_THRESHOLD;
+  const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
+
   return (
     <div style={css.repoSection}>
       {multiRepo && (
-        <div style={css.repoHeader(repo.repoColor, singleRepo)}>
+        <div
+          style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
+          onClick={isCollapsible ? () => toggleCollapsed(sectionKey) : undefined}
+        >
+          {isCollapsible && (
+            <Codicon name={sectionCollapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
+          )}
           {singleRepo
             ? <Codicon name="repo" style={css.repoIcon} />
             : <span style={css.dot(repo.repoColor)} />
           }
           <span style={css.repoName}>{repo.repoName}</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }} onClick={e => e.stopPropagation()}>
             {hasPrunable && (
               <InlineIconBtn icon="git-compare" title="Prune stale worktrees" onClick={() => onPrune(repo.repoId)} />
             )}
@@ -181,23 +196,25 @@ function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, 
           </div>
         </div>
       )}
-      {repo.worktrees.length === 0 ? (
-        <div style={css.empty}>No worktrees</div>
-      ) : (
-        repo.worktrees.map(w => (
-          <WorktreeRow
-            key={w.path}
-            entry={w}
-            repoId={repo.repoId}
-            onDelete={onDelete}
-            onLock={onLock}
-            onUnlock={onUnlock}
-            onOpenInExplorer={onOpenInExplorer}
-            onOpenInNewWindow={onOpenInNewWindow}
-            onOpenInOS={onOpenInOS}
-            onAddToWorkspace={onAddToWorkspace}
-          />
-        ))
+      {!sectionCollapsed && (
+        repo.worktrees.length === 0 ? (
+          <div style={css.empty}>No worktrees</div>
+        ) : (
+          repo.worktrees.map(w => (
+            <WorktreeRow
+              key={w.path}
+              entry={w}
+              repoId={repo.repoId}
+              onDelete={onDelete}
+              onLock={onLock}
+              onUnlock={onUnlock}
+              onOpenInExplorer={onOpenInExplorer}
+              onOpenInNewWindow={onOpenInNewWindow}
+              onOpenInOS={onOpenInOS}
+              onAddToWorkspace={onAddToWorkspace}
+            />
+          ))
+        )
       )}
       {!multiRepo && (hasPrunable || !repo.isLinkedWorktree) && (
         <div style={css.singleRepoActions}>
@@ -270,13 +287,19 @@ const css = {
   repoSection: {} as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '0 8px', height: '26px',
-    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    background: singleRepo
+      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
+      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
+    position: 'sticky', top: 0, zIndex: 1,
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
   repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
-  repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
+  repoName: {
+    fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em',
+    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flexShrink: 1,
+  } as React.CSSProperties,
   singleRepoActions: {
     display: 'flex', gap: '4px', padding: '6px 8px',
     borderTop: '1px solid var(--vscode-panel-border)',
@@ -307,25 +330,10 @@ const row = {
   nameText: {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0, flexShrink: 1,
   } as React.CSSProperties,
-  mainBadge: {
-    fontSize: '9px', padding: '1px 5px', borderRadius: '3px', flexShrink: 0,
-    background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
-    fontWeight: 'normal', letterSpacing: '0.03em',
-  } as React.CSSProperties,
-  workspaceBadge: {
-    fontSize: '9px', padding: '1px 5px', borderRadius: '3px', flexShrink: 0,
-    background: 'var(--vscode-statusBarItem-remoteBackground)', color: 'var(--vscode-statusBarItem-remoteForeground)',
-    fontWeight: 'normal', letterSpacing: '0.03em', opacity: 0.85,
-  } as React.CSSProperties,
   meta: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' } as React.CSSProperties,
   branch: {
     fontSize: '10px', opacity: 0.55, display: 'flex', alignItems: 'center',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-  } as React.CSSProperties,
-  prunableBadge: {
-    fontSize: '9px', padding: '0 4px', borderRadius: '3px', flexShrink: 0,
-    background: 'var(--vscode-inputValidation-warningBackground)',
-    color: 'var(--vscode-inputValidation-warningForeground)',
   } as React.CSSProperties,
   actions: { display: 'flex', gap: '2px', flexShrink: 0 } as React.CSSProperties,
 };

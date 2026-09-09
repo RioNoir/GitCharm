@@ -7,6 +7,12 @@ import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErr
 import { pickRefQuickPick } from '../utils/refPicker';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 
+const TAB_TITLE_MAX_LENGTH = 40;
+
+function truncateTitle(title: string): string {
+  return title.length > TAB_TITLE_MAX_LENGTH ? `${title.slice(0, TAB_TITLE_MAX_LENGTH)}…` : title;
+}
+
 export async function openCommitDetailPanel(
   extensionUri: vscode.Uri,
   manager: WorkspaceGitManager,
@@ -55,7 +61,7 @@ export async function openCommitDetailPanel(
 
   const panel = vscode.window.createWebviewPanel(
     'gitcharmCommitDetail',
-    `Commit ${commitInfo.shortHash}`,
+    commitInfo.message ? `Commit ${commitInfo.shortHash} - ${truncateTitle(commitInfo.message)}` : `Commit ${commitInfo.shortHash}`,
     vscode.ViewColumn.One,
     {
       enableScripts: true,

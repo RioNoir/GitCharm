@@ -37,6 +37,7 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
   const [thumbTop, setThumbTop] = useState(0);
   const [visible, setVisible] = useState(false);
   const [active, setActive] = useState(false);
+  const [thumbHovered, setThumbHovered] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStart = useRef<{ mouseY: number; scrollTop: number } | null>(null);
 
@@ -63,6 +64,17 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
     scheduleHide();
     onScroll?.(e);
   }, [updateThumb, scheduleHide, onScroll]);
+
+  // Reveals the scrollbar on hover too — not just after a scroll — so it can be grabbed even if it had already faded out.
+  const handleMouseEnter = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    updateThumb();
+    setVisible(true);
+  }, [updateThumb]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (!dragStart.current) scheduleHide();
+  }, [scheduleHide]);
 
   // Update thumb on resize or content change
   useEffect(() => {
@@ -121,7 +133,13 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
   const showScrollbar = thumbHeight > 0 && visible;
 
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', ...style }} className={className} onClick={onClick}>
+    <div
+      style={{ position: 'relative', overflow: 'hidden', ...style }}
+      className={className}
+      onClick={onClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {/* Native-scrollbar-hidden viewport */}
       <div
         ref={viewportRef}
@@ -163,16 +181,14 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
             borderRadius: '3px',
             background: active
               ? 'var(--vscode-scrollbarSlider-activeBackground)'
-              : 'var(--vscode-scrollbarSlider-background)',
-            opacity: 0.6,
+              : thumbHovered
+                ? 'var(--vscode-scrollbarSlider-hoverBackground)'
+                : 'var(--vscode-scrollbarSlider-background)',
+            opacity: active || thumbHovered ? 1 : 0.6,
             cursor: 'pointer',
           }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLDivElement).style.background = 'var(--vscode-scrollbarSlider-hoverBackground)';
-          }}
-          onMouseLeave={e => {
-            if (!active) (e.currentTarget as HTMLDivElement).style.background = 'var(--vscode-scrollbarSlider-background)';
-          }}
+          onMouseEnter={() => setThumbHovered(true)}
+          onMouseLeave={() => setThumbHovered(false)}
         />
       </div>
     </div>

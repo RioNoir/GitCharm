@@ -14,11 +14,30 @@ import type {
 const CACHE_TTL_MS = 45_000;
 
 export interface PullRequestFilters {
-  state: PullRequestStateFilter;
+  /** Non-empty set of states to include. */
+  states: PullRequestStateFilter[];
   author: PullRequestAuthorFilter;
+  assignedToMe: boolean;
+  reviewRequestedToMe: boolean;
+  mentioningMe: boolean;
+  /** Free-text search, or a bare PR number. Empty string = no search. */
+  search: string;
 }
 
-export const DEFAULT_PR_FILTERS: PullRequestFilters = { state: 'open', author: 'all' };
+export const DEFAULT_PR_FILTERS: PullRequestFilters = {
+  states: ['open'], author: 'all', assignedToMe: false, reviewRequestedToMe: false, mentioningMe: false, search: '',
+};
+
+const STATE_FILTER_VALUES: PullRequestStateFilter[] = ['open', 'draft', 'closed', 'merged'];
+
+function isPullRequestFilters(v: unknown): v is PullRequestFilters {
+  if (!v || typeof v !== 'object') return false;
+  const f = v as Partial<PullRequestFilters>;
+  return Array.isArray(f.states) && f.states.length > 0 && f.states.every(s => STATE_FILTER_VALUES.includes(s))
+    && (f.author === 'all' || f.author === 'mine')
+    && typeof f.assignedToMe === 'boolean' && typeof f.reviewRequestedToMe === 'boolean' && typeof f.mentioningMe === 'boolean'
+    && typeof f.search === 'string';
+}
 
 export interface RepoPullRequests {
   repoId: string;
@@ -29,6 +48,8 @@ export interface RepoPullRequests {
   page: number;
   hasMore: boolean;
   error?: string;
+  /** Client-side only placeholder — true for the synthetic entry shown while this repo's real result is still streaming in. Never set by the host. */
+  pending?: boolean;
 }
 
 interface CacheEntry {
@@ -56,10 +77,22 @@ function getHostProviderOverrides(): Record<string, string> {
 }
 
 function sameFilters(a: PullRequestFilters, b: PullRequestFilters): boolean {
-  return a.state === b.state && a.author === b.author;
+  if (a.author !== b.author || a.states.length !== b.states.length) return false;
+  if (a.assignedToMe !== b.assignedToMe || a.reviewRequestedToMe !== b.reviewRequestedToMe) return false;
+  if (a.mentioningMe !== b.mentioningMe || a.search !== b.search) return false;
+  return a.states.every(s => b.states.includes(s));
+}
+
+function toListOptions(filters: PullRequestFilters, page: number): ListPullRequestsOptions {
+  return {
+    states: filters.states, author: filters.author, page,
+    assignedToMe: filters.assignedToMe, reviewRequestedToMe: filters.reviewRequestedToMe,
+    mentioningMe: filters.mentioningMe, search: filters.search || undefined,
+  };
 }
 
 const REPO_ACCOUNT_BINDING_KEY = 'gitcharm.pullRequests.repoAccountBindings';
+const REPO_PR_FILTERS_KEY = 'gitcharm.pullRequests.repoFilters';
 
 export class PullRequestManager {
   private cache = new Map<string, CacheEntry>();
@@ -84,6 +117,21 @@ export class PullRequestManager {
 
   private bindings(): Record<string, string> {
     return this.workspaceState.get<Record<string, string>>(REPO_ACCOUNT_BINDING_KEY, {});
+  }
+
+  private repoFilters(): Record<string, PullRequestFilters> {
+    return this.workspaceState.get<Record<string, PullRequestFilters>>(REPO_PR_FILTERS_KEY, {});
+  }
+
+  getFiltersForRepo(repoId: string): PullRequestFilters {
+    const stored = this.repoFilters()[repoId];
+    return stored && isPullRequestFilters(stored) ? stored : DEFAULT_PR_FILTERS;
+  }
+
+  async setFiltersForRepo(repoId: string, filters: PullRequestFilters): Promise<void> {
+    const all = { ...this.repoFilters(), [repoId]: filters };
+    await this.workspaceState.update(REPO_PR_FILTERS_KEY, all);
+    this.cache.delete(repoId);
   }
 
   private async setBinding(repoId: string, accountId: string | undefined): Promise<void> {
@@ -175,8 +223,9 @@ export class PullRequestManager {
     return { repoId, provider: resolved.provider.provider, host: resolved.host, connected, detectionFailed: false };
   }
 
-  /** Loads the first page for a repo under the given filters, replacing any cached pages for that repo. */
-  async listForRepo(repoId: string, repoName: string, repoColor: string, filters: PullRequestFilters, forceRefresh = false): Promise<RepoPullRequests> {
+  /** Loads the first page for a repo under its own persisted filters, replacing any cached pages for that repo. */
+  async listForRepo(repoId: string, repoName: string, repoColor: string, forceRefresh = false): Promise<RepoPullRequests> {
+    const filters = this.getFiltersForRepo(repoId);
     const cached = this.cache.get(repoId);
     if (!forceRefresh && cached && sameFilters(cached.filters, filters) && cached.expiresAt > Date.now()) return cached.data;
 
@@ -192,8 +241,7 @@ export class PullRequestManager {
         result = { repoId, repoName, repoColor, connection, pullRequests: [], page: 1, hasMore: false, error: 'Unable to resolve provider for this repo' };
       } else {
         try {
-          const options: ListPullRequestsOptions = { state: filters.state, author: filters.author, page: 1 };
-          const { items, hasMore } = await provider.listPullRequests(resolved.owner, resolved.repo, options);
+          const { items, hasMore } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, 1));
           result = { repoId, repoName, repoColor, connection, pullRequests: items, page: 1, hasMore };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -208,7 +256,8 @@ export class PullRequestManager {
   }
 
   /** Loads the next page for a repo and appends it to the cached list — used by infinite scroll. */
-  async loadMore(repoId: string, filters: PullRequestFilters): Promise<RepoPullRequests | null> {
+  async loadMore(repoId: string): Promise<RepoPullRequests | null> {
+    const filters = this.getFiltersForRepo(repoId);
     const cached = this.cache.get(repoId);
     if (!cached || !sameFilters(cached.filters, filters) || !cached.data.hasMore) return cached?.data ?? null;
 
@@ -218,8 +267,7 @@ export class PullRequestManager {
 
     const nextPage = cached.data.page + 1;
     try {
-      const options: ListPullRequestsOptions = { state: filters.state, author: filters.author, page: nextPage };
-      const { items, hasMore } = await provider.listPullRequests(resolved.owner, resolved.repo, options);
+      const { items, hasMore } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, nextPage));
       const result: RepoPullRequests = {
         ...cached.data,
         pullRequests: [...cached.data.pullRequests, ...items],
@@ -237,10 +285,14 @@ export class PullRequestManager {
     }
   }
 
-  async getAllPullRequests(filters: PullRequestFilters = DEFAULT_PR_FILTERS, forceRefresh = false): Promise<RepoPullRequests[]> {
-    const metas = this.manager.getRepoMetas().filter(m => (m.depth ?? 0) === 0 && !m.isWorktree);
+  private eligibleRepoMetas() {
+    return this.manager.getRepoMetas().filter(m => (m.depth ?? 0) === 0 && !m.isWorktree);
+  }
+
+  async getAllPullRequests(forceRefresh = false): Promise<RepoPullRequests[]> {
+    const metas = this.eligibleRepoMetas();
     const results = await Promise.allSettled(
-      metas.map(meta => this.listForRepo(meta.id, meta.name, meta.color, filters, forceRefresh)),
+      metas.map(meta => this.listForRepo(meta.id, meta.name, meta.color, forceRefresh)),
     );
     return results.map((r, i) => r.status === 'fulfilled'
       ? r.value
@@ -249,6 +301,22 @@ export class PullRequestManager {
           connection: { repoId: metas[i].id, provider: 'unknown' as const, host: '', connected: false, detectionFailed: true },
           pullRequests: [], page: 1, hasMore: false, error: String(r.reason),
         });
+  }
+
+  /** Same as getAllPullRequests, but reports each repo's result as soon as it's ready instead of waiting for all of them — avoids the slowest repo blocking the whole tab from showing anything. */
+  async getAllPullRequestsStreaming(forceRefresh: boolean, onRepoReady: (repo: RepoPullRequests) => void): Promise<void> {
+    const metas = this.eligibleRepoMetas();
+    await Promise.all(metas.map(async meta => {
+      try {
+        onRepoReady(await this.listForRepo(meta.id, meta.name, meta.color, forceRefresh));
+      } catch (err) {
+        onRepoReady({
+          repoId: meta.id, repoName: meta.name, repoColor: meta.color,
+          connection: { repoId: meta.id, provider: 'unknown' as const, host: '', connected: false, detectionFailed: true },
+          pullRequests: [], page: 1, hasMore: false, error: String(err),
+        });
+      }
+    }));
   }
 
   async createPullRequest(repoId: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {

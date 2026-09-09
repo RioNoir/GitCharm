@@ -99,6 +99,17 @@ export function ChangelistView({
   const singleRepoStatus = singleRepo ? repos[0] : null;
   const singleMeta = singleRepoStatus ? metaMap.get(singleRepoStatus.repoId) : null;
 
+  // Mirrors the "hide Unversioned Files when empty" rule below, so the last group actually
+  // rendered (not just the last item in `changelists`) can suppress its own bottom border.
+  const visibleChangelistIds = changelists
+    .filter(cl => {
+      if (cl.id !== CHANGELIST_UNVERSIONED_ID) return true;
+      const clMap = changelistFiles.get(cl.id) ?? new Map<string, FileStatus[]>();
+      return Array.from(clMap.values()).some(files => files.length > 0);
+    })
+    .map(cl => cl.id);
+  const lastVisibleChangelistId = visibleChangelistIds[visibleChangelistIds.length - 1];
+
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}
@@ -172,6 +183,7 @@ export function ChangelistView({
             changelist={cl}
             repoGroups={allRepoGroups}
             isFixed={isFixed}
+            isLast={cl.id === lastVisibleChangelistId}
             multiRepo={multiRepo}
             singleRepo={singleRepo}
             selectedFile={selectedFile}

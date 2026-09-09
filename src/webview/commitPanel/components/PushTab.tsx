@@ -4,6 +4,8 @@ import type { RepoStatus, RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
+import { ScrollArea } from '../../shared/ScrollArea';
+import { AuthorAvatar } from '../../shared/AuthorAvatar';
 
 interface Props {
   repos: RepoStatus[];
@@ -314,25 +316,33 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
-      <span style={styles.commitHash}>{commit.shortHash}</span>
-      <span style={styles.commitMessage}>{commit.message.split('\n')[0]}</span>
-      <span style={styles.commitMeta}>
-        {commit.author} · {formatDate(commit.date)}
-        {commit.filesChanged != null && (
-          <span style={styles.commitStats}>
-            &nbsp;·&nbsp;{commit.filesChanged} file{commit.filesChanged !== 1 ? 's' : ''}
-            {commit.additions != null && commit.additions > 0 && <span style={styles.statAdd}>&nbsp;+{commit.additions}</span>}
-            {commit.deletions != null && commit.deletions > 0 && <span style={styles.statDel}>&nbsp;-{commit.deletions}</span>}
+      <div style={styles.commitInfo}>
+        <span style={styles.commitMessage}>
+          <span style={styles.commitHash}>{commit.shortHash}</span> {commit.message.split('\n')[0]}
+        </span>
+        <span style={styles.commitMeta}>
+          <AuthorAvatar authorName={commit.author} authorEmail={commit.authorEmail} size={16} />
+          <span style={styles.commitMetaText}>
+            {commit.author} · {formatDate(commit.date)}
+            {commit.filesChanged != null && (
+              <span style={styles.commitStats}>
+                &nbsp;·&nbsp;{commit.filesChanged} file{commit.filesChanged !== 1 ? 's' : ''}
+                {commit.additions != null && commit.additions > 0 && <span style={styles.statAdd}>&nbsp;+{commit.additions}</span>}
+                {commit.deletions != null && commit.deletions > 0 && <span style={styles.statDel}>&nbsp;-{commit.deletions}</span>}
+              </span>
+            )}
           </span>
-        )}
-      </span>
-      <div style={styles.commitActions(hovered || isSelected)}>
-        {isHead && (
-          <InlineIconBtn icon="arrow-left" title="Undo this commit (keeps changes as unstaged)" visible={hovered || isSelected} onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }} />
-        )}
-        <InlineIconBtn icon="diff-multiple" title="Open Changes" visible={hovered || isSelected} onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }} />
-        <InlineIconBtn icon="go-to-file" title="Open in Log" visible={hovered || isSelected} onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }} />
+        </span>
       </div>
+      {(hovered || isSelected) && (
+        <div style={styles.commitActions}>
+          {isHead && (
+            <InlineIconBtn icon="arrow-left" title="Undo this commit (keeps changes as unstaged)" visible onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }} />
+          )}
+          <InlineIconBtn icon="diff-multiple" title="Open Changes" visible onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }} />
+          <InlineIconBtn icon="go-to-file" title="Open in Log" visible onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -340,7 +350,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, isLast }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -360,11 +370,14 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
   singleRepo?: boolean;
+  /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<CommitCtxMenuState | null>(null);
   const [headerHovered, setHeaderHovered] = useState(false);
+  const [branchHovered, setBranchHovered] = useState(false);
 
   const rawName = repoMeta?.name ?? repoStatus.repoId.split('/').pop() ?? repoStatus.repoId;
   const isWorktree = repoMeta?.isWorktree;
@@ -391,6 +404,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
       });
     } else {
       setMultiSelectHashes(new Set());
+      onOpenDetail(repoStatus.repoId, hash);
     }
   };
 
@@ -493,7 +507,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   };
 
   return (
-    <div style={styles.repoRoot}>
+    <div style={{ ...styles.repoRoot, ...(isLast ? { borderBottom: 'none' } : {}) }}>
       {/* Repo header */}
       <div
         style={styles.repoHeader(repoColor, singleRepo)}
@@ -519,9 +533,11 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           }
           <span style={styles.repoName}>{repoName}</span>
           <span
-            style={{ ...styles.branchBadge(branchClr), cursor: 'pointer' }}
+            style={{ ...styles.branchBadge(branchClr, branchHovered), cursor: 'pointer' }}
             title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : branchLabel}
             onClick={e => { e.stopPropagation(); onBranchClick(repoStatus.repoId); }}
+            onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
+            onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
           >
             <Codicon name={worktreeBranch ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
             <span style={styles.branchName}>{branchLabel}</span>
@@ -693,7 +709,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
         ];
     return (
       <div style={css.root}>
-        <div style={css.list}>
+        <ScrollArea style={css.list}>
           <RepoSection
             key={solo.repoId}
             repoStatus={solo}
@@ -715,8 +731,9 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
             singleRepo
+            isLast
           />
-        </div>
+        </ScrollArea>
         <div style={css.footer}>
           <PushDropdownButton
             enabled={canPush}
@@ -746,8 +763,8 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
   return (
     <div style={css.root}>
       {/* Scrollable repo list */}
-      <div style={css.list}>
-        {repos.map(repoStatus => (
+      <ScrollArea style={css.list}>
+        {repos.map((repoStatus, i) => (
           <RepoSection
             key={repoStatus.repoId}
             repoStatus={repoStatus}
@@ -768,9 +785,10 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             onViewCombinedDiff={onViewCombinedDiff}
             onBranchClick={onBranchClick}
             aiEnabled={aiEnabled}
+            isLast={i === repos.length - 1}
           />
         ))}
-      </div>
+      </ScrollArea>
 
       {/* Anchored footer */}
       <div style={css.footer}>
@@ -839,7 +857,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
 
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, flex: 1, minHeight: 0 },
-  list: { flex: 1, overflowY: 'auto' as const, minHeight: 0 },
+  list: { flex: 1, minHeight: 0 },
   footer: {
     flexShrink: 0,
     display: 'flex', flexDirection: 'column' as const, gap: '6px',
@@ -873,9 +891,12 @@ const styles = {
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center',
     padding: '0 8px', height: '26px',
-    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    background: singleRepo
+      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
+      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
+    position: 'sticky', top: 0, zIndex: 1,
   }),
   checkbox: {
     margin: '0 2px 0 0', flexShrink: 0,
@@ -911,10 +932,13 @@ const styles = {
     borderRadius: '8px', padding: '1px 6px', fontSize: '10px', fontWeight: 500 as const,
     flexShrink: 0,
   } as React.CSSProperties,
-  branchBadge: (color: string): React.CSSProperties => ({
+  /** `hovered` mirrors the Log panel's "selected row" badge look — solid background instead of the usual 20%-tint. */
+  branchBadge: (color: string, hovered = false): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: '3px',
     fontSize: '10px', fontWeight: 600,
-    background: `${color}33`, color, border: `1px solid ${color}88`,
+    background: hovered ? color : `${color}33`,
+    color: hovered ? 'var(--vscode-editor-background)' : color,
+    border: `1px solid ${hovered ? color : `${color}88`}`,
     borderRadius: '3px', padding: '1px 5px',
     flexShrink: 1, minWidth: 0, maxWidth: '160px', marginLeft: '4px',
     overflow: 'hidden',
@@ -949,35 +973,32 @@ const styles = {
     borderBottom: '1px solid var(--vscode-panel-border)',
   } as React.CSSProperties,
   commitRow: {
-    display: 'grid',
-    gridTemplateColumns: '48px 1fr auto',
-    gridTemplateRows: 'auto auto',
-    gap: '0 8px',
-    padding: '7px 12px',
-    alignItems: 'center',
-    cursor: 'default',
-    userSelect: 'none' as const,
+    display: 'flex', alignItems: 'center', gap: '8px',
+    padding: '5px 8px', cursor: 'pointer', userSelect: 'none' as const,
+    borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)',
   } as React.CSSProperties,
   commitHash: {
-    fontFamily: 'var(--vscode-editor-font-family, monospace)', fontSize: '10px',
-    opacity: 0.55, gridRow: '1', gridColumn: '1',
-    display: 'flex', alignItems: 'center',
+    fontFamily: 'var(--vscode-editor-font-family, monospace)', fontWeight: 'normal' as const,
+    fontSize: '10px', opacity: 0.55,
+  } as React.CSSProperties,
+  commitInfo: {
+    display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0,
   } as React.CSSProperties,
   commitMessage: {
-    fontSize: '12px', fontWeight: 500, gridRow: '1', gridColumn: '2',
+    fontSize: '12px',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
   commitMeta: {
-    fontSize: '10px', opacity: 0.45, gridRow: '2', gridColumn: '2',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-    display: 'flex', alignItems: 'center',
+    fontSize: '10px', marginTop: '2px',
+    overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0,
+  } as React.CSSProperties,
+  commitMetaText: {
+    opacity: 0.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0,
   } as React.CSSProperties,
   commitStats: { display: 'inline-flex', alignItems: 'center', flexShrink: 0 } as React.CSSProperties,
   statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)' } as React.CSSProperties,
   statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)' } as React.CSSProperties,
-  commitActions: (visible: boolean): React.CSSProperties => ({
-    gridRow: '1 / 3', gridColumn: '3',
-    display: 'flex', alignItems: 'center', gap: '4px', alignSelf: 'center',
-    opacity: visible ? 1 : 0, transition: 'opacity 0.1s',
-  }),
+  commitActions: {
+    display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
+  } as React.CSSProperties,
 };

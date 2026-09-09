@@ -65,6 +65,7 @@ export interface UnpushedCommit {
   shortHash: string;
   message: string;
   author: string;
+  authorEmail: string;
   date: string;
   filesChanged?: number;
   additions?: number;
@@ -101,6 +102,8 @@ export type HostToCommitMsg =
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
   | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
   | { type: 'PULLREQUEST_LIST_RESULT'; repos: RepoPullRequests[] }
+  | { type: 'PULLREQUEST_LIST_START'; repoIds: string[] }
+  | { type: 'PULLREQUEST_LIST_REPO_RESULT'; repo: RepoPullRequests }
   | { type: 'PULLREQUEST_LOAD_MORE_RESULT'; repoId: string; repo: RepoPullRequests | null }
   | { type: 'PULLREQUEST_INVALIDATED' }
   | { type: 'PULLREQUEST_CONNECTION_STATUS'; statuses: PullRequestConnectionStatus[] }
@@ -202,13 +205,16 @@ export type CommitToHostMsg =
   | { type: 'WORKTREE_OPEN_IN_NEW_WINDOW'; worktreePath: string }
   | { type: 'WORKTREE_OPEN_IN_OS'; worktreePath: string }
   | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string }
-  | { type: 'PULLREQUEST_REQUEST_LIST'; filters: PullRequestFilters; forceRefresh?: boolean }
-  | { type: 'PULLREQUEST_LOAD_MORE'; repoId: string; filters: PullRequestFilters }
+  | { type: 'PULLREQUEST_REQUEST_LIST'; forceRefresh?: boolean }
+  | { type: 'PULLREQUEST_REFRESH_REPO'; repoId: string }
+  | { type: 'PULLREQUEST_LOAD_MORE'; repoId: string }
   | { type: 'PULLREQUEST_CREATE_PROMPT'; repoId: string }
-  | { type: 'PULLREQUEST_CONNECT'; repoId: string; filters: PullRequestFilters }
-  | { type: 'PULLREQUEST_CONNECT_PAT_PROMPT'; repoId: string; filters: PullRequestFilters }
-  | { type: 'PULLREQUEST_DISCONNECT'; repoId: string; filters: PullRequestFilters }
-  | { type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE'; host: string; provider: ForgeProvider; filters: PullRequestFilters }
+  | { type: 'PULLREQUEST_CONNECT'; repoId: string }
+  | { type: 'PULLREQUEST_CONNECT_PAT_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_DISCONNECT'; repoId: string }
+  | { type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE'; host: string; provider: ForgeProvider }
+  | { type: 'PULLREQUEST_FILTERS_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_SEARCH_PROMPT'; repoId: string }
   | { type: 'PULLREQUEST_OPEN_IN_BROWSER'; url: string }
   | { type: 'PULLREQUEST_OPEN_DETAIL'; repoId: string; pr: PullRequestSummary }
   | { type: 'COMMIT_INIT_REPO' }

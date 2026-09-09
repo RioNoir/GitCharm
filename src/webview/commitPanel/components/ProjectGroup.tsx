@@ -15,6 +15,8 @@ interface Props {
   multiRepo: boolean;
   singleRepo?: boolean;
   isFirst?: boolean;
+  /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
   isSubmodule?: boolean;
   submodulePath?: string;
   isWorktree?: boolean;
@@ -45,7 +47,7 @@ interface Props {
 }
 
 export function ProjectGroup({
-  repoStatus, repoName, repoColor, multiRepo, singleRepo = false, isFirst = false,
+  repoStatus, repoName, repoColor, multiRepo, singleRepo = false, isFirst = false, isLast = false,
   isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
@@ -81,6 +83,7 @@ export function ProjectGroup({
   };
 
   const [hovered, setHovered] = useState(false);
+  const [branchHovered, setBranchHovered] = useState(false);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -121,8 +124,10 @@ export function ProjectGroup({
             </span>
           )}
           <span
-            style={styles.branchBadge(branchClr)}
+            style={styles.branchBadge(branchClr, branchHovered)}
             onClick={(e) => { e.stopPropagation(); onBranchClick(repoId); }}
+            onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
+            onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
             title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
           >
             <Codicon name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
@@ -177,7 +182,7 @@ export function ProjectGroup({
           )}
         </div>
       )}
-      <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
+      {!isLast && <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />}
     </div>
   );
 }
@@ -244,10 +249,13 @@ const styles = {
   header: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
-    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    background: singleRepo
+      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
+      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     height: '26px',
     boxSizing: 'border-box',
     minWidth: 0,
+    position: 'sticky', top: 0, zIndex: 1,
   }),
   repoCheckbox: {
     margin: '0 0 0 6px',
@@ -305,7 +313,8 @@ const styles = {
     flexShrink: 0,
     opacity: 0.75,
   } as React.CSSProperties,
-  branchBadge: (color: string): React.CSSProperties => ({
+  /** `hovered` mirrors the Log panel's "selected row" badge look — solid background instead of the usual 20%-tint. */
+  branchBadge: (color: string, hovered = false): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
@@ -313,9 +322,9 @@ const styles = {
     fontWeight: 600,
     textTransform: 'none' as const,
     letterSpacing: 0,
-    background: `${color}33`,
-    color,
-    border: `1px solid ${color}88`,
+    background: hovered ? color : `${color}33`,
+    color: hovered ? 'var(--vscode-editor-background)' : color,
+    border: `1px solid ${hovered ? color : `${color}88`}`,
     borderRadius: '3px',
     padding: '1px 5px',
     flexShrink: 1,

@@ -26,6 +26,8 @@ interface Props {
   onRequestList: (repoId: string) => void;
   onOpenFileDiff: (repoId: string, stashRef: string, filePath: string) => void;
   expandAll?: boolean;
+  /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
 }
 
 const STASH_CTX_ITEMS: ContextMenuEntry[] = [
@@ -264,7 +266,6 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
         <div style={row.info}>
           <span style={row.name}>
             <span style={row.nameText}>{(entry.message || entry.ref).split('\n')[0]}</span>
-            {entry.branch && <span style={row.branchBadge}><Codicon name="git-branch" style={{ fontSize: '9px', opacity: 0.8, flexShrink: 0 }} />{entry.branch}</span>}
           </span>
           <span style={row.meta}>
             {formatDate(entry.date)}
@@ -274,13 +275,22 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
               const r = entry.files.reduce((s, f) => s + (f.removed ?? 0), 0);
               return (a > 0 || r > 0) ? <>{' '}<span style={row.statAdd}>+{a}</span>{' '}<span style={row.statDel}>-{r}</span></> : null;
             })()}
+            {entry.branch && (
+              <>
+                {' · '}
+                <Codicon name="git-branch" style={{ fontSize: '10px', marginRight: '3px' }} />
+                {entry.branch}
+              </>
+            )}
           </span>
         </div>
-        <div style={row.actions}>
-          <InlineIconBtn icon="git-stash-pop" title="Pop (apply and drop)" visible={hovered} onClick={e => { e.stopPropagation(); onPop(repoId, entry.ref); }} />
-          <InlineIconBtn icon="git-stash-apply" title="Apply (keep stash)" visible={hovered} onClick={e => { e.stopPropagation(); onApply(repoId, entry.ref); }} />
-          <InlineIconBtn icon="trash" title="Drop stash" visible={hovered} danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.ref); }} />
-        </div>
+        {hovered && (
+          <div style={row.actions}>
+            <InlineIconBtn icon="git-stash-pop" title="Pop (apply and drop)" visible onClick={e => { e.stopPropagation(); onPop(repoId, entry.ref); }} />
+            <InlineIconBtn icon="git-stash-apply" title="Apply (keep stash)" visible onClick={e => { e.stopPropagation(); onApply(repoId, entry.ref); }} />
+            <InlineIconBtn icon="trash" title="Drop stash" visible danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.ref); }} />
+          </div>
+        )}
       </div>
 
       {/* Expanded body */}
@@ -322,17 +332,30 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
 
 // ── Public component ──────────────────────────────────────────────────────────
 
+const SECTION_COLLAPSE_THRESHOLD = 5;
+
 export function StashTab({
   repoId, repoName, repoColor, multiRepo, singleRepo = false,
   worktreeBranch, mainRepoName,
   stashes, loading, error, viewMode,
   onApply, onPop, onDrop, onRename, onRequestList, onOpenFileDiff,
-  expandAll = false,
+  expandAll = false, isLast = false,
 }: Props) {
+  const { isCollapsed, toggleCollapsed } = useCommitStore();
+  const sectionKey = `stash-repo:${repoId}`;
+  const isCollapsible = !singleRepo && stashes.length > SECTION_COLLAPSE_THRESHOLD;
+  const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
+
   return (
-    <div style={css.root}>
+    <div style={{ ...css.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
       {multiRepo && (
-        <div style={css.repoHeader(repoColor, singleRepo)}>
+        <div
+          style={{ ...css.repoHeader(repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
+          onClick={isCollapsible ? () => toggleCollapsed(sectionKey) : undefined}
+        >
+          {isCollapsible && (
+            <Codicon name={sectionCollapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
+          )}
           {singleRepo
             ? <Codicon name="repo" style={css.repoIcon} />
             : <span style={css.dot(repoColor)} />
@@ -340,8 +363,8 @@ export function StashTab({
           <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
           {worktreeBranch && (
             <span style={css.worktreeBadge}>
-              <Codicon name="worktree" style={{ fontSize: '11px', marginRight: '3px' }} />
-              {worktreeBranch}
+              <Codicon name="worktree" style={{ fontSize: '11px', marginRight: '3px', flexShrink: 0 }} />
+              <span style={css.worktreeBadgeText}>{worktreeBranch}</span>
             </span>
           )}
         </div>
@@ -352,26 +375,28 @@ export function StashTab({
           {error}
         </div>
       )}
-      {loading ? (
-        <div style={css.empty}>Loading…</div>
-      ) : stashes.length === 0 ? (
-        <div style={css.empty}>No stashes</div>
-      ) : (
-        stashes.map((entry, i) => (
-          <StashRow
-            key={entry.ref}
-            entry={entry}
-            repoId={repoId}
-            viewMode={viewMode}
-            onApply={onApply}
-            onPop={onPop}
-            onDrop={onDrop}
-            onRename={onRename}
-            onOpenFileDiff={onOpenFileDiff}
-            expandAll={expandAll}
-            isLast={i === stashes.length - 1}
-          />
-        ))
+      {!sectionCollapsed && (
+        loading ? (
+          <div style={css.empty}>Loading…</div>
+        ) : stashes.length === 0 ? (
+          <div style={css.empty}>No stashes</div>
+        ) : (
+          stashes.map((entry, i) => (
+            <StashRow
+              key={entry.ref}
+              entry={entry}
+              repoId={repoId}
+              viewMode={viewMode}
+              onApply={onApply}
+              onPop={onPop}
+              onDrop={onDrop}
+              onRename={onRename}
+              onOpenFileDiff={onOpenFileDiff}
+              expandAll={expandAll}
+              isLast={i === stashes.length - 1}
+            />
+          ))
+        )
       )}
     </div>
   );
@@ -385,14 +410,26 @@ const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    background: singleRepo
+      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
+      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     borderBottom: '1px solid var(--vscode-panel-border)',
-    boxSizing: 'border-box',
+    boxSizing: 'border-box', overflow: 'hidden', minWidth: 0,
+    position: 'sticky', top: 0, zIndex: 1,
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
   repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
-  repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
-  worktreeBadge: { display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em', color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)', borderRadius: '3px', padding: '1px 5px 1px 4px', flexShrink: 0, opacity: 0.75 } as React.CSSProperties,
+  repoName: {
+    fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em',
+    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flexShrink: 1,
+  } as React.CSSProperties,
+  worktreeBadge: {
+    display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em',
+    opacity: 0.55, minWidth: 0, overflow: 'hidden', flexShrink: 1,
+  } as React.CSSProperties,
+  worktreeBadgeText: {
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0,
+  } as React.CSSProperties,
   errorRow: {
     display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',
@@ -413,13 +450,7 @@ const row = {
   } as React.CSSProperties,
   info: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
   name: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' } as React.CSSProperties,
-  nameText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 } as React.CSSProperties,
-  branchBadge: {
-    fontSize: '9px', padding: '1px 5px', borderRadius: '3px', flexShrink: 0,
-    background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
-    fontWeight: 'normal', letterSpacing: '0.03em',
-    display: 'inline-flex', alignItems: 'center', gap: '3px',
-  } as React.CSSProperties,
+  nameText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0, flex: '1 1 auto' } as React.CSSProperties,
   meta: { fontSize: '10px', opacity: 0.5, marginTop: '2px', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' } as React.CSSProperties,
   statAdd: { color: 'var(--vscode-gitDecoration-addedResourceForeground)', fontSize: '10px', opacity: 1 },
   statDel: { color: 'var(--vscode-gitDecoration-deletedResourceForeground)', fontSize: '10px', opacity: 1 },

@@ -21,6 +21,9 @@ const CAPABILITIES: PullRequestCapabilities = {
   canManageReviewers: true,
   canManageAssignees: true,
   canManageLabels: true,
+  canFilterAssignee: true,
+  canFilterReviewRequested: true,
+  canFilterMentions: false,
 };
 
 interface RawGitLabUserRef {
@@ -46,6 +49,8 @@ interface RawGitLabMr {
   created_at: string;
   updated_at: string;
   user_notes_count?: number;
+  /** Present even on the list endpoint (names only — colors need a separate lookup, see getCachedProjectLabels). */
+  labels?: string[];
 }
 
 interface RawGitLabMrDetail extends RawGitLabMr {
@@ -125,7 +130,7 @@ function targetProjectPath(mr: RawGitLabMr): string | undefined {
   return full ? full.replace(/!\d+$/, '') : undefined;
 }
 
-function mapMr(mr: RawGitLabMr, sourceProjectPath?: string): PullRequestSummary {
+function mapMr(mr: RawGitLabMr, sourceProjectPath?: string, labels?: PullRequestLabel[]): PullRequestSummary {
   const targetRepoFullName = targetProjectPath(mr);
   const isFork = mr.source_project_id !== mr.target_project_id;
   return {
@@ -143,13 +148,10 @@ function mapMr(mr: RawGitLabMr, sourceProjectPath?: string): PullRequestSummary 
     createdAt: mr.created_at,
     updatedAt: mr.updated_at,
     commentCount: mr.user_notes_count,
+    labels,
   };
 }
 
-function apiState(state: ListPullRequestsOptions['state']): 'opened' | 'closed' | 'merged' | 'all' {
-  if (state === 'open') return 'opened';
-  return state;
-}
 
 function mapMergeableState(mr: RawGitLabMrDetail): PullRequestDetail['mergeableState'] {
   if (mr.merge_status === 'can_be_merged') return 'mergeable';
@@ -235,8 +237,35 @@ export class GitLabProvider implements PullRequestProvider {
   async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
     const headers = await this.headers();
     const projectId = encodeURIComponent(`${owner}/${repo}`);
+
+    // A bare MR number goes straight to a single get-by-number call — precise, and far cheaper than a search.
+    const numberMatch = options.search?.trim().match(/^#?(\d+)$/);
+    if (numberMatch) {
+      try {
+        const { data } = await httpJson<RawGitLabMr>(`${this.apiBase()}/projects/${projectId}/merge_requests/${numberMatch[1]}`, { headers });
+        const pr = mapMr(data);
+        return { items: options.states.includes(pr.state) ? [pr] : [], hasMore: false };
+      } catch (err) {
+        if (err instanceof HttpJsonError && err.status === 404) return { items: [], hasMore: false };
+        throw err;
+      }
+    }
+
+    if (options.search) {
+      // GitLab's search API returns MR objects in the same shape as the list endpoint (source_branch/target_branch
+      // included), so mapMr can be reused directly — no separate mapper needed, unlike GitHub's issue-shaped search.
+      const params = new URLSearchParams({
+        scope: 'merge_requests', search: options.search, per_page: String(PAGE_SIZE), page: String(options.page),
+      });
+      const { data } = await httpJson<RawGitLabMr[]>(`${this.apiBase()}/projects/${projectId}/search?${params.toString()}`, { headers });
+      const items = data.map(mr => mapMr(mr)).filter(pr => options.states.includes(pr.state));
+      return { items, hasMore: data.length === PAGE_SIZE };
+    }
+
+    // GitLab's `state` param takes a single value (opened|closed|merged|all) — no array/repeat support, so an
+    // arbitrary subset of states is resolved client-side after always fetching the unfiltered "all" list.
     const params = new URLSearchParams({
-      state: apiState(options.state),
+      state: 'all',
       per_page: String(PAGE_SIZE),
       page: String(options.page),
     });
@@ -244,9 +273,21 @@ export class GitLabProvider implements PullRequestProvider {
       const username = await this.getCurrentUsername();
       if (username) params.set('author_username', username);
     }
+    if (options.assignedToMe) {
+      const username = await this.getCurrentUsername();
+      if (username) params.set('assignee_username', username);
+    }
+    if (options.reviewRequestedToMe) {
+      const username = await this.getCurrentUsername();
+      if (username) params.set('reviewer_username', username);
+    }
     const url = `${this.apiBase()}/projects/${projectId}/merge_requests?${params.toString()}`;
     const { data } = await httpJson<RawGitLabMr[]>(url, { headers });
-    return { items: data.map(mr => mapMr(mr)), hasMore: data.length === PAGE_SIZE };
+    // Label colors need a separate paginated project-labels lookup (see getCachedProjectLabels) — skipped here
+    // since the compact PR list doesn't display labels at all; only getPullRequestDetail resolves them.
+    // Drafts/WIP have no dedicated filter state — they fall under "open".
+    const items = data.map(mr => mapMr(mr)).filter(pr => options.states.includes(pr.state));
+    return { items, hasMore: data.length === PAGE_SIZE };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {

@@ -6,7 +6,7 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
-import type { CommitToHostMsg, HostToCommitMsg } from '../types/messages';
+import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter } from '../types/messages';
 import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { parseConflictFile } from '../git/ConflictParser';
@@ -324,6 +324,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     } else {
       this.view?.webview.postMessage(msg);
     }
+  }
+
+  /** Re-fetches one repo's PR list under its current filters and pushes the result to the webview — used after any filter change. */
+  private async refreshPullRequestRepo(repoId: string): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) return;
+    const repo = await this.pullRequestManager.listForRepo(meta.id, meta.name, meta.color, true);
+    this.post({ type: 'PULLREQUEST_LIST_REPO_RESULT', repo });
   }
 
   private broadcastCommit(msg: HostToCommitMsg): void {
@@ -2400,15 +2409,93 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PULLREQUEST_REQUEST_LIST': {
         if (!this.pullRequestManager) { this.post({ type: 'PULLREQUEST_LIST_RESULT', repos: [] }); break; }
-        const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, msg.forceRefresh);
-        this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        const repoIds = this.manager.getRepoMetas().filter(m => (m.depth ?? 0) === 0 && !m.isWorktree).map(m => m.id);
+        this.post({ type: 'PULLREQUEST_LIST_START', repoIds });
+        await this.pullRequestManager.getAllPullRequestsStreaming(!!msg.forceRefresh, repo => {
+          this.post({ type: 'PULLREQUEST_LIST_REPO_RESULT', repo });
+        });
         break;
       }
 
       case 'PULLREQUEST_LOAD_MORE': {
         if (!this.pullRequestManager) break;
-        const repo = await this.pullRequestManager.loadMore(msg.repoId, msg.filters);
+        const repo = await this.pullRequestManager.loadMore(msg.repoId);
         this.post({ type: 'PULLREQUEST_LOAD_MORE_RESULT', repoId: msg.repoId, repo });
+        break;
+      }
+
+      case 'PULLREQUEST_REFRESH_REPO': {
+        await this.refreshPullRequestRepo(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_FILTERS_PROMPT': {
+        if (!this.pullRequestManager) break;
+        const current = this.pullRequestManager.getFiltersForRepo(msg.repoId);
+        const capabilities = await this.pullRequestManager.getCapabilities(msg.repoId);
+        const STATE_LABELS: Record<PullRequestStateFilter, string> = { open: 'Open', draft: 'Draft', closed: 'Closed', merged: 'Merged' };
+        const STATE_ORDER: PullRequestStateFilter[] = ['open', 'draft', 'closed', 'merged'];
+        interface FilterQuickPickItem extends vscode.QuickPickItem {
+          stateValue?: PullRequestStateFilter;
+          isAuthorToggle?: boolean;
+          isAssignedToggle?: boolean;
+          isReviewToggle?: boolean;
+          isMentionsToggle?: boolean;
+          isEverythingAction?: boolean;
+        }
+        const items: FilterQuickPickItem[] = [
+          { label: 'State', kind: vscode.QuickPickItemKind.Separator },
+          ...STATE_ORDER.map(s => ({ label: STATE_LABELS[s], picked: current.states.includes(s), stateValue: s })),
+          { label: '', kind: vscode.QuickPickItemKind.Separator },
+          { label: 'Created by me', picked: current.author === 'mine', isAuthorToggle: true },
+          ...(capabilities?.canFilterAssignee ? [{ label: 'Assigned to me', picked: current.assignedToMe, isAssignedToggle: true }] : []),
+          ...(capabilities?.canFilterReviewRequested ? [{ label: 'Review requested', picked: current.reviewRequestedToMe, isReviewToggle: true }] : []),
+          ...(capabilities?.canFilterMentions ? [{ label: 'Mentioning you', picked: current.mentioningMe, isMentionsToggle: true }] : []),
+          { label: '', kind: vscode.QuickPickItemKind.Separator },
+          { label: 'Everything assigned, requested, or mentioning you', isEverythingAction: true },
+        ];
+        const picked = await vscode.window.showQuickPick(items, {
+          canPickMany: true,
+          title: 'Filter Pull Requests',
+        });
+        if (picked === undefined) break; // cancelled — leave filters unchanged
+
+        const pickedStates = STATE_ORDER.filter(s => picked.some(p => p.stateValue === s));
+        const nextStates = pickedStates.length > 0 ? pickedStates : current.states;
+        let nextAuthor: PullRequestAuthorFilter = picked.some(p => p.isAuthorToggle) ? 'mine' : 'all';
+        let nextAssigned = picked.some(p => p.isAssignedToggle);
+        let nextReview = picked.some(p => p.isReviewToggle);
+        let nextMentions = picked.some(p => p.isMentionsToggle);
+
+        if (picked.some(p => p.isEverythingAction)) {
+          // A shortcut that wins over the individual toggles above — sets everything "about you" at once.
+          nextAuthor = 'mine';
+          nextAssigned = !!capabilities?.canFilterAssignee;
+          nextReview = !!capabilities?.canFilterReviewRequested;
+          nextMentions = !!capabilities?.canFilterMentions;
+        }
+
+        await this.pullRequestManager.setFiltersForRepo(msg.repoId, {
+          states: nextStates, author: nextAuthor,
+          assignedToMe: nextAssigned, reviewRequestedToMe: nextReview, mentioningMe: nextMentions, search: current.search,
+        });
+        await this.refreshPullRequestRepo(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_SEARCH_PROMPT': {
+        if (!this.pullRequestManager) break;
+        const current = this.pullRequestManager.getFiltersForRepo(msg.repoId);
+        const input = await vscode.window.showInputBox({
+          title: 'Search Pull Requests',
+          prompt: 'Title text, or a PR number like 1234 or #1234',
+          placeHolder: 'Search…',
+          value: current.search,
+        });
+        if (input === undefined) break; // cancelled — leave the search unchanged
+
+        await this.pullRequestManager.setFiltersForRepo(msg.repoId, { ...current, search: input.trim() });
+        await this.refreshPullRequestRepo(msg.repoId);
         break;
       }
 
@@ -2425,7 +2512,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         }
         if (this.pullRequestManager) {
           this.pullRequestManager.invalidate();
-          const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
+          const repos = await this.pullRequestManager.getAllPullRequests(true);
           this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         }
         break;
@@ -2490,7 +2577,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         }
         vscode.window.showInformationMessage(`Connected to ${connection.host}`);
         logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
-        const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
+        const repos = await this.pullRequestManager.getAllPullRequests(true);
         this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         break;
       }
@@ -2498,7 +2585,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'PULLREQUEST_DISCONNECT': {
         if (!this.pullRequestManager) break;
         await this.pullRequestManager.disconnect(msg.repoId);
-        const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
+        const repos = await this.pullRequestManager.getAllPullRequests(true);
         this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         break;
       }
@@ -2509,7 +2596,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         await config.update('pullRequests.hostProviderOverrides', { ...overrides, [msg.host]: msg.provider }, vscode.ConfigurationTarget.Global);
         if (this.pullRequestManager) {
           this.pullRequestManager.invalidate();
-          const repos = await this.pullRequestManager.getAllPullRequests(msg.filters, true);
+          const repos = await this.pullRequestManager.getAllPullRequests(true);
           this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         }
         break;

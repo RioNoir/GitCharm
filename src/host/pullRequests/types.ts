@@ -19,15 +19,28 @@ export interface PullRequestSummary {
   createdAt: string;
   updatedAt: string;
   commentCount?: number;
+  /** Undefined means the provider doesn't return this in the list response (or doesn't support the concept at all, e.g. assignees/labels on Bitbucket Cloud). */
+  assignees?: PullRequestUser[];
+  reviewers?: PullRequestUser[];
+  labels?: PullRequestLabel[];
 }
 
-export type PullRequestStateFilter = 'open' | 'closed' | 'merged' | 'all';
+export type PullRequestStateFilter = 'open' | 'draft' | 'closed' | 'merged';
 export type PullRequestAuthorFilter = 'all' | 'mine';
 
 export interface ListPullRequestsOptions {
-  state: PullRequestStateFilter;
+  /** Non-empty set of states to include — never "all" as a single value; pass every state to mean "all". */
+  states: PullRequestStateFilter[];
   author: PullRequestAuthorFilter;
   page: number;
+  /** Only PRs where the authenticated user is an assignee. Ignored by providers with no assignee concept (Bitbucket) — see `PullRequestCapabilities.canFilterAssignee`. */
+  assignedToMe?: boolean;
+  /** Only PRs where the authenticated user's review was requested. */
+  reviewRequestedToMe?: boolean;
+  /** Only PRs mentioning the authenticated user (title/body/comments). GitHub only — see `PullRequestCapabilities.canFilterMentions`. */
+  mentioningMe?: boolean;
+  /** Free-text search against the title (and body, where the provider's endpoint covers it), OR a bare PR number (e.g. "1234" or "#1234") to fetch that exact PR directly. */
+  search?: string;
 }
 
 export interface ListPullRequestsResult {
@@ -74,6 +87,12 @@ export interface PullRequestCapabilities {
   canManageAssignees: boolean;
   /** false for Bitbucket Cloud — it has no labels concept on pull requests. */
   canManageLabels: boolean;
+  /** Whether the "Assigned to me" list filter is offered — false for Bitbucket Cloud (same reason as canManageAssignees). */
+  canFilterAssignee: boolean;
+  /** Whether the "Review requested" list filter is offered. True for all 4 providers. */
+  canFilterReviewRequested: boolean;
+  /** Whether the "Mentioning you" list filter is offered — true only for GitHub, the only provider with a full-text mentions search covering comments. */
+  canFilterMentions: boolean;
 }
 
 /** A user reference normalized across forges — `id` is each provider's own write-identifier (GitHub/Gitea: login, GitLab: numeric user id as a string, Bitbucket: account uuid), opaque to callers. */

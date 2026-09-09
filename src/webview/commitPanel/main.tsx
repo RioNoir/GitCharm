@@ -15,7 +15,7 @@ import { PullRequestPanel } from './components/PullRequestPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
-import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestFilters, PullRequestSummary } from '../shared/msgTypes';
+import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
@@ -23,6 +23,11 @@ import { sortRepos } from './repoSort';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/** Caps tab badge counts at "99+" so a large number never stretches the tab bar. */
+function formatBadgeCount(n: number): string {
+  return n > 99 ? '99+' : String(n);
 }
 
 // ── Dynamic context menu label helper ─────────────────────────────────────
@@ -288,11 +293,10 @@ function App() {
   // ── Pull Request state ────────────────────────────────────────────────────
   const [pullRequestRepos, setPullRequestRepos] = useState<RepoPullRequests[]>([]);
   const [pullRequestLoading, setPullRequestLoading] = useState(false);
-  const [pullRequestFilters, setPullRequestFilters] = useState<PullRequestFilters>({ state: 'open', author: 'all' });
   const [pullRequestLoadingMore, setPullRequestLoadingMore] = useState<Record<string, boolean>>({});
   const [expandedPrRepoIds, setExpandedPrRepoIds] = useState<Set<string>>(new Set());
-  const pullRequestFiltersRef = useRef(pullRequestFilters);
-  pullRequestFiltersRef.current = pullRequestFilters;
+  /** repoIds still awaited from the current streaming load — cleared as each PULLREQUEST_LIST_REPO_RESULT arrives; loading flips off once empty. */
+  const pullRequestPendingRef = useRef<Set<string>>(new Set());
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -555,6 +559,33 @@ function App() {
           setPullRequestRepos(msg.repos);
           break;
 
+        case 'PULLREQUEST_LIST_START': {
+          pullRequestPendingRef.current = new Set(msg.repoIds);
+          setPullRequestLoading(true);
+          const metas = useCommitStore.getState().repoMetas;
+          setPullRequestRepos(msg.repoIds.map(repoId => {
+            const meta = metas.find(m => m.id === repoId);
+            return {
+              repoId, repoName: meta?.name ?? repoId, repoColor: meta?.color ?? '#888',
+              connection: { repoId, provider: 'unknown', host: '', connected: false, detectionFailed: false },
+              pullRequests: [], page: 1, hasMore: false, pending: true,
+            };
+          }));
+          break;
+        }
+
+        case 'PULLREQUEST_LIST_REPO_RESULT':
+          setPullRequestRepos(prev => {
+            const idx = prev.findIndex(r => r.repoId === msg.repo.repoId);
+            if (idx === -1) return [...prev, msg.repo];
+            const next = [...prev];
+            next[idx] = msg.repo;
+            return next;
+          });
+          pullRequestPendingRef.current.delete(msg.repo.repoId);
+          if (pullRequestPendingRef.current.size === 0) setPullRequestLoading(false);
+          break;
+
         case 'PULLREQUEST_LOAD_MORE_RESULT':
           setPullRequestLoadingMore(prev => ({ ...prev, [msg.repoId]: false }));
           if (msg.repo) {
@@ -563,13 +594,13 @@ function App() {
           break;
 
         case 'PULLREQUEST_INVALIDATED':
-          requestPullRequestList(pullRequestFiltersRef.current, true);
+          requestPullRequestList(true);
           break;
 
         case 'COMMIT_SWITCH_TAB':
           setActiveTab(msg.tab);
           if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
-          if (msg.tab === 'pullrequests') requestPullRequestList(pullRequestFiltersRef.current);
+          if (msg.tab === 'pullrequests') requestPullRequestList();
           break;
 
         case 'COMMIT_DESELECT_FILE':
@@ -695,27 +726,35 @@ function App() {
 
   // ── Pull Request callbacks ────────────────────────────────────────────────
 
-  const requestPullRequestList = useCallback((filters: PullRequestFilters, forceRefresh?: boolean) => {
-    setPullRequestLoading(true);
-    send({ type: 'PULLREQUEST_REQUEST_LIST', filters, forceRefresh });
+  const requestPullRequestList = useCallback((forceRefresh?: boolean) => {
+    send({ type: 'PULLREQUEST_REQUEST_LIST', forceRefresh });
   }, [send]);
 
-  const handlePrSetFilters = useCallback((filters: PullRequestFilters) => {
-    setPullRequestFilters(filters);
-    requestPullRequestList(filters, true);
+  // Loads PRs in the background on mount (regardless of the active tab) so the tab badge count is populated right away.
+  useEffect(() => {
+    requestPullRequestList();
   }, [requestPullRequestList]);
+
+  const handlePrOpenFilters = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_FILTERS_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrOpenSearch = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_SEARCH_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrRefreshRepo = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_REFRESH_REPO', repoId });
+  }, [send]);
 
   const handlePrLoadMore = useCallback((repoId: string) => {
     setPullRequestLoadingMore(prev => ({ ...prev, [repoId]: true }));
-    send({ type: 'PULLREQUEST_LOAD_MORE', repoId, filters: pullRequestFiltersRef.current });
+    send({ type: 'PULLREQUEST_LOAD_MORE', repoId });
   }, [send]);
 
+  // Accordion — only one repo section can be expanded at a time.
   const handlePrToggleExpanded = useCallback((repoId: string) => {
-    setExpandedPrRepoIds(prev => {
-      const next = new Set(prev);
-      if (next.has(repoId)) next.delete(repoId); else next.add(repoId);
-      return next;
-    });
+    setExpandedPrRepoIds(prev => (prev.has(repoId) ? new Set() : new Set([repoId])));
   }, []);
 
   const handlePrOpenInBrowser = useCallback((url: string) => {
@@ -727,11 +766,11 @@ function App() {
   }, [send]);
 
   const handlePrConnectGitHub = useCallback((repoId: string) => {
-    send({ type: 'PULLREQUEST_CONNECT', repoId, filters: pullRequestFiltersRef.current });
+    send({ type: 'PULLREQUEST_CONNECT', repoId });
   }, [send]);
 
   const handlePrConnectPat = useCallback((repoId: string) => {
-    send({ type: 'PULLREQUEST_CONNECT_PAT_PROMPT', repoId, filters: pullRequestFiltersRef.current });
+    send({ type: 'PULLREQUEST_CONNECT_PAT_PROMPT', repoId });
   }, [send]);
 
   const handlePrRequestCreate = useCallback((repoId: string) => {
@@ -739,7 +778,7 @@ function App() {
   }, [send]);
 
   const handlePrSetHostOverride = useCallback((host: string, provider: ForgeProvider) => {
-    send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider, filters: pullRequestFiltersRef.current });
+    send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider });
   }, [send]);
 
   // ── Push / unpushed callbacks ─────────────────────────────────────────────
@@ -1224,6 +1263,7 @@ function App() {
           const paths = new Set([...r.stagedFiles.map(f => f.path), ...r.unstagedFiles.map(f => f.path)]);
           return sum + paths.size;
         }, 0);
+        const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + r.pullRequests.length, 0);
         return (
           <div style={css.tabBar}>
             {(['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'] as TabId[]).map(tab => {
@@ -1237,11 +1277,13 @@ function App() {
                   title={label}
                   onClick={() => {
                     setActiveTab(tab);
-                    if (tab === 'shelf') repos.forEach(r => requestShelveList(r.repoId));
-                    if (tab === 'stash') repos.forEach(r => requestStashList(r.repoId));
+                    // Skip refetching data that's already loaded — avoids a jarring loading flash every time the
+                    // tab is reopened; an explicit refresh (per-tab or per-repo) stays available for real refetches.
+                    if (tab === 'shelf') repos.forEach(r => { if (!(r.repoId in shelveMap)) requestShelveList(r.repoId); });
+                    if (tab === 'stash') repos.forEach(r => { if (!(r.repoId in stashMap)) requestStashList(r.repoId); });
                     if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
-                    if (tab === 'worktree') requestWorktreeList();
-                    if (tab === 'pullrequests') requestPullRequestList(pullRequestFiltersRef.current);
+                    if (tab === 'worktree' && worktreeRepos.length === 0) requestWorktreeList();
+                    if (tab === 'pullrequests' && pullRequestRepos.length === 0) requestPullRequestList();
                   }}
                 >
                   <Codicon
@@ -1254,10 +1296,13 @@ function App() {
                     </span>
                   )}
                   {tab === 'changes' && totalChanges > 0 && (
-                    <span style={css.pushBadge}>{totalChanges}</span>
+                    <span style={css.pushBadge}>{formatBadgeCount(totalChanges)}</span>
                   )}
                   {tab === 'push' && totalToPush > 0 && (
-                    <span style={css.pushBadge}>{totalToPush}</span>
+                    <span style={css.pushBadge}>{formatBadgeCount(totalToPush)}</span>
+                  )}
+                  {tab === 'pullrequests' && totalPullRequests > 0 && (
+                    <span style={css.pushBadge}>{formatBadgeCount(totalPullRequests)}</span>
                   )}
                 </button>
               );
@@ -1426,6 +1471,7 @@ function App() {
                     )}
                     <ProjectGroup
                       isFirst={idx === 0}
+                      isLast={idx === changesRepos.length - 1}
                       repoStatus={repoStatus}
                       repoName={repoName}
                       repoColor={repoColor}
@@ -1615,6 +1661,7 @@ function App() {
                   onRename={handleRenameShelve}
                   onRequestList={requestShelveList}
                   onOpenFileDiff={handleOpenFileDiff}
+                  isLast={i === repos.length - 1}
                 />
               );
             })}
@@ -1653,6 +1700,7 @@ function App() {
                   onRename={handleRenameStash}
                   onRequestList={requestStashList}
                   onOpenFileDiff={handleStashShowFileDiff}
+                  isLast={i === repos.length - 1}
                 />
               );
             })}
@@ -1726,7 +1774,6 @@ function App() {
               repos={pullRequestRepos}
               loading={pullRequestLoading}
               loadingMore={pullRequestLoadingMore}
-              filters={pullRequestFilters}
               multiRepo={multiRepo}
               expandedRepoIds={expandedPrRepoIds}
               onToggleExpanded={handlePrToggleExpanded}
@@ -1735,9 +1782,10 @@ function App() {
               onConnectGitHub={handlePrConnectGitHub}
               onConnectPat={handlePrConnectPat}
               onRequestCreate={handlePrRequestCreate}
-              onRefresh={() => requestPullRequestList(pullRequestFilters, true)}
+              onRefresh={handlePrRefreshRepo}
               onSetHostOverride={handlePrSetHostOverride}
-              onSetFilters={handlePrSetFilters}
+              onOpenFilters={handlePrOpenFilters}
+              onOpenSearch={handlePrOpenSearch}
             />
           </ScrollArea>
         )}

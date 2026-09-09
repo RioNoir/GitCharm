@@ -1,13 +1,23 @@
-import React from 'react';
-import type { RepoPullRequests, PullRequestSummary, ForgeProvider, PullRequestFilters, PullRequestStateFilter } from '../../shared/msgTypes';
+import React, { useEffect } from 'react';
+import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
+
+function useSkeletonStyle() {
+  useEffect(() => {
+    const id = 'gitcharm-pr-skeleton-pulse';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `@keyframes gitcharm-pr-skeleton-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.7; } }`;
+    document.head.appendChild(s);
+  }, []);
+}
 
 interface Props {
   repos: RepoPullRequests[];
   loading: boolean;
   loadingMore: Record<string, boolean>;
-  filters: PullRequestFilters;
   multiRepo: boolean;
   expandedRepoIds: Set<string>;
   onToggleExpanded: (repoId: string) => void;
@@ -18,7 +28,8 @@ interface Props {
   onRequestCreate: (repoId: string) => void;
   onRefresh: (repoId: string) => void;
   onSetHostOverride: (host: string, provider: ForgeProvider) => void;
-  onSetFilters: (filters: PullRequestFilters) => void;
+  onOpenFilters: (repoId: string) => void;
+  onOpenSearch: (repoId: string) => void;
 }
 
 const SELECTABLE_PROVIDERS: { value: ForgeProvider; label: string }[] = [
@@ -27,37 +38,6 @@ const SELECTABLE_PROVIDERS: { value: ForgeProvider; label: string }[] = [
   { value: 'bitbucket', label: 'Bitbucket Server' },
   { value: 'gitea', label: 'Gitea / Forgejo' },
 ];
-
-const STATE_FILTERS: { value: PullRequestStateFilter; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'merged', label: 'Merged' },
-  { value: 'all', label: 'All' },
-];
-
-function FilterBar({ filters, onSetFilters }: { filters: PullRequestFilters; onSetFilters: Props['onSetFilters'] }) {
-  return (
-    <div style={css.filterBar}>
-      <select
-        style={css.select}
-        value={filters.state}
-        onChange={e => onSetFilters({ ...filters, state: e.target.value as PullRequestStateFilter })}
-      >
-        {STATE_FILTERS.map(f => (
-          <option key={f.value} value={f.value}>{f.label}</option>
-        ))}
-      </select>
-      <label style={css.mineToggle}>
-        <input
-          type="checkbox"
-          checked={filters.author === 'mine'}
-          onChange={e => onSetFilters({ ...filters, author: e.target.checked ? 'mine' : 'all' })}
-        />
-        Created by me
-      </label>
-    </div>
-  );
-}
 
 function stateIcon(state: PullRequestSummary['state']): { icon: string; color: string; label: string } {
   switch (state) {
@@ -106,10 +86,12 @@ function PullRequestRow({ pr, repoId, onOpenInBrowser, onOpenDetail }: {
         </span>
         <span style={row.meta}>
           <AuthorAvatar name={pr.authorName} avatarUrl={pr.authorAvatarUrl} />
-          <span style={row.branch}>
-            <Codicon name="git-branch" style={{ fontSize: '10px', marginRight: '3px', opacity: 0.6 }} />
-            {pr.sourceBranch} → {pr.targetBranch}
-          </span>
+          {(pr.sourceBranch || pr.targetBranch) && (
+            <span style={row.branch}>
+              <Codicon name="git-branch" style={{ fontSize: '10px', marginRight: '3px', opacity: 0.6 }} />
+              {pr.sourceBranch} → {pr.targetBranch}
+            </span>
+          )}
         </span>
       </div>
       {hovered && (
@@ -164,7 +146,28 @@ function ConnectPrompt({ repo, onConnectGitHub, onConnectPat, onSetHostOverride 
   );
 }
 
-function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onConnectGitHub, onConnectPat, onRequestCreate, onRefresh, onSetHostOverride }: {
+function SkeletonRow() {
+  return (
+    <div style={{ ...row.header, cursor: 'default' }}>
+      <span style={{ ...skeleton.pulse, width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0 }} />
+      <div style={row.info}>
+        <span style={{ ...skeleton.pulse, width: '70%', height: '11px', marginBottom: '6px' }} />
+        <span style={{ ...skeleton.pulse, width: '40%', height: '9px' }} />
+      </div>
+    </div>
+  );
+}
+
+function RepoSkeleton() {
+  return (
+    <>
+      <SkeletonRow />
+      <SkeletonRow />
+    </>
+  );
+}
+
+function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onConnectGitHub, onConnectPat, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
   repo: RepoPullRequests;
   multiRepo: boolean;
   singleRepo?: boolean;
@@ -178,55 +181,76 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
   onRequestCreate: Props['onRequestCreate'];
   onRefresh: Props['onRefresh'];
   onSetHostOverride: Props['onSetHostOverride'];
+  onOpenFilters: Props['onOpenFilters'];
+  onOpenSearch: Props['onOpenSearch'];
 }) {
   const connected = repo.connection.connected;
   const isCollapsible = multiRepo && !singleRepo;
   const isExpanded = singleRepo || expanded;
   return (
     <div style={css.repoSection}>
-      {multiRepo && (
-        <div
-          style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
-          onClick={isCollapsible ? () => onToggleExpanded(repo.repoId) : undefined}
-        >
-          {isCollapsible && (
-            <Codicon name={isExpanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
+      <div
+        style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
+        onClick={isCollapsible ? () => onToggleExpanded(repo.repoId) : undefined}
+      >
+        {isCollapsible && (
+          <Codicon name={isExpanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
+        )}
+        {singleRepo
+          ? <Codicon name="repo" style={css.repoIcon} />
+          : <span style={css.dot(repo.repoColor)} />
+        }
+        <span style={css.repoName}>{repo.repoName}</span>
+        {repo.pending && <Codicon name="loading" className="codicon-modifier-spin" style={{ fontSize: '11px', opacity: 0.5, flexShrink: 0 }} />}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }} onClick={e => e.stopPropagation()}>
+          {connected && isExpanded && (
+            <InlineIconBtn icon="search" title="Search pull requests" onClick={() => onOpenSearch(repo.repoId)} />
           )}
-          {singleRepo
-            ? <Codicon name="repo" style={css.repoIcon} />
-            : <span style={css.dot(repo.repoColor)} />
-          }
-          <span style={css.repoName}>{repo.repoName}</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }} onClick={e => e.stopPropagation()}>
-            <InlineIconBtn icon="refresh" title="Refresh" onClick={() => onRefresh(repo.repoId)} />
-            {connected && (
-              <InlineIconBtn icon="add" title="New Pull Request" onClick={() => onRequestCreate(repo.repoId)} />
-            )}
-          </div>
+          {connected && isExpanded && (
+            <InlineIconBtn icon="filter" title="Filter pull requests" onClick={() => onOpenFilters(repo.repoId)} />
+          )}
+          <InlineIconBtn icon="refresh" title="Refresh" onClick={() => onRefresh(repo.repoId)} />
+          {connected && (
+            <InlineIconBtn icon="add" title="New Pull Request" onClick={() => onRequestCreate(repo.repoId)} />
+          )}
         </div>
-      )}
+      </div>
       {isExpanded && (
         <>
-          {repo.error && (
-            <div style={css.errorRow}>
-              <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
-              {repo.error}
-            </div>
-          )}
-          {!connected ? (
-            <ConnectPrompt repo={repo} onConnectGitHub={onConnectGitHub} onConnectPat={onConnectPat} onSetHostOverride={onSetHostOverride} />
-          ) : repo.pullRequests.length === 0 ? (
-            <div style={css.empty}>No pull requests match the current filters</div>
+          {repo.pending ? (
+            <RepoSkeleton />
           ) : (
             <>
-              {repo.pullRequests.map(pr => (
-                <PullRequestRow key={pr.id} pr={pr} repoId={repo.repoId} onOpenInBrowser={onOpenInBrowser} onOpenDetail={onOpenDetail} />
-              ))}
-              {loadingMore && <div style={css.loadingMore}>Loading more…</div>}
+              {repo.error && (
+                <div style={css.errorRow}>
+                  <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
+                  {repo.error}
+                </div>
+              )}
+              {!connected ? (
+                <ConnectPrompt repo={repo} onConnectGitHub={onConnectGitHub} onConnectPat={onConnectPat} onSetHostOverride={onSetHostOverride} />
+              ) : repo.pullRequests.length === 0 ? (
+                <div style={css.empty}>No pull requests match the current filters</div>
+              ) : (
+                <>
+                  {repo.pullRequests.map(pr => (
+                    <PullRequestRow key={pr.id} pr={pr} repoId={repo.repoId} onOpenInBrowser={onOpenInBrowser} onOpenDetail={onOpenDetail} />
+                  ))}
+                  {loadingMore && <div style={css.loadingMore}>Loading more…</div>}
+                </>
+              )}
             </>
           )}
-          {!multiRepo && connected && (
+          {!multiRepo && connected && !repo.pending && (
             <div style={css.singleRepoActions}>
+              <button style={css.actionBtn} onClick={() => onOpenSearch(repo.repoId)}>
+                <Codicon name="search" style={{ marginRight: '4px', fontSize: '12px' }} />
+                Search
+              </button>
+              <button style={css.actionBtn} onClick={() => onOpenFilters(repo.repoId)}>
+                <Codicon name="filter" style={{ marginRight: '4px', fontSize: '12px' }} />
+                Filter
+              </button>
               <button style={css.actionBtn} onClick={() => onRefresh(repo.repoId)}>
                 <Codicon name="refresh" style={{ marginRight: '4px', fontSize: '12px' }} />
                 Refresh
@@ -244,12 +268,12 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
 }
 
 export function PullRequestPanel({
-  repos, loading, loadingMore, filters, multiRepo, expandedRepoIds, onToggleExpanded,
-  onOpenInBrowser, onOpenDetail, onConnectGitHub, onConnectPat, onRequestCreate, onRefresh, onSetHostOverride, onSetFilters,
+  repos, loading, loadingMore, multiRepo, expandedRepoIds, onToggleExpanded,
+  onOpenInBrowser, onOpenDetail, onConnectGitHub, onConnectPat, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch,
 }: Props) {
+  useSkeletonStyle();
   return (
     <div style={css.root}>
-      <FilterBar filters={filters} onSetFilters={onSetFilters} />
       {loading && repos.length === 0 ? (
         <div style={css.empty}>Loading…</div>
       ) : (
@@ -269,6 +293,8 @@ export function PullRequestPanel({
             onRequestCreate={onRequestCreate}
             onRefresh={onRefresh}
             onSetHostOverride={onSetHostOverride}
+            onOpenFilters={onOpenFilters}
+            onOpenSearch={onOpenSearch}
           />
         ))
       )}
@@ -281,13 +307,19 @@ const css = {
   repoSection: {} as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '0 8px', height: '26px',
-    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    background: singleRepo
+      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
+      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box',
+    position: 'sticky', top: 0, zIndex: 1,
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
   repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
-  repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
+  repoName: {
+    fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em',
+    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flexShrink: 1,
+  } as React.CSSProperties,
   singleRepoActions: {
     display: 'flex', gap: '4px', padding: '6px 8px',
     borderTop: '1px solid var(--vscode-panel-border)',
@@ -311,13 +343,6 @@ const css = {
   select: {
     fontSize: '11px', padding: '3px 4px', background: 'var(--vscode-dropdown-background)',
     color: 'var(--vscode-dropdown-foreground)', border: '1px solid var(--vscode-dropdown-border)', borderRadius: '3px',
-  } as React.CSSProperties,
-  filterBar: {
-    display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px',
-    borderBottom: '1px solid var(--vscode-panel-border)',
-  } as React.CSSProperties,
-  mineToggle: {
-    display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', opacity: 0.85, cursor: 'pointer',
   } as React.CSSProperties,
   loadingMore: {
     padding: '10px 12px', fontSize: '11px', opacity: 0.45, textAlign: 'center' as const,
@@ -343,11 +368,21 @@ const row = {
   } as React.CSSProperties,
   avatarImg: {
     width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0,
+    border: '1px solid rgba(128,128,128,0.35)', boxSizing: 'border-box' as const,
   } as React.CSSProperties,
   avatarFallback: {
     width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: '7px', fontWeight: 'bold' as const,
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    border: '1px solid rgba(128,128,128,0.35)', boxSizing: 'border-box' as const,
+  } as React.CSSProperties,
+};
+
+const skeleton = {
+  pulse: {
+    display: 'block', borderRadius: '3px',
+    background: 'var(--vscode-foreground)',
+    animation: 'gitcharm-pr-skeleton-pulse 1.2s ease-in-out infinite',
   } as React.CSSProperties,
 };

@@ -1,11 +1,11 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestSummary, PullRequestUser,
-  SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestStateFilter,
+  PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import type { BitbucketCredentials } from '../PatCredentialStore';
-import { httpJson } from '../httpJson';
+import { httpJson, HttpJsonError } from '../httpJson';
 
 const PAGE_SIZE = 30;
 
@@ -24,6 +24,10 @@ const CAPABILITIES: PullRequestCapabilities = {
   canManageAssignees: false,
   // Bitbucket Cloud has no labels concept on pull requests at all.
   canManageLabels: false,
+  // Same reason as canManageAssignees — no assignee concept to filter on.
+  canFilterAssignee: false,
+  canFilterReviewRequested: true,
+  canFilterMentions: false,
 };
 
 interface RawBitbucketUserRef {
@@ -150,15 +154,21 @@ function mapPr(pr: RawBitbucketPr): PullRequestSummary {
     createdAt: pr.created_on,
     updatedAt: pr.updated_on,
     commentCount: pr.comment_count,
+    reviewers: (pr.reviewers ?? []).map(u => ({ id: u.uuid, username: u.display_name ?? u.nickname ?? u.uuid, avatarUrl: u.links?.avatar?.href })),
   };
 }
 
-/** Bitbucket Cloud has no single "all" state — the query filter is repeated per accepted value, or omitted entirely for "all". */
-function apiStates(state: ListPullRequestsOptions['state']): string[] {
-  if (state === 'open') return ['OPEN'];
-  if (state === 'merged') return ['MERGED'];
-  if (state === 'closed') return ['DECLINED', 'SUPERSEDED'];
-  return [];
+// Bitbucket Cloud has no server-side "draft" state — drafts are just OPEN PRs with a flag, so wanting drafts means fetching OPEN too.
+const STATE_TO_API: Record<PullRequestStateFilter, string[]> = {
+  open: ['OPEN'],
+  draft: ['OPEN'],
+  merged: ['MERGED'],
+  closed: ['DECLINED', 'SUPERSEDED'],
+};
+
+/** Bitbucket Cloud's `state` query param can be repeated for an arbitrary subset — no single "all" value needed. */
+function apiStates(states: PullRequestStateFilter[]): string[] {
+  return [...new Set(states.flatMap(s => STATE_TO_API[s]))];
 }
 
 function mapDiffstatStatus(status: RawBitbucketDiffstatEntry['status']): ChangedFile['status'] {
@@ -242,15 +252,39 @@ export class BitbucketProvider implements PullRequestProvider {
 
   async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
     const headers = await this.headers();
+
+    // A bare PR id goes straight to a single get-by-number call — precise, and far cheaper than a query search.
+    const numberMatch = options.search?.trim().match(/^#?(\d+)$/);
+    if (numberMatch) {
+      try {
+        const { data } = await httpJson<RawBitbucketPr>(`${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${numberMatch[1]}`, { headers });
+        const pr = mapPr(data);
+        return { items: options.states.includes(pr.state) ? [pr] : [], hasMore: false };
+      } catch (err) {
+        if (err instanceof HttpJsonError && err.status === 404) return { items: [], hasMore: false };
+        throw err;
+      }
+    }
+
     const params = new URLSearchParams({ pagelen: String(PAGE_SIZE), page: String(options.page) });
-    for (const s of apiStates(options.state)) params.append('state', s);
+    for (const s of apiStates(options.states)) params.append('state', s);
+    // Bitbucket's Query Language (`q`) combines multiple clauses with AND — build them up instead of overwriting.
+    const qClauses: string[] = [];
     if (options.author === 'mine') {
       const username = await this.getCurrentUsername();
-      if (username) params.set('q', `author.username="${username}"`);
+      if (username) qClauses.push(`author.username="${username}"`);
     }
+    if (options.reviewRequestedToMe) {
+      const username = await this.getCurrentUsername();
+      if (username) qClauses.push(`reviewers.username="${username}"`);
+    }
+    if (options.search) qClauses.push(`title~"${options.search}"`);
+    if (qClauses.length > 0) params.set('q', qClauses.join(' AND '));
     const url = `${this.apiBase()}/repositories/${owner}/${repo}/pullrequests?${params.toString()}`;
     const result: { data: RawBitbucketPage } = await httpJson<RawBitbucketPage>(url, { headers });
-    return { items: result.data.values.map(mapPr), hasMore: !!result.data.next };
+    // open/draft share the same server-side OPEN state — when only one of the two was requested, split them apart here.
+    const items = result.data.values.map(mapPr).filter(pr => options.states.includes(pr.state));
+    return { items, hasMore: !!result.data.next };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {

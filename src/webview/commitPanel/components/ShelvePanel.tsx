@@ -25,6 +25,8 @@ interface Props {
   onRename: (repoId: string, shelveId: string, currentName: string) => void;
   onRequestList: (repoId: string) => void;
   onOpenFileDiff: (repoId: string, shelveId: string, filePath: string) => void;
+  /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
 }
 
 const SHELVE_CTX_ITEMS: ContextMenuEntry[] = [
@@ -250,10 +252,12 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
             })()}
           </span>
         </div>
-        <div style={rowStyle.actions}>
-          <InlineIconBtn icon="desktop-download" title="Unshelve (apply and keep)" visible={hovered} onClick={e => { e.stopPropagation(); onUnshelve(repoId, entry.id); }} />
-          <InlineIconBtn icon="trash" title="Delete shelve" visible={hovered} danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.id); }} />
-        </div>
+        {hovered && (
+          <div style={rowStyle.actions}>
+            <InlineIconBtn icon="desktop-download" title="Unshelve (apply and keep)" visible onClick={e => { e.stopPropagation(); onUnshelve(repoId, entry.id); }} />
+            <InlineIconBtn icon="trash" title="Delete shelve" visible danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.id); }} />
+          </div>
+        )}
       </div>
 
       {/* Expanded body: file list (flat or tree) */}
@@ -315,13 +319,26 @@ const rowStyle = {
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo = false, worktreeBranch, mainRepoName, shelves, loading, error, viewMode, onUnshelve, onUnshelveFile, onDrop, onRename, onRequestList, onOpenFileDiff }: Props) {
+const SECTION_COLLAPSE_THRESHOLD = 5;
+
+export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo = false, worktreeBranch, mainRepoName, shelves, loading, error, viewMode, onUnshelve, onUnshelveFile, onDrop, onRename, onRequestList, onOpenFileDiff, isLast = false }: Props) {
   useEffect(() => { onRequestList(repoId); }, [repoId]);
 
+  const { isCollapsed, toggleCollapsed } = useCommitStore();
+  const sectionKey = `shelf-repo:${repoId}`;
+  const isCollapsible = !singleRepo && shelves.length > SECTION_COLLAPSE_THRESHOLD;
+  const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
+
   return (
-    <div style={css.root}>
+    <div style={{ ...css.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
       {multiRepo && (
-        <div style={css.repoHeader(repoColor, singleRepo)}>
+        <div
+          style={{ ...css.repoHeader(repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
+          onClick={isCollapsible ? () => toggleCollapsed(sectionKey) : undefined}
+        >
+          {isCollapsible && (
+            <Codicon name={sectionCollapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
+          )}
           {singleRepo
             ? <Codicon name="repo" style={css.repoIcon} />
             : <span style={css.dot(repoColor)} />
@@ -329,8 +346,8 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
           <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
           {worktreeBranch && (
             <span style={css.worktreeBadge}>
-              <Codicon name="worktree" style={{ fontSize: '11px', marginRight: '3px' }} />
-              {worktreeBranch}
+              <Codicon name="worktree" style={{ fontSize: '11px', marginRight: '3px', flexShrink: 0 }} />
+              <span style={css.worktreeBadgeText}>{worktreeBranch}</span>
             </span>
           )}
         </div>
@@ -343,25 +360,27 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
         </div>
       )}
 
-      {loading ? (
-        <div style={css.empty}>Loading…</div>
-      ) : shelves.length === 0 ? (
-        <div style={css.empty}>No shelved changes</div>
-      ) : (
-        shelves.map((entry, i) => (
-          <ShelveRow
-            key={entry.id}
-            entry={entry}
-            repoId={repoId}
-            viewMode={viewMode}
-            onUnshelve={onUnshelve}
-            onUnshelveFile={onUnshelveFile}
-            onDrop={onDrop}
-            onRename={onRename}
-            onOpenFileDiff={onOpenFileDiff}
-            isLast={i === shelves.length - 1}
-          />
-        ))
+      {!sectionCollapsed && (
+        loading ? (
+          <div style={css.empty}>Loading…</div>
+        ) : shelves.length === 0 ? (
+          <div style={css.empty}>No shelved changes</div>
+        ) : (
+          shelves.map((entry, i) => (
+            <ShelveRow
+              key={entry.id}
+              entry={entry}
+              repoId={repoId}
+              viewMode={viewMode}
+              onUnshelve={onUnshelve}
+              onUnshelveFile={onUnshelveFile}
+              onDrop={onDrop}
+              onRename={onRename}
+              onOpenFileDiff={onOpenFileDiff}
+              isLast={i === shelves.length - 1}
+            />
+          ))
+        )
       )}
     </div>
   );
@@ -371,14 +390,26 @@ const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: singleRepo ? 'color-mix(in srgb, var(--vscode-foreground) 7%, transparent)' : color + '14',
+    background: singleRepo
+      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
+      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     borderBottom: '1px solid var(--vscode-panel-border)',
-    boxSizing: 'border-box',
+    boxSizing: 'border-box', overflow: 'hidden', minWidth: 0,
+    position: 'sticky', top: 0, zIndex: 1,
   }),
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
   repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
-  repoName: { fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
-  worktreeBadge: { display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em', color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)', borderRadius: '3px', padding: '1px 5px 1px 4px', flexShrink: 0, opacity: 0.75 } as React.CSSProperties,
+  repoName: {
+    fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em',
+    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flexShrink: 1,
+  } as React.CSSProperties,
+  worktreeBadge: {
+    display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em',
+    opacity: 0.55, minWidth: 0, overflow: 'hidden', flexShrink: 1,
+  } as React.CSSProperties,
+  worktreeBadgeText: {
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0,
+  } as React.CSSProperties,
   errorRow: {
     display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',

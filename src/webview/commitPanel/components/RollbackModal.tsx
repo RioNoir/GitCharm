@@ -373,7 +373,9 @@ const s = {
   repoDot: (color: string): React.CSSProperties => ({
     width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0,
   }),
-  repoName: { flex: 1 },
+  repoName: {
+    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
   count: { fontSize: '10px', opacity: 0.45, flexShrink: 0 },
   dirRow: {
     display: 'flex',
