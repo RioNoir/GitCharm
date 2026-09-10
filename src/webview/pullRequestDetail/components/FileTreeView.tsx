@@ -198,18 +198,18 @@ export function FileTreeView({ files, iconTheme, onOpenFile }: Props) {
         <div style={{ flex: 1 }} />
         {viewMode === 'tree' && (
           <>
-            <button style={css.toolbarBtn(false)} onClick={() => setAllExpanded(true)} title="Expand all">
+            <button className="icon-btn" style={css.toolbarBtn(false)} onClick={() => setAllExpanded(true)} title="Expand all">
               <Codicon name="expand-all" style={{ fontSize: '14px' }} />
             </button>
-            <button style={css.toolbarBtn(false)} onClick={() => setAllExpanded(false)} title="Collapse all">
+            <button className="icon-btn" style={css.toolbarBtn(false)} onClick={() => setAllExpanded(false)} title="Collapse all">
               <Codicon name="collapse-all" style={{ fontSize: '14px' }} />
             </button>
           </>
         )}
-        <button style={css.toolbarBtn(viewMode === 'tree')} onClick={() => setViewMode('tree')} title="Tree view">
+        <button className="icon-btn" style={css.toolbarBtn(viewMode === 'tree')} onClick={() => setViewMode('tree')} title="Tree view">
           <Codicon name="list-tree" style={{ fontSize: '14px' }} />
         </button>
-        <button style={css.toolbarBtn(viewMode === 'flat')} onClick={() => setViewMode('flat')} title="Flat view">
+        <button className="icon-btn" style={css.toolbarBtn(viewMode === 'flat')} onClick={() => setViewMode('flat')} title="Flat view">
           <Codicon name="list-flat" style={{ fontSize: '14px' }} />
         </button>
       </div>

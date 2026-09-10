@@ -1,10 +1,11 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestSummary, PullRequestUser,
-  SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
 
@@ -108,6 +109,21 @@ interface RawGitLabNote {
   system?: boolean;
 }
 
+interface RawGitLabLabelEvent {
+  id: number;
+  user: { username: string; avatar_url: string } | null;
+  created_at: string;
+  action: 'add' | 'remove';
+  label: { name: string; color: string } | null;
+}
+
+interface RawGitLabStateEvent {
+  id: number;
+  user: { username: string; avatar_url: string } | null;
+  created_at: string;
+  state: 'closed' | 'reopened' | 'merged';
+}
+
 interface RawGitLabCommit {
   id: string;
   short_id: string;
@@ -122,6 +138,22 @@ function mapState(mr: RawGitLabMr): PullRequestSummary['state'] {
   if (mr.state === 'closed' || mr.state === 'locked') return 'closed';
   if (mr.draft || mr.work_in_progress) return 'draft';
   return 'open';
+}
+
+/** Whether `states` maps exactly onto one of GitLab's own server-side `state` values — see the comment at the `listPullRequests` call site. */
+function matchesGitLabState(states: PullRequestStateFilter[]): 'opened' | 'closed' | 'merged' | undefined {
+  const set = new Set(states);
+  if (set.size === 2 && set.has('open') && set.has('draft')) return 'opened';
+  if (set.size === 1 && set.has('closed')) return 'closed';
+  if (set.size === 1 && set.has('merged')) return 'merged';
+  return undefined;
+}
+
+function parseXTotal(headers: Headers): number | undefined {
+  const raw = headers.get('x-total');
+  if (!raw) return undefined;
+  const total = Number(raw);
+  return Number.isFinite(total) ? total : undefined;
 }
 
 /** GitLab's `references.full` is "namespace/project!123" — the target project's path, free on every MR response. */
@@ -263,9 +295,14 @@ export class GitLabProvider implements PullRequestProvider {
     }
 
     // GitLab's `state` param takes a single value (opened|closed|merged|all) — no array/repeat support, so an
-    // arbitrary subset of states is resolved client-side after always fetching the unfiltered "all" list.
+    // arbitrary subset of states is resolved client-side after fetching the narrowest server-side state that
+    // covers it. "open"+"draft" both map to GitLab's "opened" (draft is a client-side flag, see mapState), so
+    // when the requested set is exactly {open, draft}, {closed}, or {merged} the server-side state matches the
+    // requested set exactly — letting the response's X-Total header double as an exact, filter-aware total
+    // (see below). Any other combination falls back to "all" with no cheap total available.
+    const apiState = matchesGitLabState(options.states);
     const params = new URLSearchParams({
-      state: 'all',
+      state: apiState ?? 'all',
       per_page: String(PAGE_SIZE),
       page: String(options.page),
     });
@@ -282,12 +319,15 @@ export class GitLabProvider implements PullRequestProvider {
       if (username) params.set('reviewer_username', username);
     }
     const url = `${this.apiBase()}/projects/${projectId}/merge_requests?${params.toString()}`;
-    const { data } = await httpJson<RawGitLabMr[]>(url, { headers });
+    const { data, headers: responseHeaders } = await httpJson<RawGitLabMr[]>(url, { headers });
     // Label colors need a separate paginated project-labels lookup (see getCachedProjectLabels) — skipped here
     // since the compact PR list doesn't display labels at all; only getPullRequestDetail resolves them.
     // Drafts/WIP have no dedicated filter state — they fall under "open".
     const items = data.map(mr => mapMr(mr)).filter(pr => options.states.includes(pr.state));
-    return { items, hasMore: data.length === PAGE_SIZE };
+    // Only trust X-Total when the server-side `state` param exactly matches the requested filter (see above) —
+    // otherwise it would count MRs in states the user didn't ask for. Free either way: same call already made.
+    const totalCount = apiState ? parseXTotal(responseHeaders) : undefined;
+    return { items, hasMore: data.length === PAGE_SIZE, totalCount };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
@@ -306,7 +346,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true, pr: mapMr(data) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -468,7 +508,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -484,7 +524,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -499,7 +539,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -515,54 +555,158 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+
+  /** GitLab only lets the note's own author edit it via API — but `can_merge` on the MR (the same proxy
+   * `getPullRequestDetail` uses for canWrite, since it tracks Maintainer-level access) also lets that user
+   * delete notes written by someone else. */
+  private async getMrCanMerge(owner: string, repo: string, number: number, headers: Record<string, string>): Promise<boolean> {
+    try {
+      const { data } = await httpJson<RawGitLabMrDetail>(`${this.apiBase()}/projects/${this.projectId(owner, repo)}/merge_requests/${number}`, { headers });
+      return data.user?.can_merge ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  private mapNote(n: RawGitLabNote, currentUsername: string | undefined, canMerge: boolean): PullRequestComment {
+    const isOwn = !!currentUsername && n.author?.username === currentUsername;
+    return {
+      id: String(n.id),
+      authorName: n.author?.username ?? 'unknown',
+      authorAvatarUrl: n.author?.avatar_url,
+      body: n.body,
+      createdAt: n.created_at,
+      canEdit: isOwn,
+      canDelete: isOwn || canMerge,
+      canHide: false,
+    };
+  }
+
+  /** Manual page-number pagination shared by every GitLab list endpoint that isn't already using it inline
+   * (notes/commits kept their own inline loop to minimize diff — this is for the new resource-events calls). */
+  private async paginateGitlab<T>(url: string, headers: Record<string, string>): Promise<T[]> {
+    const items: T[] = [];
+    let page = 1;
+    for (;;) {
+      const { data } = await httpJson<T[]>(`${url}${url.includes('?') ? '&' : '?'}per_page=100&page=${page}`, { headers });
+      items.push(...data);
+      if (data.length < 100) break;
+      page++;
+    }
+    return items;
   }
 
   async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {
     const headers = await this.headers();
     const projectId = this.projectId(owner, repo);
+    const [currentUsername, canMerge] = await Promise.all([this.getCurrentUsername(), this.getMrCanMerge(owner, repo, number, headers)]);
     const notes: PullRequestComment[] = [];
     let page = 1;
     for (;;) {
       const { data } = await httpJson<RawGitLabNote[]>(
         `${this.apiBase()}/projects/${projectId}/merge_requests/${number}/notes?per_page=100&page=${page}`, { headers },
       );
-      notes.push(...data.filter(n => !n.system).map(n => ({
-        id: String(n.id),
-        authorName: n.author?.username ?? 'unknown',
-        authorAvatarUrl: n.author?.avatar_url,
-        body: n.body,
-        createdAt: n.created_at,
-      })));
+      notes.push(...data.filter(n => !n.system).map(n => this.mapNote(n, currentUsername, canMerge)));
       if (data.length < 100) break;
       page++;
     }
     return notes;
   }
 
+  /** GitLab has no dedicated API for rename/target-branch-change/assign/review-request history — only
+   * `resource_label_events` (label add/remove) and `resource_state_events` (close/reopen/merge) exist as
+   * proper timeline endpoints. Everything else would require parsing free-text system notes, which is fragile
+   * and out of step with this codebase's style, so it's simply not reported for GitLab. */
+  async listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]> {
+    const headers = await this.headers();
+    const projectId = this.projectId(owner, repo);
+    const [labelEvents, stateEvents] = await Promise.all([
+      this.paginateGitlab<RawGitLabLabelEvent>(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}/resource_label_events`, headers),
+      this.paginateGitlab<RawGitLabStateEvent>(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}/resource_state_events`, headers),
+    ]);
+    const events: PullRequestEvent[] = [];
+    for (const e of labelEvents) {
+      if (!e.label) continue;
+      events.push({
+        id: `label-${e.id}`,
+        kind: e.action === 'add' ? 'labeled' : 'unlabeled',
+        actorName: e.user?.username ?? 'unknown',
+        actorAvatarUrl: e.user?.avatar_url,
+        createdAt: e.created_at,
+        label: { id: e.label.name, name: e.label.name, color: e.label.color.replace(/^#/, '') },
+      });
+    }
+    for (const e of stateEvents) {
+      if (e.state !== 'closed' && e.state !== 'reopened' && e.state !== 'merged') continue;
+      events.push({
+        id: `state-${e.id}`,
+        kind: e.state === 'closed' ? 'closed' : e.state === 'reopened' ? 'reopened' : 'merged',
+        actorName: e.user?.username ?? 'unknown',
+        actorAvatarUrl: e.user?.avatar_url,
+        createdAt: e.created_at,
+      });
+    }
+    return events;
+  }
+
   async postComment(owner: string, repo: string, number: number, body: string): Promise<PostCommentResult> {
     const headers = await this.headers();
     const projectId = this.projectId(owner, repo);
     try {
-      const { data } = await httpJson<RawGitLabNote>(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}/notes`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body }),
-      });
-      return {
-        ok: true,
-        comment: {
-          id: String(data.id),
-          authorName: data.author?.username ?? 'unknown',
-          authorAvatarUrl: data.author?.avatar_url,
-          body: data.body,
-          createdAt: data.created_at,
-        },
-      };
+      const [{ data }, currentUsername, canMerge] = await Promise.all([
+        httpJson<RawGitLabNote>(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}/notes`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        }),
+        this.getCurrentUsername(),
+        this.getMrCanMerge(owner, repo, number, headers),
+      ]);
+      return { ok: true, comment: this.mapNote(data, currentUsername, canMerge) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+
+  async updateComment(owner: string, repo: string, number: number, commentId: string, body: string): Promise<PostCommentResult> {
+    const headers = await this.headers();
+    const projectId = this.projectId(owner, repo);
+    try {
+      const [{ data }, currentUsername, canMerge] = await Promise.all([
+        httpJson<RawGitLabNote>(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}/notes/${commentId}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        }),
+        this.getCurrentUsername(),
+        this.getMrCanMerge(owner, repo, number, headers),
+      ]);
+      return { ok: true, comment: this.mapNote(data, currentUsername, canMerge) };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async deleteComment(owner: string, repo: string, number: number, commentId: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    const projectId = this.projectId(owner, repo);
+    try {
+      await httpJson(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}/notes/${commentId}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async hideComment(): Promise<UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'GitLab has no concept of hiding a comment.' };
+  }
+
+  async unhideComment(): Promise<UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'GitLab has no concept of hiding a comment.' };
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -641,7 +785,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -656,7 +800,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -671,7 +815,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -693,7 +837,7 @@ export class GitLabProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 }

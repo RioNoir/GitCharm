@@ -1168,10 +1168,16 @@
     "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json"
   },
   "dependencies": {
+    "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "dompurify": "^3.4.14",
     "marked": "^18.0.11",
     "prismjs": "^1.30.0",
-    "simple-git": "^3.22.0"
+    "simple-git": "^3.22.0",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -1180,6 +1186,7 @@
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/turndown": "^5.0.6",
     "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",

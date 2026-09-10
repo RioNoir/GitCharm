@@ -1,10 +1,11 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestStateFilter,
-  PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
 
@@ -57,6 +58,20 @@ interface RawGiteaIssueComment {
   user: { login: string; avatar_url: string } | null;
   created_at: string;
   html_url: string;
+}
+
+/** Gitea/Forgejo's `/timeline` entries: `type` is the discriminant, most fields optional since they only
+ * apply to specific types. old_title/new_title for renames, label for label add/remove, ref_issue's target
+ * branch fields aren't exposed by this endpoint (no baseChanged support here, unlike GitHub). */
+interface RawGiteaTimelineEntry {
+  id: number;
+  type: string;
+  user: { login: string; avatar_url: string } | null;
+  created_at: string;
+  old_title?: string;
+  new_title?: string;
+  label?: { name: string; color: string };
+  assignee?: { login: string; avatar_url: string } | null;
 }
 
 interface RawGiteaFile {
@@ -159,6 +174,13 @@ function apiState(states: PullRequestStateFilter[]): 'open' | 'closed' | 'all' {
   return wantsOpen ? 'open' : 'closed';
 }
 
+function parseXTotalCount(headers: Headers): number | undefined {
+  const raw = headers.get('x-total-count');
+  if (!raw) return undefined;
+  const total = Number(raw);
+  return Number.isFinite(total) ? total : undefined;
+}
+
 export class GiteaProvider implements PullRequestProvider {
   readonly kind = 'gitea' as const;
   private cachedUsername: string | undefined;
@@ -240,21 +262,27 @@ export class GiteaProvider implements PullRequestProvider {
       return { items, hasMore: data.length === PAGE_SIZE };
     }
 
+    const serverState = apiState(options.states);
     const params = new URLSearchParams({
-      state: apiState(options.states),
+      state: serverState,
       limit: String(PAGE_SIZE),
       page: String(options.page),
     });
     // Gitea's PR list has no server-side author filter — apply it client-side on this page.
     const url = `${this.apiBase()}/repos/${owner}/${repo}/pulls?${params.toString()}`;
-    const { data } = await httpJson<RawGiteaPr[]>(url, { headers });
+    const { data, headers: responseHeaders } = await httpJson<RawGiteaPr[]>(url, { headers });
     // Drafts have no dedicated filter state — they fall under "open".
     let items = data.map(mapPr).filter(pr => options.states.includes(pr.state));
+    // X-Total-Count reflects the server-side `state` filter only — reliable exactly when that filter isn't
+    // further narrowed client-side: "open" alone (server state === requested states, drafts included either
+    // way), and no client-side author filter (which would otherwise cut items the header still counts).
+    const canTrustTotal = serverState === 'open' && !options.states.includes('closed') && !options.states.includes('merged')
+      && options.author !== 'mine';
     if (options.author === 'mine') {
       const username = await this.getCurrentUsername();
       if (username) items = items.filter(pr => pr.authorName === username);
     }
-    return { items, hasMore: data.length === PAGE_SIZE };
+    return { items, hasMore: data.length === PAGE_SIZE, totalCount: canTrustTotal ? parseXTotalCount(responseHeaders) : undefined };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
@@ -272,7 +300,7 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true, pr: mapPr(data) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -409,7 +437,7 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -433,7 +461,7 @@ export class GiteaProvider implements PullRequestProvider {
       }
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -457,7 +485,7 @@ export class GiteaProvider implements PullRequestProvider {
       }
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -470,45 +498,107 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
-  async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {
-    const headers = await this.headers();
-    const { data } = await httpJson<RawGiteaIssueComment[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, { headers });
-    return data.map(c => ({
+  /** Gitea/Forgejo lets anyone with repo push access edit/delete ANY comment, not just their own — same rule
+   * already used for canWrite in getPullRequestDetail. */
+  private async getRepoCanWrite(owner: string, repo: string, headers: Record<string, string>): Promise<boolean> {
+    try {
+      const { data } = await httpJson<{ permissions?: { push?: boolean } }>(`${this.apiBase()}/repos/${owner}/${repo}`, { headers });
+      return data.permissions?.push ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  private mapComment(c: RawGiteaIssueComment, currentUsername: string | undefined, canWrite: boolean): PullRequestComment {
+    const isOwn = !!currentUsername && c.user?.login === currentUsername;
+    return {
       id: String(c.id),
       authorName: c.user?.login ?? 'unknown',
       authorAvatarUrl: c.user?.avatar_url,
       body: c.body,
       createdAt: c.created_at,
       url: c.html_url,
-    }));
+      canEdit: isOwn || canWrite,
+      canDelete: isOwn || canWrite,
+      canHide: false,
+    };
+  }
+
+  async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {
+    const headers = await this.headers();
+    const [{ data }, currentUsername, canWrite] = await Promise.all([
+      httpJson<RawGiteaIssueComment[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, { headers }),
+      this.getCurrentUsername(),
+      this.getRepoCanWrite(owner, repo, headers),
+    ]);
+    return data.map(c => this.mapComment(c, currentUsername, canWrite));
+  }
+
+  /** Gitea/Forgejo's issue timeline endpoint is structurally similar to GitHub's (same lineage), returning a
+   * single flat array of typed entries rather than GitHub's split REST/GraphQL story — no pagination loop
+   * since `listComments` above already doesn't paginate this same issue-number-scoped API family. */
+  async listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]> {
+    const headers = await this.headers();
+    const { data } = await httpJson<RawGiteaTimelineEntry[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/timeline`, { headers });
+    return data.map(mapGiteaTimelineEntry).filter((e): e is PullRequestEvent => e !== null);
   }
 
   async postComment(owner: string, repo: string, number: number, body: string): Promise<PostCommentResult> {
     const headers = await this.headers();
     try {
-      const { data } = await httpJson<RawGiteaIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body }),
-      });
-      return {
-        ok: true,
-        comment: {
-          id: String(data.id),
-          authorName: data.user?.login ?? 'unknown',
-          authorAvatarUrl: data.user?.avatar_url,
-          body: data.body,
-          createdAt: data.created_at,
-          url: data.html_url,
-        },
-      };
+      const [{ data }, currentUsername, canWrite] = await Promise.all([
+        httpJson<RawGiteaIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        }),
+        this.getCurrentUsername(),
+        this.getRepoCanWrite(owner, repo, headers),
+      ]);
+      return { ok: true, comment: this.mapComment(data, currentUsername, canWrite) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+
+  async updateComment(owner: string, repo: string, _number: number, commentId: string, body: string): Promise<PostCommentResult> {
+    const headers = await this.headers();
+    try {
+      const [{ data }, currentUsername, canWrite] = await Promise.all([
+        httpJson<RawGiteaIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/comments/${commentId}`, {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        }),
+        this.getCurrentUsername(),
+        this.getRepoCanWrite(owner, repo, headers),
+      ]);
+      return { ok: true, comment: this.mapComment(data, currentUsername, canWrite) };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async deleteComment(owner: string, repo: string, _number: number, commentId: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/issues/comments/${commentId}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async hideComment(): Promise<UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'Gitea has no concept of hiding a comment.' };
+  }
+
+  async unhideComment(): Promise<UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'Gitea has no concept of hiding a comment.' };
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -607,7 +697,7 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -621,7 +711,7 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -635,7 +725,7 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -652,7 +742,29 @@ export class GiteaProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+}
+
+function mapGiteaTimelineEntry(entry: RawGiteaTimelineEntry): PullRequestEvent | null {
+  const actorName = entry.user?.login ?? 'unknown';
+  const actorAvatarUrl = entry.user?.avatar_url;
+  const base = { id: String(entry.id), actorName, actorAvatarUrl, createdAt: entry.created_at };
+  switch (entry.type) {
+    case 'change_title':
+      return { ...base, kind: 'renamed', previousTitle: entry.old_title, newTitle: entry.new_title };
+    case 'label':
+      return entry.label ? { ...base, kind: 'labeled', label: { id: entry.label.name, name: entry.label.name, color: entry.label.color.replace(/^#/, '') } } : null;
+    case 'close':
+      return { ...base, kind: 'closed' };
+    case 'reopen':
+      return { ...base, kind: 'reopened' };
+    case 'merge_pull':
+      return { ...base, kind: 'merged' };
+    case 'assignees':
+      return entry.assignee ? { ...base, kind: 'assigned', user: { id: entry.assignee.login, username: entry.assignee.login, avatarUrl: entry.assignee.avatar_url } } : null;
+    default:
+      return null;
   }
 }

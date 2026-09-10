@@ -46,6 +46,8 @@ export interface ListPullRequestsOptions {
 export interface ListPullRequestsResult {
   items: PullRequestSummary[];
   hasMore: boolean;
+  /** Total PRs matching the current filters, when the provider can report it cheaply (i.e. without downloading every page). Undefined when the provider has no cheap way to know it (e.g. Bitbucket Cloud omits it for some query shapes). */
+  totalCount?: number;
 }
 
 export interface CreatePullRequestInput {
@@ -147,6 +149,21 @@ export interface PullRequestComment {
   body: string;
   createdAt: string;
   url?: string;
+  /** Whether the authenticated user is allowed to edit/delete/hide THIS specific comment — computed by the
+   * provider itself (not the caller), since the real policy differs per forge: GitHub/Gitea let anyone with
+   * repo write access act on any comment, GitLab only lets the author edit (but a maintainer can still delete),
+   * Bitbucket Cloud restricts both to the author (delete also allows a workspace/repo admin). Comparing display
+   * names to determine "is this mine" is unreliable (Bitbucket's authorName is display_name, not the username
+   * getCurrentUsername() returns), so the provider compares its own stable author id internally instead. */
+  canEdit: boolean;
+  canDelete: boolean;
+  /** "Minimize"/hide a comment's content behind a collapsed placeholder — only GitHub exposes this (GraphQL-only,
+   * no REST equivalent). Always false on GitLab/Bitbucket/Gitea, which have no comparable concept. */
+  canHide: boolean;
+  /** Whether this comment is currently minimized/hidden — GitHub only (read via a GraphQL follow-up query, since
+   * REST doesn't expose it at all). Always false/undefined elsewhere. There's no unhide action yet, so this is
+   * display-only for now. */
+  isHidden?: boolean;
 }
 
 export interface PostCommentResult {
@@ -183,6 +200,32 @@ export interface PullRequestCommit {
   authorAvatarUrl?: string;
   authoredAt: string;
   parentSha?: string;
+}
+
+export type PullRequestEventKind =
+  | 'renamed' | 'labeled' | 'unlabeled' | 'closed' | 'reopened' | 'merged'
+  | 'baseChanged' | 'assigned' | 'unassigned' | 'reviewRequested' | 'reviewRequestRemoved';
+
+/** A normalized non-comment, non-commit timeline entry (rename, label change, close/reopen/merge, target-branch
+ * change, assign/unassign, review request). Real coverage differs sharply per forge — see each provider's
+ * listEvents for exactly which kinds it can produce; a provider never fabricates an event kind its API can't
+ * reliably report (e.g. no diffing two snapshots to "guess" a change). */
+export interface PullRequestEvent {
+  id: string;
+  kind: PullRequestEventKind;
+  actorName: string;
+  actorAvatarUrl?: string;
+  createdAt: string;
+  /** kind === 'renamed' only. previousTitle is omitted where the provider's API doesn't expose it (Bitbucket). */
+  previousTitle?: string;
+  newTitle?: string;
+  /** kind === 'labeled' | 'unlabeled' only. */
+  label?: PullRequestLabel;
+  /** kind === 'baseChanged' only — real branch names, only populated where the provider API exposes them (GitHub via GraphQL). */
+  previousBranch?: string;
+  newBranch?: string;
+  /** kind === 'assigned' | 'unassigned' | 'reviewRequested' | 'reviewRequestRemoved' only. */
+  user?: PullRequestUser;
 }
 
 export type ReviewEvent = 'approve' | 'requestChanges' | 'comment';
@@ -242,7 +285,20 @@ export interface PullRequestProvider {
   /** Replaces the full label list with `labelIds` (each a `PullRequestLabel.id`). */
   updateLabels(owner: string, repo: string, number: number, labelIds: string[]): Promise<ActionResult | UnsupportedResult>;
   listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]>;
+  /** Non-comment/commit timeline entries (rename, label changes, close/reopen/merge, target-branch change,
+   * assign/unassign, review request) — coverage differs sharply per provider based on real API capabilities. */
+  listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]>;
   postComment(owner: string, repo: string, number: number, body: string): Promise<PostCommentResult>;
+  /** `number` is the PR/MR number the comment belongs to — GitLab's note endpoints are nested under the merge
+   * request iid, so every provider takes it uniformly even though GitHub/Bitbucket/Gitea's comment endpoints
+   * are scoped by comment id alone. */
+  updateComment(owner: string, repo: string, number: number, commentId: string, body: string): Promise<PostCommentResult>;
+  deleteComment(owner: string, repo: string, number: number, commentId: string): Promise<ActionResult>;
+  /** "Minimize" a comment behind a collapsed placeholder — GitHub only (GraphQL-only mutation, no REST
+   * equivalent); every other provider returns UnsupportedResult unconditionally. */
+  hideComment(owner: string, repo: string, number: number, commentId: string): Promise<ActionResult | UnsupportedResult>;
+  /** Reverses hideComment — GitHub only, same GraphQL-only caveat. */
+  unhideComment(owner: string, repo: string, number: number, commentId: string): Promise<ActionResult | UnsupportedResult>;
   listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]>;
   getFileDiff(owner: string, repo: string, number: number, file: ChangedFile, refs: FileDiffRefs): Promise<FileDiffContent>;
   listCommits(owner: string, repo: string, number: number): Promise<PullRequestCommit[]>;

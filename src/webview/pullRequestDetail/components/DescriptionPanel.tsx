@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { renderMarkdown } from '../renderMarkdown';
+import { renderMarkdown } from '../../shared/renderMarkdown';
 import { SkeletonText } from '../../shared/Skeleton';
 
 interface Props {

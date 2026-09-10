@@ -3,7 +3,7 @@ import type { ChangedFile, IconThemeData, PullRequestCommit } from '../../../hos
 import { Codicon } from '../../shared/Codicon';
 import { FileTreeView } from './FileTreeView';
 import { formatRelativeTime } from '../formatRelativeTime';
-import { renderMarkdown } from '../renderMarkdown';
+import { renderMarkdown } from '../../shared/renderMarkdown';
 import { SkeletonList } from '../../shared/Skeleton';
 
 interface Props {
@@ -22,9 +22,10 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle, onOpenFileDiff }: {
+function CommitRow({ commit, expanded, isLast, files, filesLoading, iconTheme, onToggle, onOpenFileDiff }: {
   commit: PullRequestCommit;
   expanded: boolean;
+  isLast: boolean;
   files: ChangedFile[] | undefined;
   filesLoading: boolean;
   iconTheme: IconThemeData | null;
@@ -38,7 +39,7 @@ function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle,
   const extendedMessageHtml = useMemo(() => renderMarkdown(extendedMessage), [extendedMessage]);
 
   return (
-    <div style={css.commitWrapper}>
+    <div style={css.commitWrapper(isLast)}>
       <div
         style={{ ...css.commitRow, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
         onMouseEnter={() => setHovered(true)}
@@ -55,6 +56,7 @@ function CommitRow({ commit, expanded, files, filesLoading, iconTheme, onToggle,
             {commit.message.split('\n')[0]}
             {hasExtendedMessage && (
               <button
+                className="icon-btn"
                 style={css.viewMoreBtn}
                 onClick={e => { e.stopPropagation(); setMessageExpanded(o => !o); }}
                 title={messageExpanded ? 'Hide full message' : 'Show full message'}
@@ -112,11 +114,12 @@ export function CommitsList({ commits, loading, iconTheme, commitFiles, commitFi
 
   return (
     <div style={css.root}>
-      {commits.map(c => (
+      {commits.map((c, i) => (
         <CommitRow
           key={c.sha}
           commit={c}
           expanded={expandedSha === c.sha}
+          isLast={i === commits.length - 1}
           files={commitFiles[c.sha]}
           filesLoading={!!commitFilesLoading[c.sha]}
           iconTheme={iconTheme}
@@ -131,7 +134,9 @@ export function CommitsList({ commits, loading, iconTheme, commitFiles, commitFi
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, border: '1px solid var(--vscode-panel-border)', borderRadius: '4px', overflow: 'hidden' },
   empty: { fontSize: '12px', opacity: 0.5, fontStyle: 'italic' as const, padding: '4px 0' },
-  commitWrapper: { borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)' } as React.CSSProperties,
+  commitWrapper: (isLast: boolean): React.CSSProperties => ({
+    borderBottom: isLast ? 'none' : '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)',
+  }),
   commitRow: {
     display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '12px',
   } as React.CSSProperties,

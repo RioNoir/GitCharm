@@ -7,8 +7,9 @@ import { logError, logWarn } from '../utils/Logger';
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs, ForgeProvider,
   ListPullRequestsOptions, MergeStrategy, PostCommentResult, PullRequestAuthorFilter, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestLabel, PullRequestProvider,
-  PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
+  PullRequestProvider, PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult,
+  UpdatePullRequestInput,
 } from './types';
 
 const CACHE_TTL_MS = 45_000;
@@ -47,6 +48,8 @@ export interface RepoPullRequests {
   pullRequests: PullRequestSummary[];
   page: number;
   hasMore: boolean;
+  /** Total PRs matching the current filters, per the provider — undefined when the provider has no cheap way to know it (see `ListPullRequestsResult.totalCount`). Stays whatever the first page reported; `loadMore` doesn't re-fetch it. */
+  totalCount?: number;
   error?: string;
   /** Client-side only placeholder — true for the synthetic entry shown while this repo's real result is still streaming in. Never set by the host. */
   pending?: boolean;
@@ -241,8 +244,8 @@ export class PullRequestManager {
         result = { repoId, repoName, repoColor, connection, pullRequests: [], page: 1, hasMore: false, error: 'Unable to resolve provider for this repo' };
       } else {
         try {
-          const { items, hasMore } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, 1));
-          result = { repoId, repoName, repoColor, connection, pullRequests: items, page: 1, hasMore };
+          const { items, hasMore, totalCount } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, 1));
+          result = { repoId, repoName, repoColor, connection, pullRequests: items, page: 1, hasMore, totalCount };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logError('pullrequest-list', `Failed to list pull requests for ${repoName}`, message);
@@ -541,6 +544,38 @@ export class PullRequestManager {
     return result;
   }
 
+  async updateComment(repoId: string, number: number, commentId: string, body: string): Promise<PostCommentResult> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return { ok: false, error: target.error };
+    const result = await target.provider.updateComment(target.owner, target.repo, number, commentId, body);
+    if (!result.ok) logError('pullrequest-update-comment', `Failed to update comment ${commentId} on PR #${number}`, result.error);
+    return result;
+  }
+
+  async deleteComment(repoId: string, number: number, commentId: string): Promise<ActionResult> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return { ok: false, error: target.error };
+    const result = await target.provider.deleteComment(target.owner, target.repo, number, commentId);
+    if (!result.ok) logError('pullrequest-delete-comment', `Failed to delete comment ${commentId} on PR #${number}`, result.error);
+    return result;
+  }
+
+  async hideComment(repoId: string, number: number, commentId: string): Promise<ActionResult | UnsupportedResult> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return { ok: false, error: target.error };
+    const result = await target.provider.hideComment(target.owner, target.repo, number, commentId);
+    if (!result.ok && !('unsupported' in result)) logError('pullrequest-hide-comment', `Failed to hide comment ${commentId} on PR #${number}`, result.error);
+    return result;
+  }
+
+  async unhideComment(repoId: string, number: number, commentId: string): Promise<ActionResult | UnsupportedResult> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return { ok: false, error: target.error };
+    const result = await target.provider.unhideComment(target.owner, target.repo, number, commentId);
+    if (!result.ok && !('unsupported' in result)) logError('pullrequest-unhide-comment', `Failed to unhide comment ${commentId} on PR #${number}`, result.error);
+    return result;
+  }
+
   async listChangedFiles(repoId: string, number: number): Promise<{ items: ChangedFile[]; error?: string }> {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
@@ -573,6 +608,18 @@ export class PullRequestManager {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('pullrequest-list-commits', `Failed to load commits for PR #${number}`, message);
+      return { items: [], error: message };
+    }
+  }
+
+  async listEvents(repoId: string, number: number): Promise<{ items: PullRequestEvent[]; error?: string }> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return { items: [], error: target.error };
+    try {
+      return { items: await target.provider.listEvents(target.owner, target.repo, number) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logError('pullrequest-list-events', `Failed to load events for PR #${number}`, message);
       return { items: [], error: message };
     }
   }
@@ -666,7 +713,10 @@ export class PullRequestManager {
     const remotes = await repo.getRemotesWithUrls();
     if (remotes.length === 0) return { ok: false, error: 'No remote configured for this repository' };
 
-    const safeAuthor = pr.authorName.replace(/[^a-zA-Z0-9_-]/g, '-');
+    // Spaces become hyphens (e.g. "Riccardo Morandi" -> "riccardo-morandi"); any other non-branch-safe
+    // character is also hyphenated. Lowercased throughout — git branch names are case-sensitive and this
+    // avoids "pr/RioNoir/1" vs "pr/rionoir/1" ambiguity across checkouts of the same author's PRs.
+    const safeAuthor = pr.authorName.trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
     const branchName = mode === 'branch' ? pr.sourceBranch : `pr/${safeAuthor}/${pr.number}`;
     const { remote, refspec } = await target.provider.getCheckoutSource(pr);
 

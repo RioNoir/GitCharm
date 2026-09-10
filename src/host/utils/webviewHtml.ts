@@ -155,6 +155,12 @@ export function getWebviewHtml(
     .markdown-body th { font-weight: 600; background: rgba(127,127,127,0.08); }
     .markdown-body input[type="checkbox"] { margin-right: 6px; }
 
+    /* ── TipTap WYSIWYG editor (PR description) — reuses .markdown-body typography above, matches other inputs' font size ── */
+    .gitcharm-tiptap-content { outline: none; min-height: 168px; font-size: 13px; line-height: 1.5; }
+    .gitcharm-tiptap-content p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder); float: left; height: 0; pointer-events: none; opacity: 0.5;
+    }
+
     /* ── PR detail Overview tab: main content + sidebar, collapsing to stacked ── */
     .pr-overview-layout {
       display: grid;
@@ -168,6 +174,22 @@ export function getWebviewHtml(
     @media (max-width: 720px) {
       .pr-overview-layout { grid-template-columns: 1fr; grid-template-areas: "sidebar" "main"; }
     }
+
+    /* ── PR detail: hover feedback on every button ──────────────────────────────
+       Buttons with a transparent/no background (icon buttons, toolbar items — tagged
+       with the "icon-btn" class) get a theme-aware tint; buttons with their own solid
+       background (Merge, Approve, Reopen, Checkout, ...) get a brightness bump
+       instead, since overriding their background would clobber the color that gives
+       them meaning. */
+    .pr-detail-root button:not(:disabled) { transition: filter 0.1s ease, background-color 0.1s ease; cursor: pointer; }
+    .pr-detail-root button:not(:disabled):hover { filter: brightness(1.12); }
+    .pr-detail-root button.icon-btn:not(:disabled):hover {
+      background-color: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+      filter: none;
+    }
+    /* Dropdown menu rows (Checkout/Merge menus) are clickable divs, not <button>s, so they get their own rule. */
+    .pr-detail-root .menu-item { cursor: pointer; }
+    .pr-detail-root .menu-item:hover { background-color: var(--vscode-list-hoverBackground); }
 
     /* ── Skeleton loading placeholders ───────────────────────────────────────── */
     .skeleton-block {

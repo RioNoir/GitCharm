@@ -483,6 +483,30 @@ export class GitService {
     return branches;
   }
 
+  /** Parses the null-byte-delimited `%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s` git log format shared by getLog and getCommitsBetween. */
+  private _parseLogOutput(raw: string): CommitNode[] {
+    const commits: CommitNode[] = [];
+    for (const line of raw.trim().split('\n')) {
+      if (!line.trim()) continue;
+      const parts = line.split('\x00');
+      if (parts.length < 9) continue;
+      const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message] = parts;
+      commits.push({ hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] });
+    }
+    return commits;
+  }
+
+  /** Commits reachable from `head` but not from `base` (i.e. `git log base..head`) — used to preview what a PR from `head` into `base` would bring in, before the PR exists. No unpushed/incoming marking (that's specific to local-branch-vs-upstream, not a branch-vs-branch comparison). */
+  async getCommitsBetween(base: string, head: string, limit = 200): Promise<CommitNode[]> {
+    const raw = await this.git.raw([
+      'log', '--date-order', `--max-count=${limit}`,
+      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s',
+      '--decorate=full', '--date=iso-strict', '--abbrev=8',
+      `${base}..${head}`,
+    ]);
+    return this._parseLogOutput(raw);
+  }
+
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
   async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
@@ -512,15 +536,8 @@ export class GitService {
     }
     const raw = await this.git.raw(args);
     const hashPrefix = isHashSearch ? opts!.filterText!.trim().toLowerCase() : null;
-    const commits: CommitNode[] = [];
-    for (const line of raw.trim().split('\n')) {
-      if (!line.trim()) continue;
-      const parts = line.split('\x00');
-      if (parts.length < 9) continue;
-      const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message] = parts;
-      if (hashPrefix && !hash.toLowerCase().startsWith(hashPrefix)) continue;
-      commits.push({ hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] });
-    }
+    let commits = this._parseLogOutput(raw);
+    if (hashPrefix) commits = commits.filter(c => c.hash.toLowerCase().startsWith(hashPrefix));
 
     // Mark unpushed commits: hashes ahead of the remote tracking branch.
     // 'all' means there is no upstream — every commit on this branch is local.

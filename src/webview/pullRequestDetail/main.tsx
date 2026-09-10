@@ -6,15 +6,14 @@ import { CommentsThread } from './components/CommentsThread';
 import { ChangedFilesList } from './components/ChangedFilesList';
 import { CommitsList } from './components/CommitsList';
 import { ChecksList } from './components/ChecksList';
-import { MergeActions, hasMergeActionsContent } from './components/MergeActions';
-import { PeopleField } from './components/PeoplePanel';
+import { PeopleField, EditFieldButton } from './components/PeoplePanel';
 import { LabelsPanel } from './components/LabelsPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips } from '../shared/Skeleton';
 import type {
   ChangedFile, CiCheck, HostToPrDetailMsg, IconThemeData, MergeStrategy, PrDetailToHostMsg, PullRequestComment,
-  PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestSummary, PullRequestUser,
+  PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestSummary,
 } from '../../host/types/messages';
 
 type TabId = 'overview' | 'changes' | 'commits' | 'checks';
@@ -23,7 +22,7 @@ function CollapsibleSection({ title, icon, defaultOpen = true, first, plain, chi
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section style={plain ? undefined : (first ? css.section : css.collapsibleSection)}>
-      <button style={css.collapseHeader} onClick={() => setOpen(o => !o)}>
+      <button className="icon-btn" style={css.collapseHeader} onClick={() => setOpen(o => !o)}>
         <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '13px', opacity: 0.6 }} />
         <Codicon name={icon} style={{ fontSize: '13px', opacity: 0.6 }} />
         <h3 style={css.sectionTitle}>{title}</h3>
@@ -33,12 +32,13 @@ function CollapsibleSection({ title, icon, defaultOpen = true, first, plain, chi
   );
 }
 
-function StaticSection({ title, icon, first, children }: { title: string; icon: string; first?: boolean; children: React.ReactNode }) {
+function StaticSection({ title, icon, first, headerAction, children }: { title: string; icon: string; first?: boolean; headerAction?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section style={first ? css.section : css.collapsibleSection}>
       <div style={css.collapseHeader}>
         <Codicon name={icon} style={{ fontSize: '13px', opacity: 0.6 }} />
         <h3 style={css.sectionTitle}>{title}</h3>
+        {headerAction && <div style={{ marginLeft: 'auto' }}>{headerAction}</div>}
       </div>
       <div style={css.collapseBody}>{children}</div>
     </section>
@@ -55,6 +55,7 @@ function App() {
   const [comments, setComments] = useState<PullRequestComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [postingComment, setPostingComment] = useState(false);
+  const [commentActionError, setCommentActionError] = useState<string | undefined>();
 
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
@@ -66,6 +67,10 @@ function App() {
   const [commitsError, setCommitsError] = useState<string | undefined>();
   const [commitFiles, setCommitFiles] = useState<Record<string, ChangedFile[]>>({});
   const [commitFilesLoading, setCommitFilesLoading] = useState<Record<string, boolean>>({});
+
+  const [events, setEvents] = useState<PullRequestEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState<string | undefined>();
 
   const [checks, setChecks] = useState<CiCheck[]>([]);
   const [checksLoading, setChecksLoading] = useState(true);
@@ -81,15 +86,9 @@ function App() {
   const [reopenError, setReopenError] = useState<string | undefined>();
   const [checkingOut, setCheckingOut] = useState(false);
   const [approving, setApproving] = useState(false);
-  const [targetBranches, setTargetBranches] = useState<string[]>([]);
-  const [targetBranchesLoading, setTargetBranchesLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [collaborators, setCollaborators] = useState<PullRequestUser[]>([]);
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
   const [updatingReviewers, setUpdatingReviewers] = useState(false);
   const [updatingAssignees, setUpdatingAssignees] = useState(false);
-  const [availableLabels, setAvailableLabels] = useState<PullRequestLabel[]>([]);
-  const [availableLabelsLoading, setAvailableLabelsLoading] = useState(false);
   const [updatingLabels, setUpdatingLabels] = useState(false);
 
   const send = useCallback((msg: PrDetailToHostMsg) => {
@@ -110,10 +109,14 @@ function App() {
           send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
           send({ type: 'PRDETAIL_REQUEST_FILES' });
           send({ type: 'PRDETAIL_REQUEST_COMMITS' });
+          send({ type: 'PRDETAIL_REQUEST_EVENTS' });
           break;
         case 'PRDETAIL_LOADED':
           setDetailLoading(false);
           setDetail(msg.detail);
+          // PullRequestDetail is a superset of PullRequestSummary — keep summary in sync so the header (title,
+          // target branch label) reflects edits immediately instead of the stale value from PRDETAIL_INIT.
+          setSummary(msg.detail);
           setChecksLoading(true);
           send({ type: 'PRDETAIL_REQUEST_CHECKS', headSha: msg.detail.headSha });
           break;
@@ -129,6 +132,22 @@ function App() {
           setPostingComment(false);
           if (msg.ok) send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
           break;
+        case 'PRDETAIL_COMMENT_UPDATED':
+          if (msg.ok) send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
+          else if (msg.error) setCommentActionError(msg.error);
+          break;
+        case 'PRDETAIL_COMMENT_DELETED':
+          if (msg.ok) send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
+          else if (msg.error) setCommentActionError(msg.error);
+          break;
+        case 'PRDETAIL_COMMENT_HIDDEN':
+          if (msg.ok) send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
+          else if (msg.error && !msg.unsupported) setCommentActionError(msg.error);
+          break;
+        case 'PRDETAIL_COMMENT_UNHIDDEN':
+          if (msg.ok) send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
+          else if (msg.error && !msg.unsupported) setCommentActionError(msg.error);
+          break;
         case 'PRDETAIL_FILES_RESULT':
           setFilesLoading(false);
           setFiles(msg.files);
@@ -138,6 +157,11 @@ function App() {
           setCommitsLoading(false);
           setCommits(msg.commits);
           setCommitsError(msg.error);
+          break;
+        case 'PRDETAIL_EVENTS_RESULT':
+          setEventsLoading(false);
+          setEvents(msg.events);
+          setEventsError(msg.error);
           break;
         case 'PRDETAIL_COMMIT_FILES_RESULT':
           setCommitFilesLoading(prev => ({ ...prev, [msg.sha]: false }));
@@ -180,17 +204,9 @@ function App() {
           setApproving(false);
           if (msg.ok) send({ type: 'PRDETAIL_REQUEST_DETAIL' });
           break;
-        case 'PRDETAIL_TARGET_BRANCHES_RESULT':
-          setTargetBranchesLoading(false);
-          setTargetBranches(msg.branches);
-          break;
         case 'PRDETAIL_UPDATE_RESULT':
           setUpdating(false);
           if (msg.ok) send({ type: 'PRDETAIL_REQUEST_DETAIL' });
-          break;
-        case 'PRDETAIL_COLLABORATORS_RESULT':
-          setCollaboratorsLoading(false);
-          setCollaborators(msg.collaborators);
           break;
         case 'PRDETAIL_UPDATE_REVIEWERS_RESULT':
           setUpdatingReviewers(false);
@@ -199,10 +215,6 @@ function App() {
         case 'PRDETAIL_UPDATE_ASSIGNEES_RESULT':
           setUpdatingAssignees(false);
           if (msg.ok) send({ type: 'PRDETAIL_REQUEST_DETAIL' });
-          break;
-        case 'PRDETAIL_AVAILABLE_LABELS_RESULT':
-          setAvailableLabelsLoading(false);
-          setAvailableLabels(msg.labels);
           break;
         case 'PRDETAIL_UPDATE_LABELS_RESULT':
           setUpdatingLabels(false);
@@ -232,10 +244,12 @@ function App() {
     setCommentsLoading(true);
     setFilesLoading(true);
     setCommitsLoading(true);
+    setEventsLoading(true);
     send({ type: 'PRDETAIL_REQUEST_DETAIL' });
     send({ type: 'PRDETAIL_REQUEST_COMMENTS' });
     send({ type: 'PRDETAIL_REQUEST_FILES' });
     send({ type: 'PRDETAIL_REQUEST_COMMITS' });
+    send({ type: 'PRDETAIL_REQUEST_EVENTS' });
   }, [send]);
 
   const handleCheckoutPr = useCallback(() => {
@@ -248,49 +262,56 @@ function App() {
     send({ type: 'PRDETAIL_CHECKOUT_BRANCH' });
   }, [send]);
 
-  const handleRequestTargetBranches = useCallback(() => {
-    setTargetBranchesLoading(true);
-    send({ type: 'PRDETAIL_REQUEST_TARGET_BRANCHES' });
-  }, [send]);
-
-  const handleUpdateTitle = useCallback((title: string) => {
+  // Each of these opens a native VS Code QuickPick/InputBox on the host, which applies the update itself
+  // (Enter to confirm, Esc to cancel with no change) and reports back through the existing *_RESULT messages.
+  const handlePickTitle = useCallback(() => {
     setUpdating(true);
-    send({ type: 'PRDETAIL_UPDATE', title });
+    send({ type: 'PRDETAIL_PICK_TITLE' });
   }, [send]);
 
-  const handleUpdateTargetBranch = useCallback((targetBranch: string) => {
+  const handlePickTargetBranch = useCallback(() => {
     setUpdating(true);
-    send({ type: 'PRDETAIL_UPDATE', targetBranch });
+    send({ type: 'PRDETAIL_PICK_TARGET_BRANCH' });
   }, [send]);
 
-  const handleRequestCollaborators = useCallback(() => {
-    setCollaboratorsLoading(true);
-    send({ type: 'PRDETAIL_REQUEST_COLLABORATORS' });
-  }, [send]);
-
-  const handleUpdateReviewers = useCallback((userIds: string[]) => {
+  const handlePickReviewers = useCallback(() => {
     setUpdatingReviewers(true);
-    send({ type: 'PRDETAIL_UPDATE_REVIEWERS', userIds });
+    send({ type: 'PRDETAIL_PICK_REVIEWERS' });
   }, [send]);
 
-  const handleUpdateAssignees = useCallback((userIds: string[]) => {
+  const handlePickAssignees = useCallback(() => {
     setUpdatingAssignees(true);
-    send({ type: 'PRDETAIL_UPDATE_ASSIGNEES', userIds });
+    send({ type: 'PRDETAIL_PICK_ASSIGNEES' });
   }, [send]);
 
-  const handleRequestAvailableLabels = useCallback(() => {
-    setAvailableLabelsLoading(true);
-    send({ type: 'PRDETAIL_REQUEST_AVAILABLE_LABELS' });
-  }, [send]);
-
-  const handleUpdateLabels = useCallback((labelIds: string[]) => {
+  const handlePickLabels = useCallback(() => {
     setUpdatingLabels(true);
-    send({ type: 'PRDETAIL_UPDATE_LABELS', labelIds });
+    send({ type: 'PRDETAIL_PICK_LABELS' });
   }, [send]);
 
   const handlePostComment = useCallback((body: string) => {
     setPostingComment(true);
     send({ type: 'PRDETAIL_POST_COMMENT', body });
+  }, [send]);
+
+  const handleUpdateComment = useCallback((commentId: string, body: string) => {
+    setCommentActionError(undefined);
+    send({ type: 'PRDETAIL_UPDATE_COMMENT', commentId, body });
+  }, [send]);
+
+  const handleDeleteComment = useCallback((commentId: string) => {
+    setCommentActionError(undefined);
+    send({ type: 'PRDETAIL_DELETE_COMMENT', commentId });
+  }, [send]);
+
+  const handleHideComment = useCallback((commentId: string) => {
+    setCommentActionError(undefined);
+    send({ type: 'PRDETAIL_HIDE_COMMENT', commentId });
+  }, [send]);
+
+  const handleUnhideComment = useCallback((commentId: string) => {
+    setCommentActionError(undefined);
+    send({ type: 'PRDETAIL_UNHIDE_COMMENT', commentId });
   }, [send]);
 
   const handleOpenFile = useCallback((file: ChangedFile) => {
@@ -345,7 +366,7 @@ function App() {
   }
 
   return (
-    <div style={css.page}>
+    <div style={css.page} className="pr-detail-root">
       <PullRequestHeader
         summary={summary}
         detail={detail}
@@ -356,18 +377,21 @@ function App() {
         }
         approving={approving}
         canEdit={!!detail && detail.capabilities.canClose && detail.canWrite && (detail.state === 'open' || detail.state === 'draft')}
-        targetBranches={targetBranches}
-        targetBranchesLoading={targetBranchesLoading}
         updating={updating}
+        merging={merging}
+        mergeError={mergeError}
+        reopening={reopening}
+        reopenError={reopenError}
         onOpenInBrowser={handleOpenInBrowser}
         onViewAllChanges={handleViewAllChanges}
         onRefresh={handleRefresh}
         onCheckoutPr={handleCheckoutPr}
         onCheckoutBranch={handleCheckoutBranch}
         onApprove={handleApprove}
-        onRequestTargetBranches={handleRequestTargetBranches}
-        onUpdateTitle={handleUpdateTitle}
-        onUpdateTargetBranch={handleUpdateTargetBranch}
+        onPickTitle={handlePickTitle}
+        onPickTargetBranch={handlePickTargetBranch}
+        onMerge={handleMerge}
+        onReopen={handleReopen}
       />
 
       <div style={css.tabBar}>
@@ -379,6 +403,7 @@ function App() {
         ]).map(tab => (
           <button
             key={tab.id}
+            className="icon-btn"
             style={css.tab(activeTab === tab.id)}
             onClick={() => setActiveTab(tab.id)}
           >
@@ -404,77 +429,54 @@ function App() {
                 <CommentsThread
                   comments={comments}
                   commits={commits}
-                  loading={commentsLoading}
+                  events={events}
+                  loading={commentsLoading || commitsLoading || eventsLoading}
                   posting={postingComment}
                   canClose={detail?.capabilities.canClose === true && detail?.canWrite === true && (detail?.state === 'open' || detail?.state === 'draft')}
                   closing={closing}
                   closeError={closeError}
+                  commentActionError={commentActionError}
                   onPostComment={handlePostComment}
+                  onUpdateComment={handleUpdateComment}
+                  onDeleteComment={handleDeleteComment}
+                  onHideComment={handleHideComment}
+                  onUnhideComment={handleUnhideComment}
                   onClose={handleClose}
                   onOpenCommitAllChanges={handleOpenCommitAllChanges}
-                  mergeActions={detail && hasMergeActionsContent(detail, mergeError, reopenError) && (
-                    <MergeActions
-                      detail={detail}
-                      merging={merging}
-                      mergeError={mergeError}
-                      reopening={reopening}
-                      reopenError={reopenError}
-                      onMerge={handleMerge}
-                      onReopen={handleReopen}
-                    />
-                  )}
                 />
               </CollapsibleSection>
             </div>
             <div className="pr-overview-sidebar">
-              <StaticSection title="Reviewers" icon="eye" first>
-                {!detail ? <SkeletonChips count={2} /> : (
-                  <PeopleField
-                    label="Reviewers"
-                    icon="eye"
-                    showHeader={false}
-                    people={detail.reviewers}
-                    candidates={collaborators}
-                    candidatesLoading={collaboratorsLoading}
-                    canEdit={detail.capabilities.canManageReviewers && detail.canWrite}
-                    updating={updatingReviewers}
-                    onRequestCandidates={handleRequestCollaborators}
-                    onUpdate={handleUpdateReviewers}
-                  />
+              <StaticSection
+                title="Reviewers" icon="eye" first
+                headerAction={!!detail && detail.capabilities.canManageReviewers && detail.canWrite && (
+                  <EditFieldButton label="Reviewers" updating={updatingReviewers} onPick={handlePickReviewers} />
                 )}
+              >
+                {!detail ? <SkeletonChips count={2} /> : <PeopleField people={detail.reviewers} />}
               </StaticSection>
-              <StaticSection title="Assignees" icon="account">
+              <StaticSection
+                title="Assignees" icon="account"
+                headerAction={!!detail && detail.capabilities.canManageAssignees && detail.canWrite && (
+                  <EditFieldButton label="Assignees" updating={updatingAssignees} onPick={handlePickAssignees} />
+                )}
+              >
                 {!detail ? <SkeletonChips count={2} /> : !detail.capabilities.canManageAssignees ? (
                   <span style={css.notAvailable}>Not available for this provider</span>
                 ) : (
-                  <PeopleField
-                    label="Assignees"
-                    icon="account"
-                    showHeader={false}
-                    people={detail.assignees}
-                    candidates={collaborators}
-                    candidatesLoading={collaboratorsLoading}
-                    canEdit={detail.capabilities.canManageAssignees && detail.canWrite}
-                    updating={updatingAssignees}
-                    onRequestCandidates={handleRequestCollaborators}
-                    onUpdate={handleUpdateAssignees}
-                  />
+                  <PeopleField people={detail.assignees} />
                 )}
               </StaticSection>
-              <StaticSection title="Labels" icon="tag">
+              <StaticSection
+                title="Labels" icon="tag"
+                headerAction={!!detail && detail.capabilities.canManageLabels && detail.canWrite && (
+                  <EditFieldButton label="Labels" updating={updatingLabels} onPick={handlePickLabels} />
+                )}
+              >
                 {!detail ? <SkeletonChips count={2} /> : !detail.capabilities.canManageLabels ? (
                   <span style={css.notAvailable}>Not available for this provider</span>
                 ) : (
-                  <LabelsPanel
-                    labels={detail.labels}
-                    hasLabels={detail.capabilities.canManageLabels}
-                    canManageLabels={detail.capabilities.canManageLabels && detail.canWrite}
-                    candidates={availableLabels}
-                    candidatesLoading={availableLabelsLoading}
-                    updating={updatingLabels}
-                    onRequestCandidates={handleRequestAvailableLabels}
-                    onUpdate={handleUpdateLabels}
-                  />
+                  <LabelsPanel labels={detail.labels} hasLabels={detail.capabilities.canManageLabels} />
                 )}
               </StaticSection>
             </div>

@@ -31,11 +31,11 @@ function formatDuration(startedAt?: string, completedAt?: string): string | unde
   return `${hours}h ${minutes % 60}m`;
 }
 
-function CheckRow({ check }: { check: CiCheck }) {
+function CheckRow({ check, isLast }: { check: CiCheck; isLast: boolean }) {
   const { icon, color } = stateInfo(check.state);
   const duration = formatDuration(check.startedAt, check.completedAt);
   return (
-    <div style={css.row}>
+    <div style={css.row(isLast)}>
       <Codicon name={icon} style={{ fontSize: '15px', color, flexShrink: 0 }} />
       <span style={css.name}>{check.name}</span>
       <span style={css.meta}>
@@ -59,7 +59,7 @@ export function ChecksList({ checks, loading }: Props) {
 
   return (
     <div style={css.root}>
-      {checks.map(c => <CheckRow key={c.id} check={c} />)}
+      {checks.map((c, i) => <CheckRow key={c.id} check={c} isLast={i === checks.length - 1} />)}
     </div>
   );
 }
@@ -67,10 +67,10 @@ export function ChecksList({ checks, loading }: Props) {
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, border: '1px solid var(--vscode-panel-border)', borderRadius: '4px', overflow: 'hidden' },
   empty: { fontSize: '12px', opacity: 0.5, fontStyle: 'italic' as const, padding: '4px 0' },
-  row: {
+  row: (isLast: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', fontSize: '13px',
-    borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)',
-  } as React.CSSProperties,
+    borderBottom: isLast ? 'none' : '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)',
+  }),
   name: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
   meta: {
     display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, fontSize: '11px', opacity: 0.65,

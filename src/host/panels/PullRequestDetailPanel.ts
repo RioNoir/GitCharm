@@ -14,6 +14,25 @@ function truncateTitle(title: string): string {
   return title.length > TAB_TITLE_MAX_LENGTH ? `${title.slice(0, TAB_TITLE_MAX_LENGTH)}…` : title;
 }
 
+/** QuickPickItem.iconPath accepts a remote https URI directly (same as the GitHub Pull Requests extension does for reviewer/assignee avatars in its own pickers) — no local caching needed. */
+function avatarIconPath(avatarUrl: string | undefined): vscode.Uri | undefined {
+  if (!avatarUrl) return undefined;
+  try {
+    return vscode.Uri.parse(avatarUrl, true);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Renders a label's color as a small filled circle, data-URI encoded — QuickPickItem has no direct way to
+ * tint an item's background/text, so a colored swatch icon is the standard stand-in (same technique the
+ * GitHub Pull Requests extension uses for its own label picker). */
+function labelSwatchIconPath(hexColor: string): vscode.Uri {
+  const color = `#${hexColor.replace(/^#/, '')}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6" fill="${color}"/></svg>`;
+  return vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
+
 export class PullRequestDetailPanel {
   private panels = new Map<string, vscode.WebviewPanel>();
   private diffCache = new Map<string, FileDiffContent>();
@@ -118,6 +137,9 @@ export class PullRequestDetailPanel {
           post({ type: 'PRDETAIL_LOAD_ERROR', error: result.error });
         } else {
           post({ type: 'PRDETAIL_LOADED', detail: result });
+          // Keep the editor tab title in sync after a title edit — `pr` itself is a snapshot captured when the
+          // panel was opened/restored and is never mutated, so re-derive the title string on every fresh fetch.
+          panel.title = result.title ? `PR #${result.number} - ${truncateTitle(result.title)}` : `PR #${result.number}`;
         }
         break;
       }
@@ -131,6 +153,36 @@ export class PullRequestDetailPanel {
       case 'PRDETAIL_POST_COMMENT': {
         const result = await this.pullRequestManager.postComment(repoId, pr.number, msg.body);
         post({ type: 'PRDETAIL_COMMENT_POSTED', ok: result.ok, comment: result.comment, error: result.error });
+        break;
+      }
+
+      case 'PRDETAIL_UPDATE_COMMENT': {
+        const result = await this.pullRequestManager.updateComment(repoId, pr.number, msg.commentId, msg.body);
+        post({ type: 'PRDETAIL_COMMENT_UPDATED', ok: result.ok, comment: result.comment, error: result.error });
+        if (!result.ok) vscode.window.showErrorMessage(result.error ?? 'Failed to update comment');
+        break;
+      }
+
+      case 'PRDETAIL_DELETE_COMMENT': {
+        const confirmed = await vscode.window.showWarningMessage('Delete this comment?', { modal: true }, 'Delete');
+        if (confirmed !== 'Delete') { post({ type: 'PRDETAIL_COMMENT_DELETED', ok: true }); break; }
+        const result = await this.pullRequestManager.deleteComment(repoId, pr.number, msg.commentId);
+        post({ type: 'PRDETAIL_COMMENT_DELETED', ok: result.ok, commentId: msg.commentId, error: result.error });
+        if (!result.ok) vscode.window.showErrorMessage(result.error ?? 'Failed to delete comment');
+        break;
+      }
+
+      case 'PRDETAIL_HIDE_COMMENT': {
+        const result = await this.pullRequestManager.hideComment(repoId, pr.number, msg.commentId);
+        post({ type: 'PRDETAIL_COMMENT_HIDDEN', ok: result.ok, commentId: msg.commentId, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (!result.ok && !('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to hide comment');
+        break;
+      }
+
+      case 'PRDETAIL_UNHIDE_COMMENT': {
+        const result = await this.pullRequestManager.unhideComment(repoId, pr.number, msg.commentId);
+        post({ type: 'PRDETAIL_COMMENT_UNHIDDEN', ok: result.ok, commentId: msg.commentId, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (!result.ok && !('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to unhide comment');
         break;
       }
 
@@ -148,6 +200,12 @@ export class PullRequestDetailPanel {
       case 'PRDETAIL_REQUEST_COMMITS': {
         const { items: commits, error } = await this.pullRequestManager.listCommits(repoId, pr.number);
         post({ type: 'PRDETAIL_COMMITS_RESULT', commits, error });
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_EVENTS': {
+        const { items: events, error } = await this.pullRequestManager.listEvents(repoId, pr.number);
+        post({ type: 'PRDETAIL_EVENTS_RESULT', events, error });
         break;
       }
 
@@ -184,6 +242,10 @@ export class PullRequestDetailPanel {
       }
 
       case 'PRDETAIL_CLOSE': {
+        const confirmed = await vscode.window.showWarningMessage(
+          `Close pull request #${pr.number}?`, { modal: true }, 'Close Pull Request',
+        );
+        if (confirmed !== 'Close Pull Request') { post({ type: 'PRDETAIL_CLOSE_RESULT', ok: true }); break; }
         const result = await this.pullRequestManager.closePullRequest(repoId, pr.number);
         post({ type: 'PRDETAIL_CLOSE_RESULT', ok: result.ok, error: result.error });
         if (result.ok) this.onChanged();
@@ -233,65 +295,91 @@ export class PullRequestDetailPanel {
         break;
       }
 
-      case 'PRDETAIL_REQUEST_TARGET_BRANCHES': {
-        if (!pr.targetRepoFullName) {
-          post({ type: 'PRDETAIL_TARGET_BRANCHES_RESULT', branches: [], error: 'Target repository is unknown' });
-          break;
-        }
-        const { items: branches, error } = await this.pullRequestManager.listTargetBranches(repoId, pr.targetRepoFullName);
-        post({ type: 'PRDETAIL_TARGET_BRANCHES_RESULT', branches, error });
-        break;
-      }
-
-      case 'PRDETAIL_UPDATE': {
-        const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { title: msg.title, targetBranch: msg.targetBranch });
+      case 'PRDETAIL_PICK_TITLE': {
+        const detail = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
+        const currentTitle = 'error' in detail ? pr.title : detail.title;
+        const title = await vscode.window.showInputBox({
+          title: 'Edit Pull Request Title', value: currentTitle, prompt: 'Enter the new title', validateInput: v => v.trim() ? undefined : 'Title cannot be empty',
+        });
+        // Cancelled or unchanged — still report back (ok:true, no-op) so the webview clears its "updating" spinner.
+        if (title === undefined || title.trim() === currentTitle) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { title: title.trim() });
         post({ type: 'PRDETAIL_UPDATE_RESULT', ok: result.ok, error: result.error });
-        if (result.ok) {
-          this.onChanged();
-        } else {
-          vscode.window.showErrorMessage(result.error ?? 'Failed to update pull request');
-        }
+        if (result.ok) this.onChanged();
+        else vscode.window.showErrorMessage(result.error ?? 'Failed to update pull request');
         break;
       }
 
-      case 'PRDETAIL_REQUEST_COLLABORATORS': {
-        if (!pr.targetRepoFullName) {
-          post({ type: 'PRDETAIL_COLLABORATORS_RESULT', collaborators: [], error: 'Target repository is unknown' });
-          break;
-        }
-        const { items: collaborators, error } = await this.pullRequestManager.listCollaborators(repoId, pr.targetRepoFullName);
-        post({ type: 'PRDETAIL_COLLABORATORS_RESULT', collaborators, error });
+      case 'PRDETAIL_PICK_TARGET_BRANCH': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const { items: branches, error } = await this.pullRequestManager.listTargetBranches(repoId, pr.targetRepoFullName);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: false, error }); break; }
+        const picked = await vscode.window.showQuickPick(
+          branches.map(b => ({ label: b, description: b === pr.targetBranch ? '(current)' : undefined })),
+          { title: 'Change Target Branch', placeHolder: 'Select the new target branch' },
+        );
+        if (!picked || picked.label === pr.targetBranch) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { targetBranch: picked.label });
+        post({ type: 'PRDETAIL_UPDATE_RESULT', ok: result.ok, error: result.error });
+        if (result.ok) this.onChanged();
+        else vscode.window.showErrorMessage(result.error ?? 'Failed to update pull request');
         break;
       }
 
-      case 'PRDETAIL_UPDATE_REVIEWERS': {
-        const result = await this.pullRequestManager.updateReviewers(repoId, pr.number, msg.userIds);
+      case 'PRDETAIL_PICK_REVIEWERS': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const [{ items: collaborators, error }, detail] = await Promise.all([
+          this.pullRequestManager.listCollaborators(repoId, pr.targetRepoFullName),
+          this.pullRequestManager.getPullRequestDetail(repoId, pr.number),
+        ]);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: false, error }); break; }
+        const currentIds = new Set('error' in detail ? [] : detail.reviewers.map(r => r.id));
+        const picked = await vscode.window.showQuickPick(
+          collaborators.map(c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: avatarIconPath(c.avatarUrl) })),
+          { title: 'Reviewers', placeHolder: 'Select reviewers', canPickMany: true },
+        );
+        if (!picked) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updateReviewers(repoId, pr.number, picked.map(p => p.id));
         post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: result.ok, error: result.error });
         if (result.ok) this.onChanged();
         else vscode.window.showErrorMessage(result.error ?? 'Failed to update reviewers');
         break;
       }
 
-      case 'PRDETAIL_UPDATE_ASSIGNEES': {
-        const result = await this.pullRequestManager.updateAssignees(repoId, pr.number, msg.userIds);
+      case 'PRDETAIL_PICK_ASSIGNEES': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const [{ items: collaborators, error }, detail] = await Promise.all([
+          this.pullRequestManager.listCollaborators(repoId, pr.targetRepoFullName),
+          this.pullRequestManager.getPullRequestDetail(repoId, pr.number),
+        ]);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: false, error }); break; }
+        const currentIds = new Set('error' in detail ? [] : detail.assignees.map(a => a.id));
+        const picked = await vscode.window.showQuickPick(
+          collaborators.map(c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: avatarIconPath(c.avatarUrl) })),
+          { title: 'Assignees', placeHolder: 'Select assignees', canPickMany: true },
+        );
+        if (!picked) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updateAssignees(repoId, pr.number, picked.map(p => p.id));
         post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: result.ok, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
         if (result.ok) this.onChanged();
         else if (!('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to update assignees');
         break;
       }
 
-      case 'PRDETAIL_REQUEST_AVAILABLE_LABELS': {
-        if (!pr.targetRepoFullName) {
-          post({ type: 'PRDETAIL_AVAILABLE_LABELS_RESULT', labels: [], error: 'Target repository is unknown' });
-          break;
-        }
-        const { items: labels, error } = await this.pullRequestManager.listAvailableLabels(repoId, pr.targetRepoFullName);
-        post({ type: 'PRDETAIL_AVAILABLE_LABELS_RESULT', labels, error });
-        break;
-      }
-
-      case 'PRDETAIL_UPDATE_LABELS': {
-        const result = await this.pullRequestManager.updateLabels(repoId, pr.number, msg.labelIds);
+      case 'PRDETAIL_PICK_LABELS': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const [{ items: availableLabels, error }, detail] = await Promise.all([
+          this.pullRequestManager.listAvailableLabels(repoId, pr.targetRepoFullName),
+          this.pullRequestManager.getPullRequestDetail(repoId, pr.number),
+        ]);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: false, error }); break; }
+        const currentIds = new Set('error' in detail ? [] : detail.labels.map(l => l.id));
+        const picked = await vscode.window.showQuickPick(
+          availableLabels.map(l => ({ label: l.name, id: l.id, picked: currentIds.has(l.id), iconPath: labelSwatchIconPath(l.color) })),
+          { title: 'Labels', placeHolder: 'Select labels', canPickMany: true },
+        );
+        if (!picked) { post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updateLabels(repoId, pr.number, picked.map(p => p.id));
         post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: result.ok, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
         if (result.ok) this.onChanged();
         else if (!('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to update labels');

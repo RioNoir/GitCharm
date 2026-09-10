@@ -1,10 +1,11 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestStateFilter,
-  PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
 
@@ -38,7 +39,7 @@ interface RawGitHubPr {
   mergeable: boolean | null;
   mergeable_state?: string;
   head: { ref: string; sha: string; repo: { full_name: string } | null };
-  base: { ref: string; sha: string; repo: { full_name: string; permissions?: { push: boolean } } | null };
+  base: { ref: string; sha: string; repo: { full_name: string } | null };
   user: { login: string; avatar_url: string } | null;
   body?: string | null;
   created_at: string;
@@ -77,6 +78,7 @@ interface RawGitHubSearchResult {
 
 interface RawGitHubIssueComment {
   id: number;
+  node_id: string;
   body: string;
   user: { login: string; avatar_url: string } | null;
   created_at: string;
@@ -340,11 +342,13 @@ export class GitHubProvider implements PullRequestProvider {
       if (options.search) qParts.push(options.search);
       const params = new URLSearchParams({ q: qParts.join(' '), per_page: String(PAGE_SIZE), page: String(options.page) });
       const { data } = await httpJson<RawGitHubSearchResult>(`${this.apiBase()}/search/issues?${params.toString()}`, { headers });
-      return { items: data.items.map(mapSearchIssue), hasMore: data.items.length === PAGE_SIZE };
+      // The Search API returns the exact total for the query as-is — free, same call, already filter-aware.
+      return { items: data.items.map(mapSearchIssue), hasMore: data.items.length === PAGE_SIZE, totalCount: data.total_count };
     }
 
+    const serverState = apiState(options.states);
     const params = new URLSearchParams({
-      state: apiState(options.states),
+      state: serverState,
       per_page: String(PAGE_SIZE),
       page: String(options.page),
     });
@@ -355,7 +359,33 @@ export class GitHubProvider implements PullRequestProvider {
     const url = `${this.apiBase()}/repos/${owner}/${repo}/pulls?${params.toString()}`;
     const { data } = await httpJson<RawGitHubPr[]>(url, { headers });
     const items = data.map(mapPr).filter(pr => options.states.includes(pr.state));
-    return { items, hasMore: data.length === PAGE_SIZE };
+    // The plain list endpoint reports no total in-body or via headers on this call, only a "last page" Link
+    // header when there IS a last page to link to — and even that is only exact when nothing is filtered out
+    // client-side afterwards: `serverState === 'open'` covers exactly {open, draft} (GitHub has no server-side
+    // draft state, see apiState), and `serverState === 'closed'` is exact only when both "closed" and "merged"
+    // are requested together (GitHub has no server-side split between them either — a lone "closed" or "merged"
+    // filter would otherwise be undercounted by the header). "mine" also filters client-side (no server param).
+    const canTrustTotal = options.author !== 'mine'
+      && (serverState === 'open' || (serverState === 'closed' && options.states.includes('closed') && options.states.includes('merged')));
+    const totalCount = canTrustTotal ? await this.fetchExactTotal(owner, repo, serverState as 'open' | 'closed', headers) : undefined;
+    return { items, hasMore: data.length === PAGE_SIZE, totalCount };
+  }
+
+  /** A per_page=1 request just to read the `Link: rel="last"` header — its `page=N` IS the exact total item count, since each page holds exactly one item. Skipped entirely when the caller already knows the total can't be trusted (see call site). */
+  private async fetchExactTotal(owner: string, repo: string, state: 'open' | 'closed', headers: Record<string, string>): Promise<number | undefined> {
+    try {
+      const params = new URLSearchParams({ state, per_page: '1', page: '1' });
+      const { data, headers: responseHeaders } = await httpJson<RawGitHubPr[]>(
+        `${this.apiBase()}/repos/${owner}/${repo}/pulls?${params.toString()}`, { headers },
+      );
+      const link = responseHeaders.get('link');
+      const lastPageMatch = link?.match(/[?&]page=(\d+)>;\s*rel="last"/);
+      if (lastPageMatch) return Number(lastPageMatch[1]);
+      // No Link header at all means everything fits on one page — 0 or 1 items.
+      return data.length;
+    } catch {
+      return undefined;
+    }
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
@@ -374,7 +404,7 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true, pr: mapPr(data) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -382,22 +412,35 @@ export class GitHubProvider implements PullRequestProvider {
     const headers = await this.headers();
     const { data } = await httpJson<RawGitHubPr>(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}`, { headers });
 
-    let ciStatus: PullRequestDetail['ciStatus'];
-    try {
-      const { data: checkRuns } = await httpJson<{ check_runs: RawGitHubCheckRun[] }>(
-        `${this.apiBase()}/repos/${owner}/${repo}/commits/${data.head.sha}/check-runs`, { headers },
-      );
-      if (checkRuns.check_runs.length > 0) {
-        const hasFailure = checkRuns.check_runs.some(r => r.conclusion === 'failure' || r.conclusion === 'timed_out');
-        const hasPending = checkRuns.check_runs.some(r => r.status !== 'completed');
-        ciStatus = {
-          state: hasFailure ? 'failure' : hasPending ? 'pending' : 'success',
-          url: checkRuns.check_runs[0]?.html_url,
-        };
-      }
-    } catch {
-      // CI status is non-critical — leave undefined on any failure.
-    }
+    const [canWrite, ciStatus] = await Promise.all([
+      // The PR endpoint's embedded `base.repo.permissions` is never populated by GitHub — that field only ever
+      // appears on the dedicated repo endpoint's response. A separate call there is the only reliable way to
+      // read the authenticated user's actual push access (used to gate title/target-branch/reviewers/assignees/
+      // labels editing), rather than silently reading `undefined` as "no write access" for every user.
+      (async () => {
+        try {
+          const { data: repoData } = await httpJson<{ permissions?: { push?: boolean } }>(`${this.apiBase()}/repos/${owner}/${repo}`, { headers });
+          return repoData.permissions?.push ?? false;
+        } catch {
+          // Permission check is best-effort — default to no write access rather than fail the whole detail load.
+          return false;
+        }
+      })(),
+      (async (): Promise<PullRequestDetail['ciStatus']> => {
+        try {
+          const { data: checkRuns } = await httpJson<{ check_runs: RawGitHubCheckRun[] }>(
+            `${this.apiBase()}/repos/${owner}/${repo}/commits/${data.head.sha}/check-runs`, { headers },
+          );
+          if (checkRuns.check_runs.length === 0) return undefined;
+          const hasFailure = checkRuns.check_runs.some(r => r.conclusion === 'failure' || r.conclusion === 'timed_out');
+          const hasPending = checkRuns.check_runs.some(r => r.status !== 'completed');
+          return { state: hasFailure ? 'failure' : hasPending ? 'pending' : 'success', url: checkRuns.check_runs[0]?.html_url };
+        } catch {
+          // CI status is non-critical — leave undefined on any failure.
+          return undefined;
+        }
+      })(),
+    ]);
 
     return {
       ...mapPr(data),
@@ -408,7 +451,7 @@ export class GitHubProvider implements PullRequestProvider {
       baseSha: data.base.sha,
       ciStatus,
       capabilities: CAPABILITIES,
-      canWrite: data.base.repo?.permissions?.push ?? false,
+      canWrite,
       reviewers: (data.requested_reviewers ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
       assignees: (data.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
       labels: (data.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color })),
@@ -458,7 +501,7 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -482,7 +525,7 @@ export class GitHubProvider implements PullRequestProvider {
       }
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -506,7 +549,7 @@ export class GitHubProvider implements PullRequestProvider {
       }
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -519,45 +562,196 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
-  async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {
-    const headers = await this.headers();
-    const { data } = await httpJson<RawGitHubIssueComment[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, { headers });
-    return data.map(c => ({
+  /** GitHub lets anyone with repo push access edit/delete ANY comment, not just their own — same rule already
+   * used for canWrite in getPullRequestDetail, reused here via the dedicated repo endpoint (the comments
+   * endpoint itself never includes repo-level permissions). */
+  private async getRepoCanWrite(owner: string, repo: string, headers: Record<string, string>): Promise<boolean> {
+    try {
+      const { data } = await httpJson<{ permissions?: { push?: boolean } }>(`${this.apiBase()}/repos/${owner}/${repo}`, { headers });
+      return data.permissions?.push ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  private graphqlUrl(): string {
+    return this.host === 'github.com' ? 'https://api.github.com/graphql' : `https://${this.host}/api/graphql`;
+  }
+
+  /** REST never exposes a comment's minimized state at all — the only way to read it is GraphQL's `isMinimized`
+   * on the same IssueComment node. One query aliases every comment's node id (`n0: node(id: ...) { ... }`, `n1:
+   * ...`) so listing N comments costs one extra GraphQL round-trip total, not N. */
+  private async getMinimizedStates(nodeIds: string[], headers: Record<string, string>): Promise<Map<string, boolean>> {
+    if (nodeIds.length === 0) return new Map();
+    const fields = nodeIds.map((_, i) => `n${i}: node(id: $id${i}) { ... on IssueComment { isMinimized } }`).join(' ');
+    const query = `query(${nodeIds.map((_, i) => `$id${i}: ID!`).join(', ')}) { ${fields} }`;
+    const variables = Object.fromEntries(nodeIds.map((id, i) => [`id${i}`, id]));
+    try {
+      const { data } = await httpJson<{ data?: Record<string, { isMinimized?: boolean } | null> }>(this.graphqlUrl(), {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables }),
+      });
+      const states = new Map<string, boolean>();
+      nodeIds.forEach((id, i) => states.set(id, data.data?.[`n${i}`]?.isMinimized ?? false));
+      return states;
+    } catch {
+      return new Map();
+    }
+  }
+
+  private mapComment(c: RawGitHubIssueComment, currentUsername: string | undefined, canWrite: boolean, isHidden: boolean): PullRequestComment {
+    const isOwn = !!currentUsername && c.user?.login === currentUsername;
+    return {
       id: String(c.id),
       authorName: c.user?.login ?? 'unknown',
       authorAvatarUrl: c.user?.avatar_url,
       body: c.body,
       createdAt: c.created_at,
       url: c.html_url,
-    }));
+      canEdit: isOwn || canWrite,
+      canDelete: isOwn || canWrite,
+      canHide: canWrite,
+      isHidden,
+    };
+  }
+
+  async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {
+    const headers = await this.headers();
+    const [{ data }, currentUsername, canWrite] = await Promise.all([
+      httpJson<RawGitHubIssueComment[]>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, { headers }),
+      this.getCurrentUsername(),
+      this.getRepoCanWrite(owner, repo, headers),
+    ]);
+    const minimizedStates = await this.getMinimizedStates(data.map(c => c.node_id), headers);
+    return data.map(c => this.mapComment(c, currentUsername, canWrite, minimizedStates.get(c.node_id) ?? false));
+  }
+
+  /** REST's Issue Timeline API is stable but returns a heterogeneous mix of `event:` string shapes (and, for
+   * base_ref_changed, omits the actual branch names) — GraphQL's `timelineItems` gives one uniformly-typed
+   * response with every field this needs, including BaseRefChangedEvent's real branch names. `first: 100`
+   * without `pageInfo`/`after` pagination: covers the overwhelming majority of PRs; not worth the added
+   * complexity for the rare PR with more than 100 timeline events. */
+  async listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]> {
+    const headers = await this.headers();
+    const query = `query($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          timelineItems(first: 100, itemTypes: [
+            RENAMED_TITLE_EVENT, LABELED_EVENT, UNLABELED_EVENT, CLOSED_EVENT, REOPENED_EVENT, MERGED_EVENT,
+            BASE_REF_CHANGED_EVENT, ASSIGNED_EVENT, UNASSIGNED_EVENT, REVIEW_REQUESTED_EVENT, REVIEW_REQUEST_REMOVED_EVENT
+          ]) {
+            nodes {
+              __typename
+              ... on RenamedTitleEvent { id previousTitle currentTitle createdAt actor { login avatarUrl } }
+              ... on LabeledEvent { id createdAt actor { login avatarUrl } label { name color } }
+              ... on UnlabeledEvent { id createdAt actor { login avatarUrl } label { name color } }
+              ... on ClosedEvent { id createdAt actor { login avatarUrl } }
+              ... on ReopenedEvent { id createdAt actor { login avatarUrl } }
+              ... on MergedEvent { id createdAt actor { login avatarUrl } }
+              ... on BaseRefChangedEvent { id createdAt actor { login avatarUrl } previousRefName currentRefName }
+              ... on AssignedEvent { id createdAt actor { login avatarUrl } assignee { ... on User { login avatarUrl } } }
+              ... on UnassignedEvent { id createdAt actor { login avatarUrl } assignee { ... on User { login avatarUrl } } }
+              ... on ReviewRequestedEvent { id createdAt actor { login avatarUrl } requestedReviewer { ... on User { login avatarUrl } } }
+              ... on ReviewRequestRemovedEvent { id createdAt actor { login avatarUrl } requestedReviewer { ... on User { login avatarUrl } } }
+            }
+          }
+        }
+      }
+    }`;
+    const { data } = await httpJson<{
+      data?: { repository?: { pullRequest?: { timelineItems?: { nodes: RawGithubTimelineNode[] } } } };
+      errors?: Array<{ message: string }>;
+    }>(this.graphqlUrl(), {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { owner, repo, number } }),
+    });
+    if (data.errors?.length) throw new Error(data.errors.map(e => e.message).join('; '));
+    const nodes = data.data?.repository?.pullRequest?.timelineItems?.nodes ?? [];
+    return nodes.map(mapGithubTimelineNode).filter((e): e is PullRequestEvent => e !== null);
   }
 
   async postComment(owner: string, repo: string, number: number, body: string): Promise<PostCommentResult> {
     const headers = await this.headers();
     try {
-      const { data } = await httpJson<RawGitHubIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, {
+      const [{ data }, currentUsername, canWrite] = await Promise.all([
+        httpJson<RawGitHubIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/${number}/comments`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        }),
+        this.getCurrentUsername(),
+        this.getRepoCanWrite(owner, repo, headers),
+      ]);
+      return { ok: true, comment: this.mapComment(data, currentUsername, canWrite, false) };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async updateComment(owner: string, repo: string, _number: number, commentId: string, body: string): Promise<PostCommentResult> {
+    const headers = await this.headers();
+    try {
+      const [{ data }, currentUsername, canWrite] = await Promise.all([
+        httpJson<RawGitHubIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/comments/${commentId}`, {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        }),
+        this.getCurrentUsername(),
+        this.getRepoCanWrite(owner, repo, headers),
+      ]);
+      // A GitHub PATCH on an issue comment does not un-minimize it — the edited comment may still be hidden,
+      // so this is worth one small follow-up query rather than assuming false.
+      const minimizedStates = await this.getMinimizedStates([data.node_id], headers);
+      return { ok: true, comment: this.mapComment(data, currentUsername, canWrite, minimizedStates.get(data.node_id) ?? false) };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async deleteComment(owner: string, repo: string, _number: number, commentId: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/issues/comments/${commentId}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  /** Shared by hideComment/unhideComment — both need the comment's GraphQL node id (not its numeric REST id)
+   * and differ only in which mutation they call. */
+  private async runCommentVisibilityMutation(owner: string, repo: string, commentId: string, mutationField: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      const { data: comment } = await httpJson<RawGitHubIssueComment>(`${this.apiBase()}/repos/${owner}/${repo}/issues/comments/${commentId}`, { headers });
+      const query = `mutation($id: ID!) { ${mutationField}(input: { subjectId: $id${mutationField === 'minimizeComment' ? ', classifier: OUTDATED' : ''} }) { clientMutationId } }`;
+      const { data } = await httpJson<{ errors?: Array<{ message: string }> }>(this.graphqlUrl(), {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ query, variables: { id: comment.node_id } }),
       });
-      return {
-        ok: true,
-        comment: {
-          id: String(data.id),
-          authorName: data.user?.login ?? 'unknown',
-          authorAvatarUrl: data.user?.avatar_url,
-          body: data.body,
-          createdAt: data.created_at,
-          url: data.html_url,
-        },
-      };
+      if (data.errors?.length) return { ok: false, error: data.errors.map(e => e.message).join('; ') };
+      return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+
+  /** GitHub's "minimize comment" has no REST endpoint — only the GraphQL mutation `minimizeComment`. */
+  async hideComment(owner: string, repo: string, _number: number, commentId: string): Promise<ActionResult | UnsupportedResult> {
+    return this.runCommentVisibilityMutation(owner, repo, commentId, 'minimizeComment');
+  }
+
+  /** Reverses hideComment via GraphQL's `unminimizeComment` — same GraphQL-only caveat. */
+  async unhideComment(owner: string, repo: string, _number: number, commentId: string): Promise<ActionResult | UnsupportedResult> {
+    return this.runCommentVisibilityMutation(owner, repo, commentId, 'unminimizeComment');
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -647,7 +841,7 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -661,7 +855,7 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -675,7 +869,7 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -692,7 +886,60 @@ export class GitHubProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+}
+
+interface RawGithubTimelineActor {
+  login: string;
+  avatarUrl?: string;
+}
+
+/** `requestedReviewer`/`assignee` can be a Team instead of a User — the `login` field only exists on the User
+ * variant, so a Team shows up here as `undefined` and the event's `user` is simply omitted. */
+interface RawGithubTimelineNode {
+  __typename: string;
+  id: string;
+  createdAt: string;
+  actor?: RawGithubTimelineActor | null;
+  previousTitle?: string;
+  currentTitle?: string;
+  label?: { name: string; color: string };
+  previousRefName?: string;
+  currentRefName?: string;
+  assignee?: RawGithubTimelineActor | null;
+  requestedReviewer?: RawGithubTimelineActor | null;
+}
+
+function mapGithubTimelineNode(node: RawGithubTimelineNode): PullRequestEvent | null {
+  const actorName = node.actor?.login ?? 'unknown';
+  const actorAvatarUrl = node.actor?.avatarUrl;
+  const base = { id: node.id, actorName, actorAvatarUrl, createdAt: node.createdAt };
+  switch (node.__typename) {
+    case 'RenamedTitleEvent':
+      return { ...base, kind: 'renamed', previousTitle: node.previousTitle, newTitle: node.currentTitle };
+    case 'LabeledEvent':
+      return node.label ? { ...base, kind: 'labeled', label: { id: node.label.name, name: node.label.name, color: node.label.color.replace(/^#/, '') } } : null;
+    case 'UnlabeledEvent':
+      return node.label ? { ...base, kind: 'unlabeled', label: { id: node.label.name, name: node.label.name, color: node.label.color.replace(/^#/, '') } } : null;
+    case 'ClosedEvent':
+      return { ...base, kind: 'closed' };
+    case 'ReopenedEvent':
+      return { ...base, kind: 'reopened' };
+    case 'MergedEvent':
+      return { ...base, kind: 'merged' };
+    case 'BaseRefChangedEvent':
+      return { ...base, kind: 'baseChanged', previousBranch: node.previousRefName, newBranch: node.currentRefName };
+    case 'AssignedEvent':
+      return { ...base, kind: 'assigned', user: node.assignee?.login ? { id: node.assignee.login, username: node.assignee.login, avatarUrl: node.assignee.avatarUrl } : undefined };
+    case 'UnassignedEvent':
+      return { ...base, kind: 'unassigned', user: node.assignee?.login ? { id: node.assignee.login, username: node.assignee.login, avatarUrl: node.assignee.avatarUrl } : undefined };
+    case 'ReviewRequestedEvent':
+      return { ...base, kind: 'reviewRequested', user: node.requestedReviewer?.login ? { id: node.requestedReviewer.login, username: node.requestedReviewer.login, avatarUrl: node.requestedReviewer.avatarUrl } : undefined };
+    case 'ReviewRequestRemovedEvent':
+      return { ...base, kind: 'reviewRequestRemoved', user: node.requestedReviewer?.login ? { id: node.requestedReviewer.login, username: node.requestedReviewer.login, avatarUrl: node.requestedReviewer.avatarUrl } : undefined };
+    default:
+      return null;
   }
 }

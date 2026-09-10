@@ -1,11 +1,12 @@
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
-  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestLabel, PullRequestProvider, PullRequestStateFilter,
-  PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
+  PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import type { BitbucketCredentials } from '../PatCredentialStore';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
 
@@ -61,6 +62,8 @@ interface RawBitbucketPrDetail extends RawBitbucketPr {
 interface RawBitbucketPage {
   values: RawBitbucketPr[];
   next?: string;
+  /** Total items matching the query, when Bitbucket includes it — omitted for some filter/query combinations. */
+  size?: number;
 }
 
 interface RawBitbucketUser {
@@ -70,6 +73,7 @@ interface RawBitbucketUser {
 }
 
 interface RawBitbucketCommentUser {
+  uuid: string;
   display_name: string;
   nickname?: string;
   links: { avatar: { href: string } };
@@ -86,6 +90,23 @@ interface RawBitbucketComment {
 
 interface RawBitbucketCommentPage {
   values: RawBitbucketComment[];
+  next?: string;
+}
+
+interface RawBitbucketActivityUpdate {
+  title?: string;
+  state?: 'OPEN' | 'MERGED' | 'DECLINED';
+  reason?: string;
+  date: string;
+  author?: RawBitbucketCommentUser;
+}
+
+interface RawBitbucketActivityEntry {
+  update?: RawBitbucketActivityUpdate;
+}
+
+interface RawBitbucketActivityPage {
+  values: RawBitbucketActivityEntry[];
   next?: string;
 }
 
@@ -215,6 +236,7 @@ const MERGE_STRATEGY_MAP: Record<MergeStrategy, string> = {
 export class BitbucketProvider implements PullRequestProvider {
   readonly kind = 'bitbucket' as const;
   private cachedUsername: string | undefined;
+  private cachedUserUuid: string | undefined;
 
   constructor(
     private readonly getCredentials: () => Promise<BitbucketCredentials | undefined>,
@@ -244,10 +266,21 @@ export class BitbucketProvider implements PullRequestProvider {
     try {
       const { data } = await httpJson<RawBitbucketUser>(`${this.apiBase()}/user`, { headers });
       this.cachedUsername = data.username ?? data.nickname ?? data.uuid;
+      this.cachedUserUuid = data.uuid;
       return this.cachedUsername;
     } catch {
       return undefined;
     }
+  }
+
+  /** Bitbucket Cloud deprecated the public `username` field, so `getCurrentUsername()` often falls back to the
+   * uuid already — but comment authors are only ever identified by `uuid` (display_name/nickname aren't unique
+   * or stable), so this always resolves the real uuid rather than whatever getCurrentUsername() happened to
+   * return. */
+  private async getCurrentUserUuid(): Promise<string | undefined> {
+    if (this.cachedUserUuid) return this.cachedUserUuid;
+    await this.getCurrentUsername();
+    return this.cachedUserUuid;
   }
 
   async listPullRequests(owner: string, repo: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult> {
@@ -284,7 +317,11 @@ export class BitbucketProvider implements PullRequestProvider {
     const result: { data: RawBitbucketPage } = await httpJson<RawBitbucketPage>(url, { headers });
     // open/draft share the same server-side OPEN state — when only one of the two was requested, split them apart here.
     const items = result.data.values.map(mapPr).filter(pr => options.states.includes(pr.state));
-    return { items, hasMore: !!result.data.next };
+    // `size` (when Bitbucket includes it) counts the server-side `state` filter as sent — exact unless "open"
+    // and "draft" were requested separately (both share the OPEN bucket server-side, split apart client-side above).
+    const splitsOpenFromDraft = options.states.includes('open') !== options.states.includes('draft');
+    const totalCount = splitsOpenFromDraft ? undefined : result.data.size;
+    return { items, hasMore: !!result.data.next, totalCount };
   }
 
   async createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
@@ -302,7 +339,7 @@ export class BitbucketProvider implements PullRequestProvider {
       });
       return { ok: true, pr: mapPr(data) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -449,7 +486,7 @@ export class BitbucketProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -465,7 +502,7 @@ export class BitbucketProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -477,21 +514,45 @@ export class BitbucketProvider implements PullRequestProvider {
     return { ok: false, unsupported: true, error: 'Bitbucket does not support labels on pull requests.' };
   }
 
+  /** Bitbucket Cloud only lets a comment's own author edit it; delete also allows a workspace/repo admin
+   * (distinct from the plain "write" access canWrite already tracks — reuses the same permissions endpoint but
+   * requires the stricter 'admin' tier). */
+  private async getRepoIsAdmin(owner: string, repo: string, headers: Record<string, string>): Promise<boolean> {
+    try {
+      const query = encodeURIComponent(`repository.full_name="${owner}/${repo}"`);
+      const { data } = await httpJson<{ values: { permission: 'admin' | 'write' | 'read' }[] }>(
+        `${this.apiBase()}/user/permissions/repositories?q=${query}`, { headers },
+      );
+      return data.values[0]?.permission === 'admin';
+    } catch {
+      return false;
+    }
+  }
+
+  private mapComment(c: RawBitbucketComment, currentUserUuid: string | undefined, isAdmin: boolean): PullRequestComment {
+    const isOwn = !!currentUserUuid && c.user?.uuid === currentUserUuid;
+    return {
+      id: String(c.id),
+      ...mapCommentUser(c.user),
+      body: c.content.raw,
+      createdAt: c.created_on,
+      url: c.links.html.href,
+      canEdit: isOwn,
+      canDelete: isOwn || isAdmin,
+      canHide: false,
+    };
+  }
+
   async listComments(owner: string, repo: string, number: number): Promise<PullRequestComment[]> {
     const headers = await this.headers();
+    const [currentUserUuid, isAdmin] = await Promise.all([this.getCurrentUserUuid(), this.getRepoIsAdmin(owner, repo, headers)]);
     const comments: PullRequestComment[] = [];
     let url = `${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${number}/comments?pagelen=${PAGE_SIZE}`;
     for (;;) {
       const { data } = await httpJson<RawBitbucketCommentPage>(url, { headers });
       for (const c of data.values) {
         if (c.deleted) continue;
-        comments.push({
-          id: String(c.id),
-          ...mapCommentUser(c.user),
-          body: c.content.raw,
-          createdAt: c.created_on,
-          url: c.links.html.href,
-        });
+        comments.push(this.mapComment(c, currentUserUuid, isAdmin));
       }
       if (!data.next) break;
       url = data.next;
@@ -499,29 +560,90 @@ export class BitbucketProvider implements PullRequestProvider {
     return comments;
   }
 
+  /** Bitbucket Cloud's only timeline-shaped endpoint is Pull Request Activity — it reports title renames and
+   * state transitions (open/reopened/declined/merged) as `update` entries, but has no dedicated label/assignee/
+   * reviewer change events at all, so those kinds are simply never produced here. It also never reports the
+   * previous title on a rename, only the new one. */
+  async listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]> {
+    const headers = await this.headers();
+    const events: PullRequestEvent[] = [];
+    let url = `${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${number}/activity?pagelen=${PAGE_SIZE}`;
+    for (;;) {
+      const { data } = await httpJson<RawBitbucketActivityPage>(url, { headers });
+      for (const entry of data.values) {
+        const u = entry.update;
+        if (!u) continue;
+        const actorName = u.author?.display_name ?? 'unknown';
+        const actorAvatarUrl = u.author?.links?.avatar?.href;
+        if (u.title) {
+          events.push({ id: `title-${u.date}`, kind: 'renamed', actorName, actorAvatarUrl, createdAt: u.date, newTitle: u.title });
+        }
+        if (u.state === 'OPEN' && u.reason?.toLowerCase().includes('reopen')) {
+          events.push({ id: `state-${u.date}`, kind: 'reopened', actorName, actorAvatarUrl, createdAt: u.date });
+        } else if (u.state === 'DECLINED') {
+          events.push({ id: `state-${u.date}`, kind: 'closed', actorName, actorAvatarUrl, createdAt: u.date });
+        } else if (u.state === 'MERGED') {
+          events.push({ id: `state-${u.date}`, kind: 'merged', actorName, actorAvatarUrl, createdAt: u.date });
+        }
+      }
+      if (!data.next) break;
+      url = data.next;
+    }
+    return events;
+  }
+
   async postComment(owner: string, repo: string, number: number, body: string): Promise<PostCommentResult> {
     const headers = await this.headers();
     try {
-      const { data } = await httpJson<RawBitbucketComment>(
-        `${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${number}/comments`, {
+      const [{ data }, currentUserUuid, isAdmin] = await Promise.all([
+        httpJson<RawBitbucketComment>(`${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${number}/comments`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: { raw: body } }),
-        },
-      );
-      return {
-        ok: true,
-        comment: {
-          id: String(data.id),
-          ...mapCommentUser(data.user),
-          body: data.content.raw,
-          createdAt: data.created_on,
-          url: data.links.html.href,
-        },
-      };
+        }),
+        this.getCurrentUserUuid(),
+        this.getRepoIsAdmin(owner, repo, headers),
+      ]);
+      return { ok: true, comment: this.mapComment(data, currentUserUuid, isAdmin) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
+  }
+
+  async updateComment(owner: string, repo: string, number: number, commentId: string, body: string): Promise<PostCommentResult> {
+    const headers = await this.headers();
+    try {
+      const [{ data }, currentUserUuid, isAdmin] = await Promise.all([
+        httpJson<RawBitbucketComment>(`${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${number}/comments/${commentId}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: { raw: body } }),
+        }),
+        this.getCurrentUserUuid(),
+        this.getRepoIsAdmin(owner, repo, headers),
+      ]);
+      return { ok: true, comment: this.mapComment(data, currentUserUuid, isAdmin) };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async deleteComment(owner: string, repo: string, number: number, commentId: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repositories/${owner}/${repo}/pullrequests/${number}/comments/${commentId}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
+  async hideComment(): Promise<UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'Bitbucket Cloud has no concept of hiding a comment.' };
+  }
+
+  async unhideComment(): Promise<UnsupportedResult> {
+    return { ok: false, unsupported: true, error: 'Bitbucket Cloud has no concept of hiding a comment.' };
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -601,7 +723,7 @@ export class BitbucketProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -614,7 +736,7 @@ export class BitbucketProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 
@@ -639,7 +761,7 @@ export class BitbucketProvider implements PullRequestProvider {
       });
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return { ok: false, error: formatApiError(err) };
     }
   }
 }

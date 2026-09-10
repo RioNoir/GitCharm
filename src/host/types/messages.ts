@@ -13,15 +13,15 @@ import type { ViewAndSortSettings, ViewAndSortUserPrefs } from './settings';
 import type { PullRequestFilters, RepoPullRequests } from '../pullRequests/PullRequestManager';
 import type {
   ChangedFile, CiCheck, CreatePullRequestInput, FileDiffContent, FileDiffRefs, ForgeProvider, MergeStrategy, PullRequestAuthorFilter,
-  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestLabel, PullRequestStateFilter,
-  PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput,
+  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput,
 } from '../pullRequests/types';
 
 export type {
   RepoPullRequests, CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary,
   PullRequestFilters, PullRequestStateFilter, PullRequestAuthorFilter, PullRequestDetail, ChangedFile,
-  MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, FileDiffContent, FileDiffRefs, ReviewEvent,
-  PullRequestUser, PullRequestLabel, CiCheck,
+  MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, PullRequestEvent, FileDiffContent, FileDiffRefs, ReviewEvent,
+  PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
 };
 
 export interface MergeParentCommit {
@@ -353,12 +353,19 @@ export type MergeToHostMsg =
 export type HostToPrCreateMsg =
   | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider }
   | { type: 'PRCREATE_BRANCHES_RESULT'; branches: BranchInfo[]; error?: string }
+  | { type: 'PRCREATE_ICON_THEME'; iconTheme: IconThemeData }
+  | { type: 'PRCREATE_BRANCH_PICKED'; requestId: string; role: 'source' | 'target'; branch?: string }
+  | { type: 'PRCREATE_COMPARE_RESULT'; requestId: string; files: ChangedFile[]; commits: CommitNode[]; error?: string }
   | { type: 'PRCREATE_SUBMIT_RESULT'; ok: boolean; pr?: PullRequestSummary; error?: string };
 
 // ─── Create Pull Request: WebView → Host ─────────────────────────────────────
 
 export type PrCreateToHostMsg =
   | { type: 'PRCREATE_REQUEST_BRANCHES' }
+  | { type: 'PRCREATE_PICK_BRANCH'; requestId: string; role: 'source' | 'target'; current?: string }
+  | { type: 'PRCREATE_REQUEST_COMPARE'; requestId: string; sourceBranch: string; targetBranch: string }
+  | { type: 'PRCREATE_OPEN_FILE_DIFF'; sourceBranch: string; targetBranch: string; file: ChangedFile }
+  | { type: 'PRCREATE_OPEN_NATIVE_COMPARE'; sourceBranch: string; targetBranch: string }
   | { type: 'PRCREATE_SUBMIT'; input: CreatePullRequestInput }
   | { type: 'PRCREATE_CANCEL' };
 
@@ -371,21 +378,23 @@ export type HostToPrDetailMsg =
   | { type: 'PRDETAIL_LOAD_ERROR'; error: string }
   | { type: 'PRDETAIL_COMMENTS_RESULT'; comments: PullRequestComment[]; error?: string }
   | { type: 'PRDETAIL_COMMENT_POSTED'; ok: boolean; comment?: PullRequestComment; error?: string }
+  | { type: 'PRDETAIL_COMMENT_UPDATED'; ok: boolean; comment?: PullRequestComment; error?: string }
+  | { type: 'PRDETAIL_COMMENT_DELETED'; ok: boolean; commentId?: string; error?: string }
+  | { type: 'PRDETAIL_COMMENT_HIDDEN'; ok: boolean; commentId?: string; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_COMMENT_UNHIDDEN'; ok: boolean; commentId?: string; unsupported?: boolean; error?: string }
   | { type: 'PRDETAIL_FILES_RESULT'; files: ChangedFile[]; error?: string }
   | { type: 'PRDETAIL_FILE_DIFF_ERROR'; path: string; error: string }
   | { type: 'PRDETAIL_COMMITS_RESULT'; commits: PullRequestCommit[]; error?: string }
+  | { type: 'PRDETAIL_EVENTS_RESULT'; events: PullRequestEvent[]; error?: string }
   | { type: 'PRDETAIL_COMMIT_FILES_RESULT'; sha: string; files: ChangedFile[]; error?: string }
   | { type: 'PRDETAIL_MERGE_RESULT'; ok: boolean; error?: string }
   | { type: 'PRDETAIL_CLOSE_RESULT'; ok: boolean; error?: string }
   | { type: 'PRDETAIL_REOPEN_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
   | { type: 'PRDETAIL_REVIEW_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
   | { type: 'PRDETAIL_CHECKOUT_RESULT'; ok: boolean; branchName?: string; error?: string }
-  | { type: 'PRDETAIL_TARGET_BRANCHES_RESULT'; branches: string[]; error?: string }
   | { type: 'PRDETAIL_UPDATE_RESULT'; ok: boolean; error?: string }
-  | { type: 'PRDETAIL_COLLABORATORS_RESULT'; collaborators: PullRequestUser[]; error?: string }
   | { type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT'; ok: boolean; error?: string }
   | { type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
-  | { type: 'PRDETAIL_AVAILABLE_LABELS_RESULT'; labels: PullRequestLabel[]; error?: string }
   | { type: 'PRDETAIL_UPDATE_LABELS_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
   | { type: 'PRDETAIL_CHECKS_RESULT'; checks: CiCheck[]; error?: string };
 
@@ -395,9 +404,14 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_REQUEST_DETAIL' }
   | { type: 'PRDETAIL_REQUEST_COMMENTS' }
   | { type: 'PRDETAIL_POST_COMMENT'; body: string }
+  | { type: 'PRDETAIL_UPDATE_COMMENT'; commentId: string; body: string }
+  | { type: 'PRDETAIL_DELETE_COMMENT'; commentId: string }
+  | { type: 'PRDETAIL_HIDE_COMMENT'; commentId: string }
+  | { type: 'PRDETAIL_UNHIDE_COMMENT'; commentId: string }
   | { type: 'PRDETAIL_REQUEST_FILES' }
   | { type: 'PRDETAIL_OPEN_FILE_DIFF'; file: ChangedFile }
   | { type: 'PRDETAIL_REQUEST_COMMITS' }
+  | { type: 'PRDETAIL_REQUEST_EVENTS' }
   | { type: 'PRDETAIL_REQUEST_COMMIT_FILES'; sha: string }
   | { type: 'PRDETAIL_OPEN_COMMIT_FILE_DIFF'; file: ChangedFile; commitSha: string; parentSha?: string }
   | { type: 'PRDETAIL_OPEN_COMMIT_ALL_CHANGES'; commitSha: string; parentSha?: string }
@@ -409,11 +423,9 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_VIEW_ALL_CHANGES' }
   | { type: 'PRDETAIL_CHECKOUT_PR' }
   | { type: 'PRDETAIL_CHECKOUT_BRANCH' }
-  | { type: 'PRDETAIL_REQUEST_TARGET_BRANCHES' }
-  | { type: 'PRDETAIL_UPDATE'; title?: string; targetBranch?: string }
-  | { type: 'PRDETAIL_REQUEST_COLLABORATORS' }
-  | { type: 'PRDETAIL_UPDATE_REVIEWERS'; userIds: string[] }
-  | { type: 'PRDETAIL_UPDATE_ASSIGNEES'; userIds: string[] }
-  | { type: 'PRDETAIL_REQUEST_AVAILABLE_LABELS' }
-  | { type: 'PRDETAIL_UPDATE_LABELS'; labelIds: string[] }
+  | { type: 'PRDETAIL_PICK_TITLE' }
+  | { type: 'PRDETAIL_PICK_TARGET_BRANCH' }
+  | { type: 'PRDETAIL_PICK_REVIEWERS' }
+  | { type: 'PRDETAIL_PICK_ASSIGNEES' }
+  | { type: 'PRDETAIL_PICK_LABELS' }
   | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string };

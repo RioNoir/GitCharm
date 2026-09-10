@@ -1303,7 +1303,10 @@ function App() {
           const paths = new Set([...r.stagedFiles.map(f => f.path), ...r.unstagedFiles.map(f => f.path)]);
           return sum + paths.size;
         }, 0);
-        const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + r.pullRequests.length, 0);
+        // Prefer each repo's provider-reported totalCount (exact, filter-aware, no extra pages fetched) over the
+        // number of PRs actually downloaded so far — falls back to the downloaded count for providers/queries
+        // where no cheap total is available (see ListPullRequestsResult.totalCount).
+        const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + (r.totalCount ?? r.pullRequests.length), 0);
         const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
         const tabMeta = (tab: TabId) => ({
           label: tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : tab === 'pullrequests' ? 'Pull Requests' : 'Push',
