@@ -1596,24 +1596,20 @@ export class GitService {
     await this.git.raw(['merge', name]);
   }
 
-  async getBranchesContaining(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
-    const [localOut, remoteOut, tagOut] = await Promise.all([
-      this.git.raw(['branch', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
-      this.git.raw(['branch', '-r', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
-      // --points-at: only tags directly on this commit, not ancestors.
-      this.git.raw(['tag', '--points-at', hash]).catch(() => ''),
-    ]);
-    const parse = (out: string) => out.split('\n').map(b => b.trim()).filter(Boolean);
-    // Local branches must not contain a slash — anything with '/' is a remote ref
-    // that leaked into the local output on some git configurations.
-    // Exclude remote-leaked refs (contain '/') and the detached HEAD pseudo-entry "(HEAD detached at ...)".
-    const local = parse(localOut).filter(b => !b.includes('/') && !b.startsWith('('));
-    // Remote names come as "origin/foo" or "remotes/origin/foo" — normalise both.
-    // origin/HEAD is a symbolic alias, not a real branch — skip it here.
-    const remote = parse(remoteOut)
-      .map(b => b.replace(/^remotes\//, ''))
-      .filter(b => !b.endsWith('/HEAD') && b.includes('/'));
-    const tags = parse(tagOut);
+  // Refs that point AT this commit — never branches that merely contain it.
+  // --points-at peels annotated tags, so one call covers heads, remotes and tags.
+  async getRefsAt(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
+    const out = await this.git.raw(['for-each-ref', '--points-at', hash, '--format=%(refname)']).catch(() => '');
+    const local: string[] = [], remote: string[] = [], tags: string[] = [];
+    for (const ref of out.split('\n').map(r => r.trim()).filter(Boolean)) {
+      if (ref.startsWith('refs/heads/')) local.push(ref.slice('refs/heads/'.length));
+      else if (ref.startsWith('refs/tags/')) tags.push(ref.slice('refs/tags/'.length));
+      else if (ref.startsWith('refs/remotes/')) {
+        const name = ref.slice('refs/remotes/'.length);
+        // <remote>/HEAD is a symbolic alias, not a branch.
+        if (name.includes('/') && !name.endsWith('/HEAD')) remote.push(name);
+      }
+    }
     return { local, remote, tags };
   }
 

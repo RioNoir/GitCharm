@@ -1409,15 +1409,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
-      case 'LOG_REQUEST_COMMIT_BRANCHES': {
-        const repo = this.manager.getRepo(msg.repoId);
-        const branches = repo
-          ? await repo.getBranchesContaining(msg.hash).catch(() => ({ local: [], remote: [], tags: [] }))
-          : { local: [], remote: [], tags: [] };
-        this.post({ type: 'LOG_COMMIT_BRANCHES_RESULT', requestId: msg.requestId, branches });
-        break;
-      }
-
       case 'LOG_REQUEST_TAGS': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;

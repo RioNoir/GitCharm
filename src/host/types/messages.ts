@@ -222,7 +222,6 @@ export type HostToLogMsg =
   | { type: 'LOG_REFRESH' }
   | { type: 'LOG_MERGE_COMMITS_RESULT'; requestId: string; commits: MergeParentCommit[]; error?: string }
   | { type: 'LOG_FILE_OP_RESULT'; requestId: string; ok: boolean; error?: string }
-  | { type: 'LOG_COMMIT_BRANCHES_RESULT'; requestId: string; branches: { local: string[]; remote: string[]; tags: string[] } }
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
@@ -282,7 +281,6 @@ export type LogToHostMsg =
   | { type: 'LOG_RESET_TO_PICK'; repoId: string; hash: string }
   | { type: 'LOG_PUSH_PICK'; repoId: string }
   | { type: 'LOG_PUSH_TAG_PICK'; repoId: string; tagName: string }
-  | { type: 'LOG_REQUEST_COMMIT_BRANCHES'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_OPEN_COMMIT_BODY'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_SHOW_BRANCH_OPTIONS'; repoId: string; branchName: string }
   | { type: 'LOG_CHECKOUT_COMMIT'; requestId: string; repoId: string; hash: string; branchName?: string }

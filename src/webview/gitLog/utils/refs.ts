@@ -67,12 +67,12 @@ function normalizeRef(raw: string): { kind: 'head-pointer'; branch: string }
 }
 
 export function groupRefs(refs: string[]): RefGroup[] {
-  const remotes = new Map<string, string>(); // branchName → remoteName
+  const remotes: Array<{ remoteName: string; name: string }> = [];
   const locals = new Set<string>();
   const tags: string[] = [];
   let headBranch: string | null = null;
   let isDetached = false;
-  let remoteHeadRemoteName: string | null = null;
+  const remoteHeads: string[] = [];   // remotes whose <remote>/HEAD points here
 
   for (const ref of refs) {
     const parsed = normalizeRef(ref);
@@ -88,14 +88,16 @@ export function groupRefs(refs: string[]): RefGroup[] {
       case 'local':
         locals.add(parsed.name);
         break;
-      case 'remote':
-        if (parsed.name.toUpperCase() === 'HEAD') {
-          remoteHeadRemoteName = parsed.remoteName;
-        } else {
-          // Last remote wins if multiple remotes track the same branch name — shouldn't happen in practice.
-          remotes.set(parsed.name, parsed.remoteName);
+      case 'remote': {
+        const { remoteName, name } = parsed;
+        if (name.toUpperCase() === 'HEAD') {
+          if (!remoteHeads.includes(remoteName)) remoteHeads.push(remoteName);
+        } else if (!remotes.some(r => r.remoteName === remoteName && r.name === name)) {
+          // Keyed by remote+name: origin/main and upstream/main are distinct refs.
+          remotes.push({ remoteName, name });
         }
         break;
+      }
       case 'tag':
         tags.push(parsed.name);
         break;
@@ -125,8 +127,8 @@ export function groupRefs(refs: string[]): RefGroup[] {
     });
   }
 
-  // <remote>/HEAD symbolic pointer
-  if (remoteHeadRemoteName !== null) {
+  // <remote>/HEAD symbolic pointers (one per remote)
+  for (const remoteHeadRemoteName of remoteHeads) {
     groups.push({
       key: `${remoteHeadRemoteName}/HEAD`,
       label: 'HEAD',
@@ -141,8 +143,6 @@ export function groupRefs(refs: string[]): RefGroup[] {
   }
 
   for (const local of locals) {
-    const remoteEntry = remotes.get(local);
-    const synced = remoteEntry !== undefined;
     groups.push({
       key: local,
       label: local,
@@ -154,25 +154,11 @@ export function groupRefs(refs: string[]): RefGroup[] {
       isDetached: false,
       isRemoteHead: false,
     });
-    if (synced) {
-      groups.push({
-        key: `remote:${local}`,
-        label: local,
-        remoteName: remoteEntry,
-        isHead: false,
-        isLocal: false,
-        isRemote: true,
-        isTag: false,
-        isDetached: false,
-        isRemoteHead: false,
-      });
-      remotes.delete(local);
-    }
   }
 
-  for (const [name, remoteName] of remotes) {
+  for (const { remoteName, name } of remotes) {
     groups.push({
-      key: `remote:${name}`,
+      key: `remote:${remoteName}/${name}`,
       label: name,
       remoteName,
       isHead: false,
@@ -205,7 +191,7 @@ export function groupRefs(refs: string[]): RefGroup[] {
     if (a.isTag !== b.isTag) return a.isTag ? 1 : -1;
     if (a.label !== b.label) return a.label.localeCompare(b.label);
     if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
-    return 0;
+    return a.remoteName.localeCompare(b.remoteName);
   });
 
   return groups;

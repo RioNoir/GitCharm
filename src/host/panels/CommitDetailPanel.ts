@@ -34,7 +34,7 @@ export async function openCommitDetailPanel(
     commitInfo ??= { hash, shortHash: hash.slice(0, 7), message: '', authorName: '', authorEmail: '', authorDate: '', committerDate: '', parents: [] };
     [files, branches] = await Promise.all([
       repo.getCommitFiles(hash, commitInfo.parents),
-      repo.getBranchesContaining(hash).catch(() => ({ local: [], remote: [], tags: [] })),
+      repo.getRefsAt(hash).catch(() => ({ local: [], remote: [], tags: [] })),
     ]);
   } catch (e: unknown) {
     showGitError('commitDetail:load', e);
