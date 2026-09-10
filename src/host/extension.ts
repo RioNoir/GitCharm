@@ -275,7 +275,7 @@ export function activate(context: vscode.ExtensionContext): void {
   commitPanel.setBranchStatusBar(branchStatusBar);
   branchStatusBar.setLogPanel(logPanel);
 
-  const profileStatusBar = new ProfileStatusBar(profileService, manager);
+  const profileStatusBar = new ProfileStatusBar(profileService, manager, context.globalStorageUri.fsPath);
 
   const annotationController = new FileAnnotationController(manager, logPanel);
 

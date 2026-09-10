@@ -209,8 +209,8 @@ export type CommitToHostMsg =
   | { type: 'PULLREQUEST_REFRESH_REPO'; repoId: string }
   | { type: 'PULLREQUEST_LOAD_MORE'; repoId: string }
   | { type: 'PULLREQUEST_CREATE_PROMPT'; repoId: string }
-  | { type: 'PULLREQUEST_CONNECT'; repoId: string }
   | { type: 'PULLREQUEST_CONNECT_PAT_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_OPEN_ACCOUNT_PICKER'; repoId: string }
   | { type: 'PULLREQUEST_DISCONNECT'; repoId: string }
   | { type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE'; host: string; provider: ForgeProvider }
   | { type: 'PULLREQUEST_FILTERS_PROMPT'; repoId: string }

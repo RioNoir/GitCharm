@@ -346,7 +346,7 @@ const css = {
     overflow: 'hidden', flexShrink: 0,
   } as React.CSSProperties,
   iconBtnGrouped: {
-    background: 'transparent', border: 'none', padding: '4px 8px', cursor: 'pointer', color: 'inherit',
+    background: 'transparent', border: 'none', padding: '5px 8px', cursor: 'pointer', color: 'inherit',
     display: 'flex', alignItems: 'center',
   } as React.CSSProperties,
   iconBtnGroupDivider: {

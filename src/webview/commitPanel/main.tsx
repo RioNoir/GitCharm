@@ -834,12 +834,8 @@ function App() {
     send({ type: 'PULLREQUEST_OPEN_DETAIL', repoId, pr });
   }, [send]);
 
-  const handlePrConnectGitHub = useCallback((repoId: string) => {
-    send({ type: 'PULLREQUEST_CONNECT', repoId });
-  }, [send]);
-
-  const handlePrConnectPat = useCallback((repoId: string) => {
-    send({ type: 'PULLREQUEST_CONNECT_PAT_PROMPT', repoId });
+  const handlePrOpenAccountPicker = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_OPEN_ACCOUNT_PICKER', repoId });
   }, [send]);
 
   const handlePrRequestCreate = useCallback((repoId: string) => {
@@ -1916,8 +1912,7 @@ function App() {
               onToggleExpanded={handlePrToggleExpanded}
               onOpenInBrowser={handlePrOpenInBrowser}
               onOpenDetail={handlePrOpenDetail}
-              onConnectGitHub={handlePrConnectGitHub}
-              onConnectPat={handlePrConnectPat}
+              onOpenAccountPicker={handlePrOpenAccountPicker}
               onRequestCreate={handlePrRequestCreate}
               onRefresh={handlePrRefreshRepo}
               onSetHostOverride={handlePrSetHostOverride}

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { GitProfile } from '../git/GitProfileService';
 import { GitProfileService, LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
+import { resolveAvatarIconPath } from '../utils/avatarCache';
 
 export class ProfileStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -10,6 +11,7 @@ export class ProfileStatusBar implements vscode.Disposable {
   constructor(
     private readonly profileService: GitProfileService,
     private readonly manager?: WorkspaceGitManager,
+    private readonly avatarCacheDir?: string,
   ) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
     this.statusBarItem.command = 'gitcharm.manageProfiles';
@@ -21,6 +23,11 @@ export class ProfileStatusBar implements vscode.Disposable {
     );
 
     this.refresh();
+  }
+
+  private async avatarIconPath(email: string): Promise<vscode.Uri | undefined> {
+    if (!this.avatarCacheDir || !email.trim()) return undefined;
+    return resolveAvatarIconPath(email, this.avatarCacheDir);
   }
 
   private getActiveRepoPath(): string | undefined {
@@ -88,14 +95,17 @@ export class ProfileStatusBar implements vscode.Disposable {
     const namedProfiles = profiles.filter(p => !p.builtIn);
     if (namedProfiles.length > 0) {
       items.push(sep('PROFILES'));
-      for (const p of namedProfiles) {
+      const avatars = await Promise.all(namedProfiles.map(p => this.avatarIconPath(p.gitEmail)));
+      namedProfiles.forEach((p, i) => {
         const isActive = p.id === activeId;
+        const iconPath = avatars[i];
         items.push({
-          label: `${isActive ? '$(check)' : '$(account)'} ${p.name}`,
+          label: iconPath ? p.name : `${isActive ? '$(check)' : '$(account)'} ${p.name}`,
           description: `${p.gitName} <${p.gitEmail}>${isActive ? '  ·  active' : ''}`,
+          iconPath,
           action: () => this.showProfileActionMenu(p),
         });
-      }
+      });
       items.push(sep());
     }
 
@@ -333,12 +343,18 @@ export class ProfileStatusBar implements vscode.Disposable {
     }
 
     const activeId = this.profileService.getActiveProfileId();
+    const avatars = await Promise.all(profiles.map(p => this.avatarIconPath(p.gitEmail)));
     type Item = vscode.QuickPickItem & { id: string };
-    const items: Item[] = profiles.map(p => ({
-      label: `${p.id === activeId ? '$(check) ' : '$(account) '}${p.name}`,
-      description: `${p.gitName} <${p.gitEmail}>`,
-      id: p.id,
-    }));
+    const items: Item[] = profiles.map((p, i) => {
+      const iconPath = avatars[i];
+      const isActive = p.id === activeId;
+      return {
+        label: iconPath ? p.name : `${isActive ? '$(check) ' : '$(account) '}${p.name}`,
+        description: `${p.gitName} <${p.gitEmail}>${isActive ? '  ·  active' : ''}`,
+        iconPath,
+        id: p.id,
+      };
+    });
 
     const pick = await vscode.window.showQuickPick(items, {
       title: 'GitCharm — Switch Git Profile',

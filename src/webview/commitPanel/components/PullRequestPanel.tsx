@@ -23,8 +23,7 @@ interface Props {
   onToggleExpanded: (repoId: string) => void;
   onOpenInBrowser: (url: string) => void;
   onOpenDetail: (repoId: string, pr: PullRequestSummary) => void;
-  onConnectGitHub: (repoId: string) => void;
-  onConnectPat: (repoId: string) => void;
+  onOpenAccountPicker: (repoId: string) => void;
   onRequestCreate: (repoId: string) => void;
   onRefresh: (repoId: string) => void;
   onSetHostOverride: (host: string, provider: ForgeProvider) => void;
@@ -38,6 +37,10 @@ const SELECTABLE_PROVIDERS: { value: ForgeProvider; label: string }[] = [
   { value: 'bitbucket', label: 'Bitbucket Server' },
   { value: 'gitea', label: 'Gitea / Forgejo' },
 ];
+
+const FORGE_PROVIDER_LABELS: Record<ForgeProvider, string> = {
+  github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', gitea: 'Gitea', unknown: 'Unknown',
+};
 
 function stateIcon(state: PullRequestSummary['state']): { icon: string; color: string; label: string } {
   switch (state) {
@@ -124,10 +127,9 @@ function UnknownProviderPrompt({ repo, onSetHostOverride }: {
   );
 }
 
-function ConnectPrompt({ repo, onConnectGitHub, onConnectPat, onSetHostOverride }: {
+function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: {
   repo: RepoPullRequests;
-  onConnectGitHub: Props['onConnectGitHub'];
-  onConnectPat: Props['onConnectPat'];
+  onOpenAccountPicker: Props['onOpenAccountPicker'];
   onSetHostOverride: Props['onSetHostOverride'];
 }) {
   if (repo.connection.detectionFailed) {
@@ -137,10 +139,10 @@ function ConnectPrompt({ repo, onConnectGitHub, onConnectPat, onSetHostOverride 
   return (
     <div style={css.connectBox}>
       <Codicon name={isGitHub ? 'github' : 'plug'} style={{ fontSize: '20px', opacity: 0.5, marginBottom: '6px' }} />
-      <div style={css.connectText}>Not connected to {repo.connection.host || repo.connection.provider}.</div>
-      <button style={css.actionBtn} onClick={() => (isGitHub ? onConnectGitHub(repo.repoId) : onConnectPat(repo.repoId))}>
+      <div style={css.connectText}>Not connected to {repo.connection.host || FORGE_PROVIDER_LABELS[repo.connection.provider]}</div>
+      <button style={css.actionBtn} onClick={() => onOpenAccountPicker(repo.repoId)}>
         <Codicon name={isGitHub ? 'github' : 'key'} style={{ marginRight: '4px', fontSize: '12px' }} />
-        {isGitHub ? 'Connect to GitHub' : 'Connect with Personal Access Token'}
+        Connect…
       </button>
     </div>
   );
@@ -167,7 +169,7 @@ function RepoSkeleton() {
   );
 }
 
-function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onConnectGitHub, onConnectPat, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
+function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
   repo: RepoPullRequests;
   multiRepo: boolean;
   singleRepo?: boolean;
@@ -176,8 +178,7 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
   onToggleExpanded: Props['onToggleExpanded'];
   onOpenInBrowser: Props['onOpenInBrowser'];
   onOpenDetail: Props['onOpenDetail'];
-  onConnectGitHub: Props['onConnectGitHub'];
-  onConnectPat: Props['onConnectPat'];
+  onOpenAccountPicker: Props['onOpenAccountPicker'];
   onRequestCreate: Props['onRequestCreate'];
   onRefresh: Props['onRefresh'];
   onSetHostOverride: Props['onSetHostOverride'];
@@ -210,6 +211,9 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
             <InlineIconBtn icon="filter" title="Filter pull requests" onClick={() => onOpenFilters(repo.repoId)} />
           )}
           <InlineIconBtn icon="refresh" title="Refresh" onClick={() => onRefresh(repo.repoId)} />
+          {connected && !repo.connection.detectionFailed && (
+            <InlineIconBtn icon="account" title="Switch account" onClick={() => onOpenAccountPicker(repo.repoId)} />
+          )}
           {connected && (
             <InlineIconBtn icon="add" title="New Pull Request" onClick={() => onRequestCreate(repo.repoId)} />
           )}
@@ -228,7 +232,7 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
                 </div>
               )}
               {!connected ? (
-                <ConnectPrompt repo={repo} onConnectGitHub={onConnectGitHub} onConnectPat={onConnectPat} onSetHostOverride={onSetHostOverride} />
+                <ConnectPrompt repo={repo} onOpenAccountPicker={onOpenAccountPicker} onSetHostOverride={onSetHostOverride} />
               ) : repo.pullRequests.length === 0 ? (
                 <div style={css.empty}>No pull requests match the current filters</div>
               ) : (
@@ -269,7 +273,7 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
 
 export function PullRequestPanel({
   repos, loading, loadingMore, multiRepo, expandedRepoIds, onToggleExpanded,
-  onOpenInBrowser, onOpenDetail, onConnectGitHub, onConnectPat, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch,
+  onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch,
 }: Props) {
   useSkeletonStyle();
   return (
@@ -288,8 +292,7 @@ export function PullRequestPanel({
             onToggleExpanded={onToggleExpanded}
             onOpenInBrowser={onOpenInBrowser}
             onOpenDetail={onOpenDetail}
-            onConnectGitHub={onConnectGitHub}
-            onConnectPat={onConnectPat}
+            onOpenAccountPicker={onOpenAccountPicker}
             onRequestCreate={onRequestCreate}
             onRefresh={onRefresh}
             onSetHostOverride={onSetHostOverride}
@@ -367,13 +370,13 @@ const row = {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
   avatarImg: {
-    width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0,
+    width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0,
     border: '1px solid rgba(128,128,128,0.35)', boxSizing: 'border-box' as const,
   } as React.CSSProperties,
   avatarFallback: {
-    width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0,
+    width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '7px', fontWeight: 'bold' as const,
+    fontSize: '8px', fontWeight: 'bold' as const,
     background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
     border: '1px solid rgba(128,128,128,0.35)', boxSizing: 'border-box' as const,
   } as React.CSSProperties,

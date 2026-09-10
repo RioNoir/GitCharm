@@ -26,6 +26,9 @@ import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
 import type { ViewAndSortSettings } from '../types/settings';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
+import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
+import type { PatAccount } from '../pullRequests/PatCredentialStore';
+import { resolveAvatarIconPath, resolveGitHubUsernameAvatarIconPath } from '../utils/avatarCache';
 import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
 import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
 
@@ -355,6 +358,153 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests'): void {
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
+  }
+
+  /** Prompts for a token (and, for Bitbucket, an account email) and connects the repo with it as a new saved account. */
+  private async promptAndConnectPat(repoId: string): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const connection = await this.pullRequestManager.getConnectionStatus(repoId);
+    if (connection.detectionFailed) {
+      logWarn('pullrequest-connect-pat', `Cannot connect a token for repo ${repoId} — provider detection failed`);
+      vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
+      return;
+    }
+
+    let result: { ok: boolean; error?: string };
+    if (connection.provider === 'bitbucket') {
+      // Bitbucket Cloud retired App Passwords in favor of API Tokens, which authenticate
+      // via Basic auth using the Atlassian account email — so two prompts are needed here.
+      const email = await vscode.window.showInputBox({
+        prompt: 'Enter your Atlassian account email',
+        placeHolder: 'you@example.com',
+        title: 'Connect to Bitbucket — Account Email',
+      });
+      if (!email?.trim()) return;
+      const apiToken = await vscode.window.showInputBox({
+        prompt: 'Enter a Bitbucket API Token (id.atlassian.com → API tokens)',
+        placeHolder: 'Token is stored securely and never leaves this machine',
+        password: true,
+        title: 'Connect to Bitbucket — API Token',
+      });
+      if (!apiToken?.trim()) return;
+      result = await this.pullRequestManager.connectBitbucket(repoId, email.trim(), { email: email.trim(), apiToken: apiToken.trim() });
+    } else {
+      const token = await vscode.window.showInputBox({
+        prompt: `Enter a Personal Access Token for ${connection.host}`,
+        placeHolder: 'Token is stored securely and never leaves this machine',
+        password: true,
+        title: `Connect to ${forgeProviderLabel(connection.provider)} — ${connection.host}`,
+      });
+      if (!token?.trim()) return;
+      const label = await vscode.window.showInputBox({
+        prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
+        placeHolder: connection.host,
+        title: `Connect to ${forgeProviderLabel(connection.provider)} — Account Label`,
+      });
+      result = await this.pullRequestManager.connectWithPat(repoId, token.trim(), label?.trim() || connection.host);
+    }
+
+    if (!result.ok) {
+      vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
+      return;
+    }
+    vscode.window.showInformationMessage(`Connected to ${connection.host}`);
+    logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
+    const repos = await this.pullRequestManager.getAllPullRequests(true);
+    this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+  }
+
+  /**
+   * Opens a QuickPick letting the user pick an already-saved account for this repo's
+   * detected provider, or connect a new one. Shown both for a first-time connection and
+   * to switch the account an already-connected repo uses.
+   */
+  private async openPullRequestAccountPicker(repoId: string): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const connection = await this.pullRequestManager.getConnectionStatus(repoId);
+    if (connection.detectionFailed) {
+      vscode.window.showWarningMessage('Select a Git forge for this host before connecting an account.');
+      return;
+    }
+
+    const CONNECT_NEW = Symbol('connect-new');
+
+    if (connection.provider === 'github') {
+      const accounts = await this.pullRequestManager.listGitHubAccounts();
+      const boundId = this.pullRequestManager.getGitHubAccountBinding(repoId);
+      const avatars = await Promise.all(accounts.map(a => resolveGitHubUsernameAvatarIconPath(a.label, this.globalStoragePath)));
+      const picked = await vscode.window.showQuickPick(
+        [
+          ...accounts.map((a, i) => {
+            const isBound = a.id === boundId;
+            const iconPath = avatars[i];
+            return {
+              label: iconPath ? a.label : `${isBound ? '$(check) ' : ''}${a.label}`,
+              description: isBound ? 'currently assigned' : undefined,
+              iconPath,
+              accountId: a.id as string | typeof CONNECT_NEW,
+            };
+          }),
+          { label: '$(add) Connect new account…', accountId: CONNECT_NEW },
+        ],
+        { title: 'GitHub Account', placeHolder: `Select a GitHub account for ${connection.host}` }
+      );
+      if (!picked) return;
+
+      if (picked.accountId === CONNECT_NEW) {
+        try {
+          // clearSessionPreference is what actually prompts VS Code's account chooser —
+          // forceNewSession alone just re-authenticates whichever account is already preferred.
+          await vscode.authentication.getSession('github', ['repo'], { createIfNone: true, clearSessionPreference: true });
+        } catch (e: unknown) {
+          logWarn('pullrequest-account-picker', formatGitError(e));
+          return;
+        }
+        this.pullRequestManager.invalidate();
+      } else {
+        await this.pullRequestManager.assignGitHubAccount(repoId, picked.accountId as string);
+      }
+      const repos = await this.pullRequestManager.getAllPullRequests(true);
+      this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+      return;
+    }
+
+    const options = await this.pullRequestManager.getAccountOptions(repoId);
+    const accounts = options?.accounts ?? [];
+    const avatars = await Promise.all(accounts.map(a => this.resolveAccountAvatar(a)));
+    const picked = await vscode.window.showQuickPick(
+      [
+        ...accounts.map((a, i) => {
+          const isBound = a.id === options?.boundAccountId;
+          const iconPath = avatars[i];
+          return {
+            label: iconPath ? a.label : `${isBound ? '$(check) ' : ''}${a.label}`,
+            description: isBound ? 'currently assigned' : undefined,
+            iconPath,
+            accountId: a.id as string | typeof CONNECT_NEW,
+          };
+        }),
+        { label: '$(add) Connect new account…', accountId: CONNECT_NEW },
+      ],
+      { title: `${forgeProviderLabel(connection.provider)} Account`, placeHolder: `Select an account for ${connection.host}` }
+    );
+    if (!picked) return;
+
+    if (picked.accountId === CONNECT_NEW) {
+      await this.promptAndConnectPat(repoId);
+    } else {
+      await this.pullRequestManager.assignAccount(repoId, picked.accountId as string);
+      const repos = await this.pullRequestManager.getAllPullRequests(true);
+      this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+    }
+  }
+
+  /** Resolves an avatar for a saved PAT account — only Bitbucket accounts have a known email; other providers fall back to no avatar (codicon shown instead). */
+  private async resolveAccountAvatar(account: PatAccount): Promise<vscode.Uri | undefined> {
+    if (!this.pullRequestManager) return undefined;
+    const email = await this.pullRequestManager.getAccountEmail(account);
+    if (!email) return undefined;
+    return resolveAvatarIconPath(email, this.globalStoragePath);
   }
 
   /** Invalidates the PR cache and asks the webview to re-request the list with its current filters. */
@@ -2509,17 +2659,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
-      case 'PULLREQUEST_CONNECT': {
-        try {
-          await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
-        } catch (e: unknown) {
-          logWarn('pullrequest-connect', formatGitError(e));
-        }
-        if (this.pullRequestManager) {
-          this.pullRequestManager.invalidate();
-          const repos = await this.pullRequestManager.getAllPullRequests(true);
-          this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
-        }
+      case 'PULLREQUEST_OPEN_ACCOUNT_PICKER': {
+        await this.openPullRequestAccountPicker(msg.repoId);
         break;
       }
 
@@ -2534,56 +2675,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'PULLREQUEST_CONNECT_PAT_PROMPT': {
-        if (!this.pullRequestManager) break;
-        const connection = await this.pullRequestManager.getConnectionStatus(msg.repoId);
-        if (connection.detectionFailed) {
-          logWarn('pullrequest-connect-pat', `Cannot connect a token for repo ${msg.repoId} — provider detection failed`);
-          vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
-          break;
-        }
-
-        let result: { ok: boolean; error?: string };
-        if (connection.provider === 'bitbucket') {
-          // Bitbucket Cloud retired App Passwords in favor of API Tokens, which authenticate
-          // via Basic auth using the Atlassian account email — so two prompts are needed here.
-          const email = await vscode.window.showInputBox({
-            prompt: 'Enter your Atlassian account email',
-            placeHolder: 'you@example.com',
-            title: 'Connect to Bitbucket — Account Email',
-          });
-          if (!email?.trim()) break;
-          const apiToken = await vscode.window.showInputBox({
-            prompt: 'Enter a Bitbucket API Token (id.atlassian.com → API tokens)',
-            placeHolder: 'Token is stored securely and never leaves this machine',
-            password: true,
-            title: 'Connect to Bitbucket — API Token',
-          });
-          if (!apiToken?.trim()) break;
-          result = await this.pullRequestManager.connectBitbucket(msg.repoId, email.trim(), { email: email.trim(), apiToken: apiToken.trim() });
-        } else {
-          const token = await vscode.window.showInputBox({
-            prompt: `Enter a Personal Access Token for ${connection.host}`,
-            placeHolder: 'Token is stored securely and never leaves this machine',
-            password: true,
-            title: `Connect to ${connection.provider} — ${connection.host}`,
-          });
-          if (!token?.trim()) break;
-          const label = await vscode.window.showInputBox({
-            prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
-            placeHolder: connection.host,
-            title: `Connect to ${connection.provider} — Account Label`,
-          });
-          result = await this.pullRequestManager.connectWithPat(msg.repoId, token.trim(), label?.trim() || connection.host);
-        }
-
-        if (!result.ok) {
-          vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
-          break;
-        }
-        vscode.window.showInformationMessage(`Connected to ${connection.host}`);
-        logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
-        const repos = await this.pullRequestManager.getAllPullRequests(true);
-        this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        await this.promptAndConnectPat(msg.repoId);
         break;
       }
 

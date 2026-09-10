@@ -186,16 +186,13 @@ export class PullRequestManager {
   }
 
   /**
-   * Picks which saved PAT account a repo should use: an explicit binding wins; otherwise, if
-   * exactly one account is saved for that (provider, host), it's used automatically (keeps the
-   * single-account case working with no setup); with zero or multiple accounts and no binding,
-   * no account can be chosen automatically — the caller must assign one explicitly.
+   * Picks which saved PAT account a repo should use: only an explicit binding counts — even
+   * with exactly one account saved for that (provider, host), the repo stays unconnected until
+   * the user assigns one via the account picker. No silent auto-selection.
    */
-  private resolveAccountId(repoId: string, provider: ForgeProvider, host: string): string | undefined {
+  private resolveAccountId(repoId: string, _provider: ForgeProvider, _host: string): string | undefined {
     const bound = this.bindings()[repoId];
-    if (bound && this.patStore.getAccount(bound)) return bound;
-    const candidates = this.patStore.listAccounts(provider, host);
-    return candidates.length === 1 ? candidates[0].id : undefined;
+    return bound && this.patStore.getAccount(bound) ? bound : undefined;
   }
 
   private makeProvider(repoId: string, parsed: NonNullable<ReturnType<typeof parseRemoteUrl>>) {
@@ -401,6 +398,17 @@ export class PullRequestManager {
 
   listAccounts(): PatAccount[] {
     return this.patStore.listAccounts();
+  }
+
+  async renameAccount(accountId: string, label: string): Promise<void> {
+    await this.patStore.renameAccount(accountId, label);
+  }
+
+  /** The account email, when known — only Bitbucket accounts store one (used for avatar resolution). */
+  async getAccountEmail(account: PatAccount): Promise<string | undefined> {
+    if (account.provider !== 'bitbucket') return undefined;
+    const creds = await this.patStore.getBitbucketCredentials(account.id);
+    return creds?.email;
   }
 
   /** Permanently deletes a saved account and unbinds every repo that was using it. */

@@ -1,5 +1,17 @@
 export type ForgeProvider = 'github' | 'gitlab' | 'bitbucket' | 'gitea' | 'unknown';
 
+const FORGE_PROVIDER_LABELS: Record<ForgeProvider, string> = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
+  gitea: 'Gitea',
+  unknown: 'Unknown',
+};
+
+export function forgeProviderLabel(provider: ForgeProvider): string {
+  return FORGE_PROVIDER_LABELS[provider];
+}
+
 export interface ParsedRemote {
   provider: ForgeProvider;
   host: string;

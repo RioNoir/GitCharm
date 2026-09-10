@@ -10,6 +10,8 @@ import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
 import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
+import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
+import { resolveAvatarIconPath } from '../utils/avatarCache';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -672,28 +674,44 @@ export function registerCommands(
     vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', async () => {
       if (!pullRequestManager || !manager) return;
 
-      const action = await vscode.window.showQuickPick(
-        [
-          { label: '$(add) Add provider account', action: 'add' as const },
-          { label: '$(repo) Assign account to a repo', action: 'assign' as const },
-          { label: '$(trash) Remove account', action: 'remove' as const },
-        ],
-        { title: 'Manage Pull Request Credentials', placeHolder: 'What do you want to do?' }
+      const ADD_NEW = Symbol('add-new');
+      const accounts = pullRequestManager.listAccounts();
+      const grouped = [...accounts].sort((a, b) =>
+        forgeProviderLabel(a.provider).localeCompare(forgeProviderLabel(b.provider)) || a.label.localeCompare(b.label)
       );
-      if (!action) return;
 
-      if (action.action === 'add') {
+      const avatars = await Promise.all(grouped.map(async account => {
+        const email = await pullRequestManager.getAccountEmail(account);
+        return email ? resolveAvatarIconPath(email, context.globalStorageUri.fsPath) : undefined;
+      }));
+
+      const items: (vscode.QuickPickItem & { accountId?: string | typeof ADD_NEW })[] = [];
+      let lastProvider: string | undefined;
+      grouped.forEach((account, i) => {
+        if (account.provider !== lastProvider) {
+          items.push({ label: forgeProviderLabel(account.provider), kind: vscode.QuickPickItemKind.Separator });
+          lastProvider = account.provider;
+        }
+        items.push({ label: account.label, description: account.host, iconPath: avatars[i], accountId: account.id });
+      });
+      items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+      items.push({ label: '$(add) Add account…', accountId: ADD_NEW });
+
+      const picked = await vscode.window.showQuickPick(items, { title: 'Pull Request Accounts', placeHolder: 'Select an account, or add a new one' });
+      if (!picked || !picked.accountId) return;
+
+      if (picked.accountId === ADD_NEW) {
         const provider = await vscode.window.showQuickPick(
           [
             { label: 'GitLab', provider: 'gitlab' as const },
             { label: 'Bitbucket Cloud', provider: 'bitbucket' as const },
             { label: 'Gitea / Forgejo', provider: 'gitea' as const },
           ],
-          { title: 'Add Provider Account', placeHolder: 'Select a forge (GitHub uses your VS Code account, no token needed)' }
+          { title: 'Add Account', placeHolder: 'Select a forge (GitHub uses your VS Code account, no token needed)' }
         );
         if (!provider) return;
         const host = await vscode.window.showInputBox({
-          title: 'Add Provider Account — Host',
+          title: 'Add Account — Host',
           prompt: 'Enter the host for this account',
           placeHolder: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : 'gitea.example.com',
           value: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : undefined,
@@ -702,18 +720,18 @@ export function registerCommands(
 
         let email: string | undefined;
         if (provider.provider === 'bitbucket') {
-          email = await vscode.window.showInputBox({ title: 'Add Provider Account — Account Email', prompt: 'Enter your Atlassian account email', placeHolder: 'you@example.com' });
+          email = await vscode.window.showInputBox({ title: 'Add Account — Account Email', prompt: 'Enter your Atlassian account email', placeHolder: 'you@example.com' });
           if (!email?.trim()) return;
         }
         const apiToken = await vscode.window.showInputBox({
-          title: `Add Provider Account — ${provider.provider === 'bitbucket' ? 'API Token' : 'Personal Access Token'}`,
+          title: `Add Account — ${provider.provider === 'bitbucket' ? 'API Token' : 'Personal Access Token'}`,
           prompt: `Enter a ${provider.provider === 'bitbucket' ? 'Bitbucket API Token' : 'Personal Access Token'} for ${host.trim()}`,
           placeHolder: 'Token is stored securely and never leaves this machine',
           password: true,
         });
         if (!apiToken?.trim()) return;
         const label = await vscode.window.showInputBox({
-          title: 'Add Provider Account — Label',
+          title: 'Add Account — Label',
           prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
           placeHolder: email?.trim() || host.trim(),
         });
@@ -726,81 +744,42 @@ export function registerCommands(
           vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
           return;
         }
-        vscode.window.showInformationMessage(`Added account for ${host.trim()}. Use "Assign account to a repo" to start using it.`);
+        vscode.window.showInformationMessage(`Added account for ${host.trim()}. Assign it to a repo from the Pull Requests panel.`);
         return;
       }
 
-      if (action.action === 'assign') {
-        const metas = manager.getRepoMetas().filter(m => (m.depth ?? 0) === 0 && !m.isWorktree);
-        const repoPicked = await vscode.window.showQuickPick(
-          metas.map(m => ({ label: m.name, repoId: m.id })),
-          { title: 'Assign Account to a Repo', placeHolder: 'Select a repo' }
-        );
-        if (!repoPicked) return;
+      // An existing account was picked — offer rename/remove.
+      const account = accounts.find(a => a.id === picked.accountId);
+      if (!account) return;
 
-        const connection = await pullRequestManager.getConnectionStatus(repoPicked.repoId);
-        if (connection.provider === 'github') {
-          const githubAccounts = await pullRequestManager.listGitHubAccounts();
-          if (githubAccounts.length === 0) {
-            vscode.window.showInformationMessage('No GitHub accounts are signed into VS Code yet — use the Accounts menu (bottom left) to add one.');
-            return;
-          }
-          const boundId = pullRequestManager.getGitHubAccountBinding(repoPicked.repoId);
-          const githubPicked = await vscode.window.showQuickPick(
-            githubAccounts.map(a => ({
-              label: `${a.id === boundId ? '$(check) ' : ''}${a.label}`,
-              description: a.id === boundId ? 'currently assigned' : undefined,
-              accountId: a.id,
-            })),
-            { title: `Assign GitHub Account — ${repoPicked.label}`, placeHolder: 'Select a GitHub account signed into VS Code' }
-          );
-          if (!githubPicked) return;
-          await pullRequestManager.assignGitHubAccount(repoPicked.repoId, githubPicked.accountId);
-          await commitPanel.requestPullRequestRefresh();
-          vscode.window.showInformationMessage(`${repoPicked.label} now uses the "${githubPicked.label.replace('$(check) ', '')}" GitHub account.`);
-          return;
-        }
-
-        const options = await pullRequestManager.getAccountOptions(repoPicked.repoId);
-        if (!options) {
-          vscode.window.showInformationMessage('Unable to determine a Git forge for this repo — set one via the provider picker in the Pull Requests panel first.');
-          return;
-        }
-        if (options.accounts.length === 0) {
-          vscode.window.showInformationMessage(`No accounts saved for ${options.host} yet — use "Add provider account" first.`);
-          return;
-        }
-        const accountPicked = await vscode.window.showQuickPick(
-          options.accounts.map(a => ({
-            label: `${a.id === options.boundAccountId ? '$(check) ' : ''}${a.label}`,
-            description: a.id === options.boundAccountId ? 'currently assigned' : undefined,
-            accountId: a.id,
-          })),
-          { title: `Assign Account — ${repoPicked.label}`, placeHolder: `Select an account for ${options.host}` }
-        );
-        if (!accountPicked) return;
-        await pullRequestManager.assignAccount(repoPicked.repoId, accountPicked.accountId);
-        await commitPanel.requestPullRequestRefresh();
-        vscode.window.showInformationMessage(`${repoPicked.label} now uses the "${options.accounts.find(a => a.id === accountPicked.accountId)?.label}" account.`);
-        return;
-      }
-
-      // action.action === 'remove'
-      const accounts = pullRequestManager.listAccounts();
-      if (accounts.length === 0) {
-        vscode.window.showInformationMessage('No Personal Access Token accounts are currently stored (GitHub accounts are managed via the Accounts menu, bottom left).');
-        return;
-      }
-      const removePicked = await vscode.window.showQuickPick(
-        accounts.map(a => ({ label: a.label, description: `${a.host} (${a.provider})`, accountId: a.id })),
-        { title: 'Remove Account', placeHolder: 'Select a Personal Access Token account to remove' }
+      const accountAction = await vscode.window.showQuickPick(
+        [
+          { label: '$(edit) Rename', action: 'rename' as const },
+          { label: '$(trash) Remove', action: 'remove' as const },
+        ],
+        { title: account.label, placeHolder: `${forgeProviderLabel(account.provider)} — ${account.host}` }
       );
-      if (!removePicked) return;
-      const confirm = await vscode.window.showWarningMessage(`Remove the "${removePicked.label}" account? Any repo assigned to it will be disconnected.`, { modal: true }, 'Remove');
+      if (!accountAction) return;
+
+      if (accountAction.action === 'rename') {
+        const newLabel = await vscode.window.showInputBox({
+          title: 'Rename Account',
+          prompt: 'Enter a new label for this account',
+          value: account.label,
+        });
+        if (!newLabel?.trim() || newLabel.trim() === account.label) return;
+        await pullRequestManager.renameAccount(account.id, newLabel.trim());
+        await commitPanel.requestPullRequestRefresh();
+        vscode.window.showInformationMessage(`Renamed to "${newLabel.trim()}".`);
+        return;
+      }
+
+      // accountAction.action === 'remove'
+      const confirm = await vscode.window.showWarningMessage(`Remove the "${account.label}" account? Any repo assigned to it will be disconnected.`, { modal: true }, 'Remove');
       if (confirm !== 'Remove') return;
-      await pullRequestManager.removeAccount(removePicked.accountId);
+      await pullRequestManager.removeAccount(account.id);
       await commitPanel.requestPullRequestRefresh();
-      vscode.window.showInformationMessage(`Removed "${removePicked.label}".`);
+      vscode.window.showInformationMessage(`Removed "${account.label}".`);
     }),
 
     // ── File History ──────────────────────────────────────────────────────────

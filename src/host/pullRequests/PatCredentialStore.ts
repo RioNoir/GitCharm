@@ -58,6 +58,10 @@ export class PatCredentialStore {
     return id;
   }
 
+  async renameAccount(accountId: string, label: string): Promise<void> {
+    await this.saveIndex(this.index().map(a => (a.id === accountId ? { ...a, label } : a)));
+  }
+
   async removeAccount(accountId: string): Promise<void> {
     const account = this.getAccount(accountId);
     if (!account) return;
