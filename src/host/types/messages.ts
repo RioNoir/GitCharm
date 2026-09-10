@@ -76,8 +76,9 @@ export interface UnpushedCommit {
 
 export type HostToCommitMsg =
   | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } }
+  | { type: 'COMMIT_PERSISTED_MESSAGE_RESULT'; message: string }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
-  | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
+  | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string; succeededRepoIds?: string[] }
   | { type: 'COMMIT_BRANCHES_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'COMMIT_REMOTES_RESULT'; requestId: string; remotes: string[]; error?: string }
   | { type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT'; requestId: string; message: string; error?: string }
@@ -115,6 +116,7 @@ export type HostToCommitMsg =
 
 export type CommitToHostMsg =
   | { type: 'COMMIT_REQUEST_STATUS' }
+  | { type: 'COMMIT_PERSIST_MESSAGE'; message: string }
   | { type: 'COMMIT_REQUEST_DIFF'; requestId: string; repoId: string; filePath: string; staged: boolean }
   | { type: 'COMMIT_STAGE_FILES'; requestId: string; repoId: string; paths: string[] }
   | { type: 'COMMIT_UNSTAGE_FILES'; requestId: string; repoId: string; paths: string[] }

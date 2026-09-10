@@ -34,6 +34,8 @@ import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
+const COMMIT_MESSAGE_WORKSPACE_KEY = 'gitcharm.commitPanel.draftMessage';
+
 /**
  * Asks — in the command bar — how to reconcile branches that have diverged from their
  * upstream. When the divergence looks like rewritten history (amend, rebase, squash) the
@@ -113,17 +115,39 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   handleUndockedMessage(msg: CommitToHostMsg, _provider: UndockedPanelProvider): void {
     this.activeReplyTarget = 'undocked';
-    this.handleMessage(msg, undefined as unknown as vscode.Webview).finally(() => { this.activeReplyTarget = 'sidebar'; });
+    this.handleMessage(msg, undefined as unknown as vscode.Webview)
+      .catch(e => {
+        logError('handle-message', formatGitError(e), getRawErrorDetail(e));
+        if ('requestId' in msg) {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId as string, ok: false, error: formatGitError(e) });
+        }
+      })
+      .finally(() => { this.activeReplyTarget = 'sidebar'; });
   }
 
   /**
    * Seeds the commit box with the message git prepared for an in-progress merge or
    * squash (or the configured commit.template), matching VS Code's Source Control
    * input. Only fills an empty box, so a message the user typed is never clobbered.
+   *
+   * Checks every repo for an actual merge/squash message before falling back to any
+   * repo's commit.template — otherwise a plain template configured on one repo could
+   * preempt a real in-progress merge in another.
    */
   async seedCommitMessage(): Promise<void> {
-    for (const meta of this.manager.getRepoMetas()) {
-      const message = await this.manager.getRepo(meta.id)?.getInputTemplate().catch(() => '');
+    const repos = this.manager.getRepoMetas()
+      .map(meta => this.manager.getRepo(meta.id))
+      .filter((repo): repo is NonNullable<typeof repo> => !!repo);
+
+    for (const repo of repos) {
+      const message = await repo.getMergeSquashMessage().catch(() => '');
+      if (message) {
+        this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
+        return;
+      }
+    }
+    for (const repo of repos) {
+      const message = await repo.getInputTemplate().catch(() => '');
       if (message) {
         this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
         return;
@@ -244,7 +268,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     );
 
     webviewView.webview.onDidReceiveMessage((msg: CommitToHostMsg) =>
-      this.handleMessage(msg, webviewView.webview)
+      this.handleMessage(msg, webviewView.webview).catch(e => {
+        logError('handle-message', formatGitError(e), getRawErrorDetail(e));
+        if ('requestId' in msg) {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId as string, ok: false, error: formatGitError(e) });
+        }
+      })
     );
 
     // Refresh status whenever the panel becomes visible (e.g. user switches to it)
@@ -260,6 +289,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
     // Send view/sort settings first so the webview can render the file tree with the right mode from the start
     this.postViewAndSortSettings();
+
+    // Restore a commit message draft scoped to this workspace — unlike localStorage,
+    // workspaceState never leaks a draft between unrelated projects on the same machine.
+    const persistedMessage = this.workspaceState?.get<string>(COMMIT_MESSAGE_WORKSPACE_KEY, '') ?? '';
+    if (persistedMessage) this.post({ type: 'COMMIT_PERSISTED_MESSAGE_RESULT', message: persistedMessage });
 
     // Sync current state — send changelists first so setStatus can read the correct viewMode
     this.manager.getAllStatuses().then(async status => {
@@ -706,6 +740,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(msg: CommitToHostMsg, webview: vscode.Webview): Promise<void> {
     switch (msg.type) {
+      case 'COMMIT_PERSIST_MESSAGE': {
+        await this.workspaceState?.update(COMMIT_MESSAGE_WORKSPACE_KEY, msg.message || undefined);
+        break;
+      }
+
       case 'COMMIT_REQUEST_STATUS': {
         const [repos, status, iconTheme] = await Promise.all([
           Promise.resolve(this.manager.getRepoMetas()),
@@ -876,6 +915,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           { location: vscode.ProgressLocation.Notification, title: `Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
           async () => {
             const errors: string[] = [];
+            const succeededRepoIds: string[] = [];
             // Commit submodules before parent repos so the parent's pointer update
             // always refers to an already-committed submodule state.
             const repoMetas = this.manager.getRepoMetas();
@@ -896,15 +936,16 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                 const creds = await this.getCommitCredentials(repo.rootPath);
                 await repo.commit(r.message, r.amend, creds, s => this.profileService?.trace(s));
                 if (msg.andPush) await repo.push();
+                succeededRepoIds.push(r.repoId);
               } catch (e: unknown) {
                 errors.push(`${r.repoId.split('/').pop()}: ${formatGitError(e)}`);
                 logError(`commit-multi:${r.repoId}`, formatGitError(e), getRawErrorDetail(e));
               }
             }
             if (errors.length > 0) {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n') });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n'), succeededRepoIds });
             } else {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, succeededRepoIds });
               logInfo('commit-multi', `Committed ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}${msg.andPush ? ' and pushed' : ''}`);
               this.logProvider?.refresh();
             }

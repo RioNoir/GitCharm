@@ -1164,13 +1164,8 @@ export class GitService {
     })();
   }
 
-  /**
-   * The message the commit box should seed itself with when empty — the same sources
-   * VS Code's Source Control input uses: the message git prepared for an in-progress
-   * merge or squash, otherwise the configured commit.template. Empty when there is
-   * nothing to seed.
-   */
-  async getInputTemplate(): Promise<string> {
+  /** The message git prepared for an in-progress merge or squash, or '' if none. */
+  async getMergeSquashMessage(): Promise<string> {
     const dir = await this.gitDir();
     for (const name of ['MERGE_MSG', 'SQUASH_MSG']) {
       let raw: string;
@@ -1182,6 +1177,18 @@ export class GitService {
       const message = stripCommitComments(raw);
       if (message) return message;
     }
+    return '';
+  }
+
+  /**
+   * The message the commit box should seed itself with when empty — the same sources
+   * VS Code's Source Control input uses: the message git prepared for an in-progress
+   * merge or squash, otherwise the configured commit.template. Empty when there is
+   * nothing to seed.
+   */
+  async getInputTemplate(): Promise<string> {
+    const mergeSquash = await this.getMergeSquashMessage();
+    if (mergeSquash) return mergeSquash;
     return this.commitTemplate();
   }
 
@@ -1208,15 +1215,15 @@ export class GitService {
       .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
   }
 
+  // Raw git rather than vsRepo() — getMergeRebaseState() (which the panel uses to decide
+  // whether Abort should even be offered) reads the git dir directly, and VS Code's API
+  // state can disagree with it (e.g. once conflicts are staged); using the same source
+  // for both the check and the action avoids Abort silently no-op'ing against stale state.
   async abortMerge(): Promise<void> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.mergeAbort(); return; }
     await this.git.raw(['merge', '--abort']);
   }
 
   async abortRebase(): Promise<void> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.rebase('--abort' as string); return; }
     await this.git.raw(['rebase', '--abort']);
   }
 

@@ -311,6 +311,17 @@ function App() {
   // The in-flight commit, so its message is only cleared once the commit succeeded.
   const pendingCommitRef = useRef<{ requestId: string; repoIds: string[] } | null>(null);
 
+  // Persist the commit message draft to workspaceState (host-side), debounced so typing
+  // doesn't post a message per keystroke. Scoped per-workspace by the host, unlike the
+  // webview's shared-origin localStorage.
+  const commitMessage = useCommitStore(s => s.commitMessage);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      getVsCodeApi().postMessage({ type: 'COMMIT_PERSIST_MESSAGE', message: commitMessage } satisfies CommitToHostMsg);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [commitMessage]);
+
   // ── Vscode mode: repo selection for commit ───────────────────────────────
   const [vscodeSelectedRepos, setVscodeSelectedRepos] = useState<Set<string>>(new Set());
 
@@ -529,11 +540,14 @@ function App() {
           if (pendingCommitRef.current?.requestId === msg.requestId) {
             const { repoIds } = pendingCommitRef.current;
             pendingCommitRef.current = null;
-            // Only a successful commit consumes the message — a rejecting hook or a
-            // missing identity must not cost the user what they typed.
+            // Only repos that actually committed consume the message/amend flag — a
+            // rejecting hook or missing identity in one repo of a multi-repo commit
+            // must not cost the user what they typed for the repos that did succeed.
             if (msg.ok) {
               store.setCommitMessage('');
               repoIds.forEach(id => store.clearAmend(id));
+            } else if (msg.succeededRepoIds?.length) {
+              msg.succeededRepoIds.forEach(id => store.clearAmend(id));
             }
           }
           if (msg.ok) {
@@ -557,6 +571,9 @@ function App() {
         case 'COMMIT_SET_MESSAGE':
           if (msg.ifEmpty && useCommitStore.getState().commitMessage.trim()) break;
           store.setCommitMessage(msg.message);
+          break;
+        case 'COMMIT_PERSISTED_MESSAGE_RESULT':
+          if (!useCommitStore.getState().commitMessage.trim()) store.setCommitMessage(msg.message);
           break;
         case 'SHELVE_LIST_RESULT':
           setShelveLoading(prev => ({ ...prev, [msg.repoId]: false }));
