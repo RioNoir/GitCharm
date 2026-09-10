@@ -34,7 +34,7 @@
     "workspaceContains:**/.git",
     "onStartupFinished",
     "onWebviewPanel:gitcharm.undocked",
-    "onWebviewPanel:gitcharmCommitDetail",
+    "onWebviewPanel:gitcharm.commitFullDetail",
     "onWebviewPanel:gitcharm.pullRequestDetail"
   ],
   "main": "./out/host/extension.js",

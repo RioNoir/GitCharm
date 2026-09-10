@@ -375,7 +375,7 @@ const css = {
   approveBtn: {
     display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px', borderRadius: '4px',
     background: '#3fb950', color: '#fff',
-    border: 'none', cursor: 'pointer', flexShrink: 0, fontWeight: 600,
+    border: 'none', cursor: 'pointer', flexShrink: 0,
   } as React.CSSProperties,
   mergeSplit: {
     display: 'flex', borderRadius: '4px', overflow: 'hidden',
@@ -383,7 +383,7 @@ const css = {
   } as React.CSSProperties,
   mergeMainBtn: {
     display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px',
-    background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: 600,
+    background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
   mergeDivider: {
     width: '1px', alignSelf: 'stretch' as const, margin: '4px 0', background: '#fff', opacity: 0.3,

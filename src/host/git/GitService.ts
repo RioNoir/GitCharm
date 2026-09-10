@@ -496,6 +496,17 @@ export class GitService {
     return commits;
   }
 
+  /** A single commit as a full `CommitNode` (including `refs`, unlike `getCommitMeta`) — works for root commits too, unlike `getCommitsBetween(hash~1, hash)` which has no base to diff against. */
+  async getCommitNode(hash: string): Promise<CommitNode | null> {
+    const raw = await this.git.raw([
+      'log', '--max-count=1',
+      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s',
+      '--decorate=full', '--date=iso-strict', '--abbrev=8',
+      hash,
+    ]);
+    return this._parseLogOutput(raw)[0] ?? null;
+  }
+
   /** Commits reachable from `head` but not from `base` (i.e. `git log base..head`) — used to preview what a PR from `head` into `base` would bring in, before the PR exists. No unpushed/incoming marking (that's specific to local-branch-vs-upstream, not a branch-vs-branch comparison). */
   async getCommitsBetween(base: string, head: string, limit = 200): Promise<CommitNode[]> {
     const raw = await this.git.raw([

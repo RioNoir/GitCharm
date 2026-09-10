@@ -14,6 +14,7 @@ const apps = [
   { name: 'undockedPanel',     entry: 'src/webview/undockedPanel/main.tsx' },
   { name: 'pullRequestCreate', entry: 'src/webview/pullRequestCreate/main.tsx' },
   { name: 'pullRequestDetail', entry: 'src/webview/pullRequestDetail/main.tsx' },
+  { name: 'commitFullDetail',  entry: 'src/webview/commitFullDetail/main.tsx' },
 ];
 
 /** @returns {import('esbuild').BuildOptions} */

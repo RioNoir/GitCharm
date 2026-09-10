@@ -163,6 +163,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       this.postChangelistsUpdate(status);
       this.broadcastCommit({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
       await postAllBranches();
+
+      const worktreeRepos = await this.manager.getAllWorktrees();
+      this.broadcastCommit({ type: 'WORKTREE_LIST_RESULT', repos: worktreeRepos });
+
+      this.requestPullRequestRefresh();
     });
 
     this.manager.onWorktreeChange(async () => {
@@ -1766,8 +1771,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'PUSH_OPEN_DETAIL': {
-        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
-        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
         break;
       }
 
@@ -1795,8 +1800,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'PUSH_EXPLAIN_COMMIT': {
-        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
-        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
         break;
       }
 

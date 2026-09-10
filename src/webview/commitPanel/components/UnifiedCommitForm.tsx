@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { RepoMeta, RepoStatus } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
@@ -41,7 +41,7 @@ interface Props {
   onOpenProfiles: () => void;
 }
 
-interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; }
+interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; separatorAfter?: boolean; }
 interface DropdownButtonProps {
   enabled: boolean;
   icon: string;
@@ -104,6 +104,11 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
     userSelect: 'none',
   };
 
+  const dropSeparatorStyle: React.CSSProperties = {
+    height: '1px', margin: '3px 0',
+    background: 'var(--vscode-menu-separatorBackground, var(--vscode-panel-border))',
+  };
+
   return (
     <div ref={ref} style={{ position: 'relative', display: 'flex', ...(fullWidth ? { width: '100%' } : {}), opacity: enabled ? 1 : 0.4 }}>
       <div style={{
@@ -150,7 +155,10 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
           zIndex: 9999, minWidth: '150px', padding: '3px 0',
         }}>
           {items.map(item => (
-            <DropItem key={item.label} icon={item.icon} label={item.label} itemStyle={dropItemStyle} onSelect={() => { item.onSelect(); setOpen(false); }} />
+            <React.Fragment key={item.label}>
+              <DropItem icon={item.icon} label={item.label} itemStyle={dropItemStyle} onSelect={() => { item.onSelect(); setOpen(false); }} />
+              {item.separatorAfter && <div style={dropSeparatorStyle} />}
+            </React.Fragment>
           ))}
         </div>
       )}
@@ -206,6 +214,37 @@ export function UnifiedCommitForm({
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const [textareaFocused, setTextareaFocused] = useState(false);
+
+  // Hides the Stash/Shelve button once the actions row no longer fits both buttons at full
+  // width, folding its two options into the Commit button's own dropdown instead — same
+  // width-probe idea as the Commit Panel's tab-bar collapse (main.tsx), scaled down to two
+  // buttons: a hidden, always-expanded probe strip drives the check so the threshold doesn't
+  // depend on which commit label ("Commit" vs "Commit & Push") happens to be active.
+  const [stashButtonCollapsed, setStashButtonCollapsed] = useState(false);
+  const actionsRowRef = useRef<HTMLDivElement | null>(null);
+  const actionsRowProbeRef = useRef<HTMLDivElement | null>(null);
+  const actionsRowObserverRef = useRef<ResizeObserver | null>(null);
+  const setActionsRowRefs = useCallback(() => {
+    const bar = actionsRowRef.current;
+    const probe = actionsRowProbeRef.current;
+    actionsRowObserverRef.current?.disconnect();
+    actionsRowObserverRef.current = null;
+    if (!bar || !probe) return;
+    const check = () => setStashButtonCollapsed(probe.scrollWidth > bar.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(bar);
+    observer.observe(probe);
+    actionsRowObserverRef.current = observer;
+  }, []);
+  const actionsRowRefCb = useCallback((el: HTMLDivElement | null) => {
+    actionsRowRef.current = el;
+    setActionsRowRefs();
+  }, [setActionsRowRefs]);
+  const actionsRowProbeRefCb = useCallback((el: HTMLDivElement | null) => {
+    actionsRowProbeRef.current = el;
+    setActionsRowRefs();
+  }, [setActionsRowRefs]);
 
   // In vscode mode count staged files; otherwise count selected files
   const commitTargets = repoStatuses.map(r => ({
@@ -324,6 +363,26 @@ export function UnifiedCommitForm({
     `;
   }, []);
 
+  // When the Stash/Shelve button is hidden for lack of space, its two actions move into the
+  // Commit button's own dropdown instead, above the Commit/Commit & Push entries, so they stay reachable.
+  const stashDropdownItems: DropdownButtonItem[] = stashButtonCollapsed
+    ? [
+        { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
+        { icon: 'git-stash', label: 'Stash Changes', onSelect: onStash, separatorAfter: true },
+      ]
+    : [];
+  const commitDropdownItems: DropdownButtonItem[] = defaultCommitAction === 'commitAndPush'
+    ? [
+        ...stashDropdownItems,
+        { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
+        { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
+      ]
+    : [
+        ...stashDropdownItems,
+        { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
+        { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
+      ];
+
   return (
     <div style={styles.container}>
       {/* Commit targets summary (multi-repo only) */}
@@ -439,8 +498,26 @@ export function UnifiedCommitForm({
         </div>
       )}
 
+      {/* Hidden probe: both buttons rendered at full width (label + chevron) to measure whether
+          they'd both fit — kept in sync with the real actionsRow layout below (gap, fullWidth
+          proportions don't matter here since we only compare total content width to available
+          width, not the split between the two buttons). */}
+      <div ref={actionsRowProbeRefCb} aria-hidden="true" style={styles.actionsRowProbe}>
+        <div style={styles.stashBtnProbe}>
+          <Codicon name="git-stash" style={{ fontSize: '14px' }} />
+          <span>Stash</span>
+          <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
+        </div>
+        <div style={styles.stashBtnProbe}>
+          <Codicon name="cloud-upload" style={{ fontSize: '14px' }} />
+          <span>Commit &amp; Push</span>
+          <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
+        </div>
+      </div>
+
       {/* Amend + actions row */}
-      <div style={styles.actionsRow}>
+      <div ref={actionsRowRefCb} style={styles.actionsRow}>
+        {!stashButtonCollapsed && (
         <div style={styles.leftActions}>
           <DropdownButton
             variant="secondary"
@@ -456,6 +533,7 @@ export function UnifiedCommitForm({
             onMainClick={defaultSaveAction === 'stash' ? onStash : onShelve}
           />
         </div>
+        )}
 
         <div style={styles.rightActions}>
           {showSync ? (
@@ -494,16 +572,7 @@ export function UnifiedCommitForm({
             label={defaultCommitAction === 'commitAndPush' ? 'Commit & Push' : 'Commit'}
             title={defaultCommitAction === 'commitAndPush' ? 'Commit & Push (Cmd+Enter)' : 'Commit (Cmd+Enter)'}
             disabledTitle="Stage files and write a message first"
-            items={defaultCommitAction === 'commitAndPush'
-              ? [
-                  { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
-                  { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
-                ]
-              : [
-                  { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
-                  { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
-                ]
-            }
+            items={commitDropdownItems}
             onMainClick={defaultCommitAction === 'commitAndPush' ? onCommitAndPush : onCommit}
           />
           )}
@@ -652,6 +721,25 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
   },
+  // Off-screen width probe for the Stash-button-collapse check (see stashButtonCollapsed) —
+  // mirrors actionsRow's gap so the measured total width lines up with the real layout.
+  actionsRowProbe: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    position: 'fixed' as const,
+    left: '-9999px',
+    top: '-9999px',
+    visibility: 'hidden' as const,
+  } as React.CSSProperties,
+  stashBtnProbe: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '5px 12px',
+    fontSize: '13px',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
   leftActions: {
     display: 'flex',
     alignItems: 'center',

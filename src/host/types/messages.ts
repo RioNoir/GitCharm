@@ -260,7 +260,8 @@ export type HostToLogMsg =
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
   | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[] }
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
-  | { type: 'LOG_DESELECT_FILE'; filePath: string };
+  | { type: 'LOG_DESELECT_FILE'; filePath: string }
+  | { type: 'LOG_EXPLAIN_COMMIT_RESULT'; explanation?: string; error?: string };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
@@ -429,3 +430,30 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_PICK_ASSIGNEES' }
   | { type: 'PRDETAIL_PICK_LABELS' }
   | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string };
+
+// ─── Commit Full Detail: Host → WebView ──────────────────────────────────────
+// Reuses LogToHostMsg/HostToLogMsg for its file-tree/context-menu interactions
+// (see src/webview/gitLog/components/CommitDetail.tsx) — this panel is a
+// standalone single-commit view built around that same component, so only the
+// init payload and the AI explain result/request are panel-specific.
+
+export type HostToCommitFullDetailMsg =
+  | {
+      type: 'COMMITFULLDETAIL_INIT';
+      repoId: string;
+      repoName: string;
+      commit: CommitNode;
+      fullMessage: string;
+      files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>;
+      iconTheme?: IconThemeData;
+      aiEnabled: boolean;
+      aiModelLabel: string;
+      autoExplain: boolean;
+      activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+    }
+  | { type: 'COMMITFULLDETAIL_ICON_THEME'; iconTheme: IconThemeData };
+
+// ─── Commit Full Detail: WebView → Host ──────────────────────────────────────
+
+export type CommitFullDetailToHostMsg =
+  | { type: 'COMMITFULLDETAIL_EXPLAIN'; repoId: string; hash: string };

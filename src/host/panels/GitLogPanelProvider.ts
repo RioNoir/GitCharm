@@ -1737,8 +1737,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
 
       case 'LOG_OPEN_EXTENDED_DETAIL': {
-        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
-        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
         break;
       }
 
@@ -1839,8 +1839,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
 
       case 'LOG_EXPLAIN_COMMIT': {
-        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
-        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
         break;
       }
 
@@ -2035,9 +2035,9 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 }
 
 // git empty tree SHA — represents an empty file for added/deleted diffs
-const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-async function openSmartDiff(
+export async function openSmartDiff(
   repo: import('../git/GitService').GitService,
   msg: { hash: string; filePath: string; fileStatus?: string; oldPath?: string; parents?: string[]; combined?: boolean },
 ): Promise<void> {

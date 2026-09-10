@@ -8,7 +8,7 @@ export function generateNonce(): string {
 export function getWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
-  appName: 'commitPanel' | 'gitLog' | 'mergeEditor' | 'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail',
+  appName: 'commitPanel' | 'gitLog' | 'mergeEditor' | 'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'commitFullDetail',
   title: string,
   initialConfig?: Record<string, unknown>,
 ): string {
@@ -173,6 +173,13 @@ export function getWebviewHtml(
     .pr-overview-sidebar { grid-area: sidebar; display: flex; flex-direction: column; gap: 20px; }
     @media (max-width: 720px) {
       .pr-overview-layout { grid-template-columns: 1fr; grid-template-areas: "sidebar" "main"; }
+    }
+
+    /* ── Commit Full Detail: two-column layout, stacking when the panel is narrow ── */
+    @media (max-width: 720px) {
+      .commit-detail-two-column { flex-direction: column !important; height: auto !important; min-height: 100%; }
+      .commit-detail-two-column-header { flex: none !important; width: auto !important; border-right: none !important; border-bottom: 1px solid var(--vscode-panel-border); max-height: 45vh; }
+      .commit-detail-two-column-right { min-height: 300px; }
     }
 
     /* ── PR detail: hover feedback on every button ──────────────────────────────

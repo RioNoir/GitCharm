@@ -18,7 +18,7 @@ import { PatCredentialStore } from './pullRequests/PatCredentialStore';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
 import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
-import { deserializeCommitDetailPanel } from './panels/CommitDetailPanel';
+import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 
 async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void> {
   const SHOWN_KEY = 'hasShownViewModeQuickpick';
@@ -293,10 +293,10 @@ export function activate(context: vscode.ExtensionContext): void {
         return Promise.resolve();
       },
     }),
-    // Restore Commit Detail / Pull Request Detail panels left open across a window reload/restart
-    vscode.window.registerWebviewPanelSerializer('gitcharmCommitDetail', {
+    // Restore Commit Full Detail / Pull Request Detail panels left open across a window reload/restart
+    vscode.window.registerWebviewPanelSerializer('gitcharm.commitFullDetail', {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
-        deserializeCommitDetailPanel(panel, state, context.extensionUri, manager),
+        deserializeCommitFullDetailPanel(panel, state, context.extensionUri, manager),
     }),
     vscode.window.registerWebviewPanelSerializer('gitcharm.pullRequestDetail', {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>

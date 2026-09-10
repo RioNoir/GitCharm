@@ -66,39 +66,55 @@ export class PullRequestDetailPanel {
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
     );
-    await this.setupPanel(panel, repoId, pr);
+    this.setupPanel(panel, repoId, pr.number, panelTitle);
+    await this.sendInit(panel, repoId, pr);
   }
 
-  /** Re-hydrates a Pull Request Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharm.pullRequestDetail', ...) in extension.ts. */
+  /** Re-hydrates a Pull Request Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharm.pullRequestDetail', ...) in extension.ts.
+   * Unlike `open()` (which already has the PR summary in memory), a restore only has {repoId, number}
+   * persisted via setState — fetching the summary is a network call. The webview/HTML is set up
+   * synchronously first (the client shows its own loading skeleton with no PRDETAIL_INIT yet), and
+   * the fetched summary is pushed in once it resolves. Otherwise the panel would stay a blank/black
+   * tab for as long as that call takes — worse the more panels are restored at once on startup. */
   async restore(panel: vscode.WebviewPanel, state: unknown): Promise<void> {
     const s = state as { repoId?: unknown; number?: unknown } | null;
     if (!s || typeof s.repoId !== 'string' || typeof s.number !== 'number') {
       panel.dispose();
       return;
     }
-    const result = await this.pullRequestManager.getPullRequestDetail(s.repoId, s.number);
-    if ('error' in result) {
-      logWarn('pullrequest-detail-restore', `Failed to restore PR detail panel: ${result.error}`);
-      vscode.window.showWarningMessage(`Could not restore pull request #${s.number}: ${result.error}`);
-      panel.dispose();
-      return;
-    }
-    await this.setupPanel(panel, s.repoId, result);
-  }
-
-  private async setupPanel(panel: vscode.WebviewPanel, repoId: string, pr: PullRequestSummary): Promise<void> {
-    const key = `${repoId}:${pr.number}`;
+    const repoId = s.repoId;
+    const number = s.number;
 
     const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
     if (!meta) {
-      logWarn('pullrequest-detail-open', `Repository not found for repoId ${repoId}`);
-      vscode.window.showErrorMessage('Repository not found');
+      logWarn('pullrequest-detail-restore', `Repository not found for repoId ${repoId}`);
       panel.dispose();
       return;
     }
 
-    const panelTitle = pr.title ? `PR #${pr.number} - ${truncateTitle(pr.title)}` : `PR #${pr.number}`;
-    panel.title = panelTitle;
+    this.setupPanel(panel, repoId, number, `PR #${number}`, /* keepExistingTitle */ true);
+
+    const result = await this.pullRequestManager.getPullRequestDetail(repoId, number);
+    if ('error' in result) {
+      logWarn('pullrequest-detail-restore', `Failed to restore PR detail panel: ${result.error}`);
+      panel.webview.postMessage({ type: 'PRDETAIL_LOAD_ERROR', error: result.error } satisfies HostToPrDetailMsg);
+      return;
+    }
+    await this.sendInit(panel, repoId, result);
+  }
+
+  /** Creates the webview/HTML and message-handling wiring — synchronous and network-free, so
+   * the panel/tab appears (with the client's own loading skeleton) immediately. `pr` is not
+   * yet known when restoring, so handleMessage's calls source the PR number/summary lazily
+   * through `currentPr`, updated once `sendInit` resolves the real summary.
+   * `keepExistingTitle` is set on the restore path: VS Code re-creates a restored panel with the
+   * tab title it last had before the reload (typically already the full "PR #N - Title" from
+   * the previous session) — forcing it to the bare "PR #N" form here would visibly regress it
+   * for the ~1s until sendInit re-derives the real title, which is exactly the flicker this
+   * avoids. `open()` has no prior title to preserve, so it always sets one. */
+  private setupPanel(panel: vscode.WebviewPanel, repoId: string, prNumber: number, panelTitle: string, keepExistingTitle = false): void {
+    const key = `${repoId}:${prNumber}`;
+    if (!keepExistingTitle) panel.title = panelTitle;
     panel.iconPath = new vscode.ThemeIcon('git-pull-request');
 
     panel.webview.html = getWebviewHtml(
@@ -108,15 +124,48 @@ export class PullRequestDetailPanel {
       panelTitle
     );
 
-    panel.webview.onDidReceiveMessage((msg: PrDetailToHostMsg) => this.handleMessage(msg, repoId, pr, panel));
+    const currentPr = { value: null as PullRequestSummary | null };
+    panel.webview.onDidReceiveMessage((msg: PrDetailToHostMsg) => {
+      const pr = currentPr.value;
+      if (!pr) return; // still loading the initial summary (restore path) — nothing to act on yet
+      return this.handleMessage(msg, repoId, pr, panel);
+    });
+    this.currentPrByPanel.set(panel, currentPr);
 
     const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
       if (!e.affectsConfiguration('workbench.iconTheme')) return;
       const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
       panel.webview.postMessage({ type: 'PRDETAIL_ICON_THEME', iconTheme } satisfies HostToPrDetailMsg);
     });
-    panel.onDidDispose(() => { this.panels.delete(key); iconThemeWatcher.dispose(); });
+    // Belt-and-suspenders: re-apply the real title whenever the panel's view state changes
+    // (tab gains/loses focus, becomes visible again, etc.), in case anything else ever
+    // resets it back to the bare "PR #N" form once the real summary is known.
+    const viewStateWatcher = panel.onDidChangeViewState(() => {
+      const pr = currentPr.value;
+      if (pr?.title) panel.title = `PR #${pr.number} - ${truncateTitle(pr.title)}`;
+    });
+    panel.onDidDispose(() => { this.panels.delete(key); this.currentPrByPanel.delete(panel); iconThemeWatcher.dispose(); viewStateWatcher.dispose(); });
     this.panels.set(key, panel);
+  }
+
+  /** Holds each open panel's current PR summary once known, so `setupPanel`'s message handler
+   * (wired before the summary is fetched, on the restore path) can pick it up once ready. */
+  private currentPrByPanel = new WeakMap<vscode.WebviewPanel, { value: PullRequestSummary | null }>();
+
+  private async sendInit(panel: vscode.WebviewPanel, repoId: string, pr: PullRequestSummary): Promise<void> {
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) {
+      logWarn('pullrequest-detail-open', `Repository not found for repoId ${repoId}`);
+      vscode.window.showErrorMessage('Repository not found');
+      panel.dispose();
+      return;
+    }
+    const holder = this.currentPrByPanel.get(panel);
+    if (holder) holder.value = pr;
+    // Restored panels only know `PR #{number}` until now (the real title needs this same
+    // network round-trip) — set it as soon as the real summary is available, rather than
+    // waiting for the client's own follow-up PRDETAIL_REQUEST_DETAIL round-trip to do it.
+    panel.title = pr.title ? `PR #${pr.number} - ${truncateTitle(pr.title)}` : `PR #${pr.number}`;
 
     const currentUsername = await this.pullRequestManager.getCurrentUsername(repoId).catch(() => undefined);
     panel.webview.postMessage({
@@ -139,7 +188,9 @@ export class PullRequestDetailPanel {
           post({ type: 'PRDETAIL_LOADED', detail: result });
           // Keep the editor tab title in sync after a title edit — `pr` itself is a snapshot captured when the
           // panel was opened/restored and is never mutated, so re-derive the title string on every fresh fetch.
-          panel.title = result.title ? `PR #${result.number} - ${truncateTitle(result.title)}` : `PR #${result.number}`;
+          // Only ever upgrades to a title, never regresses to the bare "PR #N" form — a transient/incomplete
+          // response here shouldn't blank out a title the tab already has.
+          if (result.title) panel.title = `PR #${result.number} - ${truncateTitle(result.title)}`;
         }
         break;
       }

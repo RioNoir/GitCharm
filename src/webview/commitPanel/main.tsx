@@ -323,6 +323,32 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
 
+  // Prune per-repo caches when a repo disappears from the workspace (removed folder,
+  // repo no longer detected, etc.) so stale entries don't linger in the UI forever.
+  useEffect(() => {
+    const currentRepoIds = new Set((store.status?.repos ?? []).map(r => r.repoId));
+    const pruneRecord = <T,>(prev: Record<string, T>): Record<string, T> => {
+      let changed = false;
+      const next: Record<string, T> = {};
+      for (const [repoId, value] of Object.entries(prev)) {
+        if (currentRepoIds.has(repoId)) next[repoId] = value;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    };
+    setShelveMap(pruneRecord);
+    setShelveLoading(pruneRecord);
+    setShelveError(pruneRecord);
+    setStashMap(pruneRecord);
+    setStashLoading(pruneRecord);
+    setStashError(pruneRecord);
+    setUnpushedMap(pruneRecord);
+    setDetachedWarnings(pruneRecord);
+    setWorktreeRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
+    setPullRequestRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
+
   const toggleVscodeRepoSelection = (repoId: string) => {
     setVscodeSelectedRepos(prev => {
       const next = new Set(prev);
@@ -384,8 +410,10 @@ function App() {
   }, []);
 
   // Collapse the tab bar into a single dropdown button once it no longer fits in the
-  // available width (checked against the natural, unwrapped content width). The tab bar
-  // only mounts once the loading/empty-state early returns below have passed, so the
+  // available width. The width check is driven by a hidden probe strip with every tab's
+  // label expanded at once (see tabBarContentRefCb usage below), not by the real strip —
+  // that keeps the collapse threshold constant regardless of which tab is active. The tab
+  // bar only mounts once the loading/empty-state early returns below have passed, so the
   // observer is (re)installed via callback refs rather than a mount-only useEffect —
   // otherwise it would run once against null refs (during the loading state) and never again.
   const tabBarObserverRef = useRef<ResizeObserver | null>(null);
@@ -1325,15 +1353,13 @@ function App() {
         };
         const allTabs: TabId[] = ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
         const activeMeta = tabMeta(activeTab);
+        // Longest label among all tabs — used by the width probe below as the one tab whose label
+        // gets expanded, since only one tab (the active one) is ever expanded at a time.
+        const widestTab = allTabs.reduce((a, b) => tabMeta(b).label.length > tabMeta(a).label.length ? b : a);
         return (
           <div ref={tabBarRefCb} style={css.tabBar}>
-            {/* Real tab strip — always mounted (off-screen when collapsed) so its natural width keeps driving the ResizeObserver check. */}
-            <div
-              ref={tabBarContentRefCb}
-              style={tabBarCollapsed
-                ? { display: 'flex', position: 'fixed', left: '-9999px', top: '-9999px', visibility: 'hidden' }
-                : { display: 'flex', minWidth: 0 }}
-            >
+            {/* Real tab strip — hidden (not unmounted) when collapsed, so it keeps its state and re-appears instantly once space is available again. */}
+            <div style={tabBarCollapsed ? { display: 'none' } : { display: 'flex', minWidth: 0 }}>
               {allTabs.map(tab => {
                 const { label, iconName, badge } = tabMeta(tab);
                 return (
@@ -1348,7 +1374,7 @@ function App() {
                       style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
                     />
                     {activeTab === tab && (
-                      <span style={{ animation: tabBarCollapsed ? 'none' : 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
+                      <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
                         {label}
                       </span>
                     )}
@@ -1356,6 +1382,32 @@ function App() {
                       <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
                     )}
                   </button>
+                );
+              })}
+            </div>
+
+            {/* Width probe — always mounted off-screen. Only ever one tab has its label expanded at a
+                time (the active one), so the worst case is the widest label among all tabs expanded
+                alongside the rest icon-only — not every label expanded at once, which would reserve far
+                more space than any real state ever needs. This keeps the collapse threshold constant
+                regardless of which tab is active (activating "Pull Requests", the longest label, no
+                longer collapses the bar at a width where a shorter-labeled tab like "Changes" still fit). */}
+            <div
+              ref={tabBarContentRefCb}
+              aria-hidden="true"
+              style={{ display: 'flex', position: 'fixed', left: '-9999px', top: '-9999px', visibility: 'hidden' }}
+            >
+              {allTabs.map(tab => {
+                const { label, iconName, badge } = tabMeta(tab);
+                const isWidest = tab === widestTab;
+                return (
+                  <div key={tab} style={css.tab(isWidest)}>
+                    <Codicon name={iconName} style={{ marginRight: isWidest ? '5px' : '0', fontSize: '13px' }} />
+                    {isWidest && <span style={{ overflow: 'hidden', display: 'inline-block' }}>{label}</span>}
+                    {badge > 0 && (
+                      <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
+                    )}
+                  </div>
                 );
               })}
             </div>

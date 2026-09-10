@@ -396,7 +396,7 @@ function App() {
 
       <div style={css.tabBar}>
         {([
-          { id: 'overview' as const, label: 'Overview', icon: 'note' },
+          { id: 'overview' as const, label: 'Overview', icon: 'note', count: (commentsLoading ? summary?.commentCount : comments.length) || undefined },
           { id: 'changes' as const, label: 'Changes', icon: 'diff', count: files.length || undefined },
           { id: 'commits' as const, label: 'Commits', icon: 'git-commit', count: commits.length || undefined },
           { id: 'checks' as const, label: 'Checks', icon: 'checklist', count: checks.length || undefined },

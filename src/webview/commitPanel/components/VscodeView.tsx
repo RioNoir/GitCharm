@@ -3,10 +3,10 @@ import type { FileStatus, RepoMeta, RepoStatus } from '../../shared/types';
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { FileIcon } from '../../shared/FileIcon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { SingleRepoHeader } from './ProjectGroup';
 import { branchColor, tagColor } from '../../shared/branchColors';
+import { GenericFileTree } from '../../shared/GenericFileTree';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -43,55 +43,7 @@ interface Props {
   multiSelectedFiles?: FileStatus[];
 }
 
-// ── Tree helpers (same logic as FileTree) ─────────────────────────────────
-
-type TreeFile = { kind: 'file'; file: FileStatus };
-type TreeDir  = { kind: 'dir'; name: string; path: string; children: TreeNode[] };
-type TreeNode = TreeFile | TreeDir;
-
-function buildTree(files: FileStatus[]): TreeNode[] {
-  const root: TreeNode[] = [];
-  for (const file of files) {
-    const parts = file.path.split('/');
-    let nodes = root;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const name = parts[i];
-      const dirPath = parts.slice(0, i + 1).join('/');
-      let dir = nodes.find((n): n is TreeDir => n.kind === 'dir' && n.name === name);
-      if (!dir) { dir = { kind: 'dir', name, path: dirPath, children: [] }; nodes.push(dir); }
-      nodes = dir.children;
-    }
-    nodes.push({ kind: 'file', file });
-  }
-  return collapseSingleChildDirs(root);
-}
-
-function collapseSingleChildDirs(nodes: TreeNode[]): TreeNode[] {
-  return nodes.map(node => {
-    if (node.kind === 'file') return node;
-    const children = collapseSingleChildDirs(node.children);
-    if (children.length === 1 && children[0].kind === 'dir') {
-      const only = children[0] as TreeDir;
-      return { kind: 'dir' as const, name: `${node.name}/${only.name}`, path: only.path, children: only.children };
-    }
-    return { ...node, children };
-  });
-}
-
-function collectFiles(node: TreeDir): FileStatus[] {
-  const result: FileStatus[] = [];
-  for (const child of node.children) {
-    if (child.kind === 'file') result.push(child.file);
-    else result.push(...collectFiles(child));
-  }
-  return result;
-}
-
 // ── Constants ────────────────────────────────────────────────────────────
-
-const BASE_PAD = 20;
-const LEVEL_PAD = 20;
-const ICON_SIZE = 16;
 
 const STATUS_COLORS: Record<string, string> = {
   modified:   'var(--vscode-gitDecoration-modifiedResourceForeground)',
@@ -108,148 +60,13 @@ const STATUS_LETTERS: Record<string, string> = {
   untracked: 'U', conflicted: 'C', ignored: 'I', submodule: 'S',
 };
 
-// ── File row (no checkbox) ────────────────────────────────────────────────
-
-interface FileRowProps {
-  file: FileStatus;
-  depth: number;
-  staged: boolean;
-  selectedFile: { repoId: string; path: string } | null;
-  ctxFile?: { repoId: string; path: string } | null;
-  iconTheme?: IconThemeData | null;
-  onSelect: (file: FileStatus) => void;
-  onContextMenu: (e: React.MouseEvent, file: FileStatus) => void;
-  onOpenFile: (file: FileStatus) => void;
-  onRollback: (files: FileStatus[]) => void;
-  onResolveMerge: (file: FileStatus) => void;
-  onStage: (file: FileStatus) => void;
-  onUnstage: (file: FileStatus) => void;
-  onMultiSelect?: (file: FileStatus) => void;
-  multiSelectedFiles?: FileStatus[];
+function statusColor(status: string): string {
+  return STATUS_COLORS[status] ?? 'var(--vscode-foreground)';
+}
+function statusLetter(status: string): string {
+  return STATUS_LETTERS[status] ?? 'M';
 }
 
-function VscodeFileRow({ file, depth, staged, selectedFile, ctxFile, iconTheme, onSelect, onContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onMultiSelect, multiSelectedFiles }: FileRowProps) {
-  const isSelected = selectedFile?.repoId === file.repoId && selectedFile.path === file.path;
-  const isCtxActive = !isSelected && ctxFile?.repoId === file.repoId && ctxFile.path === file.path;
-  const isMultiSelected = multiSelectedFiles?.some(f => f.repoId === file.repoId && f.path === file.path) ?? false;
-  const color = STATUS_COLORS[file.status] ?? 'var(--vscode-foreground)';
-  const letter = STATUS_LETTERS[file.status] ?? 'M';
-  const fileName = file.path.split('/').pop() ?? file.path;
-  const dir = (() => { const p = file.path.split('/'); return p.length > 1 ? p.slice(0, -1).join('/') : ''; })();
-  const [hovered, setHovered] = useState(false);
-  const isSubmodule = file.status === 'submodule';
-
-  return (
-    <div
-      style={{ ...rowStyle(isSelected, isCtxActive, hovered), paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
-      onClick={isSubmodule ? undefined : (e) => {
-        if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
-          e.stopPropagation();
-          onMultiSelect(file);
-          return;
-        }
-        onSelect(file);
-      }}
-      onContextMenu={e => { e.preventDefault(); onContextMenu(e, file); }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={file.path}
-    >
-      <FileIcon name={fileName} theme={iconTheme} size={ICON_SIZE} />
-      <div style={fileNameGroupStyle}>
-        <span style={{ ...fileNameStyle, color }}>{fileName}</span>
-        {depth === 0 && dir && <span style={dirPathStyle} title={dir}>{dir}</span>}
-      </div>
-      <div style={rowActionsStyle}>
-        {!isSubmodule && <>
-          {file.status === 'conflicted' && (
-            <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
-          )}
-          <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
-          {!staged && (
-            <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
-          )}
-          {staged ? (
-            <InlineIconBtn icon="remove" title="Unstage" visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
-          ) : (
-            <InlineIconBtn icon="add" title="Stage" visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
-          )}
-        </>}
-        <span style={statusLetterStyle(color)}>{letter}</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Dir node (no checkbox) ────────────────────────────────────────────────
-
-interface DirNodeProps {
-  node: TreeDir;
-  depth: number;
-  staged: boolean;
-  selectedFile: { repoId: string; path: string } | null;
-  ctxFile?: { repoId: string; path: string } | null;
-  iconTheme?: IconThemeData | null;
-  isCollapsed: (key: string) => boolean;
-  toggleCollapsed: (key: string) => void;
-  activeFolderPath?: string | null;
-  repoId: string;
-  onSelect: (file: FileStatus) => void;
-  onContextMenu: (e: React.MouseEvent, file: FileStatus) => void;
-  onFolderContextMenu: (e: React.MouseEvent, folderPath: string, files: FileStatus[]) => void;
-  onOpenFile: (file: FileStatus) => void;
-  onRollback: (files: FileStatus[]) => void;
-  onResolveMerge: (file: FileStatus) => void;
-  onStage: (file: FileStatus) => void;
-  onUnstage: (file: FileStatus) => void;
-  onStageFolder: (files: FileStatus[]) => void;
-  onUnstageFolder: (files: FileStatus[]) => void;
-  onMultiSelect?: (file: FileStatus) => void;
-  multiSelectedFiles?: FileStatus[];
-}
-
-function VscodeDirNode({ node, depth, staged, repoId, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, onSelect, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onStageFolder, onUnstageFolder, onMultiSelect, multiSelectedFiles }: DirNodeProps) {
-  const collapseKey = `vscode-${staged ? 'staged' : 'unstaged'}-${repoId}:${node.path}`;
-  const open = !isCollapsed(collapseKey);
-  const allFiles = collectFiles(node);
-  const [hovered, setHovered] = useState(false);
-  const ctxActive = activeFolderPath === node.path;
-
-  const childProps = { depth: depth + 1, staged, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, activeFolderPath, repoId, onSelect, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStage, onUnstage, onStageFolder, onUnstageFolder, onMultiSelect, multiSelectedFiles };
-
-  return (
-    <div>
-      <div
-        style={{ ...treeDirStyle, paddingLeft: `${BASE_PAD + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : undefined, borderRadius: '2px' }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onContextMenu={e => { e.preventDefault(); onFolderContextMenu(e, node.path, allFiles); }}
-      >
-        <div style={treeDirInnerStyle} onClick={() => toggleCollapsed(collapseKey)}>
-          <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />
-          <FileIcon name={node.name} isFolder isOpen={open} theme={iconTheme} size={ICON_SIZE} />
-          <span style={folderNameStyle}>{node.name}</span>
-        </div>
-        <div style={rowActionsStyle}>
-          {!staged && (
-            <InlineIconBtn icon="discard" title="Rollback folder" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(allFiles); }} />
-          )}
-          {staged ? (
-            <InlineIconBtn icon="remove" title="Unstage folder" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(allFiles); }} />
-          ) : (
-            <InlineIconBtn icon="add" title="Stage folder" visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(allFiles); }} />
-          )}
-          <span style={dirCountStyle}>{allFiles.length}</span>
-        </div>
-      </div>
-      {open && node.children.map((child, i) =>
-        child.kind === 'dir'
-          ? <VscodeDirNode key={i} node={child} {...childProps} />
-          : <VscodeFileRow key={i} file={child.file} depth={depth + 1} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelect} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
-      )}
-    </div>
-  );
-}
 
 // ── Repo sub-group ────────────────────────────────────────────────────────
 
@@ -314,18 +131,23 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
   const onStageFolder   = (fs: FileStatus[]) => onStageFiles(fs.map(f => f.path));
   const onUnstageFolder = (fs: FileStatus[]) => onUnstageFiles(fs.map(f => f.path));
 
-  const renderFiles = () => {
-    if (viewMode === 'tree') {
-      const nodes = buildTree(files);
-      return nodes.map((node, i) =>
-        node.kind === 'dir'
-          ? <VscodeDirNode key={i} node={node} depth={0} staged={staged} repoId={repoId} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} isCollapsed={isCollapsed} toggleCollapsed={toggleCollapsed} activeFolderPath={activeFolderPath} onSelect={onSelectFile} onContextMenu={onContextMenu} onFolderContextMenu={(e, fp, fs) => onFolderContextMenu(e, repoId, fp, fs)} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onStageFolder={onStageFolder} onUnstageFolder={onUnstageFolder} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
-          : <VscodeFileRow key={i} file={node.file} depth={0} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelectFile} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
-      );
+  const dirCollapseKey = (dirPath: string) => `vscode-${staged ? 'staged' : 'unstaged'}-${repoId}:${dirPath}`;
+
+  const isFileSelected = (file: FileStatus) =>
+    (selectedFile?.repoId === file.repoId && selectedFile.path === file.path) ||
+    (multiSelectedFiles?.some(f => f.repoId === file.repoId && f.path === file.path) ?? false);
+
+  const isFileContextActive = (file: FileStatus) =>
+    ctxFile?.repoId === file.repoId && ctxFile.path === file.path;
+
+  const handleOpenFile = (file: FileStatus, e: React.MouseEvent) => {
+    if (file.status === 'submodule') return;
+    if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
+      e.stopPropagation();
+      onMultiSelect(file);
+      return;
     }
-    return files.map((file, i) =>
-      <VscodeFileRow key={i} file={file} depth={0} staged={staged} selectedFile={selectedFile} ctxFile={ctxFile} iconTheme={iconTheme} onSelect={onSelectFile} onContextMenu={onContextMenu} onOpenFile={onOpenFile} onRollback={onRollback} onResolveMerge={onResolveMerge} onStage={onStage} onUnstage={onUnstage} onMultiSelect={onMultiSelect} multiSelectedFiles={multiSelectedFiles} />
-    );
+    onSelectFile(file);
   };
 
   return (
@@ -395,7 +217,51 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
       {!collapsed && isEmpty && (
         <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
       )}
-      {!collapsed && !isEmpty && <div>{renderFiles()}</div>}
+      {!collapsed && !isEmpty && (
+        <GenericFileTree<FileStatus>
+          files={files}
+          viewMode={viewMode}
+          iconTheme={iconTheme}
+          statusColor={statusColor}
+          statusLetter={statusLetter}
+          isDirOpen={dirPath => !isCollapsed(dirCollapseKey(dirPath))}
+          toggleDir={dirPath => toggleCollapsed(dirCollapseKey(dirPath))}
+          isFileSelected={isFileSelected}
+          isFileContextActive={isFileContextActive}
+          onOpenFile={handleOpenFile}
+          onContextMenuFile={(e, file) => onContextMenu(e, file)}
+          onContextMenuDir={(e, dirPath, files) => onFolderContextMenu(e, repoId, dirPath, files)}
+          isDirContextActive={dirPath => activeFolderPath === dirPath}
+          renderFileActions={(file, hovered) => file.status === 'submodule' ? null : (
+            <>
+              {file.status === 'conflicted' && (
+                <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
+              )}
+              <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
+              {!staged && (
+                <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
+              )}
+              {staged ? (
+                <InlineIconBtn icon="remove" title="Unstage" visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
+              ) : (
+                <InlineIconBtn icon="add" title="Stage" visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
+              )}
+            </>
+          )}
+          renderDirActions={(dirFiles, hovered) => (
+            <>
+              {!staged && (
+                <InlineIconBtn icon="discard" title="Rollback folder" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(dirFiles); }} />
+              )}
+              {staged ? (
+                <InlineIconBtn icon="remove" title="Unstage folder" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(dirFiles); }} />
+              ) : (
+                <InlineIconBtn icon="add" title="Stage folder" visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(dirFiles); }} />
+              )}
+            </>
+          )}
+        />
+      )}
       {!isLast && <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />}
     </div>
   );
@@ -734,63 +600,8 @@ const repoCountStyle: React.CSSProperties = {
   minWidth: '14px', textAlign: 'center', marginLeft: '6px',
 };
 
-const rowStyle = (selected: boolean, ctxActive = false, hovered = false): React.CSSProperties => ({
-  display: 'flex', alignItems: 'center', paddingRight: '8px',
-  cursor: 'pointer',
-  background: selected
-    ? 'var(--vscode-list-activeSelectionBackground)'
-    : ctxActive
-      ? 'var(--vscode-list-inactiveSelectionBackground)'
-      : hovered
-        ? 'var(--vscode-list-hoverBackground)'
-        : 'transparent',
-  color: selected ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
-  borderRadius: '2px', minHeight: '22px', fontSize: '12px', gap: '3px',
-});
-
-const fileNameGroupStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: '4px', flex: 1, minWidth: 0, overflow: 'hidden',
-};
-
-const fileNameStyle: React.CSSProperties = {
-  flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
-};
-
-const dirPathStyle: React.CSSProperties = {
-  fontSize: '11px', opacity: 0.5, overflow: 'hidden',
-  textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0,
-};
-
-const statusLetterStyle = (color: string): React.CSSProperties => ({
-  fontSize: '11px', fontWeight: 'bold', color, flexShrink: 0, width: '14px',
-  textAlign: 'center', opacity: 0.9, marginLeft: '6px',
-});
-
-const rowActionsStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '0', flexShrink: 0, marginLeft: 'auto',
-};
-
 const repoActionsStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '0', flexShrink: 0, paddingRight: '8px',
-};
-
-
-const treeDirStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', minHeight: '22px',
-  fontSize: '12px', color: 'var(--vscode-foreground)', paddingRight: '8px', gap: '0',
-};
-
-const treeDirInnerStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '4px', flex: 1, cursor: 'pointer',
-  paddingLeft: '2px', overflow: 'hidden',
-};
-
-const folderNameStyle: React.CSSProperties = {
-  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-};
-
-const dirCountStyle: React.CSSProperties = {
-  fontSize: '11px', opacity: 0.5, marginLeft: '6px', flexShrink: 0, minWidth: '14px', textAlign: 'center',
 };
 
 const submoduleBadgeStyle: React.CSSProperties = {

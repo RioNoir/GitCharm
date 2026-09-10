@@ -5,6 +5,7 @@ import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
+import { TreeGuideLines, useTreeGuideHoverStyle } from '../../shared/TreeGuides';
 
 interface Props {
   repoId: string;
@@ -121,13 +122,16 @@ function Checkbox({ checked, indeterminate, onChange, onClick }: {
 }
 
 // ── Layout constants ───────────────────────────────────────────────────────
-// Each row: [BASE_PAD left] [checkbox ~14px] [treeDirInner paddingLeft 2px] [chevron 12px] [gap 4px] [folder icon 16px] ...
-// The vertical guide line sits at the horizontal centre of the folder icon of the parent row.
-// Centre of folder icon = BASE_PAD + depth*LEVEL_PAD + 14(checkbox) + 2(padding) + 12(chevron) + 4(gap) + 8(half icon) = BASE_PAD + depth*LEVEL_PAD + 40
-// We encode this as GUIDE_OFFSET so children's guide div can be placed correctly.
+// Each row: [BASE_PAD left] [checkbox ~13px] [treeDirInner paddingLeft 2px] [chevron 12px] [gap 4px] [folder icon 16px] ...
+// The vertical guide line sits at the horizontal centre of the row's own checkbox (not the
+// folder/file icon) — every row here has one, unlike the other tree views in this codebase.
+// Centre of checkbox = BASE_PAD + depth*LEVEL_PAD + 7(half checkbox width) = BASE_PAD + depth*LEVEL_PAD + 7
+// GUIDE_ICON_CENTER is that constant term; guide lines for a row at depth N sit at
+// basePad + GUIDE_ICON_CENTER + level*LEVEL_PAD for level in [0, N).
 
 const DEFAULT_BASE_PAD = 20;  // left padding at depth-0
 const LEVEL_PAD = 20;  // indent per depth level
+const GUIDE_ICON_CENTER = 7;
 
 // ── Shared sub-props type ──────────────────────────────────────────────────
 
@@ -154,11 +158,12 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
   return (
     <div>
       <div
-        style={{ ...styles.treeDir, paddingLeft: `${basePad + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : undefined, borderRadius: '2px' }}
+        style={{ ...styles.treeDir, position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : undefined, borderRadius: '2px' }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={(e) => { e.preventDefault(); onFolderContextMenu(e, repoId, node.path, allFiles); }}
       >
+        <TreeGuideLines depth={depth} offset={basePad + GUIDE_ICON_CENTER} step={LEVEL_PAD} />
         <Checkbox
           checked={allSelected}
           indeterminate={someSelected}
@@ -202,7 +207,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
   return (
     <div
-      style={{ ...styles.row(isSelected, isCtxActive, hovered), paddingLeft: `${basePad + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
+      style={{ ...styles.row(isSelected, isCtxActive, hovered), position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
       onClick={isSubmodule ? undefined : (e) => {
         if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
           e.stopPropagation();
@@ -216,6 +221,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
       onMouseLeave={() => setHovered(false)}
       title={file.path}
     >
+      <TreeGuideLines depth={depth} offset={basePad + GUIDE_ICON_CENTER} step={LEVEL_PAD} />
       <Checkbox
         checked={checked}
         onChange={() => onToggleFile(repoId, file.path)}
@@ -243,6 +249,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 // ── Public component ───────────────────────────────────────────────────────
 
 export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, viewMode, basePad = DEFAULT_BASE_PAD, activeFolderPath, onMultiSelect, multiSelectedFiles }: Props) {
+  useTreeGuideHoverStyle();
   if (files.length === 0) return null;
 
   const shared: SharedProps = { repoId, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, basePad, activeFolderPath, onMultiSelect, multiSelectedFiles };
@@ -250,7 +257,7 @@ export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSe
   if (viewMode === 'tree') {
     const nodes = buildTree(files);
     return (
-      <div style={styles.container}>
+      <div style={styles.container} data-filetree-container>
         {nodes.map((node, i) =>
           node.kind === 'dir'
             ? <TreeDirNode key={i} node={node} depth={0} {...shared} />
@@ -261,7 +268,7 @@ export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSe
   }
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-filetree-container>
       {files.map((file) => (
         <FileRow key={`${file.repoId}-${file.path}`} file={file} depth={0} {...shared} />
       ))}
