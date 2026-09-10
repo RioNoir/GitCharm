@@ -157,7 +157,7 @@ function App() {
           filterRepoRef.current(msg.repoId, msg.branch ?? null);
           break;
         case 'LOG_STASHES_BATCH':
-          store.setStashes(msg.stashCommits);
+          store.setStashes(msg.stashCommits, msg.queriedRepoIds);
           break;
         case 'LOG_REMOTES_RESULT':
           break;

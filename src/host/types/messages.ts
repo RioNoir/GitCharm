@@ -226,7 +226,7 @@ export type HostToLogMsg =
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
-  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[] }
+  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[]; queriedRepoIds: string[] }
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
   | { type: 'LOG_DESELECT_FILE'; filePath: string };
 

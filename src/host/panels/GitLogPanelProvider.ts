@@ -569,7 +569,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             // disappearing is reported. Skipping it left a stash dropped elsewhere on
             // screen until the webview remounted. The store bails on an unchanged list,
             // so the repeated empty batch of a stash-less repo costs nothing.
-            post({ type: 'LOG_STASHES_BATCH', stashCommits: all.flat() });
+            //
+            // queriedRepoIds scopes the replace to the repos this request actually asked
+            // about — logRepoIds can be a single filtered repo, and without this the
+            // store's full-replace would wipe every other repo's stashes off screen.
+            post({ type: 'LOG_STASHES_BATCH', stashCommits: all.flat(), queriedRepoIds: logRepoIds });
           }).catch(() => {});
         }
         break;
