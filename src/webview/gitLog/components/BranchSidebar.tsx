@@ -527,6 +527,10 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [onClose]);
+  const copyName = () => {
+    navigator.clipboard.writeText(merged.baseName).catch(() => {});
+    onClose();
+  };
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: `Checkout "${merged.baseName}"`, action: onCheckout },
     { sep: true },
@@ -537,6 +541,8 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
       ...(onPull ? [{ icon: 'cloud-download', label: `Pull "${merged.baseName}"`, action: onPull }] : []),
       ...(onPush ? [{ icon: 'cloud-upload', label: `Push "${merged.baseName}"...`, action: onPush }] : []),
     ] : []),
+    { sep: true },
+    { icon: 'copy', label: 'Copy Branch Name', action: copyName },
     ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete branch', action: onDelete, danger: true }] : []),
   ];
 
