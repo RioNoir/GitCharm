@@ -111,7 +111,7 @@ function LogApp() {
           reloadRef.current();
           break;
         case 'LOG_STASHES_BATCH':
-          store.setStashes(msg.stashCommits);
+          store.setStashes(msg.stashCommits, msg.queriedRepoIds);
           break;
         case 'LOG_SCROLL_TO_COMMIT':
           store.setPendingScrollTarget({ hash: msg.hash, repoId: msg.repoId });
