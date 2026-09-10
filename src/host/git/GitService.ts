@@ -47,6 +47,11 @@ function vsStatusToGitFileStatus(s: Status): GitFileStatus {
   }
 }
 
+/** Drops the comment lines git adds to prepared commit messages, the way `git commit` would. */
+function stripCommitComments(raw: string): string {
+  return raw.replace(/^\s*#.*$\n?/gm, '').trim();
+}
+
 export class GitService {
   private git: SimpleGit;
   // Set immediately after a tag checkout, cleared when VS Code API confirms the update.
@@ -117,7 +122,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
   }
 
   private async getShortHash(): Promise<string | undefined> {
@@ -288,6 +293,7 @@ export class GitService {
         unstagedFiles,
         isDetachedHead: isDetached,
         conflictCount,
+        mergeRebaseState: await this.getMergeRebaseState() ?? undefined,
       };
     }
 
@@ -321,7 +327,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
   }
 
   async getCurrentBranch(): Promise<BranchInfo> {
@@ -1127,20 +1133,79 @@ export class GitService {
     return result.summary.changes.toString();
   }
 
-  async getMergeRebaseState(): Promise<'merge' | 'rebase' | null> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) {
-      if (vsRepo.state.rebaseCommit !== undefined) return 'rebase';
-      if (vsRepo.state.mergeChanges.length > 0) return 'merge';
-      return null;
+  /**
+   * Absolute path of the repo's git dir. It is a plain file for worktrees and
+   * submodules, so resolve it through git once and cache it.
+   */
+  private gitDirPromise?: Promise<string>;
+  private gitDir(): Promise<string> {
+    return this.gitDirPromise ??= this.git
+      .raw(['rev-parse', '--absolute-git-dir'])
+      .then(out => out.trim() || path.join(this.rootPath, '.git'))
+      .catch(() => path.join(this.rootPath, '.git'));
+  }
+
+  // ponytail: commit.template is resolved once per session; a mid-session config
+  // change needs a window reload. Watch .git/config if that ever matters.
+  private commitTemplatePromise?: Promise<string>;
+  private commitTemplate(): Promise<string> {
+    return this.commitTemplatePromise ??= (async () => {
+      const configured = (await this.git.raw(['config', '--get', 'commit.template']).catch(() => '')).trim();
+      if (!configured) return '';
+      // git expands a leading ~ / ~user itself — mirror that before reading.
+      let templatePath = configured.replace(/^~([^/]*)\//, (_m, user: string) =>
+        `${user ? path.join(path.dirname(os.homedir()), user) : os.homedir()}/`);
+      if (!path.isAbsolute(templatePath)) templatePath = path.join(this.rootPath, templatePath);
+      try {
+        return stripCommitComments(fs.readFileSync(templatePath, 'utf8'));
+      } catch {
+        return '';
+      }
+    })();
+  }
+
+  /**
+   * The message the commit box should seed itself with when empty — the same sources
+   * VS Code's Source Control input uses: the message git prepared for an in-progress
+   * merge or squash, otherwise the configured commit.template. Empty when there is
+   * nothing to seed.
+   */
+  async getInputTemplate(): Promise<string> {
+    const dir = await this.gitDir();
+    for (const name of ['MERGE_MSG', 'SQUASH_MSG']) {
+      let raw: string;
+      try {
+        raw = fs.readFileSync(path.join(dir, name), 'utf8');
+      } catch {
+        continue; // no merge / squash in progress
+      }
+      const message = stripCommitComments(raw);
+      if (message) return message;
     }
-    const mergeHead = await this.git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).catch(() => '');
-    if (mergeHead.trim()) return 'merge';
-    const rebaseDir = await this.git.raw(['rev-parse', '--git-path', 'rebase-merge']).catch(() => '');
-    try {
-      if (rebaseDir.trim() && fs.existsSync(rebaseDir.trim())) return 'rebase';
-    } catch { /* */ }
+    return this.commitTemplate();
+  }
+
+  /**
+   * Whether a merge or rebase is still open. Read off the git dir rather than the
+   * VS Code API, which only reports a merge while conflicts are unresolved — the
+   * operation is still in progress after they are staged, and that is exactly when
+   * the panel needs to offer Continue. Cheap enough for every status refresh.
+   */
+  async getMergeRebaseState(): Promise<'merge' | 'rebase' | null> {
+    const dir = await this.gitDir();
+    const exists = (name: string) => { try { return fs.existsSync(path.join(dir, name)); } catch { return false; } };
+    // Rebase wins: an interactive rebase can leave MERGE_HEAD behind on a conflicted pick.
+    if (exists('rebase-merge') || exists('rebase-apply')) return 'rebase';
+    if (exists('MERGE_HEAD')) return 'merge';
     return null;
+  }
+
+  async rebaseContinue(): Promise<void> {
+    // `rebase --continue` opens an editor for the commit being replayed. core.editor=true
+    // is the no-op shell builtin, so the stored message is accepted unchanged and the
+    // command never blocks — simple-git needs allowUnsafeEditor to let the override past.
+    await simpleGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+      .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
   }
 
   async abortMerge(): Promise<void> {

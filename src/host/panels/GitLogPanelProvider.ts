@@ -904,10 +904,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           logError('merge', errMsg, getRawErrorDetail(e));
           this.post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT')) {
-            repo.getCurrentBranch().then(current => {
-              const mergeMsg = `Merge branch '${msg.from}' into '${current.name}'`;
-              this.commitPanel?.prefillCommitMessage(mergeMsg);
-            }).catch(() => {});
+            void this.commitPanel?.seedCommitMessage();
             vscode.window.showWarningMessage(
               'Merge conflicts detected. Use the Merge Editor to resolve them.',
               'Open Commit Panel'

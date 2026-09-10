@@ -308,6 +308,8 @@ function App() {
 
   // Track unstaged file counts per repo to detect new changes for auto-expand in vscode mode
   const prevUnstagedCountsRef = useRef<Map<string, number>>(new Map());
+  // The in-flight commit, so its message is only cleared once the commit succeeded.
+  const pendingCommitRef = useRef<{ requestId: string; repoIds: string[] } | null>(null);
 
   // ── Vscode mode: repo selection for commit ───────────────────────────────
   const [vscodeSelectedRepos, setVscodeSelectedRepos] = useState<Set<string>>(new Set());
@@ -524,6 +526,16 @@ function App() {
           break;
         case 'COMMIT_OP_RESULT':
           store.setLoading(false);
+          if (pendingCommitRef.current?.requestId === msg.requestId) {
+            const { repoIds } = pendingCommitRef.current;
+            pendingCommitRef.current = null;
+            // Only a successful commit consumes the message — a rejecting hook or a
+            // missing identity must not cost the user what they typed.
+            if (msg.ok) {
+              store.setCommitMessage('');
+              repoIds.forEach(id => store.clearAmend(id));
+            }
+          }
           if (msg.ok) {
             // Refresh push tab after any successful operation (commit, undo, push, etc.)
             const currentRepos = useCommitStore.getState().status?.repos ?? [];
@@ -543,6 +555,7 @@ function App() {
           }
           break;
         case 'COMMIT_SET_MESSAGE':
+          if (msg.ifEmpty && useCommitStore.getState().commitMessage.trim()) break;
           store.setCommitMessage(msg.message);
           break;
         case 'SHELVE_LIST_RESULT':
@@ -1273,9 +1286,9 @@ function App() {
       if (targets.length === 0) return;
       store.setLoading(true);
 
-      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
-      store.setCommitMessage('');
-      targets.forEach(t => store.clearAmend(t.repoId));
+      const requestId = generateId();
+      pendingCommitRef.current = { requestId, repoIds: targets.map(t => t.repoId) };
+      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush } satisfies CommitToHostMsg);
       return;
     }
 
@@ -1308,9 +1321,9 @@ function App() {
     if (targets.length === 0) return;
     store.setLoading(true);
     store.setError(null);
-    getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
-    store.setCommitMessage('');
-    targets.forEach(t => store.clearAmend(t.repoId));
+    const requestId = generateId();
+    pendingCommitRef.current = { requestId, repoIds: targets.map(t => t.repoId) };
+    getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush } satisfies CommitToHostMsg);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1740,6 +1753,10 @@ function App() {
             generatingMessage={generatingMessage}
             activeProfile={store.activeProfile}
             onOpenProfiles={() => send({ type: 'OPEN_PROFILES_MENU' } satisfies CommitToHostMsg)}
+            onRebaseAction={(repoId, action) => {
+              store.setLoading(true);
+              send({ type: 'COMMIT_REBASE_ACTION', requestId: generateId(), repoId, action } satisfies CommitToHostMsg);
+            }}
             onShelve={() => {
               const name = store.commitMessage.trim();
               if (!name) return;

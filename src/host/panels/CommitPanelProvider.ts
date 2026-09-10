@@ -116,8 +116,19 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.handleMessage(msg, undefined as unknown as vscode.Webview).finally(() => { this.activeReplyTarget = 'sidebar'; });
   }
 
-  prefillCommitMessage(message: string): void {
-    this.post({ type: 'COMMIT_SET_MESSAGE', message });
+  /**
+   * Seeds the commit box with the message git prepared for an in-progress merge or
+   * squash (or the configured commit.template), matching VS Code's Source Control
+   * input. Only fills an empty box, so a message the user typed is never clobbered.
+   */
+  async seedCommitMessage(): Promise<void> {
+    for (const meta of this.manager.getRepoMetas()) {
+      const message = await this.manager.getRepo(meta.id)?.getInputTemplate().catch(() => '');
+      if (message) {
+        this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
+        return;
+      }
+    }
   }
   private shelveServices = new Map<string, ShelveService>();
 
@@ -353,6 +364,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private syncBadgeFromMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
       this.badgeController?.update(msg.status);
+      // A merge can start anywhere (terminal, VS Code's own panel, a pull), so re-seed
+      // off every status refresh rather than only from GitCharm's own merge command.
+      void this.seedCommitMessage();
     }
   }
 
@@ -899,6 +913,25 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             this.postChangelistsUpdate(status);
           }
         );
+        break;
+      }
+
+      case 'COMMIT_REBASE_ACTION': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { logWarn('rebase-action', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          if (msg.action === 'continue') await repo.rebaseContinue();
+          else await repo.abortRebase();
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          logInfo('rebase-action', `Rebase ${msg.action} in ${msg.repoId}`);
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          logError('rebase-action', formatGitError(e), getRawErrorDetail(e));
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+        }
+        const rebaseStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: rebaseStatus });
+        this.postChangelistsUpdate(rebaseStatus);
         break;
       }
 

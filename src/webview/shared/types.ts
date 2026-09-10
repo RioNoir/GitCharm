@@ -138,6 +138,8 @@ export interface RepoStatus {
   unstagedFiles: FileStatus[];
   isDetachedHead: boolean;
   conflictCount: number;
+  /** Set while a merge or rebase is still open, so the panel can offer Continue / Abort. */
+  mergeRebaseState?: 'merge' | 'rebase';
 }
 
 // ─── Changelists ─────────────────────────────────────────────────────────────

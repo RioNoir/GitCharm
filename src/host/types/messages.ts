@@ -93,7 +93,7 @@ export type HostToCommitMsg =
   | { type: 'PUSH_DROP_RESULT'; requestId: string; ok: boolean; error?: string }
   | { type: 'PUSH_REVERT_RESULT'; requestId: string; ok: boolean; error?: string }
   | { type: 'PUSH_EDIT_MSG_RESULT'; requestId: string; ok: boolean; error?: string }
-  | { type: 'COMMIT_SET_MESSAGE'; message: string }
+  | { type: 'COMMIT_SET_MESSAGE'; message: string; ifEmpty?: boolean }
   | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' | 'vscode' }
   | { type: 'SUBMODULE_OP_RESULT'; requestId: string; parentRepoId: string; submodulePath: string; op: 'init' | 'deinit' | 'update'; ok: boolean; error?: string }
   | { type: 'SUBMODULE_PUSH_RESULT'; requestId: string; repoId: string; ok: boolean; error?: string }
@@ -123,6 +123,7 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_DO_COMMIT'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_PUSH'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean }
+  | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'abort' }
   | { type: 'COMMIT_PULL_ALL' }
   | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_REMOTES'; requestId: string; repoId: string }
