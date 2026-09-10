@@ -16,7 +16,7 @@
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/RioNoir/GitCharm?style=flat&logo=GitHub&label=Stars&color=yellow">
 </p>
 
-GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, and a 3-way merge editor for conflict resolution.
+GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), and a 3-way merge editor for conflict resolution.
 
 It activates automatically when the opened workspace contains a Git repository.
 
@@ -91,6 +91,22 @@ When there is nothing left to commit, the primary button turns into the remote a
 - **Publish** button for branches that have never been pushed.
 - Silent refresh: existing commits stay visible while reloading (no flicker).
 
+### 🔀 Pull Requests
+
+- Dedicated **Pull Requests** tab in the Commit Panel, with multi-provider support: GitHub, GitLab, Bitbucket Cloud, and Gitea/Forgejo — auto-detected from the repository's remote URL, with a manual override per host for self-hosted instances that can't be auto-detected.
+- Per-repository list with state icons (open, draft, merged, closed), author avatar, source → target branch, and total/loaded count; filter by state, author, assigned-to-me, review-requested-to-me, and mentions, plus free-text/PR-number search.
+- **Account picker**: connect a new account (GitHub via VS Code's built-in authentication, or a Personal Access Token for GitLab/Bitbucket/Gitea) or switch between already-saved accounts per repository — no more silent auto-selection of a single saved account.
+- **Manage Pull Request Credentials** command: a single account list grouped by provider, with rename and remove actions, and an entry to add a new account.
+- Avatars (GitHub username avatar, or Gravatar when an account email is known) shown next to accounts in the account pickers, falling back to a generic icon when no avatar can be resolved.
+- **Create Pull Request**: two-column layout with native branch QuickPickers, a Markdown (TipTap) description editor, and a live commit/file diff preview against the selected branches.
+- **Pull Request detail** panel: description, rich Activity timeline (renames, label changes, close/reopen/merge, base-branch changes, assign/review-request) with a connecting thread line and author avatars, reviewers/assignees/labels, CI checks, changed files with a full diff view, and commits.
+- **Comments**: add, edit, hide/delete (with per-provider permission checks), inline Markdown editing, and minimize/unminimize on GitHub; comment-count badge on the Overview tab.
+- **Merge** (with strategy choice) and **Checkout** actions with confirmation, directly from the detail header.
+- **Open Full Detail** opens the same rich detail view as a persistent editor tab, restored automatically across VS Code restarts.
+
+<br>
+<img src="media/screenshots/pull_requests.png" alt="GitCharm log panel">
+
 ### 🗄️ Shelve & Stash
 
 - **Shelve** with patch-based shelves: create, apply (full or partial), delete, rename, and inspect per-file diffs.
@@ -163,6 +179,7 @@ When there is nothing left to commit, the primary button turns into the remote a
 - Reserved names `Local` and `Global` are displayed as implicit entries with source tooltip.
 - Active profile applied automatically to the local repo config before every commit.
 - Each workspace/repository can use a different identity.
+- Avatars in the profile picker: resolves each profile's email to a GitHub or Gravatar avatar, falling back to a generic icon when none can be resolved.
 
 
 ### 🔍 Git Annotations (Blame)
@@ -281,6 +298,8 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Select AI Provider` | Opens a QuickPick to choose and configure the AI provider and model. |
 | `GitCharm: Generate Commit Message` | Generates an AI commit message from the current staged diff. |
 | `GitCharm: Explain Commit` | Opens the commit detail panel with an AI-generated explanation of the selected commit. |
+| `GitCharm: Manage Pull Request Credentials` | Opens the Pull Request account manager (add, rename, remove accounts). |
+| `GitCharm: Refresh Pull Requests` | Refreshes the Pull Requests tab, bypassing the cache. |
 
 ## ⌨️ Keybindings
 
@@ -314,6 +333,8 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.ai.anthropicApiKey` | `""` | API key for the Anthropic provider. |
 | `gitcharm.ai.openaiApiKey` | `""` | API key for the OpenAI provider. |
 | `gitcharm.ai.geminiApiKey` | `""` | API key for the Gemini API provider. |
+| `gitcharm.pullRequests.hostProviderOverrides` | `{}` | Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. `{ "git.mycompany.com": "gitea" }`. Valid values: `github`, `gitlab`, `bitbucket`, `gitea`. |
+| `gitcharm.pullRequests.defaultTargetBranch` | `""` | Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master). |
 
 Example:
 
@@ -334,12 +355,16 @@ Example:
 ```text
 src/host/                 VS Code extension host code
 src/host/git/             Git, diff, conflict, blame, workspace, and shelve services
-src/host/panels/          Webview providers for Commit, Log, Merge Editor, and Undocked Panel
+src/host/panels/          Webview providers for Commit, Log, Merge Editor, Undocked Panel, and Pull Requests
+src/host/pullRequests/    Multi-provider Pull Request manager, per-provider API clients, and credential storage
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
 src/webview/gitLog/       React Git Log panel
+src/webview/commitFullDetail/ React commit "Full Detail" editor-tab panel
 src/webview/mergeEditor/  React 3-way merge editor
 src/webview/undockedPanel/ React undocked panel (Commit + Log side by side)
+src/webview/pullRequestCreate/ React Create Pull Request panel
+src/webview/pullRequestDetail/ React Pull Request detail panel
 src/webview/shared/       Shared webview components, hooks, and message types
 media/                    Extension icons, codicons, and assets
 out/                      Built extension and webview bundles
