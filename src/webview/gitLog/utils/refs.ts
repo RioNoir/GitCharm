@@ -1,4 +1,3 @@
-import { isPrimaryBranch } from '../../shared/branchUtils';
 import { currentPalette as _currentPalette } from '../../shared/branchColors';
 export {
   primaryBranchColor,

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChangelistData, FileDiff, FileStatus, RepoMeta, RepoStatus, WorkspaceStatus } from '../../shared/types';
+import type { ChangelistData, FileDiff, RepoMeta, RepoStatus, WorkspaceStatus } from '../../shared/types';
 import type { IconThemeData } from '../../../host/types/messages';
 import { DEFAULT_VIEW_AND_SORT_SETTINGS, type ViewAndSortSettings } from '../../../host/types/settings';
 
@@ -136,7 +136,6 @@ export const useCommitStore = create<CommitState>((set, get) => ({
     for (const r of status.repos) {
       repoSelections[r.repoId] = prev[r.repoId] ?? true;
       const currentPaths = allFilePaths(r);
-      const untrackedPaths = new Set(r.unstagedFiles.filter(f => f.status === 'untracked').map(f => f.path));
       const prevSelectedSet = prevFiles[r.repoId];
       const prevSeenSet = prevSeen[r.repoId];
       const savedSelection = !prevSeenSet && (changesViewMode === 'simplified' || changesViewMode === 'changelists') ? loadPersistedSelection(changesViewMode, r.repoId) : null;

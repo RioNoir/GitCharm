@@ -188,7 +188,7 @@ function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
 
 /* ─── DebouncedInput ──────────────────────────────────────────────────────── */
 
-function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth, debounceMs }: {
+function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth: _maxWidth, debounceMs }: {
   value: string;
   placeholder: string;
   icon: string;
@@ -689,7 +689,7 @@ const calStyles = {
     padding: '2px 0',
     fontWeight: 600,
   },
-  day: (isEdge: boolean, inRange: boolean, isStart: boolean): React.CSSProperties => ({
+  day: (isEdge: boolean, inRange: boolean, _isStart: boolean): React.CSSProperties => ({
     fontSize: '11px',
     textAlign: 'center',
     padding: '3px 1px',

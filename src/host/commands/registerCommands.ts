@@ -846,7 +846,7 @@ export function registerCommands(
 async function pickSubmodule(
   manager: WorkspaceGitManager | undefined,
   repoId: string | undefined,
-  requireInitialized: boolean,
+  _requireInitialized: boolean,
 ): Promise<{ parentRepoId: string; submodulePath: string } | undefined> {
   const metas = manager?.getRepoMetas().filter(m => m.isSubmodule) ?? [];
   if (metas.length === 0) {

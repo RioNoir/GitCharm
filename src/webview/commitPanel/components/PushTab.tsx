@@ -649,7 +649,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());

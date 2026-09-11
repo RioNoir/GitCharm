@@ -12,7 +12,7 @@ import type {
   SubmoduleEntry,
 } from '../types/git';
 import type { StashEntry, UnpushedCommit } from '../types/messages';
-import { parseDiff, buildMonacoContents, detectLanguage } from './DiffParser';
+import { parseDiff, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
 
@@ -230,7 +230,7 @@ export class GitService {
       // or in both simultaneously. Query their real staged/unstaged state via
       // simple-git porcelain and handle them separately.
       const submoduleRelPaths = await this.getSubmoduleRelativePaths();
-      let submodulePorcelainFiles: FileStatus[] = [];
+      const submodulePorcelainFiles: FileStatus[] = [];
       if (submoduleRelPaths.size > 0) {
         const porcelain = await this.git.status();
         for (const file of porcelain.files) {
@@ -1099,7 +1099,6 @@ export class GitService {
     const isUntracked = status.trimStart().startsWith('??');
 
     if (isUntracked) {
-      const fs = require('fs') as typeof import('fs');
       try { fs.unlinkSync(absPath); } catch { /* already gone */ }
       return;
     }
@@ -1862,7 +1861,7 @@ export class GitService {
       const message = branchMatch ? subject.slice(branchMatch[0].length).trim() : subject;
 
       // Get files for this stash entry
-      let files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+      const files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
       try {
         const stats = new Map<string, { added: number; removed: number }>();
         const numstatRaw = await this.git.raw(['stash', 'show', '--numstat', ref]).catch(() => '');
@@ -2230,7 +2229,7 @@ export interface WorktreeEntry {
   isInWorkspace: boolean; // path is inside a VS Code workspace folder
 }
 
-function parseWorktreePorcelain(raw: string, mainPath: string): WorktreeEntry[] {
+function parseWorktreePorcelain(raw: string, _mainPath: string): WorktreeEntry[] {
   const entries: WorktreeEntry[] = [];
   const blocks = raw.trim().split(/\n\n+/);
   for (const block of blocks) {

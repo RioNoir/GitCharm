@@ -42,6 +42,7 @@ function dynItems(items: ContextMenuEntry[], n: number): ContextMenuEntry[] {
   };
   return items.map(i => {
     if (!('id' in i)) return i;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const l = label((i as any).id);
     return l ? { ...i, label: l } : i;
   });
@@ -92,26 +93,6 @@ const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
   { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
   { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
-  { separator: true },
-  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
-  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
-  { separator: true },
-  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
-  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
-  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
-  { separator: true },
-  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
-  { separator: true },
-  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
-];
-
-const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
-  { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
-  { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
-  { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
-  { separator: true },
-  { id: 'add-to-git',        label: 'Add to Git',             icon: 'add' },
-  { id: 'move-to-cl',        label: 'Move to Changelist…',   icon: 'list-unordered' },
   { separator: true },
   { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
   { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
@@ -333,7 +314,6 @@ function App() {
       for (const id of currentRepoIds) if (!next.has(id)) next.add(id);
       return next;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
 
   // Prune per-repo caches when a repo disappears from the workspace (removed folder,
@@ -359,7 +339,6 @@ function App() {
     setDetachedWarnings(pruneRecord);
     setWorktreeRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
     setPullRequestRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
 
   const toggleVscodeRepoSelection = (repoId: string) => {
@@ -2114,6 +2093,7 @@ function App() {
               const totalFiles = new Set([...(rs?.unstagedFiles ?? []).map(f => f.path), ...(rs?.stagedFiles ?? []).map(f => f.path)]).size;
               const noChanges = totalFiles === 0;
               let items = noChanges
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 ? repoItems.filter(i => !('id' in i) || !['rollback', 'shelve', 'stash'].includes((i as any).id))
                 : repoItems;
               if (noChanges) items = items.filter((item, i, arr) =>

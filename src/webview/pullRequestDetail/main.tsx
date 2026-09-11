@@ -70,7 +70,7 @@ function App() {
 
   const [events, setEvents] = useState<PullRequestEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
-  const [eventsError, setEventsError] = useState<string | undefined>();
+  const [, setEventsError] = useState<string | undefined>();
 
   const [checks, setChecks] = useState<CiCheck[]>([]);
   const [checksLoading, setChecksLoading] = useState(true);

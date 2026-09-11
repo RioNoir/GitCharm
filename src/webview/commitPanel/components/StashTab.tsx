@@ -208,7 +208,7 @@ export function StashTab({
   repoId, repoName, repoColor, multiRepo, singleRepo = false,
   worktreeBranch, mainRepoName,
   stashes, loading, error, viewMode,
-  onApply, onPop, onDrop, onRename, onRequestList, onOpenFileDiff,
+  onApply, onPop, onDrop, onRename, onRequestList: _onRequestList, onOpenFileDiff,
   expandAll = false, isLast = false,
 }: Props) {
   const { isCollapsed, toggleCollapsed } = useCommitStore();

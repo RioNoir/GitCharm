@@ -29,7 +29,7 @@ function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): 
 
 type DeleteTagChoice = 'local' | 'remote' | 'both' | null;
 
-async function confirmDeleteTag(tagName: string, title: string): Promise<DeleteTagChoice> {
+async function confirmDeleteTag(tagName: string, _title: string): Promise<DeleteTagChoice> {
   const pick = await vscode.window.showWarningMessage(
     `Delete tag "${tagName}"?`,
     { modal: true },

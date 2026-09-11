@@ -195,7 +195,7 @@ export class ProfileStatusBar implements vscode.Disposable {
 
   // ── Named profile action menu ─────────────────────────────────────────────────
 
-  private async showProfileActionMenu(profile: GitProfile, repoPath?: string): Promise<void> {
+  private async showProfileActionMenu(profile: GitProfile, _repoPath?: string): Promise<void> {
     const activeId = this.profileService.getActiveProfileId();
     const isActive = profile.id === activeId;
 

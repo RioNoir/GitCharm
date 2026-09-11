@@ -47,7 +47,7 @@ interface Props {
 }
 
 export function ProjectGroup({
-  repoStatus, repoName, repoColor, multiRepo, singleRepo = false, isFirst = false, isLast = false,
+  repoStatus, repoName, repoColor, multiRepo: _multiRepo, singleRepo = false, isFirst = false, isLast = false,
   isSubmodule, submodulePath, isWorktree, mainWorktreePath,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,

@@ -13,10 +13,6 @@ interface BinaryFile {
   storeName: string;     // filename inside shelfDir
 }
 
-interface ShelfMeta {
-  shelves: ShelveEntry[];
-}
-
 // Extended entry stored only internally (not in messages.ts)
 interface ShelveEntryInternal extends ShelveEntry {
   binaryFiles?: BinaryFile[];
@@ -167,7 +163,7 @@ export class ShelveService {
     // untracked files: count lines as additions
     for (const f of untrackedFiles) {
       try {
-        const content = require('fs').readFileSync(require('path').join(this.rootPath, f), 'utf8') as string;
+        const content = fs.readFileSync(path.join(this.rootPath, f), 'utf8');
         numstatMap.set(f, { added: content.split('\n').length, removed: 0 });
       } catch { /* skip */ }
     }

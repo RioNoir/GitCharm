@@ -11,15 +11,9 @@ import { isPrimaryBranch } from '../../shared/branchUtils';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { GenericFileTree } from '../../shared/GenericFileTree';
 
-const STASH_COLOR = '#e07b39';
-
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
-
-const IS_MAC = navigator.userAgent.includes('Mac');
-const IS_WIN = navigator.userAgent.includes('Windows');
-const REVEAL_OS_LABEL = IS_MAC ? 'Reveal in Finder' : IS_WIN ? 'Show in Explorer' : 'Show in File Manager';
 
 interface FileContextMenuProps {
   x: number;

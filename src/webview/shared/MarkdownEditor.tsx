@@ -95,7 +95,6 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
     // was being torn down and rebuilt on nearly every interaction. That's what caused marks like bold to appear
     // to toggle themselves on a plain click: the click landed mid-rebuild, on a fresh instance replaying stale
     // stored marks from the just-discarded one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

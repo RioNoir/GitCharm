@@ -368,7 +368,7 @@ export function VscodeView({
         count={totalStaged}
         collapsed={stagedCollapsed}
         onToggle={() => toggleCollapsed(STAGED_COLLAPSE_KEY)}
-        onContextMenu={e => {/* no-op for now */}}
+        onContextMenu={_e => {/* no-op for now */}}
         actionIcon={totalStaged > 0 ? "remove" : undefined}
         actionTitle={totalStaged > 0 ? "Unstage All" : undefined}
         onAction={totalStaged > 0 ? () => repos.forEach(r => onUnstageAll(r.repoId)) : undefined}
@@ -431,7 +431,7 @@ export function VscodeView({
         count={totalUnstaged}
         collapsed={unstagedCollapsed}
         onToggle={() => toggleCollapsed(UNSTAGED_COLLAPSE_KEY)}
-        onContextMenu={e => {/* no-op */}}
+        onContextMenu={_e => {/* no-op */}}
         actionIcon={totalUnstaged > 0 ? "add" : undefined}
         actionTitle={totalUnstaged > 0 ? "Stage All" : undefined}
         onAction={totalUnstaged > 0 ? () => repos.forEach(r => onStageAll(r.repoId)) : undefined}

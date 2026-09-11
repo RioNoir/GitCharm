@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { generateWithAI } from '../ai/aiGenerate';
@@ -9,7 +10,6 @@ import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocu
 import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter } from '../types/messages';
 import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
-import { parseConflictFile } from '../git/ConflictParser';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { MergeEditorProvider } from './MergeEditorProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
@@ -19,7 +19,6 @@ import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { compareFileWithRef, compareFolderWithRef } from './CompareWithCommand';
 import { pickRefQuickPick } from '../utils/refPicker';
 import type { GitProfileService } from '../git/GitProfileService';
-import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
@@ -738,7 +737,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleMessage(msg: CommitToHostMsg, webview: vscode.Webview): Promise<void> {
+  private async handleMessage(msg: CommitToHostMsg, _webview: vscode.Webview): Promise<void> {
     switch (msg.type) {
       case 'COMMIT_PERSIST_MESSAGE': {
         await this.workspaceState?.update(COMMIT_MESSAGE_WORKSPACE_KEY, msg.message || undefined);
@@ -984,7 +983,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_PULL_ALL': {
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Pulling all repositories', cancellable: false },
-          async (progress) => {
+          async (_progress) => {
             const results = await this.manager.pullAll();
             const failed = results.filter(r => !r.ok);
             if (failed.length > 0) {
@@ -1381,8 +1380,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_ADD_TO_GITIGNORE': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        
-        const fs = require('fs') as typeof import('fs');
 
         // Find all .gitignore files in the repo
         const rootUri = vscode.Uri.file(repo.rootPath);
@@ -1659,9 +1656,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!svc || !repo) return;
         try {
-          const fs = require('fs') as typeof import('fs');
-          
-
           const diffChunk = svc.getFileDiff(msg.shelveId, msg.filePath);
           const absFilePath = path.join(repo.rootPath, msg.filePath);
           const fileName = msg.filePath.split('/').pop() ?? msg.filePath;
@@ -1703,8 +1697,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         try {
-          
-          const fs = require('fs') as typeof import('fs');
           const fileName = msg.filePath.split('/').pop() ?? msg.filePath;
           const absPath = path.join(repo.rootPath, msg.filePath);
           const safeRef = msg.stashRef.replace(/[{}]/g, '_');
@@ -2256,6 +2248,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_SET_VIEW_SORT_SETTINGS': {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { type: _type, ...partial } = msg;
         await this.viewAndSortSettings.updatePrefs(partial);
         this.postViewAndSortSettings();

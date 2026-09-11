@@ -94,7 +94,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
-  onCheckout, onMerge, onRebase, onDelete, onFetchRepo, onPull, onPush,
+  onCheckout, onMerge, onRebase, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
 }, ref) {
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());

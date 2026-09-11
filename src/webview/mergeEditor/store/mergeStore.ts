@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ConflictBlock, MergeConflictFile } from '../../shared/types';
+import type { MergeConflictFile } from '../../shared/types';
 
 export type Resolution = 'ours' | 'theirs' | 'both' | 'unresolved';
 

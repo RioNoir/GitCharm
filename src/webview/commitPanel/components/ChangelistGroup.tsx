@@ -56,7 +56,7 @@ interface Props {
 }
 
 export function ChangelistGroup({
-  changelist, repoGroups, isFixed, multiRepo, singleRepo, isLast = false,
+  changelist, repoGroups, isFixed: _isFixed, multiRepo, singleRepo, isLast = false,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,

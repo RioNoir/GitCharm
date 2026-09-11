@@ -206,7 +206,6 @@ const LANG_MAP: Record<string, string> = {
 
 export function DiffViewer({ diff, loading }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<unknown>(null);
   const [MonacoLoaded, setMonacoLoaded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [DiffEditorComponent, setDiffEditorComponent] = useState<React.ComponentType<any> | null>(null);
@@ -214,6 +213,7 @@ export function DiffViewer({ diff, loading }: Props) {
   useEffect(() => {
     import('@monaco-editor/react').then(async (mod) => {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const monaco = await (mod as any).loader.init();
         if (monaco) registerDarkModernTheme(monaco);
       } catch { /* theme registration is best-effort */ }
@@ -319,7 +319,7 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
-  badge: (isNew: boolean, isDeleted: boolean, isModified: boolean) => ({
+  badge: (isNew: boolean, isDeleted: boolean, _isModified: boolean) => ({
     fontSize: '10px',
     padding: '1px 4px',
     borderRadius: '3px',

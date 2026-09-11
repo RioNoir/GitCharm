@@ -232,7 +232,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   let startupNotificationsDone = false;
   const badgeDisposable = manager.onStatusChange(status => { badge.update(status); });
-  const startupDisposable = manager.onStatusChange(async status => {
+  const startupDisposable = manager.onStatusChange(async _status => {
     if (!startupNotificationsDone) {
       startupNotificationsDone = true;
       startupDisposable.dispose();

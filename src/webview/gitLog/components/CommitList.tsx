@@ -145,7 +145,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -1048,7 +1048,6 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   const oldestHash = sortedOldestFirst[0]?.hash ?? commit.hash;
 
   const hasStashInMulti = isMulti && multiSelected.some(c => c.isStash);
-  const allStashInMulti = isMulti && multiSelected.every(c => c.isStash);
 
   if (isMulti) {
     return (

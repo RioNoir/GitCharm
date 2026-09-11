@@ -577,12 +577,6 @@ const initRepoBtnStyle: React.CSSProperties = {
   fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
 };
 
-const secondaryBtnStyle: React.CSSProperties = {
-  background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)',
-  border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
-  fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
-};
-
 const appStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',

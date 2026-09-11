@@ -109,7 +109,7 @@ function stringsEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-export const useLogStore = create<LogState>((set, get) => ({
+export const useLogStore = create<LogState>((set, _get) => ({
   repos: [],
   initialized: false,
   hasWorkspaceFolder: true,
