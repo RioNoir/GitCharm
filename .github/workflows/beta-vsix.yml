@@ -89,8 +89,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Find the previous beta tag (exclude the current one)
-          PREV_TAG="$(git tag --sort=-creatordate --list '*-beta' | grep -v "^${RELEASE_TAG}$" | head -1)"
+          # Find the previous beta tag (exclude the current one). grep exits 1 when nothing
+          # matches (e.g. this is the only beta tag so far) — `|| true` keeps that from
+          # tripping `set -e` under pipefail.
+          PREV_TAG="$(git tag --sort=-creatordate --list '*-beta' | { grep -v "^${RELEASE_TAG}$" || true; } | head -1)"
 
           if [ -z "${PREV_TAG}" ]; then
             RANGE="HEAD"
