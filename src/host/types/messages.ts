@@ -267,8 +267,7 @@ export type HostToLogMsg =
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
   | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[]; queriedRepoIds: string[] }
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
-  | { type: 'LOG_DESELECT_FILE'; filePath: string }
-  | { type: 'LOG_EXPLAIN_COMMIT_RESULT'; explanation?: string; error?: string };
+  | { type: 'LOG_DESELECT_FILE'; filePath: string };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
@@ -380,7 +379,7 @@ export type PrCreateToHostMsg =
 // ─── Pull Request Detail: Host → WebView ─────────────────────────────────────
 
 export type HostToPrDetailMsg =
-  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string }
+  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string; aiEnabled: boolean; aiModelLabel: string }
   | { type: 'PRDETAIL_ICON_THEME'; iconTheme: IconThemeData }
   | { type: 'PRDETAIL_LOADED'; detail: PullRequestDetail }
   | { type: 'PRDETAIL_LOAD_ERROR'; error: string }
@@ -436,7 +435,8 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_PICK_REVIEWERS' }
   | { type: 'PRDETAIL_PICK_ASSIGNEES' }
   | { type: 'PRDETAIL_PICK_LABELS' }
-  | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string };
+  | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string }
+  | { type: 'PRDETAIL_EXPLAIN' };
 
 // ─── Commit Full Detail: Host → WebView ──────────────────────────────────────
 // Reuses LogToHostMsg/HostToLogMsg for its file-tree/context-menu interactions
@@ -459,6 +459,16 @@ export type HostToCommitFullDetailMsg =
       activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
     }
   | { type: 'COMMITFULLDETAIL_ICON_THEME'; iconTheme: IconThemeData };
+
+// ─── AI Explain Detail: Host → WebView ───────────────────────────────────────
+// A small standalone panel (opened beside the commit/PR detail panel it was triggered from) that just
+// displays one AI-generated explanation — subject metadata + model label + markdown result/error. It never
+// re-generates itself; the host re-posts AIEXPLAIN_RESULT into the same already-open panel when the user
+// hits "Regenerate" on the originating panel's floating action button.
+
+export type HostToAiExplainMsg =
+  | { type: 'AIEXPLAIN_INIT'; subjectKind: 'commit' | 'pull-request'; subjectTitle: string; subjectSubtitle?: string; modelLabel: string }
+  | { type: 'AIEXPLAIN_RESULT'; explanation?: string; error?: string };
 
 // ─── Commit Full Detail: WebView → Host ──────────────────────────────────────
 

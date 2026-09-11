@@ -8,7 +8,7 @@ export function generateNonce(): string {
 export function getWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
-  appName: 'commitPanel' | 'gitLog' | 'mergeEditor' | 'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'commitFullDetail',
+  appName: 'commitPanel' | 'gitLog' | 'mergeEditor' | 'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'commitFullDetail' | 'aiExplainDetail',
   title: string,
   initialConfig?: Record<string, unknown>,
 ): string {
@@ -215,6 +215,23 @@ export function getWebviewHtml(
     }
     @media (prefers-reduced-motion: reduce) {
       .skeleton-block { animation: none; background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent); }
+    }
+
+    /* ── AI Explain floating action button ───────────────────────────────────── */
+    .ai-explain-fab {
+      animation: ai-explain-glow 2.4s ease-in-out infinite;
+    }
+    .ai-explain-fab:hover, .ai-explain-fab:focus-visible {
+      animation: none;
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-button-background) 70%, transparent),
+        0 0 18px 4px color-mix(in srgb, var(--vscode-button-background) 55%, transparent);
+    }
+    @keyframes ai-explain-glow {
+      0%, 100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 0 color-mix(in srgb, var(--vscode-button-background) 45%, transparent); }
+      50% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 14px 3px color-mix(in srgb, var(--vscode-button-background) 45%, transparent); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ai-explain-fab { animation: none; }
     }
   </style>
 </head>

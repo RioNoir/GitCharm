@@ -154,7 +154,7 @@ async function setupPanel(
 
   panel.webview.html = getWebviewHtml(panel.webview, extensionUri, 'commitFullDetail', panel.title);
 
-  panel.webview.onDidReceiveMessage((msg: CommitFullDetailToHostMsg | LogToHostMsg) => handleMessage(msg, repoId, hash, repo, panel));
+  panel.webview.onDidReceiveMessage((msg: CommitFullDetailToHostMsg | LogToHostMsg) => handleMessage(msg, repoId, hash, repo, panel, extensionUri));
 
   const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
     if (!e.affectsConfiguration('workbench.iconTheme')) return;
@@ -204,57 +204,76 @@ async function setupPanel(
   } satisfies HostToCommitFullDetailMsg);
 }
 
+/** Builds the AI prompt from the commit's diff/message/files and generates the explanation.
+ * Returns the result rather than posting it — the caller displays it in the separate AI Explain Detail panel. */
+async function explainCommit(
+  hash: string,
+  repo: import('../git/GitService').GitService,
+): Promise<{ explanation?: string; error?: string }> {
+  try {
+    const cfg = vscode.workspace.getConfiguration('gitcharm');
+    const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
+    const configuredLang: string = cfg.get('ai.language', '');
+    const language = configuredLang.trim() || vscode.env.language || 'en';
+
+    const [diff, fullMessage, commitMeta] = await Promise.all([
+      repo.getCommitDiff(hash, maxDiffChars),
+      repo.getFullCommitMessage(hash),
+      repo.getCommitMeta(hash),
+    ]);
+    const commitFiles = await repo.getCommitFiles(hash, commitMeta.parents);
+
+    const fileList = commitFiles.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`).join('\n');
+    const prompt = [
+      'You are a code reviewer explaining a git commit to a developer.',
+      '',
+      'Rules:',
+      `- Write the explanation in this language: ${language}`,
+      '- Start with a one-sentence summary of what this commit does',
+      '- Then explain the key changes: what was modified and why',
+      '- Be specific: reference file names, function names, or module names when relevant',
+      '- Keep it concise but complete (3-8 sentences or bullet points)',
+      '- The output is rendered as Markdown: use it (bold, lists, inline code) where it helps readability',
+      '- Output ONLY the explanation, no code fences wrapping the whole response, no preamble',
+      '',
+      `## Commit: ${commitMeta.shortHash}`,
+      `## Message: ${fullMessage.trim() || commitMeta.message}`,
+      '',
+      '## Changed files',
+      fileList,
+      diff ? `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\`` : '',
+    ].filter(Boolean).join('\n');
+
+    const { generateWithAI } = await import('../ai/aiGenerate');
+    const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg);
+    return { explanation };
+  } catch (e: unknown) {
+    logError('commitFullDetail:explain', formatGitError(e), getRawErrorDetail(e));
+    return { error: formatGitError(e) };
+  }
+}
+
 async function handleMessage(
   msg: CommitFullDetailToHostMsg | LogToHostMsg,
   repoId: string,
   hash: string,
   repo: import('../git/GitService').GitService,
   panel: vscode.WebviewPanel,
+  extensionUri: vscode.Uri,
 ): Promise<void> {
   const post = (m: HostToLogMsg | HostToCommitFullDetailMsg) => panel.webview.postMessage(m);
 
   switch (msg.type) {
     case 'COMMITFULLDETAIL_EXPLAIN': {
-      try {
-        const cfg = vscode.workspace.getConfiguration('gitcharm');
-        const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
-        const configuredLang: string = cfg.get('ai.language', '');
-        const language = configuredLang.trim() || vscode.env.language || 'en';
-
-        const [diff, fullMessage, commitMeta] = await Promise.all([
-          repo.getCommitDiff(hash, maxDiffChars),
-          repo.getFullCommitMessage(hash),
-          repo.getCommitMeta(hash),
-        ]);
-        const commitFiles = await repo.getCommitFiles(hash, commitMeta.parents);
-
-        const fileList = commitFiles.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`).join('\n');
-        const prompt = [
-          'You are a code reviewer explaining a git commit to a developer.',
-          '',
-          'Rules:',
-          `- Write the explanation in this language: ${language}`,
-          '- Start with a one-sentence summary of what this commit does',
-          '- Then explain the key changes: what was modified and why',
-          '- Be specific: reference file names, function names, or module names when relevant',
-          '- Keep it concise but complete (3-8 sentences or bullet points)',
-          '- Output ONLY the explanation, no markdown fences, no preamble',
-          '',
-          `## Commit: ${commitMeta.shortHash}`,
-          `## Message: ${fullMessage.trim() || commitMeta.message}`,
-          '',
-          '## Changed files',
-          fileList,
-          diff ? `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\`` : '',
-        ].filter(Boolean).join('\n');
-
-        const { generateWithAI } = await import('../ai/aiGenerate');
-        const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg);
-        post({ type: 'LOG_EXPLAIN_COMMIT_RESULT', explanation } satisfies HostToLogMsg);
-      } catch (e: unknown) {
-        logError('commitFullDetail:explain', formatGitError(e), getRawErrorDetail(e));
-        post({ type: 'LOG_EXPLAIN_COMMIT_RESULT', error: formatGitError(e) } satisfies HostToLogMsg);
-      }
+      const { openAiExplainDetail } = await import('./AiExplainDetailPanel');
+      const cfg = vscode.workspace.getConfiguration('gitcharm');
+      const shortHash = msg.hash.startsWith('stash@{') ? msg.hash : msg.hash.slice(0, 7);
+      openAiExplainDetail(
+        extensionUri,
+        { key: `commit:${msg.repoId}:${msg.hash}`, kind: 'commit', title: `Commit ${shortHash}` },
+        getAiModelLabel(cfg),
+        () => explainCommit(msg.hash, repo),
+      );
       return;
     }
 

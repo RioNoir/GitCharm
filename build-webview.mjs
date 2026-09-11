@@ -15,6 +15,7 @@ const apps = [
   { name: 'pullRequestCreate', entry: 'src/webview/pullRequestCreate/main.tsx' },
   { name: 'pullRequestDetail', entry: 'src/webview/pullRequestDetail/main.tsx' },
   { name: 'commitFullDetail',  entry: 'src/webview/commitFullDetail/main.tsx' },
+  { name: 'aiExplainDetail',   entry: 'src/webview/aiExplainDetail/main.tsx' },
 ];
 
 /** @returns {import('esbuild').BuildOptions} */

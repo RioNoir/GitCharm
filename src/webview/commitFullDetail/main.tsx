@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
-import { AiExplainSection } from './components/AiExplainSection';
 import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi } from '../shared/vscodeApi';
+import { AiExplainFab } from '../shared/AiExplainFab';
 import type { CommitNode, HostToCommitFullDetailMsg, HostToLogMsg, IconThemeData } from '../../host/types/messages';
 import type { RepoMeta } from '../shared/types';
 
@@ -18,10 +18,14 @@ function App() {
   const [iconTheme, setIconTheme] = useState<IconThemeData | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiModelLabel, setAiModelLabel] = useState('');
-  const [autoExplain, setAutoExplain] = useState(false);
   const [activeProfile, setActiveProfile] = useState<{ name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } | undefined>();
   const [repoMeta, setRepoMeta] = useState<RepoMeta | null>(null);
 
+  const handleExplain = useCallback((currentRepoId: string, hash: string) => {
+    getVsCodeApi().postMessage({ type: 'COMMITFULLDETAIL_EXPLAIN', repoId: currentRepoId, hash });
+  }, []);
+
+  const autoExplainedRef = useRef(false);
   useEffect(() => {
     const handler = (event: MessageEvent<HostToCommitFullDetailMsg | HostToLogMsg>) => {
       const msg = event.data;
@@ -37,15 +41,18 @@ function App() {
         setIconTheme(msg.iconTheme ?? null);
         setAiEnabled(msg.aiEnabled);
         setAiModelLabel(msg.aiModelLabel);
-        setAutoExplain(msg.autoExplain);
         setActiveProfile(msg.activeProfile);
+        if (msg.autoExplain && !autoExplainedRef.current) {
+          autoExplainedRef.current = true;
+          handleExplain(msg.repoId, msg.commit.hash);
+        }
       } else if (msg.type === 'COMMITFULLDETAIL_ICON_THEME') {
         setIconTheme(msg.iconTheme);
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [handleExplain]);
 
   if (!commit || !repoMeta) {
     return <div style={{ padding: '16px', fontSize: '12px', opacity: 0.5 }}>Loading…</div>;
@@ -59,7 +66,7 @@ function App() {
         <span style={styles.toolbarMessage}>{commit.message}</span>
       </div>
       {aiEnabled && repoId && (
-        <AiExplainSection repoId={repoId} hash={commit.hash} modelLabel={aiModelLabel} autoExplain={autoExplain} />
+        <AiExplainFab modelLabel={aiModelLabel} onClick={() => handleExplain(repoId, commit.hash)} />
       )}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <CommitDetail

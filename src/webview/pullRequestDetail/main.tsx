@@ -8,6 +8,7 @@ import { CommitsList } from './components/CommitsList';
 import { ChecksList } from './components/ChecksList';
 import { PeopleField, EditFieldButton } from './components/PeoplePanel';
 import { LabelsPanel } from './components/LabelsPanel';
+import { AiExplainFab } from '../shared/AiExplainFab';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips } from '../shared/Skeleton';
@@ -18,15 +19,18 @@ import type {
 
 type TabId = 'overview' | 'changes' | 'commits' | 'checks';
 
-function CollapsibleSection({ title, icon, defaultOpen = true, first, plain, children }: { title: string; icon: string; defaultOpen?: boolean; first?: boolean; plain?: boolean; children: React.ReactNode }) {
+function CollapsibleSection({ title, icon, defaultOpen = true, first, plain, headerAction, children }: { title: string; icon: string; defaultOpen?: boolean; first?: boolean; plain?: boolean; headerAction?: React.ReactNode; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section style={plain ? undefined : (first ? css.section : css.collapsibleSection)}>
-      <button className="icon-btn" style={css.collapseHeader} onClick={() => setOpen(o => !o)}>
-        <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '13px', opacity: 0.6 }} />
-        <Codicon name={icon} style={{ fontSize: '13px', opacity: 0.6 }} />
-        <h3 style={css.sectionTitle}>{title}</h3>
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <button className="icon-btn" style={{ ...css.collapseHeader, flex: 1 }} onClick={() => setOpen(o => !o)}>
+          <Codicon name={open ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '13px', opacity: 0.6 }} />
+          <Codicon name={icon} style={{ fontSize: '13px', opacity: 0.6 }} />
+          <h3 style={css.sectionTitle}>{title}</h3>
+        </button>
+        {headerAction && <div onClick={e => e.stopPropagation()}>{headerAction}</div>}
+      </div>
       {open && <div style={css.collapseBody}>{children}</div>}
     </section>
   );
@@ -48,6 +52,8 @@ function StaticSection({ title, icon, first, headerAction, children }: { title: 
 function App() {
   const [summary, setSummary] = useState<PullRequestSummary | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | undefined>();
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiModelLabel, setAiModelLabel] = useState('');
   const [detail, setDetail] = useState<PullRequestDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState<string | undefined>();
@@ -103,6 +109,8 @@ function App() {
         case 'PRDETAIL_INIT':
           setSummary(msg.summary);
           setCurrentUsername(msg.currentUsername);
+          setAiEnabled(msg.aiEnabled);
+          setAiModelLabel(msg.aiModelLabel);
           // Persisted so VS Code can restore this panel (via registerWebviewPanelSerializer) after a window reload/restart.
           getVsCodeApi().setState({ repoId: msg.repoId, number: msg.number });
           send({ type: 'PRDETAIL_REQUEST_DETAIL' });
@@ -354,6 +362,10 @@ function App() {
     send({ type: 'PRDETAIL_SUBMIT_REVIEW', input: { event: 'approve' } });
   }, [send]);
 
+  const handleExplain = useCallback(() => {
+    send({ type: 'PRDETAIL_EXPLAIN' });
+  }, [send]);
+
   if (!summary) {
     return (
       <div style={css.loading}>
@@ -393,6 +405,8 @@ function App() {
         onMerge={handleMerge}
         onReopen={handleReopen}
       />
+
+      {aiEnabled && <AiExplainFab modelLabel={aiModelLabel} onClick={handleExplain} />}
 
       <div style={css.tabBar}>
         {([
