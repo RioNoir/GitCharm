@@ -1,4 +1,4 @@
-name: Release Beta (GitHub only)
+name: Beta VSIX (GitHub only)
 
 on:
   workflow_dispatch:
@@ -39,7 +39,7 @@ jobs:
           VERSION: ${{ steps.package.outputs.version }}
         run: |
           set -euo pipefail
-          echo "tag=${VERSION}-beta" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}-beta" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm ci
@@ -54,6 +54,25 @@ jobs:
         run: |
           mkdir -p dist
           npm run package -- --out "dist/gitcharm-${{ steps.release_tag.outputs.tag }}.vsix"
+
+      - name: Create and push tag
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Beta iterates fast without always bumping package.json — re-running for the same
+          # version moves the existing tag forward instead of failing the run.
+          if git rev-parse "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            git push origin ":refs/tags/${RELEASE_TAG}" || true
+          fi
+
+          git tag -f -a "${RELEASE_TAG}" -m "Beta release ${RELEASE_TAG}"
+          git push origin "refs/tags/${RELEASE_TAG}"
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v6
@@ -132,12 +151,12 @@ jobs:
           set -euo pipefail
 
           # Re-running for the same version replaces the existing beta release/asset instead of failing.
+          # The tag itself was already created/pushed by the previous step — don't clean it up here.
           if gh release view "${RELEASE_TAG}" > /dev/null 2>&1; then
-            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
+            gh release delete "${RELEASE_TAG}" --yes
           fi
 
           gh release create "${RELEASE_TAG}" dist/*.vsix \
             --title "GitCharm ${RELEASE_TAG}" \
             --notes-file "${NOTES_FILE}" \
-            --prerelease \
-            --target beta
+            --prerelease
