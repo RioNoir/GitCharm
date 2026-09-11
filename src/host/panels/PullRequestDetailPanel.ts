@@ -173,6 +173,8 @@ export class PullRequestDetailPanel {
     panel.webview.postMessage({
       type: 'PRDETAIL_INIT', repoId, repoName: meta.name, number: pr.number, summary: pr, currentUsername,
       aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg),
+      defaultMergeStrategy: cfg.get('pullRequests.defaultMergeStrategy', 'merge'),
+      defaultCheckoutAction: cfg.get('pullRequests.defaultCheckoutAction', 'pr'),
     } satisfies HostToPrDetailMsg);
 
     const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));

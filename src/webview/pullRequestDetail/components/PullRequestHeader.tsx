@@ -24,6 +24,11 @@ interface Props {
   onPickTargetBranch: () => void;
   onMerge: (strategy: MergeStrategy) => void;
   onReopen: () => void;
+  /** User-configured default (gitcharm.pullRequests.defaultMergeStrategy) pre-selected on the merge split-button —
+   * falls back to the first provider-supported strategy if this one isn't in that PR's `mergeStrategies` list. */
+  defaultMergeStrategy: MergeStrategy;
+  /** User-configured default (gitcharm.pullRequests.defaultCheckoutAction) for the checkout split-button's main action. */
+  defaultCheckoutAction: 'pr' | 'branch';
 }
 
 const STRATEGY_LABEL: Record<MergeStrategy, string> = {
@@ -64,9 +69,11 @@ function ciInfo(state: 'pending' | 'success' | 'failure' | 'unknown'): { icon: s
   }
 }
 
-interface CheckoutMenuItem { icon: string; label: string; description: string; onSelect: () => void; }
+interface CheckoutMenuItem { key: 'pr' | 'branch'; icon: string; label: string; description: string; onSelect: () => void; }
 
-function CheckoutButton({ enabled, checkingOut, items }: { enabled: boolean; checkingOut: boolean; items: CheckoutMenuItem[] }) {
+function CheckoutButton({ enabled, checkingOut, items, defaultAction }: {
+  enabled: boolean; checkingOut: boolean; items: CheckoutMenuItem[]; defaultAction: 'pr' | 'branch';
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -77,7 +84,7 @@ function CheckoutButton({ enabled, checkingOut, items }: { enabled: boolean; che
     return () => document.removeEventListener('mousedown', h, true);
   }, [open]);
 
-  const main = items[0];
+  const main = items.find(i => i.key === defaultAction) ?? items[0];
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
@@ -115,11 +122,14 @@ function CheckoutButton({ enabled, checkingOut, items }: { enabled: boolean; che
 
 /** GitHub-style split merge button: a primary "Merge pull request" action plus a chevron dropdown listing every
  * strategy the provider supports, each with its own explanatory line and a checkmark on the currently selected one. */
-function MergeButton({ strategies, merging, disabled, disabledTitle, onMerge }: {
+function MergeButton({ strategies, merging, disabled, disabledTitle, onMerge, defaultStrategy }: {
   strategies: MergeStrategy[]; merging: boolean; disabled: boolean; disabledTitle?: string; onMerge: (strategy: MergeStrategy) => void;
+  defaultStrategy: MergeStrategy;
 }) {
   const [open, setOpen] = useState(false);
-  const [strategy, setStrategy] = useState<MergeStrategy>(strategies[0]);
+  const [strategy, setStrategy] = useState<MergeStrategy>(
+    strategies.includes(defaultStrategy) ? defaultStrategy : strategies[0],
+  );
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -199,7 +209,7 @@ export function PullRequestHeader({
   summary, detail, checkingOut, canApprove, approving, canEdit, updating,
   merging, mergeError, reopening, reopenError,
   onOpenInBrowser, onViewAllChanges, onRefresh, onCheckoutPr, onCheckoutBranch, onApprove, onPickTitle, onPickTargetBranch,
-  onMerge, onReopen,
+  onMerge, onReopen, defaultMergeStrategy, defaultCheckoutAction,
 }: Props) {
   const state = detail?.merged ? 'merged' : summary.state;
   const badge = stateBadge(state);
@@ -218,8 +228,8 @@ export function PullRequestHeader({
   // the one actually created (e.g. "Riccardo Morandi" -> "riccardo-morandi").
   const safeAuthor = summary.authorName.trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
   const checkoutItems: CheckoutMenuItem[] = [
-    { icon: 'git-branch', label: 'Checkout Pull Request', description: `Creates a local branch pr/${safeAuthor}/${summary.number}`, onSelect: onCheckoutPr },
-    { icon: 'repo-pull', label: 'Checkout Branch', description: `Downloads or updates the local "${summary.sourceBranch}" branch`, onSelect: onCheckoutBranch },
+    { key: 'pr', icon: 'git-branch', label: 'Checkout Pull Request', description: `Creates a local branch pr/${safeAuthor}/${summary.number}`, onSelect: onCheckoutPr },
+    { key: 'branch', icon: 'repo-pull', label: 'Checkout Branch', description: `Downloads or updates the local "${summary.sourceBranch}" branch`, onSelect: onCheckoutBranch },
   ];
 
   return (
@@ -242,6 +252,7 @@ export function PullRequestHeader({
               disabled={isConflicting}
               disabledTitle={isConflicting ? 'Resolve conflicts before merging' : undefined}
               onMerge={onMerge}
+              defaultStrategy={defaultMergeStrategy}
             />
           )}
           {canShowReopen && (
@@ -250,7 +261,7 @@ export function PullRequestHeader({
               {reopening ? 'Reopening…' : 'Reopen pull request'}
             </button>
           )}
-          <CheckoutButton enabled={true} checkingOut={checkingOut} items={checkoutItems} />
+          <CheckoutButton enabled={true} checkingOut={checkingOut} items={checkoutItems} defaultAction={defaultCheckoutAction} />
 
           <div style={css.spacer} />
 
@@ -401,12 +412,12 @@ const css = {
   mergeMenuItem: {
     display: 'flex', gap: '8px', padding: '6px 12px', cursor: 'pointer',
   } as React.CSSProperties,
-  mergeMenuItemLabel: { fontSize: '12px', fontWeight: 600 } as React.CSSProperties,
+  mergeMenuItemLabel: { fontSize: '12px' } as React.CSSProperties,
   mergeMenuItemDesc: { fontSize: '11px', opacity: 0.6, marginTop: '2px' } as React.CSSProperties,
   reopenBtn: {
     display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px', borderRadius: '4px',
     background: '#1a7f37', color: '#fff',
-    border: 'none', cursor: 'pointer', flexShrink: 0, fontWeight: 600,
+    border: 'none', cursor: 'pointer', flexShrink: 0,
   } as React.CSSProperties,
   checkoutSplit: {
     display: 'flex', borderRadius: '4px', overflow: 'hidden',
@@ -433,7 +444,7 @@ const css = {
   checkoutMenuItem: {
     display: 'flex', gap: '8px', padding: '6px 12px', cursor: 'pointer',
   } as React.CSSProperties,
-  checkoutMenuItemLabel: { fontSize: '12px', fontWeight: 600 } as React.CSSProperties,
+  checkoutMenuItemLabel: { fontSize: '12px' } as React.CSSProperties,
   checkoutMenuItemDesc: { fontSize: '11px', opacity: 0.6, marginTop: '2px' } as React.CSSProperties,
   ciRow: (color: string): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color,

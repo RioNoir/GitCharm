@@ -379,7 +379,7 @@ export type PrCreateToHostMsg =
 // ─── Pull Request Detail: Host → WebView ─────────────────────────────────────
 
 export type HostToPrDetailMsg =
-  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string; aiEnabled: boolean; aiModelLabel: string }
+  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string; aiEnabled: boolean; aiModelLabel: string; defaultMergeStrategy: MergeStrategy; defaultCheckoutAction: 'pr' | 'branch' }
   | { type: 'PRDETAIL_ICON_THEME'; iconTheme: IconThemeData }
   | { type: 'PRDETAIL_LOADED'; detail: PullRequestDetail }
   | { type: 'PRDETAIL_LOAD_ERROR'; error: string }

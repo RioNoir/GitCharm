@@ -54,6 +54,8 @@ function App() {
   const [currentUsername, setCurrentUsername] = useState<string | undefined>();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiModelLabel, setAiModelLabel] = useState('');
+  const [defaultMergeStrategy, setDefaultMergeStrategy] = useState<MergeStrategy>('merge');
+  const [defaultCheckoutAction, setDefaultCheckoutAction] = useState<'pr' | 'branch'>('pr');
   const [detail, setDetail] = useState<PullRequestDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState<string | undefined>();
@@ -111,6 +113,8 @@ function App() {
           setCurrentUsername(msg.currentUsername);
           setAiEnabled(msg.aiEnabled);
           setAiModelLabel(msg.aiModelLabel);
+          setDefaultMergeStrategy(msg.defaultMergeStrategy);
+          setDefaultCheckoutAction(msg.defaultCheckoutAction);
           // Persisted so VS Code can restore this panel (via registerWebviewPanelSerializer) after a window reload/restart.
           getVsCodeApi().setState({ repoId: msg.repoId, number: msg.number });
           send({ type: 'PRDETAIL_REQUEST_DETAIL' });
@@ -404,6 +408,8 @@ function App() {
         onPickTargetBranch={handlePickTargetBranch}
         onMerge={handleMerge}
         onReopen={handleReopen}
+        defaultMergeStrategy={defaultMergeStrategy}
+        defaultCheckoutAction={defaultCheckoutAction}
       />
 
       {aiEnabled && <AiExplainFab modelLabel={aiModelLabel} onClick={handleExplain} />}
