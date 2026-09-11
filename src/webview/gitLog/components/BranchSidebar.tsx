@@ -284,6 +284,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       {/* Branch context menu */}
       {contextMenu && (() => {
         const inst = primaryInstance(contextMenu.merged);
+        // Merging or rebasing in the repo where this branch is already checked out
+        // does nothing — target a repo where it is not the current branch.
+        const opInst = contextMenu.merged.instances.find(i => !i.isHead) ?? inst;
         const localInstances = contextMenu.merged.instances.filter(instance => !instance.isRemote);
         const currentLocalRepoIds = localInstances.filter(instance => instance.isHead).map(instance => instance.repoId);
         const localRepoIds = localInstances.map(instance => instance.repoId);
@@ -295,8 +298,8 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             canDelete={!contextMenu.merged.isHead}
             onClose={() => setContextMenu(null)}
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
-            onMerge={() => { onMerge(inst.repoId, inst.name); setContextMenu(null); }}
-            onRebase={() => { onRebase(inst.repoId, inst.name); setContextMenu(null); }}
+            onMerge={() => { onMerge(opInst.repoId, opInst.name); setContextMenu(null); }}
+            onRebase={() => { onRebase(opInst.repoId, opInst.name); setContextMenu(null); }}
             onDelete={() => { onDelete(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onPull={currentLocalRepoIds.length > 0 ? () => { onPull(currentLocalRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
             onPush={localRepoIds.length > 0 ? () => { onPush(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}

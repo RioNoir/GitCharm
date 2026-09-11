@@ -1471,7 +1471,13 @@ export class GitService {
     await this.git.branch(from ? [branchName, from] : [branchName]);
   }
 
-  async merge(from: string): Promise<void> {
+  /**
+   * Merge `from` into the current branch. Returns whether HEAD actually moved:
+   * git exits 0 with "Already up to date" when there is nothing to merge, and
+   * callers must not report that as a completed merge.
+   */
+  async merge(from: string): Promise<{ upToDate: boolean }> {
+    const before = await this.getFullHash();
     try {
       await this.git.merge([from]);
     } catch (e: unknown) {
@@ -1494,6 +1500,7 @@ export class GitService {
       }
       await this.git.stash(['pop']);
     }
+    return { upToDate: !!before && before === await this.getFullHash() };
   }
 
   async rebase(onto: string): Promise<void> {

@@ -888,8 +888,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         try {
-          await repo.merge(msg.from);
+          const { upToDate } = await repo.merge(msg.from);
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          post({ type: 'LOG_REFRESH' });
+          if (upToDate) vscode.window.showInformationMessage(`"${msg.from}" is already up to date — nothing to merge.`);
         } catch (e: unknown) {
           const errMsg = formatGitError(e);
           const isDirty = errMsg.includes('Your local changes') || errMsg.includes('overwritten by merge') || (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree';
@@ -912,8 +914,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             if (pick?.value === 'stash') {
               try {
                 await repo.stashPush(`WIP before merge of ${msg.from}`);
-                await repo.merge(msg.from);
+                const { upToDate } = await repo.merge(msg.from);
                 post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+                post({ type: 'LOG_REFRESH' });
+                if (upToDate) vscode.window.showInformationMessage(`"${msg.from}" is already up to date — nothing to merge.`);
               } catch (e2: unknown) {
                 logError('merge:stash', formatGitError(e2), getRawErrorDetail(e2));
                 post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e2) });
@@ -931,6 +935,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             ).then(choice => {
               if (choice) vscode.commands.executeCommand('gitcharm.commitPanel.focus');
             });
+          } else {
+            // The webview only logs this to its console, so the failure is
+            // invisible unless it is reported here.
+            vscode.window.showErrorMessage(`Merge of "${msg.from}" failed: ${errMsg}`);
           }
         }
         break;
@@ -942,9 +950,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         try {
           await repo.rebase(msg.onto);
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
           logError('rebase', formatGitError(e), getRawErrorDetail(e));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          vscode.window.showErrorMessage(`Rebase onto "${msg.onto}" failed: ${formatGitError(e)}`);
         }
         break;
       }
