@@ -530,7 +530,7 @@ export function CommitList({ layout, selectedHash, repoColors, repos, activeRepo
                 type DisplayItem = RefGroup | '__HEAD__';
                 const displayItems: DisplayItem[] = [
                   ...(headBranchGroup ? [HEAD_SENTINEL] : []),
-                  ...allGroups.filter(g => !(headAndRemoteHead && g.isRemoteHead)),
+                  ...allGroups.filter(g => !(headAndRemoteHead && g === remoteHeadGroup)),
                 ];
 
                 const refsSpace = containerWidth - labelColWidth - 340;
@@ -809,7 +809,7 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
         const popoverHeadGroup = refGroups.find(g => g.isHead && !g.isDetached);
         const popoverRemoteHeadGroup = refGroups.find(g => g.isRemoteHead);
         const headAndRemoteHead = popoverHeadGroup && popoverRemoteHeadGroup;
-        const displayGroups = headAndRemoteHead ? refGroups.filter(g => !g.isRemoteHead) : refGroups;
+        const displayGroups = headAndRemoteHead ? refGroups.filter(g => g !== popoverRemoteHeadGroup) : refGroups;
         const hc = headColor();
         return (
           <div style={popoverStyles.refs}>
@@ -1524,13 +1524,20 @@ const ctxStyles = {
   } as React.CSSProperties,
 };
 
+// A branch can live on several remotes (origin/main + upstream/main) — keep them all.
+function joinRemoteNames(a: string, b: string): string {
+  if (!a) return b;
+  if (!b || a.split(' & ').includes(b)) return a;
+  return `${a} & ${b}`;
+}
+
 function mergeLocalRemote(groups: RefGroup[]): RefGroup[] {
   const merged: RefGroup[] = [];
   const seen = new Map<string, RefGroup>();
   for (const g of groups) {
     if (!g.isTag && !g.isRemoteHead && !g.isDetached && seen.has(g.label)) {
       const existing = seen.get(g.label)!;
-      const combined: RefGroup = { ...existing, isLocal: existing.isLocal || g.isLocal, isRemote: existing.isRemote || g.isRemote, remoteName: existing.remoteName || g.remoteName };
+      const combined: RefGroup = { ...existing, isLocal: existing.isLocal || g.isLocal, isRemote: existing.isRemote || g.isRemote, remoteName: joinRemoteNames(existing.remoteName, g.remoteName) };
       seen.set(g.label, combined);
       const idx = merged.findIndex(x => x.key === existing.key);
       if (idx >= 0) merged[idx] = combined;

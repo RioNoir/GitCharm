@@ -243,6 +243,8 @@ async function handleMessage(
       return;
     }
 
+    // Branches that merely descend from this commit — kept separate from the refs
+    // shown on the commit itself (see getRefsAt), which only cover exact matches.
     case 'LOG_REQUEST_COMMIT_BRANCHES': {
       const branches = await repo.getBranchesContaining(msg.hash).catch(() => ({ local: [], remote: [], tags: [] }));
       post({ type: 'LOG_COMMIT_BRANCHES_RESULT', requestId: msg.requestId, branches });

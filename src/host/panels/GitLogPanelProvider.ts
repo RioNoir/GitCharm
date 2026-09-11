@@ -1436,6 +1436,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      // Branches that merely descend from this commit — kept separate from the refs
+      // shown on the commit itself (see getRefsAt), which only cover exact matches.
       case 'LOG_REQUEST_COMMIT_BRANCHES': {
         const repo = this.manager.getRepo(msg.repoId);
         const branches = repo

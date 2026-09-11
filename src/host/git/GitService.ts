@@ -1753,12 +1753,34 @@ export class GitService {
     await this.git.raw(['merge', name]);
   }
 
+  // Refs that point AT this commit — never branches that merely contain it.
+  // --points-at peels annotated tags, so one call covers heads, remotes and tags.
+  async getRefsAt(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
+    const out = await this.git.raw(['for-each-ref', '--points-at', hash, '--format=%(refname)']).catch(() => '');
+    const local: string[] = [], remote: string[] = [], tags: string[] = [];
+    for (const ref of out.split('\n').map(r => r.trim()).filter(Boolean)) {
+      if (ref.startsWith('refs/heads/')) local.push(ref.slice('refs/heads/'.length));
+      else if (ref.startsWith('refs/tags/')) tags.push(ref.slice('refs/tags/'.length));
+      else if (ref.startsWith('refs/remotes/')) {
+        const name = ref.slice('refs/remotes/'.length);
+        // <remote>/HEAD is a symbolic alias, not a branch.
+        if (name.includes('/') && !name.endsWith('/HEAD')) remote.push(name);
+      }
+    }
+    return { local, remote, tags };
+  }
+
+  /**
+   * Branches/tags that descend from this commit without pointing at it directly —
+   * shown in a separate "descendant branches" section so that information isn't
+   * lost now that getRefsAt only reports exact matches.
+   */
   async getBranchesContaining(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
     const [localOut, remoteOut, tagOut] = await Promise.all([
       this.git.raw(['branch', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
       this.git.raw(['branch', '-r', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
-      // --points-at: only tags directly on this commit, not ancestors.
-      this.git.raw(['tag', '--points-at', hash]).catch(() => ''),
+      // --contains: every tag reachable from the commit, not just ones directly on it.
+      this.git.raw(['tag', '--contains', hash]).catch(() => ''),
     ]);
     const parse = (out: string) => out.split('\n').map(b => b.trim()).filter(Boolean);
     // Local branches must not contain a slash — anything with '/' is a remote ref
@@ -1771,7 +1793,18 @@ export class GitService {
       .map(b => b.replace(/^remotes\//, ''))
       .filter(b => !b.endsWith('/HEAD') && b.includes('/'));
     const tags = parse(tagOut);
-    return { local, remote, tags };
+
+    // Exclude anything getRefsAt would already show as an exact match on this commit —
+    // this method exists to report ADDITIONAL descendant branches, not duplicate them.
+    const { local: exactLocal, remote: exactRemote, tags: exactTags } = await this.getRefsAt(hash);
+    const exactLocalSet = new Set(exactLocal);
+    const exactRemoteSet = new Set(exactRemote);
+    const exactTagSet = new Set(exactTags);
+    return {
+      local: local.filter(b => !exactLocalSet.has(b)),
+      remote: remote.filter(b => !exactRemoteSet.has(b)),
+      tags: tags.filter(t => !exactTagSet.has(t)),
+    };
   }
 
   async getFullCommitMessage(hash: string): Promise<string> {
