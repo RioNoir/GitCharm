@@ -54,9 +54,11 @@ function ctxItems(entry: WorktreeEntry): ContextMenuEntry[] {
 
 // ── Single worktree row ───────────────────────────────────────────────────────
 
-function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace }: {
+function WorktreeRow({ entry, repoId, suppressBorder = false, onDelete, onLock, onUnlock, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace }: {
   entry: WorktreeEntry;
   repoId: string;
+  /** True when the enclosing repo section's own bottom border (rendered only when that section isn't the last repo) already covers this row's separator, so this row must not double it up. */
+  suppressBorder?: boolean;
   onDelete: Props['onDelete'];
   onLock: Props['onLock'];
   onUnlock: Props['onUnlock'];
@@ -75,7 +77,7 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
     : entry.branchShort || entry.branch;
 
   return (
-    <div style={row.root}>
+    <div style={{ ...row.root, ...(suppressBorder ? { borderBottom: 'none' } : {}) }}>
       <div
         style={{ ...row.header, background: ctxMenu ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
         onMouseEnter={() => setHovered(true)}
@@ -150,10 +152,11 @@ function WorktreeRow({ entry, repoId, onDelete, onLock, onUnlock, onOpenInExplor
 
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
-function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, onPrune, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate }: {
+function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, onLock, onUnlock, onPrune, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate }: {
   repo: RepoWorktrees;
   multiRepo: boolean;
   singleRepo?: boolean;
+  isLast?: boolean;
   onDelete: Props['onDelete'];
   onLock: Props['onLock'];
   onUnlock: Props['onUnlock'];
@@ -172,7 +175,7 @@ function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, 
   const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
 
   return (
-    <div style={css.repoSection}>
+    <div style={{ ...css.repoSection, ...(!sectionCollapsed && !isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : {}) }}>
       {multiRepo && (
         <div
           style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
@@ -200,11 +203,12 @@ function RepoSection({ repo, multiRepo, singleRepo, onDelete, onLock, onUnlock, 
         repo.worktrees.length === 0 ? (
           <div style={css.empty}>No worktrees</div>
         ) : (
-          repo.worktrees.map(w => (
+          repo.worktrees.map((w, idx) => (
             <WorktreeRow
               key={w.path}
               entry={w}
               repoId={repo.repoId}
+              suppressBorder={!isLast && idx === repo.worktrees.length - 1}
               onDelete={onDelete}
               onLock={onLock}
               onUnlock={onUnlock}
@@ -258,12 +262,13 @@ export function WorktreePanel({
       {allEmpty ? (
         <div style={css.empty}>No worktrees</div>
       ) : (
-        repos.map(repo => (
+        repos.map((repo, idx) => (
           <RepoSection
             key={repo.repoId}
             repo={repo}
             multiRepo={multiRepo}
             singleRepo={repos.length === 1}
+            isLast={idx === repos.length - 1}
             onDelete={onDelete}
             onLock={onLock}
             onUnlock={onUnlock}

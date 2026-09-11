@@ -163,7 +163,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
 }
 
 const rowStyle = {
-  root: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
+  root: { borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)' } as React.CSSProperties,
   header: {
     display: 'flex', alignItems: 'center', gap: '5px',
     padding: '5px 8px 5px 4px', cursor: 'default', minHeight: '32px',
@@ -206,7 +206,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
   const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
 
   return (
-    <div style={{ ...css.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
+    <div style={{ ...css.root, ...(!sectionCollapsed && !isLast ? {} : { borderBottom: 'none' }) }}>
       {multiRepo && (
         <div
           style={{ ...css.repoHeader(repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
@@ -253,7 +253,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
               onDrop={onDrop}
               onRename={onRename}
               onOpenFileDiff={onOpenFileDiff}
-              isLast={i === shelves.length - 1}
+              isLast={!isLast && i === shelves.length - 1}
             />
           ))
         )

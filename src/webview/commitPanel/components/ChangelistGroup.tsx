@@ -85,7 +85,7 @@ export function ChangelistGroup({
 
   const isUnversioned = changelist.id === CHANGELIST_UNVERSIONED_ID;
   const isDefault = changelist.id === CHANGELIST_DEFAULT_ID;
-  const headerIcon = isUnversioned ? 'question' : isDefault ? 'git-pull-request' : 'list-unordered';
+  const headerIcon = isUnversioned ? 'question' : isDefault ? 'circle-large-outline' : 'list-unordered';
 
   return (
     <div style={styles.container}>
@@ -317,35 +317,37 @@ function RepoSubGroup({
           </div>
         </div>
       )}
-      {files.length === 0 && (!multiRepo || singleRepo || !collapsed) && (
-        <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+      {(!multiRepo || singleRepo || !collapsed) && (
+        <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
+          {files.length === 0 ? (
+            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+          ) : (
+            <FileTree
+              repoId={repoId}
+              files={files}
+              iconTheme={iconTheme}
+              selectedFile={selectedFile}
+              onSelect={onSelectFile}
+              onToggleFile={onToggleFile}
+              onSetFiles={onSetFiles}
+              isFileSelected={isFileSelected}
+              isCollapsed={isCollapsed}
+              toggleCollapsed={toggleCollapsed}
+              onContextMenu={onContextMenu}
+              onFolderContextMenu={onFolderContextMenu}
+              onOpenFile={onOpenFile}
+              onRollback={onRollback}
+              onResolveMerge={onResolveMerge}
+              viewMode={viewMode}
+              basePad={multiRepo && !singleRepo ? 36 : 24}
+              activeFolderPath={activeFolderPath}
+              ctxFile={ctxFile}
+              onMultiSelect={onMultiSelect}
+              multiSelectedFiles={multiSelectedFiles}
+            />
+          )}
+        </div>
       )}
-      {files.length > 0 && (!multiRepo || singleRepo || !collapsed) && (
-        <FileTree
-          repoId={repoId}
-          files={files}
-          iconTheme={iconTheme}
-          selectedFile={selectedFile}
-          onSelect={onSelectFile}
-          onToggleFile={onToggleFile}
-          onSetFiles={onSetFiles}
-          isFileSelected={isFileSelected}
-          isCollapsed={isCollapsed}
-          toggleCollapsed={toggleCollapsed}
-          onContextMenu={onContextMenu}
-          onFolderContextMenu={onFolderContextMenu}
-          onOpenFile={onOpenFile}
-          onRollback={onRollback}
-          onResolveMerge={onResolveMerge}
-          viewMode={viewMode}
-          basePad={multiRepo && !singleRepo ? 36 : 24}
-          activeFolderPath={activeFolderPath}
-          ctxFile={ctxFile}
-          onMultiSelect={onMultiSelect}
-          multiSelectedFiles={multiSelectedFiles}
-        />
-      )}
-      {!isLast && <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />}
     </div>
   );
 }
@@ -445,6 +447,7 @@ const styles = {
     background: `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     height: '26px',
     boxSizing: 'border-box',
+    borderBottom: '1px solid var(--vscode-panel-border)',
     position: 'sticky', top: 0, zIndex: 1,
   }),
 

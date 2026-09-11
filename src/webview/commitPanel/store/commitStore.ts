@@ -14,6 +14,8 @@ export interface CommitState {
   iconTheme: IconThemeData | null;
   repoSelections: Record<string, boolean>;
   fileSelections: FileSelections;
+  // Which repos are checked for a multi-repo push — separate from repoSelections (used for commit).
+  pushSelections: Record<string, boolean>;
   seenFiles: Record<string, Set<string>>;
   // collapsed state for repo headers and tree dirs (key = repoId or dirPath)
   collapsedKeys: Set<string>;
@@ -36,6 +38,8 @@ export interface CommitState {
 
   setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, defaultCommitAction?: 'commit' | 'commitAndPush', defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
+  isPushSelected: (repoId: string) => boolean;
+  setPushSelection: (repoId: string, selected: boolean) => void;
   toggleFileSelection: (repoId: string, path: string) => void;
   setFileSelections: (repoId: string, paths: string[], selected: boolean) => void;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -91,6 +95,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   iconTheme: null,
   repoSelections: {},
   fileSelections: {},
+  pushSelections: {},
   seenFiles: {},
   collapsedKeys: new Set(),
   selectedFile: null,
@@ -175,6 +180,12 @@ export const useCommitStore = create<CommitState>((set, get) => ({
 
   setRepoSelection: (repoId, selected) =>
     set(s => ({ repoSelections: { ...s.repoSelections, [repoId]: selected } })),
+
+  // Unlike repoSelections (commit), push selections default to unchecked — pushing is
+  // an explicit opt-in per repo, not "everything is included unless excluded".
+  isPushSelected: (repoId) => get().pushSelections[repoId] === true,
+  setPushSelection: (repoId, selected) =>
+    set(s => ({ pushSelections: { ...s.pushSelections, [repoId]: selected } })),
 
   toggleFileSelection: (repoId, path) =>
     set(s => {

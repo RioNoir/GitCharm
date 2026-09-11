@@ -153,7 +153,7 @@ export function ProjectGroup({
       </div>
 
       {!collapsed && (
-        <div style={styles.body}>
+        <div style={{ ...styles.body, ...(!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : {}) }}>
           {allFiles.length > 0 ? (
             <FileTree
               repoId={repoId}
@@ -182,7 +182,6 @@ export function ProjectGroup({
           )}
         </div>
       )}
-      {!isLast && <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />}
     </div>
   );
 }
@@ -255,6 +254,7 @@ const styles = {
     height: '26px',
     boxSizing: 'border-box',
     minWidth: 0,
+    borderBottom: '1px solid var(--vscode-panel-border)',
     position: 'sticky', top: 0, zIndex: 1,
   }),
   repoCheckbox: {

@@ -214,55 +214,57 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           )}
         </div>
       )}
-      {!collapsed && isEmpty && (
-        <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
-      )}
-      {!collapsed && !isEmpty && (
-        <GenericFileTree<FileStatus>
-          files={files}
-          viewMode={viewMode}
-          iconTheme={iconTheme}
-          statusColor={statusColor}
-          statusLetter={statusLetter}
-          isDirOpen={dirPath => !isCollapsed(dirCollapseKey(dirPath))}
-          toggleDir={dirPath => toggleCollapsed(dirCollapseKey(dirPath))}
-          isFileSelected={isFileSelected}
-          isFileContextActive={isFileContextActive}
-          onOpenFile={handleOpenFile}
-          onContextMenuFile={(e, file) => onContextMenu(e, file)}
-          onContextMenuDir={(e, dirPath, files) => onFolderContextMenu(e, repoId, dirPath, files)}
-          isDirContextActive={dirPath => activeFolderPath === dirPath}
-          renderFileActions={(file, hovered) => file.status === 'submodule' ? null : (
-            <>
-              {file.status === 'conflicted' && (
-                <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
+      {!collapsed && (
+        <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
+          {isEmpty ? (
+            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+          ) : (
+            <GenericFileTree<FileStatus>
+              files={files}
+              viewMode={viewMode}
+              iconTheme={iconTheme}
+              statusColor={statusColor}
+              statusLetter={statusLetter}
+              isDirOpen={dirPath => !isCollapsed(dirCollapseKey(dirPath))}
+              toggleDir={dirPath => toggleCollapsed(dirCollapseKey(dirPath))}
+              isFileSelected={isFileSelected}
+              isFileContextActive={isFileContextActive}
+              onOpenFile={handleOpenFile}
+              onContextMenuFile={(e, file) => onContextMenu(e, file)}
+              onContextMenuDir={(e, dirPath, files) => onFolderContextMenu(e, repoId, dirPath, files)}
+              isDirContextActive={dirPath => activeFolderPath === dirPath}
+              renderFileActions={(file, hovered) => file.status === 'submodule' ? null : (
+                <>
+                  {file.status === 'conflicted' && (
+                    <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
+                  )}
+                  <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
+                  {!staged && (
+                    <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
+                  )}
+                  {staged ? (
+                    <InlineIconBtn icon="remove" title="Unstage" visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
+                  ) : (
+                    <InlineIconBtn icon="add" title="Stage" visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
+                  )}
+                </>
               )}
-              <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
-              {!staged && (
-                <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
+              renderDirActions={(dirFiles, hovered) => (
+                <>
+                  {!staged && (
+                    <InlineIconBtn icon="discard" title="Rollback folder" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(dirFiles); }} />
+                  )}
+                  {staged ? (
+                    <InlineIconBtn icon="remove" title="Unstage folder" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(dirFiles); }} />
+                  ) : (
+                    <InlineIconBtn icon="add" title="Stage folder" visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(dirFiles); }} />
+                  )}
+                </>
               )}
-              {staged ? (
-                <InlineIconBtn icon="remove" title="Unstage" visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
-              ) : (
-                <InlineIconBtn icon="add" title="Stage" visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
-              )}
-            </>
+            />
           )}
-          renderDirActions={(dirFiles, hovered) => (
-            <>
-              {!staged && (
-                <InlineIconBtn icon="discard" title="Rollback folder" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(dirFiles); }} />
-              )}
-              {staged ? (
-                <InlineIconBtn icon="remove" title="Unstage folder" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(dirFiles); }} />
-              ) : (
-                <InlineIconBtn icon="add" title="Stage folder" visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(dirFiles); }} />
-              )}
-            </>
-          )}
-        />
+        </div>
       )}
-      {!isLast && <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />}
     </div>
   );
 }
@@ -285,13 +287,15 @@ interface SectionHeaderProps {
   openChangesIcon?: string;
   openChangesTitle?: string;
   onOpenChanges?: () => void;
+  /** Adds a top border — used when the section above is expanded, whose own bottom border is suppressed since it isn't followed by another repo group of its own kind. */
+  topBorder?: boolean;
 }
 
-function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, secondActionIcon, secondActionTitle, onSecondAction, openChangesIcon, openChangesTitle, onOpenChanges }: SectionHeaderProps) {
+function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, secondActionIcon, secondActionTitle, onSecondAction, openChangesIcon, openChangesTitle, onOpenChanges, topBorder }: SectionHeaderProps) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
-      style={sectionHeaderStyle}
+      style={topBorder ? { ...sectionHeaderStyle, borderTop: '1px solid var(--vscode-panel-border)' } : sectionHeaderStyle}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e); }}
@@ -338,6 +342,19 @@ export function VscodeView({
   const totalStaged   = repos.reduce((s, r) => s + r.stagedFiles.length, 0);
   const totalUnstaged = repos.reduce((s, r) => s + r.unstagedFiles.length, 0);
 
+  const stagedRepos = repos.filter(r => r.stagedFiles.length > 0);
+
+  // Mirrors VscodeRepoGroup's own `collapsed` calculation. The last staged repo group
+  // suppresses its own bottom border (being the last group in its section), so "Changes"
+  // below only needs its own top border to cover that gap when that last group is actually
+  // expanded — when it's collapsed, its header's border already closes the section off.
+  const lastStagedRepo = stagedRepos[stagedRepos.length - 1];
+  const lastStagedRepoExpanded = lastStagedRepo
+    ? (lastStagedRepo.stagedFiles.length === 0
+        ? isCollapsed(`vscode-repo-staged:${lastStagedRepo.repoId}`)
+        : !isCollapsed(`vscode-repo-staged:${lastStagedRepo.repoId}`))
+    : false;
+
   const isSingleRepo = repos.length === 1;
   const singleRepoStatus = isSingleRepo ? repos[0] : null;
   const singleMeta = singleRepoStatus ? metaMap.get(singleRepoStatus.repoId) : null;
@@ -377,7 +394,6 @@ export function VscodeView({
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenStagedChanges(singleRepoStatus.repoId) : undefined}
       />
       {!stagedCollapsed && (() => {
-        const stagedRepos = repos.filter(r => r.stagedFiles.length > 0);
         return stagedRepos.map((r, idx) => {
           const meta = metaMap.get(r.repoId);
           return (
@@ -427,7 +443,7 @@ export function VscodeView({
       {/* ── Changes ── */}
       <SectionHeader
         title="Changes"
-        icon="git-pull-request"
+        icon="circle-large-outline"
         count={totalUnstaged}
         collapsed={unstagedCollapsed}
         onToggle={() => toggleCollapsed(UNSTAGED_COLLAPSE_KEY)}
@@ -441,6 +457,7 @@ export function VscodeView({
         openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
         openChangesTitle={isSingleRepo ? 'Open Changes' : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenUnstagedChanges(singleRepoStatus.repoId) : undefined}
+        topBorder={!stagedCollapsed && totalStaged > 0 && lastStagedRepoExpanded}
       />
       {!unstagedCollapsed && (() => {
         const unstagedRepos = repos.filter(r => r.stagedFiles.length === 0 || r.unstagedFiles.length > 0);
@@ -501,9 +518,6 @@ const sectionHeaderStyle: React.CSSProperties = {
   background: 'var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.08))',
   borderLeft: '3px solid var(--vscode-focusBorder, var(--vscode-button-background, #007acc))',
   borderBottom: '1px solid var(--vscode-panel-border)',
-  position: 'sticky',
-  top: 0,
-  zIndex: 1,
   height: '26px',
   boxSizing: 'border-box',
 };
@@ -550,8 +564,8 @@ const repoHeaderStyle = (color: string): React.CSSProperties => ({
   height: '26px',
   boxSizing: 'border-box',
   minWidth: 0,
-  // Sticks just below the section header (Staged Changes / Changes) above it, which is itself sticky at top:0.
-  position: 'sticky', top: '26px', zIndex: 1,
+  borderBottom: '1px solid var(--vscode-panel-border)',
+  position: 'sticky', top: 0, zIndex: 1,
 });
 
 const repoHeaderMainStyle: React.CSSProperties = {

@@ -217,7 +217,7 @@ export function StashTab({
   const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
 
   return (
-    <div style={{ ...css.root, ...(isLast ? { borderBottom: 'none' } : {}) }}>
+    <div style={{ ...css.root, ...(!sectionCollapsed && !isLast ? {} : { borderBottom: 'none' }) }}>
       {multiRepo && (
         <div
           style={{ ...css.repoHeader(repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
@@ -263,7 +263,7 @@ export function StashTab({
               onRename={onRename}
               onOpenFileDiff={onOpenFileDiff}
               expandAll={expandAll}
-              isLast={i === stashes.length - 1}
+              isLast={!isLast && i === stashes.length - 1}
             />
           ))
         )
@@ -308,7 +308,7 @@ const css = {
 };
 
 const row = {
-  root: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
+  root: { borderBottom: '1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent)' } as React.CSSProperties,
   header: {
     display: 'flex', alignItems: 'center', gap: '5px',
     padding: '5px 8px 5px 4px', cursor: 'default', minHeight: '32px',

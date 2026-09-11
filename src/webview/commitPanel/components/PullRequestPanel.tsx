@@ -65,9 +65,11 @@ function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string })
   return <span style={row.avatarFallback} title={name}>{initials(name)}</span>;
 }
 
-function PullRequestRow({ pr, repoId, onOpenInBrowser, onOpenDetail }: {
+function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, onOpenDetail }: {
   pr: PullRequestSummary;
   repoId: string;
+  /** True when the enclosing repo section's own bottom border (rendered only when that section isn't the last repo) already covers this row's separator, so this row must not double it up. */
+  suppressBorder?: boolean;
   onOpenInBrowser: (url: string) => void;
   onOpenDetail: (repoId: string, pr: PullRequestSummary) => void;
 }) {
@@ -75,7 +77,7 @@ function PullRequestRow({ pr, repoId, onOpenInBrowser, onOpenDetail }: {
   const s = stateIcon(pr.state);
   return (
     <div
-      style={{ ...row.header, background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
+      style={{ ...row.header, ...(suppressBorder ? { borderBottom: 'none' } : {}), background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={() => onOpenDetail(repoId, pr)}
@@ -169,10 +171,11 @@ function RepoSkeleton() {
   );
 }
 
-function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
+function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
   repo: RepoPullRequests;
   multiRepo: boolean;
   singleRepo?: boolean;
+  isLast?: boolean;
   expanded: boolean;
   loadingMore: boolean;
   onToggleExpanded: Props['onToggleExpanded'];
@@ -189,7 +192,7 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
   const isCollapsible = multiRepo && !singleRepo;
   const isExpanded = singleRepo || expanded;
   return (
-    <div style={css.repoSection}>
+    <div style={{ ...css.repoSection, ...(isExpanded && !isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : {}) }}>
       <div
         style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
         onClick={isCollapsible ? () => onToggleExpanded(repo.repoId) : undefined}
@@ -237,8 +240,15 @@ function RepoSection({ repo, multiRepo, singleRepo, expanded, loadingMore, onTog
                 <div style={css.empty}>No pull requests match the current filters</div>
               ) : (
                 <>
-                  {repo.pullRequests.map(pr => (
-                    <PullRequestRow key={pr.id} pr={pr} repoId={repo.repoId} onOpenInBrowser={onOpenInBrowser} onOpenDetail={onOpenDetail} />
+                  {repo.pullRequests.map((pr, idx) => (
+                    <PullRequestRow
+                      key={pr.id}
+                      pr={pr}
+                      repoId={repo.repoId}
+                      suppressBorder={!isLast && !loadingMore && idx === repo.pullRequests.length - 1}
+                      onOpenInBrowser={onOpenInBrowser}
+                      onOpenDetail={onOpenDetail}
+                    />
                   ))}
                   {loadingMore && <div style={css.loadingMore}>Loading more…</div>}
                 </>
@@ -281,12 +291,13 @@ export function PullRequestPanel({
       {loading && repos.length === 0 ? (
         <div style={css.empty}>Loading…</div>
       ) : (
-        repos.map(repo => (
+        repos.map((repo, idx) => (
           <RepoSection
             key={repo.repoId}
             repo={repo}
             multiRepo={multiRepo}
             singleRepo={repos.length === 1}
+            isLast={idx === repos.length - 1}
             expanded={expandedRepoIds.has(repo.repoId)}
             loadingMore={!!loadingMore[repo.repoId]}
             onToggleExpanded={onToggleExpanded}

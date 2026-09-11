@@ -190,7 +190,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
 
       <ScrollArea style={{ flex: 1, minHeight: 0 }}>
       {/* LOCAL section */}
-      <div style={styles.sectionHeader} onClick={() => toggle('local')}>
+      <div style={styles.sectionHeader()} onClick={() => toggle('local')}>
         <span style={styles.chevron}>{collapsed.has('local') ? '▶' : '▼'}</span>
         <Codicon name="git-branch" style={styles.sectionIcon} />
         <span style={styles.sectionLabel}>Local</span>
@@ -218,11 +218,17 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       ))}
 
       {/* REMOTE sections — one per remote name (origin, upstream, …) */}
-      {remoteGroups.map(({ name, merged }) => {
+      {remoteGroups.map(({ name, merged }, idx) => {
         const sectionKey = `remote:${name}`;
+        // The section immediately above (Local, or the previous remote group) suppresses its
+        // own separator only when it's expanded and non-empty — mirror that here so we don't
+        // end up with neither border (gap) or both (double line).
+        const prevExpandedNonEmpty = idx === 0
+          ? localMerged.length > 0 && !collapsed.has('local')
+          : remoteGroups[idx - 1].merged.length > 0 && !collapsed.has(`remote:${remoteGroups[idx - 1].name}`);
         return (
           <React.Fragment key={sectionKey}>
-            <div style={styles.sectionHeader} onClick={() => toggle(sectionKey)}>
+            <div style={styles.sectionHeader(prevExpandedNonEmpty)} onClick={() => toggle(sectionKey)}>
               <span style={styles.chevron}>{collapsed.has(sectionKey) ? '▶' : '▼'}</span>
               <Codicon name="cloud" style={styles.sectionIcon} />
               <span style={styles.sectionLabel}>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
@@ -253,9 +259,14 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       })}
 
       {/* TAGS section */}
-      {mergedTags.length > 0 && (
+      {mergedTags.length > 0 && (() => {
+        const lastRemote = remoteGroups[remoteGroups.length - 1];
+        const prevExpandedNonEmpty = lastRemote
+          ? lastRemote.merged.length > 0 && !collapsed.has(`remote:${lastRemote.name}`)
+          : localMerged.length > 0 && !collapsed.has('local');
+        return (
         <>
-          <div style={styles.sectionHeader} onClick={() => toggle('tags')}>
+          <div style={styles.sectionHeader(prevExpandedNonEmpty)} onClick={() => toggle('tags')}>
             <span style={styles.chevron}>{collapsed.has('tags') ? '▶' : '▼'}</span>
             <Codicon name="tag" style={styles.sectionIcon} />
             <span style={styles.sectionLabel}>Tags</span>
@@ -277,7 +288,8 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             />
           ))}
         </>
-      )}
+        );
+      })()}
 
       </ScrollArea>
 
@@ -651,7 +663,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
   } as React.CSSProperties,
-  sectionHeader: {
+  sectionHeader: (topBorder?: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -660,9 +672,10 @@ const styles = {
     userSelect: 'none' as const,
     background: 'var(--vscode-sideBarSectionHeader-background)',
     borderBottom: '1px solid var(--vscode-panel-border)',
+    ...(topBorder ? { borderTop: '1px solid var(--vscode-panel-border)' } : {}),
     color: 'var(--vscode-foreground)',
     minWidth: 0,
-  },
+  }),
   chevron: {
     fontSize: '9px',
     opacity: 0.5,

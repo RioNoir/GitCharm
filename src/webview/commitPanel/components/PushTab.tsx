@@ -6,6 +6,7 @@ import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 import { ScrollArea } from '../../shared/ScrollArea';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
+import { useCommitStore } from '../store/commitStore';
 
 interface Props {
   repos: RepoStatus[];
@@ -291,11 +292,13 @@ const ctxStyles = {
 
 // ── Single commit row ─────────────────────────────────────────────────────────
 
-function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoCommit, onOpenChanges, onClick, onContextMenu }: {
+function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenInLog, onUndoCommit, onOpenChanges, onClick, onContextMenu }: {
   commit: UnpushedCommit;
   repoId: string;
   isHead: boolean;
   isSelected: boolean;
+  /** True when the enclosing repo section's own bottom border (rendered only when that section isn't the last repo) already covers this row's separator, so this row must not double it up. */
+  suppressBorder?: boolean;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
   onOpenChanges: (repoId: string, hash: string) => void;
@@ -310,7 +313,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, onOpenInLog, onUndoComm
 
   return (
     <div
-      style={{ ...styles.commitRow, background: bg }}
+      style={{ ...styles.commitRow, ...(suppressBorder ? { borderBottom: 'none' } : {}), background: bg }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onClick}
@@ -373,7 +376,9 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
   isLast?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const { isCollapsed, toggleCollapsed } = useCommitStore();
+  const collapseKey = `push-repo:${repoStatus.repoId}`;
+  const expanded = !isCollapsed(collapseKey);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<CommitCtxMenuState | null>(null);
   const [headerHovered, setHeaderHovered] = useState(false);
@@ -507,7 +512,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   };
 
   return (
-    <div style={{ ...styles.repoRoot, ...(isLast ? { borderBottom: 'none' } : {}) }}>
+    <div style={{ ...styles.repoRoot, ...(expanded && !isLast ? {} : { borderBottom: 'none' }) }}>
       {/* Repo header */}
       <div
         style={styles.repoHeader(repoColor, singleRepo)}
@@ -525,7 +530,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             title={!canCheck ? 'Nothing to push' : checked ? 'Exclude from push' : 'Include in push'}
           />
         )}
-        <div style={styles.headerMain} onClick={singleRepo ? undefined : () => setExpanded(e => !e)}>
+        <div style={styles.headerMain} onClick={singleRepo ? undefined : () => toggleCollapsed(collapseKey)}>
           {!singleRepo && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />}
           {singleRepo
             ? <Codicon name="repo" style={{ fontSize: '13px', opacity: 0.7, flexShrink: 0 }} />
@@ -604,6 +609,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
                     repoId={repoStatus.repoId}
                     isHead={i === 0}
                     isSelected={multiSelectHashes.has(c.hash)}
+                    suppressBorder={!isLast && i === commits.length - 1}
                     onOpenInLog={onOpenInLog}
                     onUndoCommit={onUndoCommit}
                     onOpenChanges={onOpenChanges}
@@ -652,7 +658,8 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
-  const [checked, setChecked] = useState<Set<string>>(() => new Set<string>());
+  const { isPushSelected, setPushSelection } = useCommitStore();
+  const checked = new Set(repos.filter(r => isPushSelected(r.repoId)).map(r => r.repoId));
 
   const canPushRepo = (r: RepoStatus) => {
     const ahead = r.branch.aheadBehind?.ahead ?? 0;
@@ -664,21 +671,13 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
 
   // Auto-deselect repos that no longer have commits to push
   useEffect(() => {
-    setChecked(prev => {
-      const toRemove = repos.filter(r => prev.has(r.repoId) && !canPushRepo(r));
-      if (toRemove.length === 0) return prev;
-      const next = new Set(prev);
-      toRemove.forEach(r => next.delete(r.repoId));
-      return next;
-    });
+    for (const r of repos) {
+      if (isPushSelected(r.repoId) && !canPushRepo(r)) setPushSelection(r.repoId, false);
+    }
   }, [repos, unpushedMap]);
 
   const toggleRepo = (repoId: string) => {
-    setChecked(prev => {
-      const next = new Set(prev);
-      if (next.has(repoId)) next.delete(repoId); else next.add(repoId);
-      return next;
-    });
+    setPushSelection(repoId, !isPushSelected(repoId));
   };
 
   const pushButtonLabel = (targets: RepoStatus[]) => {
