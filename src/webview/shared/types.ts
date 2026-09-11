@@ -12,8 +12,12 @@ export interface MergeParentCommit {
   shortHash: string;
   message: string;
   authorName: string;
+  authorEmail: string;
   authorDate: string;
   parentIndex: number;
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 export interface RepoMeta {
@@ -138,6 +142,8 @@ export interface RepoStatus {
   unstagedFiles: FileStatus[];
   isDetachedHead: boolean;
   conflictCount: number;
+  /** Set while a merge or rebase is still open, so the panel can offer Continue / Abort. */
+  mergeRebaseState?: 'merge' | 'rebase';
 }
 
 // ─── Changelists ─────────────────────────────────────────────────────────────

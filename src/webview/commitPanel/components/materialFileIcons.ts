@@ -1,54 +1,53 @@
 // Material Icon Theme SVG imports — bundled as inline text by esbuild
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — esbuild resolves .svg as raw text strings
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgFile         from 'material-icon-theme/icons/file.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgReactTs      from 'material-icon-theme/icons/react_ts.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgReact        from 'material-icon-theme/icons/react.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgTypescript   from 'material-icon-theme/icons/typescript.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgJavascript   from 'material-icon-theme/icons/javascript.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgHtml         from 'material-icon-theme/icons/html.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgCss          from 'material-icon-theme/icons/css.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgSass         from 'material-icon-theme/icons/sass.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgLess         from 'material-icon-theme/icons/less.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgPhp          from 'material-icon-theme/icons/php.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgPython       from 'material-icon-theme/icons/python.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgRuby         from 'material-icon-theme/icons/ruby.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgGo           from 'material-icon-theme/icons/go.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgRust         from 'material-icon-theme/icons/rust.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgJson         from 'material-icon-theme/icons/json.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgMarkdown     from 'material-icon-theme/icons/markdown.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgDatabase     from 'material-icon-theme/icons/database.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgImage        from 'material-icon-theme/icons/image.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgConsole      from 'material-icon-theme/icons/console.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgToml         from 'material-icon-theme/icons/toml.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgXml          from 'material-icon-theme/icons/xml.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgTune         from 'material-icon-theme/icons/tune.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgYaml         from 'material-icon-theme/icons/yaml.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgFolder       from 'material-icon-theme/icons/folder.svg';
-// @ts-ignore
+// @ts-expect-error — esbuild resolves .svg as raw text strings
 import svgFolderOpen   from 'material-icon-theme/icons/folder-open.svg';
 
 // Map file extension → SVG string

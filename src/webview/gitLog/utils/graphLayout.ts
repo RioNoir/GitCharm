@@ -1,6 +1,6 @@
 import type { CommitNode } from '../../shared/types';
 import { anonymousLaneColor } from './refs';
-import { headColor, primaryBranchColor, currentPalette, branchPaletteIndex } from '../../shared/branchColors';
+import { primaryBranchColor, currentPalette, branchPaletteIndex } from '../../shared/branchColors';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 
 export const LANE_WIDTH = 20;
@@ -185,7 +185,7 @@ function colorForBranch(colourSlot: number, refName: string | null): string {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function assignLanes(commits: CommitNode[], isFiltered = false): GraphLayout {
+export function assignLanes(commits: CommitNode[], _isFiltered = false): GraphLayout {
   // In filtered/search mode each result is an isolated node — strip all parent links so
   // the graph shows only dots with no connecting lines between unrelated results.
   if (commits.length === 0) return { commits: [], segments: [], totalCols: 1, refColors: new Map() };

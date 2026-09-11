@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { generateWithAI } from '../ai/aiGenerate';
@@ -6,10 +7,9 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
-import type { CommitToHostMsg, HostToCommitMsg } from '../types/messages';
+import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter } from '../types/messages';
 import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
-import { parseConflictFile } from '../git/ConflictParser';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { MergeEditorProvider } from './MergeEditorProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
@@ -19,14 +19,21 @@ import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { compareFileWithRef, compareFolderWithRef } from './CompareWithCommand';
 import { pickRefQuickPick } from '../utils/refPicker';
 import type { GitProfileService } from '../git/GitProfileService';
-import { LOCAL_PROFILE_ID, GLOBAL_PROFILE_ID } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
 import type { ViewAndSortSettings } from '../types/settings';
+import type { PullRequestManager } from '../pullRequests/PullRequestManager';
+import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
+import type { PatAccount } from '../pullRequests/PatCredentialStore';
+import { resolveAvatarIconPath, resolveGitHubUsernameAvatarIconPath } from '../utils/avatarCache';
+import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
+import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
+
+const COMMIT_MESSAGE_WORKSPACE_KEY = 'gitcharm.commitPanel.draftMessage';
 
 /**
  * Asks — in the command bar — how to reconcile branches that have diverged from their
@@ -74,6 +81,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   // When set, post() sends to the undocked panel instead of the sidebar
   private activeReplyTarget: 'sidebar' | 'undocked' = 'sidebar';
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  private createPullRequestPanel?: CreatePullRequestPanel;
+  private pullRequestDetailPanel?: PullRequestDetailPanel;
 
   setMergeEditorProvider(provider: MergeEditorProvider): void {
     this.mergeEditorProvider = provider;
@@ -91,17 +100,58 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.undockedPanel = provider;
   }
 
+  setCreatePullRequestPanel(provider: CreatePullRequestPanel): void {
+    this.createPullRequestPanel = provider;
+  }
+
+  setPullRequestDetailPanel(provider: PullRequestDetailPanel): void {
+    this.pullRequestDetailPanel = provider;
+  }
+
   setBranchStatusBar(bar: BranchStatusBar): void {
     this.branchStatusBar = bar;
   }
 
   handleUndockedMessage(msg: CommitToHostMsg, _provider: UndockedPanelProvider): void {
     this.activeReplyTarget = 'undocked';
-    this.handleMessage(msg, undefined as unknown as vscode.Webview).finally(() => { this.activeReplyTarget = 'sidebar'; });
+    this.handleMessage(msg, undefined as unknown as vscode.Webview)
+      .catch(e => {
+        logError('handle-message', formatGitError(e), getRawErrorDetail(e));
+        if ('requestId' in msg) {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId as string, ok: false, error: formatGitError(e) });
+        }
+      })
+      .finally(() => { this.activeReplyTarget = 'sidebar'; });
   }
 
-  prefillCommitMessage(message: string): void {
-    this.post({ type: 'COMMIT_SET_MESSAGE', message });
+  /**
+   * Seeds the commit box with the message git prepared for an in-progress merge or
+   * squash (or the configured commit.template), matching VS Code's Source Control
+   * input. Only fills an empty box, so a message the user typed is never clobbered.
+   *
+   * Checks every repo for an actual merge/squash message before falling back to any
+   * repo's commit.template — otherwise a plain template configured on one repo could
+   * preempt a real in-progress merge in another.
+   */
+  async seedCommitMessage(): Promise<void> {
+    const repos = this.manager.getRepoMetas()
+      .map(meta => this.manager.getRepo(meta.id))
+      .filter((repo): repo is NonNullable<typeof repo> => !!repo);
+
+    for (const repo of repos) {
+      const message = await repo.getMergeSquashMessage().catch(() => '');
+      if (message) {
+        this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
+        return;
+      }
+    }
+    for (const repo of repos) {
+      const message = await repo.getInputTemplate().catch(() => '');
+      if (message) {
+        this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
+        return;
+      }
+    }
   }
   private shelveServices = new Map<string, ShelveService>();
 
@@ -122,7 +172,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private mergeEditorProvider?: MergeEditorProvider,
     private readonly profileService?: GitProfileService,
     private readonly globalState?: vscode.Memento,
-    private readonly workspaceState?: vscode.Memento
+    private readonly workspaceState?: vscode.Memento,
+    private readonly pullRequestManager?: PullRequestManager
   ) {
     this.viewAndSortSettings = new ViewAndSortSettingsService(this.globalState, this.workspaceState);
     this.viewAndSortSettings.migrateIfNeeded().then(() => this.syncContextKeys(this.viewAndSortSettings.getAll()));
@@ -149,6 +200,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       this.postChangelistsUpdate(status);
       this.broadcastCommit({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
       await postAllBranches();
+
+      const worktreeRepos = await this.manager.getAllWorktrees();
+      this.broadcastCommit({ type: 'WORKTREE_LIST_RESULT', repos: worktreeRepos });
+
+      this.requestPullRequestRefresh();
     });
 
     this.manager.onWorktreeChange(async () => {
@@ -211,7 +267,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     );
 
     webviewView.webview.onDidReceiveMessage((msg: CommitToHostMsg) =>
-      this.handleMessage(msg, webviewView.webview)
+      this.handleMessage(msg, webviewView.webview).catch(e => {
+        logError('handle-message', formatGitError(e), getRawErrorDetail(e));
+        if ('requestId' in msg) {
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId as string, ok: false, error: formatGitError(e) });
+        }
+      })
     );
 
     // Refresh status whenever the panel becomes visible (e.g. user switches to it)
@@ -227,6 +288,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
     // Send view/sort settings first so the webview can render the file tree with the right mode from the start
     this.postViewAndSortSettings();
+
+    // Restore a commit message draft scoped to this workspace — unlike localStorage,
+    // workspaceState never leaks a draft between unrelated projects on the same machine.
+    const persistedMessage = this.workspaceState?.get<string>(COMMIT_MESSAGE_WORKSPACE_KEY, '') ?? '';
+    if (persistedMessage) this.post({ type: 'COMMIT_PERSISTED_MESSAGE_RESULT', message: persistedMessage });
 
     // Sync current state — send changelists first so setStatus can read the correct viewMode
     this.manager.getAllStatuses().then(async status => {
@@ -312,6 +378,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Re-fetches one repo's PR list under its current filters and pushes the result to the webview — used after any filter change. */
+  private async refreshPullRequestRepo(repoId: string): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) return;
+    const repo = await this.pullRequestManager.listForRepo(meta.id, meta.name, meta.color, true);
+    this.post({ type: 'PULLREQUEST_LIST_REPO_RESULT', repo });
+  }
+
   private broadcastCommit(msg: HostToCommitMsg): void {
     this.enrichCommitMsg(msg);
     this.syncBadgeFromMsg(msg);
@@ -322,11 +397,168 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private syncBadgeFromMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
       this.badgeController?.update(msg.status);
+      // A merge can start anywhere (terminal, VS Code's own panel, a pull), so re-seed
+      // off every status refresh rather than only from GitCharm's own merge command.
+      void this.seedCommitMessage();
     }
   }
 
-  switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push'): void {
+  switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests'): void {
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
+  }
+
+  /** Prompts for a token (and, for Bitbucket, an account email) and connects the repo with it as a new saved account. */
+  private async promptAndConnectPat(repoId: string): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const connection = await this.pullRequestManager.getConnectionStatus(repoId);
+    if (connection.detectionFailed) {
+      logWarn('pullrequest-connect-pat', `Cannot connect a token for repo ${repoId} — provider detection failed`);
+      vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
+      return;
+    }
+
+    let result: { ok: boolean; error?: string };
+    if (connection.provider === 'bitbucket') {
+      // Bitbucket Cloud retired App Passwords in favor of API Tokens, which authenticate
+      // via Basic auth using the Atlassian account email — so two prompts are needed here.
+      const email = await vscode.window.showInputBox({
+        prompt: 'Enter your Atlassian account email',
+        placeHolder: 'you@example.com',
+        title: 'Connect to Bitbucket — Account Email',
+      });
+      if (!email?.trim()) return;
+      const apiToken = await vscode.window.showInputBox({
+        prompt: 'Enter a Bitbucket API Token (id.atlassian.com → API tokens)',
+        placeHolder: 'Token is stored securely and never leaves this machine',
+        password: true,
+        title: 'Connect to Bitbucket — API Token',
+      });
+      if (!apiToken?.trim()) return;
+      result = await this.pullRequestManager.connectBitbucket(repoId, email.trim(), { email: email.trim(), apiToken: apiToken.trim() });
+    } else {
+      const token = await vscode.window.showInputBox({
+        prompt: `Enter a Personal Access Token for ${connection.host}`,
+        placeHolder: 'Token is stored securely and never leaves this machine',
+        password: true,
+        title: `Connect to ${forgeProviderLabel(connection.provider)} — ${connection.host}`,
+      });
+      if (!token?.trim()) return;
+      const label = await vscode.window.showInputBox({
+        prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
+        placeHolder: connection.host,
+        title: `Connect to ${forgeProviderLabel(connection.provider)} — Account Label`,
+      });
+      result = await this.pullRequestManager.connectWithPat(repoId, token.trim(), label?.trim() || connection.host);
+    }
+
+    if (!result.ok) {
+      vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
+      return;
+    }
+    vscode.window.showInformationMessage(`Connected to ${connection.host}`);
+    logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
+    const repos = await this.pullRequestManager.getAllPullRequests(true);
+    this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+  }
+
+  /**
+   * Opens a QuickPick letting the user pick an already-saved account for this repo's
+   * detected provider, or connect a new one. Shown both for a first-time connection and
+   * to switch the account an already-connected repo uses.
+   */
+  private async openPullRequestAccountPicker(repoId: string): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const connection = await this.pullRequestManager.getConnectionStatus(repoId);
+    if (connection.detectionFailed) {
+      vscode.window.showWarningMessage('Select a Git forge for this host before connecting an account.');
+      return;
+    }
+
+    const CONNECT_NEW = Symbol('connect-new');
+
+    if (connection.provider === 'github') {
+      const accounts = await this.pullRequestManager.listGitHubAccounts();
+      const boundId = this.pullRequestManager.getGitHubAccountBinding(repoId);
+      const avatars = await Promise.all(accounts.map(a => resolveGitHubUsernameAvatarIconPath(a.label, this.globalStoragePath)));
+      const picked = await vscode.window.showQuickPick(
+        [
+          ...accounts.map((a, i) => {
+            const isBound = a.id === boundId;
+            const iconPath = avatars[i];
+            return {
+              label: iconPath ? a.label : `${isBound ? '$(check) ' : ''}${a.label}`,
+              description: isBound ? 'currently assigned' : undefined,
+              iconPath,
+              accountId: a.id as string | typeof CONNECT_NEW,
+            };
+          }),
+          { label: '$(add) Connect new account…', accountId: CONNECT_NEW },
+        ],
+        { title: 'GitHub Account', placeHolder: `Select a GitHub account for ${connection.host}` }
+      );
+      if (!picked) return;
+
+      if (picked.accountId === CONNECT_NEW) {
+        try {
+          // clearSessionPreference is what actually prompts VS Code's account chooser —
+          // forceNewSession alone just re-authenticates whichever account is already preferred.
+          await vscode.authentication.getSession('github', ['repo'], { createIfNone: true, clearSessionPreference: true });
+        } catch (e: unknown) {
+          logWarn('pullrequest-account-picker', formatGitError(e));
+          return;
+        }
+        this.pullRequestManager.invalidate();
+      } else {
+        await this.pullRequestManager.assignGitHubAccount(repoId, picked.accountId as string);
+      }
+      const repos = await this.pullRequestManager.getAllPullRequests(true);
+      this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+      return;
+    }
+
+    const options = await this.pullRequestManager.getAccountOptions(repoId);
+    const accounts = options?.accounts ?? [];
+    const avatars = await Promise.all(accounts.map(a => this.resolveAccountAvatar(a)));
+    const picked = await vscode.window.showQuickPick(
+      [
+        ...accounts.map((a, i) => {
+          const isBound = a.id === options?.boundAccountId;
+          const iconPath = avatars[i];
+          return {
+            label: iconPath ? a.label : `${isBound ? '$(check) ' : ''}${a.label}`,
+            description: isBound ? 'currently assigned' : undefined,
+            iconPath,
+            accountId: a.id as string | typeof CONNECT_NEW,
+          };
+        }),
+        { label: '$(add) Connect new account…', accountId: CONNECT_NEW },
+      ],
+      { title: `${forgeProviderLabel(connection.provider)} Account`, placeHolder: `Select an account for ${connection.host}` }
+    );
+    if (!picked) return;
+
+    if (picked.accountId === CONNECT_NEW) {
+      await this.promptAndConnectPat(repoId);
+    } else {
+      await this.pullRequestManager.assignAccount(repoId, picked.accountId as string);
+      const repos = await this.pullRequestManager.getAllPullRequests(true);
+      this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+    }
+  }
+
+  /** Resolves an avatar for a saved PAT account — only Bitbucket accounts have a known email; other providers fall back to no avatar (codicon shown instead). */
+  private async resolveAccountAvatar(account: PatAccount): Promise<vscode.Uri | undefined> {
+    if (!this.pullRequestManager) return undefined;
+    const email = await this.pullRequestManager.getAccountEmail(account);
+    if (!email) return undefined;
+    return resolveAvatarIconPath(email, this.globalStoragePath);
+  }
+
+  /** Invalidates the PR cache and asks the webview to re-request the list with its current filters. */
+  requestPullRequestRefresh(): void {
+    if (!this.pullRequestManager) return;
+    this.pullRequestManager.invalidate();
+    this.post({ type: 'PULLREQUEST_INVALIDATED' });
   }
 
   /** Reads fresh status after a stage/unstage op. simple-git reads directly from the git index so it's always accurate once the op completes. */
@@ -505,8 +737,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleMessage(msg: CommitToHostMsg, webview: vscode.Webview): Promise<void> {
+  private async handleMessage(msg: CommitToHostMsg, _webview: vscode.Webview): Promise<void> {
     switch (msg.type) {
+      case 'COMMIT_PERSIST_MESSAGE': {
+        await this.workspaceState?.update(COMMIT_MESSAGE_WORKSPACE_KEY, msg.message || undefined);
+        break;
+      }
+
       case 'COMMIT_REQUEST_STATUS': {
         const [repos, status, iconTheme] = await Promise.all([
           Promise.resolve(this.manager.getRepoMetas()),
@@ -677,6 +914,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           { location: vscode.ProgressLocation.Notification, title: `Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
           async () => {
             const errors: string[] = [];
+            const succeededRepoIds: string[] = [];
             // Commit submodules before parent repos so the parent's pointer update
             // always refers to an already-committed submodule state.
             const repoMetas = this.manager.getRepoMetas();
@@ -697,15 +935,16 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                 const creds = await this.getCommitCredentials(repo.rootPath);
                 await repo.commit(r.message, r.amend, creds, s => this.profileService?.trace(s));
                 if (msg.andPush) await repo.push();
+                succeededRepoIds.push(r.repoId);
               } catch (e: unknown) {
                 errors.push(`${r.repoId.split('/').pop()}: ${formatGitError(e)}`);
                 logError(`commit-multi:${r.repoId}`, formatGitError(e), getRawErrorDetail(e));
               }
             }
             if (errors.length > 0) {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n') });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n'), succeededRepoIds });
             } else {
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, succeededRepoIds });
               logInfo('commit-multi', `Committed ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}${msg.andPush ? ' and pushed' : ''}`);
               this.logProvider?.refresh();
             }
@@ -717,6 +956,25 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_REBASE_ACTION': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { logWarn('rebase-action', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        try {
+          if (msg.action === 'continue') await repo.rebaseContinue();
+          else await repo.abortRebase();
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+          logInfo('rebase-action', `Rebase ${msg.action} in ${msg.repoId}`);
+          this.logProvider?.refresh();
+        } catch (e: unknown) {
+          logError('rebase-action', formatGitError(e), getRawErrorDetail(e));
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+        }
+        const rebaseStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: rebaseStatus });
+        this.postChangelistsUpdate(rebaseStatus);
+        break;
+      }
+
       case 'OPEN_PROFILES_MENU': {
         vscode.commands.executeCommand('gitcharm.manageProfiles');
         break;
@@ -725,7 +983,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_PULL_ALL': {
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Pulling all repositories', cancellable: false },
-          async (progress) => {
+          async (_progress) => {
             const results = await this.manager.pullAll();
             const failed = results.filter(r => !r.ok);
             if (failed.length > 0) {
@@ -1122,8 +1380,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_ADD_TO_GITIGNORE': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
-        
-        const fs = require('fs') as typeof import('fs');
 
         // Find all .gitignore files in the repo
         const rootUri = vscode.Uri.file(repo.rootPath);
@@ -1400,9 +1656,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!svc || !repo) return;
         try {
-          const fs = require('fs') as typeof import('fs');
-          
-
           const diffChunk = svc.getFileDiff(msg.shelveId, msg.filePath);
           const absFilePath = path.join(repo.rootPath, msg.filePath);
           const fileName = msg.filePath.split('/').pop() ?? msg.filePath;
@@ -1444,8 +1697,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         try {
-          
-          const fs = require('fs') as typeof import('fs');
           const fileName = msg.filePath.split('/').pop() ?? msg.filePath;
           const absPath = path.join(repo.rootPath, msg.filePath);
           const safeRef = msg.stashRef.replace(/[{}]/g, '_');
@@ -1736,8 +1987,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'PUSH_OPEN_DETAIL': {
-        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
-        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, {}, this.profileService);
         break;
       }
 
@@ -1765,8 +2016,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'PUSH_EXPLAIN_COMMIT': {
-        const { openCommitDetailPanel } = await import('./CommitDetailPanel');
-        await openCommitDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true }, this.profileService);
         break;
       }
 
@@ -1997,6 +2248,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_SET_VIEW_SORT_SETTINGS': {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { type: _type, ...partial } = msg;
         await this.viewAndSortSettings.updatePrefs(partial);
         this.postViewAndSortSettings();
@@ -2374,6 +2626,143 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const uri = vscode.Uri.file(msg.worktreePath);
         const folders = vscode.workspace.workspaceFolders ?? [];
         vscode.workspace.updateWorkspaceFolders(folders.length, 0, { uri });
+        break;
+      }
+
+      case 'PULLREQUEST_REQUEST_LIST': {
+        if (!this.pullRequestManager) { this.post({ type: 'PULLREQUEST_LIST_RESULT', repos: [] }); break; }
+        const repoIds = this.manager.getRepoMetas().filter(m => (m.depth ?? 0) === 0 && !m.isWorktree).map(m => m.id);
+        this.post({ type: 'PULLREQUEST_LIST_START', repoIds });
+        await this.pullRequestManager.getAllPullRequestsStreaming(!!msg.forceRefresh, repo => {
+          this.post({ type: 'PULLREQUEST_LIST_REPO_RESULT', repo });
+        });
+        break;
+      }
+
+      case 'PULLREQUEST_LOAD_MORE': {
+        if (!this.pullRequestManager) break;
+        const repo = await this.pullRequestManager.loadMore(msg.repoId);
+        this.post({ type: 'PULLREQUEST_LOAD_MORE_RESULT', repoId: msg.repoId, repo });
+        break;
+      }
+
+      case 'PULLREQUEST_REFRESH_REPO': {
+        await this.refreshPullRequestRepo(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_FILTERS_PROMPT': {
+        if (!this.pullRequestManager) break;
+        const current = this.pullRequestManager.getFiltersForRepo(msg.repoId);
+        const capabilities = await this.pullRequestManager.getCapabilities(msg.repoId);
+        const STATE_LABELS: Record<PullRequestStateFilter, string> = { open: 'Open', draft: 'Draft', closed: 'Closed', merged: 'Merged' };
+        const STATE_ORDER: PullRequestStateFilter[] = ['open', 'draft', 'closed', 'merged'];
+        interface FilterQuickPickItem extends vscode.QuickPickItem {
+          stateValue?: PullRequestStateFilter;
+          isAuthorToggle?: boolean;
+          isAssignedToggle?: boolean;
+          isReviewToggle?: boolean;
+          isMentionsToggle?: boolean;
+          isEverythingAction?: boolean;
+        }
+        const items: FilterQuickPickItem[] = [
+          { label: 'State', kind: vscode.QuickPickItemKind.Separator },
+          ...STATE_ORDER.map(s => ({ label: STATE_LABELS[s], picked: current.states.includes(s), stateValue: s })),
+          { label: '', kind: vscode.QuickPickItemKind.Separator },
+          { label: 'Created by me', picked: current.author === 'mine', isAuthorToggle: true },
+          ...(capabilities?.canFilterAssignee ? [{ label: 'Assigned to me', picked: current.assignedToMe, isAssignedToggle: true }] : []),
+          ...(capabilities?.canFilterReviewRequested ? [{ label: 'Review requested', picked: current.reviewRequestedToMe, isReviewToggle: true }] : []),
+          ...(capabilities?.canFilterMentions ? [{ label: 'Mentioning you', picked: current.mentioningMe, isMentionsToggle: true }] : []),
+          { label: '', kind: vscode.QuickPickItemKind.Separator },
+          { label: 'Everything assigned, requested, or mentioning you', isEverythingAction: true },
+        ];
+        const picked = await vscode.window.showQuickPick(items, {
+          canPickMany: true,
+          title: 'Filter Pull Requests',
+        });
+        if (picked === undefined) break; // cancelled — leave filters unchanged
+
+        const pickedStates = STATE_ORDER.filter(s => picked.some(p => p.stateValue === s));
+        const nextStates = pickedStates.length > 0 ? pickedStates : current.states;
+        let nextAuthor: PullRequestAuthorFilter = picked.some(p => p.isAuthorToggle) ? 'mine' : 'all';
+        let nextAssigned = picked.some(p => p.isAssignedToggle);
+        let nextReview = picked.some(p => p.isReviewToggle);
+        let nextMentions = picked.some(p => p.isMentionsToggle);
+
+        if (picked.some(p => p.isEverythingAction)) {
+          // A shortcut that wins over the individual toggles above — sets everything "about you" at once.
+          nextAuthor = 'mine';
+          nextAssigned = !!capabilities?.canFilterAssignee;
+          nextReview = !!capabilities?.canFilterReviewRequested;
+          nextMentions = !!capabilities?.canFilterMentions;
+        }
+
+        await this.pullRequestManager.setFiltersForRepo(msg.repoId, {
+          states: nextStates, author: nextAuthor,
+          assignedToMe: nextAssigned, reviewRequestedToMe: nextReview, mentioningMe: nextMentions, search: current.search,
+        });
+        await this.refreshPullRequestRepo(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_SEARCH_PROMPT': {
+        if (!this.pullRequestManager) break;
+        const current = this.pullRequestManager.getFiltersForRepo(msg.repoId);
+        const input = await vscode.window.showInputBox({
+          title: 'Search Pull Requests',
+          prompt: 'Title text, or a PR number like 1234 or #1234',
+          placeHolder: 'Search…',
+          value: current.search,
+        });
+        if (input === undefined) break; // cancelled — leave the search unchanged
+
+        await this.pullRequestManager.setFiltersForRepo(msg.repoId, { ...current, search: input.trim() });
+        await this.refreshPullRequestRepo(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_CREATE_PROMPT': {
+        await this.createPullRequestPanel?.open(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_OPEN_ACCOUNT_PICKER': {
+        await this.openPullRequestAccountPicker(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_OPEN_IN_BROWSER': {
+        vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        break;
+      }
+
+      case 'PULLREQUEST_OPEN_DETAIL': {
+        await this.pullRequestDetailPanel?.open(msg.repoId, msg.pr);
+        break;
+      }
+
+      case 'PULLREQUEST_CONNECT_PAT_PROMPT': {
+        await this.promptAndConnectPat(msg.repoId);
+        break;
+      }
+
+      case 'PULLREQUEST_DISCONNECT': {
+        if (!this.pullRequestManager) break;
+        await this.pullRequestManager.disconnect(msg.repoId);
+        const repos = await this.pullRequestManager.getAllPullRequests(true);
+        this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        break;
+      }
+
+      case 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE': {
+        const config = vscode.workspace.getConfiguration('gitcharm');
+        const overrides = config.get<Record<string, string>>('pullRequests.hostProviderOverrides', {});
+        await config.update('pullRequests.hostProviderOverrides', { ...overrides, [msg.host]: msg.provider }, vscode.ConfigurationTarget.Global);
+        if (this.pullRequestManager) {
+          this.pullRequestManager.invalidate();
+          const repos = await this.pullRequestManager.getAllPullRequests(true);
+          this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        }
         break;
       }
 

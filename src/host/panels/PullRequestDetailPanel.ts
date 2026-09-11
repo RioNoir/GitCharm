@@ -1,0 +1,706 @@
+import * as vscode from 'vscode';
+import { getWebviewHtml } from '../utils/webviewHtml';
+import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
+import { redactCredentialsInUrls, type PullRequestManager } from '../pullRequests/PullRequestManager';
+import { PullRequestDocumentProvider } from '../pullRequests/PullRequestDocumentProvider';
+import { loadIconTheme } from '../utils/IconThemeService';
+import type { ChangedFile, FileDiffContent, HostToPrDetailMsg, PrDetailToHostMsg, PullRequestSummary } from '../types/messages';
+import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
+import { logInfo, logWarn, logError } from '../utils/Logger';
+import { getAiModelLabel } from '../utils/aiModelLabel';
+
+const TAB_TITLE_MAX_LENGTH = 40;
+
+function truncateTitle(title: string): string {
+  return title.length > TAB_TITLE_MAX_LENGTH ? `${title.slice(0, TAB_TITLE_MAX_LENGTH)}…` : title;
+}
+
+/** QuickPickItem.iconPath accepts a remote https URI directly (same as the GitHub Pull Requests extension does for reviewer/assignee avatars in its own pickers) — no local caching needed. */
+function avatarIconPath(avatarUrl: string | undefined): vscode.Uri | undefined {
+  if (!avatarUrl) return undefined;
+  try {
+    return vscode.Uri.parse(avatarUrl, true);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Renders a label's color as a small filled circle, data-URI encoded — QuickPickItem has no direct way to
+ * tint an item's background/text, so a colored swatch icon is the standard stand-in (same technique the
+ * GitHub Pull Requests extension uses for its own label picker). */
+function labelSwatchIconPath(hexColor: string): vscode.Uri {
+  const color = `#${hexColor.replace(/^#/, '')}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6" fill="${color}"/></svg>`;
+  return vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
+
+export class PullRequestDetailPanel {
+  private panels = new Map<string, vscode.WebviewPanel>();
+  private diffCache = new Map<string, FileDiffContent>();
+
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly manager: WorkspaceGitManager,
+    private readonly pullRequestManager: PullRequestManager,
+    private readonly prDocProvider: PullRequestDocumentProvider,
+    private readonly onChanged: () => void,
+  ) {}
+
+  async open(repoId: string, pr: PullRequestSummary): Promise<void> {
+    const key = `${repoId}:${pr.number}`;
+    if (this.panels.has(key)) {
+      this.panels.get(key)!.reveal();
+      return;
+    }
+
+    const localResourceRoots: vscode.Uri[] = [this.extensionUri];
+    for (const ext of vscode.extensions.all) {
+      const themes: Array<{ id: string }> = ext.packageJSON?.contributes?.iconThemes ?? [];
+      if (themes.length > 0) localResourceRoots.push(vscode.Uri.file(ext.extensionPath));
+    }
+
+    const panelTitle = pr.title ? `PR #${pr.number} - ${truncateTitle(pr.title)}` : `PR #${pr.number}`;
+
+    const panel = vscode.window.createWebviewPanel(
+      'gitcharm.pullRequestDetail',
+      panelTitle,
+      vscode.ViewColumn.One,
+      { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
+    );
+    this.setupPanel(panel, repoId, pr.number, panelTitle);
+    await this.sendInit(panel, repoId, pr);
+  }
+
+  /** Re-hydrates a Pull Request Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharm.pullRequestDetail', ...) in extension.ts.
+   * Unlike `open()` (which already has the PR summary in memory), a restore only has {repoId, number}
+   * persisted via setState — fetching the summary is a network call. The webview/HTML is set up
+   * synchronously first (the client shows its own loading skeleton with no PRDETAIL_INIT yet), and
+   * the fetched summary is pushed in once it resolves. Otherwise the panel would stay a blank/black
+   * tab for as long as that call takes — worse the more panels are restored at once on startup. */
+  async restore(panel: vscode.WebviewPanel, state: unknown): Promise<void> {
+    const s = state as { repoId?: unknown; number?: unknown } | null;
+    if (!s || typeof s.repoId !== 'string' || typeof s.number !== 'number') {
+      panel.dispose();
+      return;
+    }
+    const repoId = s.repoId;
+    const number = s.number;
+
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) {
+      logWarn('pullrequest-detail-restore', `Repository not found for repoId ${repoId}`);
+      panel.dispose();
+      return;
+    }
+
+    this.setupPanel(panel, repoId, number, `PR #${number}`, /* keepExistingTitle */ true);
+
+    const result = await this.pullRequestManager.getPullRequestDetail(repoId, number);
+    if ('error' in result) {
+      logWarn('pullrequest-detail-restore', `Failed to restore PR detail panel: ${result.error}`);
+      panel.webview.postMessage({ type: 'PRDETAIL_LOAD_ERROR', error: result.error } satisfies HostToPrDetailMsg);
+      return;
+    }
+    await this.sendInit(panel, repoId, result);
+  }
+
+  /** Creates the webview/HTML and message-handling wiring — synchronous and network-free, so
+   * the panel/tab appears (with the client's own loading skeleton) immediately. `pr` is not
+   * yet known when restoring, so handleMessage's calls source the PR number/summary lazily
+   * through `currentPr`, updated once `sendInit` resolves the real summary.
+   * `keepExistingTitle` is set on the restore path: VS Code re-creates a restored panel with the
+   * tab title it last had before the reload (typically already the full "PR #N - Title" from
+   * the previous session) — forcing it to the bare "PR #N" form here would visibly regress it
+   * for the ~1s until sendInit re-derives the real title, which is exactly the flicker this
+   * avoids. `open()` has no prior title to preserve, so it always sets one. */
+  private setupPanel(panel: vscode.WebviewPanel, repoId: string, prNumber: number, panelTitle: string, keepExistingTitle = false): void {
+    const key = `${repoId}:${prNumber}`;
+    if (!keepExistingTitle) panel.title = panelTitle;
+    panel.iconPath = new vscode.ThemeIcon('git-pull-request');
+
+    panel.webview.html = getWebviewHtml(
+      panel.webview,
+      this.extensionUri,
+      'pullRequestDetail',
+      panelTitle
+    );
+
+    const currentPr = { value: null as PullRequestSummary | null };
+    panel.webview.onDidReceiveMessage((msg: PrDetailToHostMsg) => {
+      const pr = currentPr.value;
+      if (!pr) return; // still loading the initial summary (restore path) — nothing to act on yet
+      return this.handleMessage(msg, repoId, pr, panel);
+    });
+    this.currentPrByPanel.set(panel, currentPr);
+
+    const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
+      if (!e.affectsConfiguration('workbench.iconTheme')) return;
+      const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
+      panel.webview.postMessage({ type: 'PRDETAIL_ICON_THEME', iconTheme } satisfies HostToPrDetailMsg);
+    });
+    // Belt-and-suspenders: re-apply the real title whenever the panel's view state changes
+    // (tab gains/loses focus, becomes visible again, etc.), in case anything else ever
+    // resets it back to the bare "PR #N" form once the real summary is known.
+    const viewStateWatcher = panel.onDidChangeViewState(() => {
+      const pr = currentPr.value;
+      if (pr?.title) panel.title = `PR #${pr.number} - ${truncateTitle(pr.title)}`;
+    });
+    panel.onDidDispose(() => { this.panels.delete(key); this.currentPrByPanel.delete(panel); iconThemeWatcher.dispose(); viewStateWatcher.dispose(); });
+    this.panels.set(key, panel);
+  }
+
+  /** Holds each open panel's current PR summary once known, so `setupPanel`'s message handler
+   * (wired before the summary is fetched, on the restore path) can pick it up once ready. */
+  private currentPrByPanel = new WeakMap<vscode.WebviewPanel, { value: PullRequestSummary | null }>();
+
+  private async sendInit(panel: vscode.WebviewPanel, repoId: string, pr: PullRequestSummary): Promise<void> {
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) {
+      logWarn('pullrequest-detail-open', `Repository not found for repoId ${repoId}`);
+      vscode.window.showErrorMessage('Repository not found');
+      panel.dispose();
+      return;
+    }
+    const holder = this.currentPrByPanel.get(panel);
+    if (holder) holder.value = pr;
+    // Restored panels only know `PR #{number}` until now (the real title needs this same
+    // network round-trip) — set it as soon as the real summary is available, rather than
+    // waiting for the client's own follow-up PRDETAIL_REQUEST_DETAIL round-trip to do it.
+    panel.title = pr.title ? `PR #${pr.number} - ${truncateTitle(pr.title)}` : `PR #${pr.number}`;
+
+    const currentUsername = await this.pullRequestManager.getCurrentUsername(repoId).catch(() => undefined);
+    const cfg = vscode.workspace.getConfiguration('gitcharm');
+    panel.webview.postMessage({
+      type: 'PRDETAIL_INIT', repoId, repoName: meta.name, number: pr.number, summary: pr, currentUsername,
+      aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg),
+      defaultMergeStrategy: cfg.get('pullRequests.defaultMergeStrategy', 'merge'),
+      defaultCheckoutAction: cfg.get('pullRequests.defaultCheckoutAction', 'pr'),
+    } satisfies HostToPrDetailMsg);
+
+    const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
+    panel.webview.postMessage({ type: 'PRDETAIL_ICON_THEME', iconTheme } satisfies HostToPrDetailMsg);
+  }
+
+  private async handleMessage(msg: PrDetailToHostMsg, repoId: string, pr: PullRequestSummary, panel: vscode.WebviewPanel): Promise<void> {
+    const post = (m: HostToPrDetailMsg) => panel.webview.postMessage(m);
+
+    switch (msg.type) {
+      case 'PRDETAIL_REQUEST_DETAIL': {
+        const result = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
+        if ('error' in result) {
+          post({ type: 'PRDETAIL_LOAD_ERROR', error: result.error });
+        } else {
+          post({ type: 'PRDETAIL_LOADED', detail: result });
+          // Keep the editor tab title in sync after a title edit — `pr` itself is a snapshot captured when the
+          // panel was opened/restored and is never mutated, so re-derive the title string on every fresh fetch.
+          // Only ever upgrades to a title, never regresses to the bare "PR #N" form — a transient/incomplete
+          // response here shouldn't blank out a title the tab already has.
+          if (result.title) panel.title = `PR #${result.number} - ${truncateTitle(result.title)}`;
+        }
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_COMMENTS': {
+        const { items: comments, error } = await this.pullRequestManager.listComments(repoId, pr.number);
+        post({ type: 'PRDETAIL_COMMENTS_RESULT', comments, error });
+        break;
+      }
+
+      case 'PRDETAIL_POST_COMMENT': {
+        const result = await this.pullRequestManager.postComment(repoId, pr.number, msg.body);
+        post({ type: 'PRDETAIL_COMMENT_POSTED', ok: result.ok, comment: result.comment, error: result.error });
+        break;
+      }
+
+      case 'PRDETAIL_UPDATE_COMMENT': {
+        const result = await this.pullRequestManager.updateComment(repoId, pr.number, msg.commentId, msg.body);
+        post({ type: 'PRDETAIL_COMMENT_UPDATED', ok: result.ok, comment: result.comment, error: result.error });
+        if (!result.ok) vscode.window.showErrorMessage(result.error ?? 'Failed to update comment');
+        break;
+      }
+
+      case 'PRDETAIL_DELETE_COMMENT': {
+        const confirmed = await vscode.window.showWarningMessage('Delete this comment?', { modal: true }, 'Delete');
+        if (confirmed !== 'Delete') { post({ type: 'PRDETAIL_COMMENT_DELETED', ok: true }); break; }
+        const result = await this.pullRequestManager.deleteComment(repoId, pr.number, msg.commentId);
+        post({ type: 'PRDETAIL_COMMENT_DELETED', ok: result.ok, commentId: msg.commentId, error: result.error });
+        if (!result.ok) vscode.window.showErrorMessage(result.error ?? 'Failed to delete comment');
+        break;
+      }
+
+      case 'PRDETAIL_HIDE_COMMENT': {
+        const result = await this.pullRequestManager.hideComment(repoId, pr.number, msg.commentId);
+        post({ type: 'PRDETAIL_COMMENT_HIDDEN', ok: result.ok, commentId: msg.commentId, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (!result.ok && !('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to hide comment');
+        break;
+      }
+
+      case 'PRDETAIL_UNHIDE_COMMENT': {
+        const result = await this.pullRequestManager.unhideComment(repoId, pr.number, msg.commentId);
+        post({ type: 'PRDETAIL_COMMENT_UNHIDDEN', ok: result.ok, commentId: msg.commentId, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (!result.ok && !('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to unhide comment');
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_FILES': {
+        const { items: files, error } = await this.pullRequestManager.listChangedFiles(repoId, pr.number);
+        post({ type: 'PRDETAIL_FILES_RESULT', files, error });
+        break;
+      }
+
+      case 'PRDETAIL_OPEN_FILE_DIFF': {
+        await this.openFileDiff(repoId, pr, msg.file, post);
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_COMMITS': {
+        const { items: commits, error } = await this.pullRequestManager.listCommits(repoId, pr.number);
+        post({ type: 'PRDETAIL_COMMITS_RESULT', commits, error });
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_EVENTS': {
+        const { items: events, error } = await this.pullRequestManager.listEvents(repoId, pr.number);
+        post({ type: 'PRDETAIL_EVENTS_RESULT', events, error });
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_COMMIT_FILES': {
+        const { items: files, error } = await this.pullRequestManager.listCommitFiles(repoId, msg.sha);
+        post({ type: 'PRDETAIL_COMMIT_FILES_RESULT', sha: msg.sha, files, error });
+        break;
+      }
+
+      case 'PRDETAIL_OPEN_COMMIT_FILE_DIFF': {
+        await this.openCommitFileDiff(repoId, pr, msg.file, msg.commitSha, msg.parentSha, post);
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_CHECKS': {
+        const { items: checks, error } = await this.pullRequestManager.listChecks(repoId, msg.headSha);
+        post({ type: 'PRDETAIL_CHECKS_RESULT', checks, error });
+        break;
+      }
+
+      case 'PRDETAIL_EXPLAIN': {
+        const { openAiExplainDetail } = await import('./AiExplainDetailPanel');
+        const cfg = vscode.workspace.getConfiguration('gitcharm');
+        openAiExplainDetail(
+          this.extensionUri,
+          { key: `pr:${repoId}:${pr.number}`, kind: 'pull-request', title: `PR #${pr.number} — ${pr.title}`, subtitle: `${pr.sourceBranch} → ${pr.targetBranch}` },
+          getAiModelLabel(cfg),
+          () => this.explainPullRequest(repoId, pr),
+        );
+        break;
+      }
+
+      case 'PRDETAIL_MERGE': {
+        try {
+          const result = await this.pullRequestManager.mergePullRequest(repoId, pr.number, msg.strategy);
+          post({ type: 'PRDETAIL_MERGE_RESULT', ok: result.ok, error: result.error });
+          if (result.ok) {
+            logInfo('pullrequest-merge', `Merged PR #${pr.number} for ${repoId}`);
+            this.onChanged();
+          }
+        } catch (e: unknown) {
+          logError('pullrequest-merge', formatGitError(e), getRawErrorDetail(e));
+          post({ type: 'PRDETAIL_MERGE_RESULT', ok: false, error: formatGitError(e) });
+        }
+        break;
+      }
+
+      case 'PRDETAIL_CLOSE': {
+        const confirmed = await vscode.window.showWarningMessage(
+          `Close pull request #${pr.number}?`, { modal: true }, 'Close Pull Request',
+        );
+        if (confirmed !== 'Close Pull Request') { post({ type: 'PRDETAIL_CLOSE_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.closePullRequest(repoId, pr.number);
+        post({ type: 'PRDETAIL_CLOSE_RESULT', ok: result.ok, error: result.error });
+        if (result.ok) this.onChanged();
+        break;
+      }
+
+      case 'PRDETAIL_REOPEN': {
+        const result = await this.pullRequestManager.reopenPullRequest(repoId, pr.number);
+        post({ type: 'PRDETAIL_REOPEN_RESULT', ok: result.ok, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (result.ok) this.onChanged();
+        break;
+      }
+
+      case 'PRDETAIL_SUBMIT_REVIEW': {
+        const result = await this.pullRequestManager.submitReview(repoId, pr.number, msg.input);
+        post({ type: 'PRDETAIL_REVIEW_RESULT', ok: result.ok, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (result.ok) {
+          this.onChanged();
+        } else {
+          vscode.window.showErrorMessage(result.error ?? 'Failed to submit review');
+        }
+        break;
+      }
+
+      case 'PRDETAIL_OPEN_IN_BROWSER': {
+        vscode.env.openExternal(vscode.Uri.parse(pr.url));
+        break;
+      }
+
+      case 'PRDETAIL_VIEW_ALL_CHANGES': {
+        await this.openAllChanges(repoId, pr, post);
+        break;
+      }
+
+      case 'PRDETAIL_OPEN_COMMIT_ALL_CHANGES': {
+        await this.openCommitAllChanges(repoId, pr, msg.commitSha, msg.parentSha);
+        break;
+      }
+
+      case 'PRDETAIL_CHECKOUT_PR': {
+        await this.checkoutPullRequest(repoId, pr, 'pr', post);
+        break;
+      }
+
+      case 'PRDETAIL_CHECKOUT_BRANCH': {
+        await this.checkoutPullRequest(repoId, pr, 'branch', post);
+        break;
+      }
+
+      case 'PRDETAIL_PICK_TITLE': {
+        const detail = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
+        const currentTitle = 'error' in detail ? pr.title : detail.title;
+        const title = await vscode.window.showInputBox({
+          title: 'Edit Pull Request Title', value: currentTitle, prompt: 'Enter the new title', validateInput: v => v.trim() ? undefined : 'Title cannot be empty',
+        });
+        // Cancelled or unchanged — still report back (ok:true, no-op) so the webview clears its "updating" spinner.
+        if (title === undefined || title.trim() === currentTitle) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { title: title.trim() });
+        post({ type: 'PRDETAIL_UPDATE_RESULT', ok: result.ok, error: result.error });
+        if (result.ok) this.onChanged();
+        else vscode.window.showErrorMessage(result.error ?? 'Failed to update pull request');
+        break;
+      }
+
+      case 'PRDETAIL_PICK_TARGET_BRANCH': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const { items: branches, error } = await this.pullRequestManager.listTargetBranches(repoId, pr.targetRepoFullName);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: false, error }); break; }
+        const picked = await vscode.window.showQuickPick(
+          branches.map(b => ({ label: b, description: b === pr.targetBranch ? '(current)' : undefined })),
+          { title: 'Change Target Branch', placeHolder: 'Select the new target branch' },
+        );
+        if (!picked || picked.label === pr.targetBranch) { post({ type: 'PRDETAIL_UPDATE_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { targetBranch: picked.label });
+        post({ type: 'PRDETAIL_UPDATE_RESULT', ok: result.ok, error: result.error });
+        if (result.ok) this.onChanged();
+        else vscode.window.showErrorMessage(result.error ?? 'Failed to update pull request');
+        break;
+      }
+
+      case 'PRDETAIL_PICK_REVIEWERS': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const [{ items: collaborators, error }, detail] = await Promise.all([
+          this.pullRequestManager.listCollaborators(repoId, pr.targetRepoFullName),
+          this.pullRequestManager.getPullRequestDetail(repoId, pr.number),
+        ]);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: false, error }); break; }
+        const currentIds = new Set('error' in detail ? [] : detail.reviewers.map(r => r.id));
+        const picked = await vscode.window.showQuickPick(
+          collaborators.map(c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: avatarIconPath(c.avatarUrl) })),
+          { title: 'Reviewers', placeHolder: 'Select reviewers', canPickMany: true },
+        );
+        if (!picked) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updateReviewers(repoId, pr.number, picked.map(p => p.id));
+        post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: result.ok, error: result.error });
+        if (result.ok) this.onChanged();
+        else vscode.window.showErrorMessage(result.error ?? 'Failed to update reviewers');
+        break;
+      }
+
+      case 'PRDETAIL_PICK_ASSIGNEES': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const [{ items: collaborators, error }, detail] = await Promise.all([
+          this.pullRequestManager.listCollaborators(repoId, pr.targetRepoFullName),
+          this.pullRequestManager.getPullRequestDetail(repoId, pr.number),
+        ]);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: false, error }); break; }
+        const currentIds = new Set('error' in detail ? [] : detail.assignees.map(a => a.id));
+        const picked = await vscode.window.showQuickPick(
+          collaborators.map(c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: avatarIconPath(c.avatarUrl) })),
+          { title: 'Assignees', placeHolder: 'Select assignees', canPickMany: true },
+        );
+        if (!picked) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updateAssignees(repoId, pr.number, picked.map(p => p.id));
+        post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: result.ok, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (result.ok) this.onChanged();
+        else if (!('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to update assignees');
+        break;
+      }
+
+      case 'PRDETAIL_PICK_LABELS': {
+        if (!pr.targetRepoFullName) { post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: false, error: 'Target repository is unknown' }); break; }
+        const [{ items: availableLabels, error }, detail] = await Promise.all([
+          this.pullRequestManager.listAvailableLabels(repoId, pr.targetRepoFullName),
+          this.pullRequestManager.getPullRequestDetail(repoId, pr.number),
+        ]);
+        if (error) { post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: false, error }); break; }
+        const currentIds = new Set('error' in detail ? [] : detail.labels.map(l => l.id));
+        const picked = await vscode.window.showQuickPick(
+          availableLabels.map(l => ({ label: l.name, id: l.id, picked: currentIds.has(l.id), iconPath: labelSwatchIconPath(l.color) })),
+          { title: 'Labels', placeHolder: 'Select labels', canPickMany: true },
+        );
+        if (!picked) { post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: true }); break; }
+        const result = await this.pullRequestManager.updateLabels(repoId, pr.number, picked.map(p => p.id));
+        post({ type: 'PRDETAIL_UPDATE_LABELS_RESULT', ok: result.ok, unsupported: 'unsupported' in result ? result.unsupported : undefined, error: result.error });
+        if (result.ok) this.onChanged();
+        else if (!('unsupported' in result)) vscode.window.showErrorMessage(result.error ?? 'Failed to update labels');
+        break;
+      }
+    }
+  }
+
+  private async checkoutPullRequest(repoId: string, pr: PullRequestSummary, mode: 'pr' | 'branch', post: (m: HostToPrDetailMsg) => void): Promise<void> {
+    try {
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Checking out PR #${pr.number}…`, cancellable: false },
+        () => this.pullRequestManager.checkoutPullRequest(repoId, pr, mode),
+      );
+      post({ type: 'PRDETAIL_CHECKOUT_RESULT', ok: result.ok, branchName: result.branchName, error: result.error });
+      if (result.ok) {
+        logInfo('pullrequest-checkout', `Checked out PR #${pr.number} as "${result.branchName}"`);
+        vscode.window.showInformationMessage(`Checked out PR #${pr.number} as "${result.branchName}"`);
+      } else {
+        logError('pullrequest-checkout', `Failed to check out PR #${pr.number}`, result.error);
+        vscode.window.showErrorMessage(result.error ?? 'Failed to check out pull request');
+      }
+    } catch (e: unknown) {
+      const message = redactCredentialsInUrls(formatGitError(e));
+      logError('pullrequest-checkout', message, redactCredentialsInUrls(getRawErrorDetail(e) ?? ''));
+      post({ type: 'PRDETAIL_CHECKOUT_RESULT', ok: false, error: message });
+      vscode.window.showErrorMessage(message);
+    }
+  }
+
+  /** Opens every changed file in VS Code's native multi-diff editor (vscode.changes) instead of one tab per file. */
+  private async openAllChanges(repoId: string, pr: PullRequestSummary, post: (m: HostToPrDetailMsg) => void): Promise<void> {
+    const { items: files, error } = await this.pullRequestManager.listChangedFiles(repoId, pr.number);
+    if (error) {
+      vscode.window.showErrorMessage(error);
+      return;
+    }
+    if (files.length === 0) {
+      vscode.window.showInformationMessage('No changed files to show.');
+      return;
+    }
+
+    const detailResult = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
+    if ('error' in detailResult) {
+      post({ type: 'PRDETAIL_FILE_DIFF_ERROR', path: '', error: detailResult.error });
+      return;
+    }
+
+    await this.openMultiDiff(
+      repoId, pr, files,
+      file => this.pullRequestManager.getFileDiff(repoId, pr.number, file, detailResult),
+      `${repoId}:${pr.number}:`,
+      file => file.oldPath ?? file.path,
+      file => file.path,
+      `PR #${pr.number} — ${pr.title}`,
+    );
+  }
+
+  /** Opens every file changed by a single commit in the native multi-diff editor. */
+  private async openCommitAllChanges(repoId: string, pr: PullRequestSummary, commitSha: string, parentSha: string | undefined): Promise<void> {
+    const { items: files, error } = await this.pullRequestManager.listCommitFiles(repoId, commitSha);
+    if (error) {
+      vscode.window.showErrorMessage(error);
+      return;
+    }
+    if (files.length === 0) {
+      vscode.window.showInformationMessage('No changed files to show.');
+      return;
+    }
+
+    await this.openMultiDiff(
+      repoId, pr, files,
+      file => this.pullRequestManager.getCommitFileDiff(repoId, pr.number, file, commitSha, parentSha),
+      `${repoId}:commit:${commitSha}:`,
+      file => `${commitSha}:${file.oldPath ?? file.path}`,
+      file => `${commitSha}:${file.path}`,
+      `${commitSha.slice(0, 8)} — ${pr.title}`,
+    );
+  }
+
+  private async openMultiDiff(
+    repoId: string, pr: PullRequestSummary, files: ChangedFile[],
+    getDiff: (file: ChangedFile) => Promise<FileDiffContent | { error: string }>,
+    cacheKeyPrefix: string,
+    leftPath: (file: ChangedFile) => string,
+    rightPath: (file: ChangedFile) => string,
+    title: string,
+  ): Promise<void> {
+    const resources = await Promise.all(files.map(async file => {
+      const cacheKey = `${cacheKeyPrefix}${file.path}`;
+      let content = this.diffCache.get(cacheKey);
+      if (!content) {
+        const diffResult = await getDiff(file);
+        if ('error' in diffResult) return null;
+        content = diffResult;
+        this.diffCache.set(cacheKey, content);
+      }
+
+      const leftUri = PullRequestDocumentProvider.buildUri(repoId, pr.number, 'base', leftPath(file));
+      const rightUri = PullRequestDocumentProvider.buildUri(repoId, pr.number, 'head', rightPath(file));
+      this.prDocProvider.set(leftUri, content.beforeContent);
+      this.prDocProvider.set(rightUri, content.afterContent);
+      return [rightUri, leftUri, rightUri] as [vscode.Uri, vscode.Uri, vscode.Uri];
+    }));
+
+    const validResources = resources.filter((r): r is [vscode.Uri, vscode.Uri, vscode.Uri] => r !== null);
+    if (validResources.length === 0) {
+      logWarn('pullrequest-multi-diff', `All ${files.length} file diffs failed to load for PR #${pr.number}`);
+      vscode.window.showErrorMessage('Failed to load file diffs.');
+      return;
+    }
+
+    await vscode.commands.executeCommand('vscode.changes', title, validResources);
+  }
+
+  private async openFileDiff(repoId: string, pr: PullRequestSummary, file: ChangedFile, post: (m: HostToPrDetailMsg) => void): Promise<void> {
+    const cacheKey = `${repoId}:${pr.number}:${file.path}`;
+    let content = this.diffCache.get(cacheKey);
+
+    if (!content) {
+      const detailResult = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
+      if ('error' in detailResult) {
+        post({ type: 'PRDETAIL_FILE_DIFF_ERROR', path: file.path, error: detailResult.error });
+        return;
+      }
+      const diffResult = await this.pullRequestManager.getFileDiff(repoId, pr.number, file, detailResult);
+      if ('error' in diffResult) {
+        post({ type: 'PRDETAIL_FILE_DIFF_ERROR', path: file.path, error: diffResult.error });
+        return;
+      }
+      content = diffResult;
+      this.diffCache.set(cacheKey, content);
+    }
+
+    const leftUri = PullRequestDocumentProvider.buildUri(repoId, pr.number, 'base', file.oldPath ?? file.path);
+    const rightUri = PullRequestDocumentProvider.buildUri(repoId, pr.number, 'head', file.path);
+    this.prDocProvider.set(leftUri, content.beforeContent);
+    this.prDocProvider.set(rightUri, content.afterContent);
+
+    const title = `${file.path} (PR #${pr.number})`;
+    await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
+  }
+
+  private async openCommitFileDiff(repoId: string, pr: PullRequestSummary, file: ChangedFile, commitSha: string, parentSha: string | undefined, post: (m: HostToPrDetailMsg) => void): Promise<void> {
+    const cacheKey = `${repoId}:commit:${commitSha}:${file.path}`;
+    let content = this.diffCache.get(cacheKey);
+
+    if (!content) {
+      const diffResult = await this.pullRequestManager.getCommitFileDiff(repoId, pr.number, file, commitSha, parentSha);
+      if ('error' in diffResult) {
+        post({ type: 'PRDETAIL_FILE_DIFF_ERROR', path: file.path, error: diffResult.error });
+        return;
+      }
+      content = diffResult;
+      this.diffCache.set(cacheKey, content);
+    }
+
+    const leftUri = PullRequestDocumentProvider.buildUri(repoId, pr.number, 'base', `${commitSha}:${file.oldPath ?? file.path}`);
+    const rightUri = PullRequestDocumentProvider.buildUri(repoId, pr.number, 'head', `${commitSha}:${file.path}`);
+    this.prDocProvider.set(leftUri, content.beforeContent);
+    this.prDocProvider.set(rightUri, content.afterContent);
+
+    const title = `${file.path} (${commitSha.slice(0, 8)})`;
+    await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, { preview: true });
+  }
+
+  /** Builds an AI prompt from the PR's description, changed files, and per-file diffs (reconstructed from the
+   * before/after blob content the provider already fetches — see `PullRequestManager`'s design notes on why PR
+   * diffing works from full blobs rather than patch application), plus mergeability/CI signals, and asks the
+   * model to both summarize the change and flag anything risky about merging it into the requested branch.
+   * Returns the result rather than posting it — the caller displays it in the separate AI Explain Detail panel. */
+  private async explainPullRequest(repoId: string, pr: PullRequestSummary): Promise<{ explanation?: string; error?: string }> {
+    try {
+      const cfg = vscode.workspace.getConfiguration('gitcharm');
+      const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
+      const configuredLang: string = cfg.get('ai.language', '');
+      const language = configuredLang.trim() || vscode.env.language || 'en';
+
+      const detailResult = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
+      if ('error' in detailResult) {
+        return { error: detailResult.error };
+      }
+      const detail = detailResult;
+
+      const { items: files, error: filesError } = await this.pullRequestManager.listChangedFiles(repoId, pr.number);
+      if (filesError) {
+        return { error: filesError };
+      }
+
+      const { buildSimpleUnifiedDiff } = await import('../utils/simpleUnifiedDiff');
+      const MAX_DIFF_FILES = 25;
+      let remainingChars = maxDiffChars;
+      const diffBlocks: string[] = [];
+      for (const file of files.slice(0, MAX_DIFF_FILES)) {
+        if (remainingChars <= 0) break;
+        const cacheKey = `${repoId}:${pr.number}:${file.path}`;
+        let content = this.diffCache.get(cacheKey);
+        if (!content) {
+          const diffResult = await this.pullRequestManager.getFileDiff(repoId, pr.number, file, detail);
+          if ('error' in diffResult) continue;
+          content = diffResult;
+          this.diffCache.set(cacheKey, content);
+        }
+        let diffText = buildSimpleUnifiedDiff(content.beforeContent, content.afterContent);
+        if (diffText.length > remainingChars) diffText = `${diffText.slice(0, remainingChars)}\n...[diff truncated]`;
+        remainingChars -= diffText.length;
+        diffBlocks.push(`### ${file.status} ${file.path}${file.oldPath && file.oldPath !== file.path ? ` (from ${file.oldPath})` : ''}\n\`\`\`diff\n${diffText}\n\`\`\``);
+      }
+      if (files.length > MAX_DIFF_FILES) diffBlocks.push(`...[${files.length - MAX_DIFF_FILES} more changed file(s) omitted]`);
+
+      const fileList = files.slice(0, 100).map(f => `${f.status[0].toUpperCase()} ${f.path}`).join('\n');
+
+      const mergeIssues: string[] = [];
+      if (detail.mergeableState === 'conflicting') mergeIssues.push('This PR currently has merge conflicts with its target branch.');
+      if (detail.ciStatus?.state === 'failure') mergeIssues.push('CI checks are currently failing on this PR.');
+      if (detail.ciStatus?.state === 'pending') mergeIssues.push('CI checks are still running on this PR.');
+      if (detail.canWrite === false) mergeIssues.push('The current user does not have write access to merge this PR directly.');
+
+      const prompt = [
+        'You are a senior code reviewer explaining a pull request to a developer before it gets merged.',
+        '',
+        'Rules:',
+        `- Write the explanation in this language: ${language}`,
+        '- Start with a one-sentence summary of what this PR does',
+        '- Then explain the key changes: what was modified and why, referencing specific files/functions where relevant',
+        '- Finish with a short "Merge considerations" section: flag anything risky about merging this into the target branch',
+        '  (conflicts, failing/pending CI, incomplete-looking changes, missing tests, breaking changes, anything that looks unsafe to merge as-is).',
+        '  If nothing looks risky, say so briefly — do not invent problems.',
+        '- Be concise but complete',
+        '- The output is rendered as Markdown: use it (bold, lists, headings, inline code) where it helps readability',
+        '- Output ONLY the explanation, no code fences wrapping the whole response, no preamble',
+        '',
+        `## Pull Request #${pr.number}: ${detail.title}`,
+        `## Source branch: ${detail.sourceRepoFullName ? `${detail.sourceRepoFullName}:` : ''}${detail.sourceBranch}`,
+        `## Target branch: ${detail.targetRepoFullName ? `${detail.targetRepoFullName}:` : ''}${detail.targetBranch}`,
+        detail.description ? `## Description\n${detail.description.slice(0, 4000)}` : '',
+        mergeIssues.length ? `## Known signals\n${mergeIssues.map(m => `- ${m}`).join('\n')}` : '',
+        '## Changed files',
+        fileList,
+        diffBlocks.length ? `\n## Diffs\n${diffBlocks.join('\n\n')}` : '',
+      ].filter(Boolean).join('\n');
+
+      const { generateWithAI } = await import('../ai/aiGenerate');
+      const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg);
+      return { explanation };
+    } catch (e: unknown) {
+      logError('pullrequest-explain', formatGitError(e), getRawErrorDetail(e));
+      return { error: formatGitError(e) };
+    }
+  }
+
+  dispose(): void {
+    this.panels.forEach(p => p.dispose());
+    this.panels.clear();
+  }
+}

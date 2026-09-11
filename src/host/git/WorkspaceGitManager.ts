@@ -230,9 +230,23 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const gitApi = getVscodeGitApi();
     if (!gitApi) return;
 
+    // vscode.git doesn't necessarily drop a repo from `repositories` the instant its
+    // workspace folder is removed, so only accept repos still relevant to the *current*
+    // workspace: this is meant to pick up a parent-folder repo (workspace root sits inside
+    // it) that our downward scans can't reach — not to resurrect an unrelated repo that
+    // vscode.git simply hasn't pruned from its own list yet.
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    const isRelevant = (repoPath: string) =>
+      folders.some(f => {
+        const folderPath = f.uri.fsPath;
+        const rel = path.relative(repoPath, folderPath);
+        return !rel.startsWith('..') && !path.isAbsolute(rel);
+      });
+
     for (const vsRepo of gitApi.repositories) {
       const repoPath = path.normalize(vsRepo.rootUri.fsPath);
       if (this.repos.has(repoPath)) continue;
+      if (!isRelevant(repoPath)) continue;
 
       const color = customColors[path.basename(repoPath)] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
       const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(repoPath);

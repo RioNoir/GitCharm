@@ -63,7 +63,7 @@ interface LogState {
   updateBranches: (repoId: string, branches: BranchInfo[]) => void;
   setError: (err: string | null) => void;
   setPendingScrollTarget: (target: { hash: string; repoId: string } | null) => void;
-  setStashes: (stashes: CommitNode[]) => void;
+  setStashes: (stashes: CommitNode[], queriedRepoIds: string[]) => void;
 }
 
 const defaultCommitFilters: CommitFilters = {
@@ -109,7 +109,7 @@ function stringsEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-export const useLogStore = create<LogState>((set, get) => ({
+export const useLogStore = create<LogState>((set, _get) => ({
   repos: [],
   initialized: false,
   hasWorkspaceFolder: true,
@@ -194,10 +194,15 @@ export const useLogStore = create<LogState>((set, get) => ({
   })),
   setError: (err) => set({ error: err }),
   setPendingScrollTarget: (target) => set({ pendingScrollTarget: target }),
-  setStashes: (stashes) => set(s => (
+  setStashes: (stashes, queriedRepoIds) => set(s => {
+    // A batch only reports the repos it actually queried (e.g. a single filtered repo) —
+    // replace just those repos' stashes and keep everyone else's, otherwise a filtered
+    // request would wipe every other repo's stashes off screen.
+    const queried = new Set(queriedRepoIds);
+    const merged = [...s.stashes.filter(c => !queried.has(c.repoId)), ...stashes];
     // Same reasoning as the commit bail-out: stashes are merged into the row list,
     // so handing back a new array reference for an unchanged set of stashes would
     // re-trigger assignLanes on every refresh and undo that fast path.
-    commitListsEqual(s.stashes, stashes) ? {} : { stashes }
-  )),
+    return commitListsEqual(s.stashes, merged) ? {} : { stashes: merged };
+  }),
 }));

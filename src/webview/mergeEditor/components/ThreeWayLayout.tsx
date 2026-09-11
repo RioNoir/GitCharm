@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import type { MergeConflictFile, ConflictBlock } from '../../shared/types';
+import React from 'react';
+import type { MergeConflictFile } from '../../shared/types';
 import { MonacoPane } from './MonacoPane';
 import type { Resolution } from '../store/mergeStore';
 
@@ -12,37 +12,9 @@ interface Props {
   currentConflictIndex: number;
 }
 
-function buildSideContent(file: MergeConflictFile, side: 'ours' | 'theirs'): string {
-  // Reconstruct a file showing only one side's content (no conflict markers)
-  const lines: string[] = [];
-  let lastEnd = 0;
-
-  // We'd need the raw file lines... Let's just show the relevant content
-  // For a proper implementation, we'd need the original raw file
-  // For now, we build from conflict blocks
-  for (const block of file.conflicts) {
-    const chosen = side === 'ours' ? block.oursLines : block.theirsLines;
-    lines.push(...chosen);
-  }
-  return lines.join('\n');
-}
-
-function buildInitialResult(file: MergeConflictFile, rawContent?: string): string {
-  // Return a clean result content without conflict markers, starting with ours
-  // In a real implementation, this would be the raw file content with markers
-  // For our implementation, we return ours side as initial
-  if (rawContent) return rawContent;
-  const sections: string[] = [];
-  for (const block of file.conflicts) {
-    sections.push(...block.oursLines);
-  }
-  return sections.join('\n');
-}
-
 export function ThreeWayLayout({ file, resultContent, resolutions, onResultChange, onResolveBlock, currentConflictIndex }: Props) {
   const oursContent = file.conflicts.map(b => b.oursLines.join('\n')).join('\n---conflict---\n');
   const theirsContent = file.conflicts.map(b => b.theirsLines.join('\n')).join('\n---conflict---\n');
-  const baseContent = file.conflicts.map(b => b.baseLines.join('\n')).join('\n---conflict---\n');
 
   const currentBlock = file.conflicts[currentConflictIndex] ?? file.conflicts[0];
 
@@ -136,9 +108,6 @@ function applyResolution(
 
   // Replace conflict block in result content
   // The result starts with conflict markers, so we find and replace
-  const oursMarker = `<<<<<<< ${block.oursLabel}`;
-  const theirsMarker = `>>>>>>> ${block.theirsLabel}`;
-
   const lines = currentContent.split('\n');
   const newLines: string[] = [];
   let inConflict = false;

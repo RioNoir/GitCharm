@@ -11,10 +11,11 @@ import { ShelvePanel } from './components/ShelvePanel';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
+import { PullRequestPanel } from './components/PullRequestPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
-import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry } from '../shared/msgTypes';
+import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
@@ -22,6 +23,11 @@ import { sortRepos } from './repoSort';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/** Caps tab badge counts at "99+" so a large number never stretches the tab bar. */
+function formatBadgeCount(n: number): string {
+  return n > 99 ? '99+' : String(n);
 }
 
 // ── Dynamic context menu label helper ─────────────────────────────────────
@@ -36,6 +42,7 @@ function dynItems(items: ContextMenuEntry[], n: number): ContextMenuEntry[] {
   };
   return items.map(i => {
     if (!('id' in i)) return i;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const l = label((i as any).id);
     return l ? { ...i, label: l } : i;
   });
@@ -86,26 +93,6 @@ const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
   { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
   { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
   { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
-  { separator: true },
-  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
-  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
-  { separator: true },
-  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
-  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
-  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
-  { separator: true },
-  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
-  { separator: true },
-  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
-];
-
-const REPO_CONTEXT_ITEMS_CHANGELISTS: ContextMenuEntry[] = [
-  { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
-  { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
-  { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
-  { separator: true },
-  { id: 'add-to-git',        label: 'Add to Git',             icon: 'add' },
-  { id: 'move-to-cl',        label: 'Move to Changelist…',   icon: 'list-unordered' },
   { separator: true },
   { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
   { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
@@ -260,7 +247,7 @@ const CHANGELIST_HEADER_ITEMS_CUSTOM: ContextMenuEntry[] = [
   { id: 'refresh',     label: 'Refresh',           icon: 'refresh' },
 ];
 
-type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree';
+type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests';
 
 function App() {
   const store = useCommitStore();
@@ -268,6 +255,10 @@ function App() {
 
   // ── Tab ───────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('changes');
+  const [tabBarCollapsed, setTabBarCollapsed] = useState(false);
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number } | null>(null);
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
+  const tabBarContentRef = useRef<HTMLDivElement | null>(null);
 
   // ── Shelve state ──────────────────────────────────────────────────────────
   const [shelveMap, setShelveMap]       = useState<Record<string, ShelveEntry[]>>({});
@@ -284,12 +275,33 @@ function App() {
   const [worktreeLoading, setWorktreeLoading] = useState(false);
   const [worktreeError, setWorktreeError] = useState<string | null>(null);
 
+  // ── Pull Request state ────────────────────────────────────────────────────
+  const [pullRequestRepos, setPullRequestRepos] = useState<RepoPullRequests[]>([]);
+  const [pullRequestLoading, setPullRequestLoading] = useState(false);
+  const [pullRequestLoadingMore, setPullRequestLoadingMore] = useState<Record<string, boolean>>({});
+  const [expandedPrRepoIds, setExpandedPrRepoIds] = useState<Set<string>>(new Set());
+  /** repoIds still awaited from the current streaming load — cleared as each PULLREQUEST_LIST_REPO_RESULT arrives; loading flips off once empty. */
+  const pullRequestPendingRef = useRef<Set<string>>(new Set());
+
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
   const [detachedWarnings, setDetachedWarnings] = useState<Record<string, string>>({});
 
   // Track unstaged file counts per repo to detect new changes for auto-expand in vscode mode
   const prevUnstagedCountsRef = useRef<Map<string, number>>(new Map());
+  // The in-flight commit, so its message is only cleared once the commit succeeded.
+  const pendingCommitRef = useRef<{ requestId: string; repoIds: string[] } | null>(null);
+
+  // Persist the commit message draft to workspaceState (host-side), debounced so typing
+  // doesn't post a message per keystroke. Scoped per-workspace by the host, unlike the
+  // webview's shared-origin localStorage.
+  const commitMessage = useCommitStore(s => s.commitMessage);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      getVsCodeApi().postMessage({ type: 'COMMIT_PERSIST_MESSAGE', message: commitMessage } satisfies CommitToHostMsg);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [commitMessage]);
 
   // ── Vscode mode: repo selection for commit ───────────────────────────────
   const [vscodeSelectedRepos, setVscodeSelectedRepos] = useState<Set<string>>(new Set());
@@ -302,7 +314,31 @@ function App() {
       for (const id of currentRepoIds) if (!next.has(id)) next.add(id);
       return next;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
+
+  // Prune per-repo caches when a repo disappears from the workspace (removed folder,
+  // repo no longer detected, etc.) so stale entries don't linger in the UI forever.
+  useEffect(() => {
+    const currentRepoIds = new Set((store.status?.repos ?? []).map(r => r.repoId));
+    const pruneRecord = <T,>(prev: Record<string, T>): Record<string, T> => {
+      let changed = false;
+      const next: Record<string, T> = {};
+      for (const [repoId, value] of Object.entries(prev)) {
+        if (currentRepoIds.has(repoId)) next[repoId] = value;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    };
+    setShelveMap(pruneRecord);
+    setShelveLoading(pruneRecord);
+    setShelveError(pruneRecord);
+    setStashMap(pruneRecord);
+    setStashLoading(pruneRecord);
+    setStashError(pruneRecord);
+    setUnpushedMap(pruneRecord);
+    setDetachedWarnings(pruneRecord);
+    setWorktreeRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
+    setPullRequestRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
   }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
 
   const toggleVscodeRepoSelection = (repoId: string) => {
@@ -355,6 +391,45 @@ function App() {
     s.textContent = `[data-action-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; }`;
     document.head.appendChild(s);
   }, []);
+
+  useEffect(() => {
+    const id = 'gitcharm-tab-dropdown-hover';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `[data-tab-dropdown-btn]:hover { background: var(--vscode-toolbar-hoverBackground) !important; }`;
+    document.head.appendChild(s);
+  }, []);
+
+  // Collapse the tab bar into a single dropdown button once it no longer fits in the
+  // available width. The width check is driven by a hidden probe strip with every tab's
+  // label expanded at once (see tabBarContentRefCb usage below), not by the real strip —
+  // that keeps the collapse threshold constant regardless of which tab is active. The tab
+  // bar only mounts once the loading/empty-state early returns below have passed, so the
+  // observer is (re)installed via callback refs rather than a mount-only useEffect —
+  // otherwise it would run once against null refs (during the loading state) and never again.
+  const tabBarObserverRef = useRef<ResizeObserver | null>(null);
+  const setTabBarRefs = useCallback(() => {
+    const bar = tabBarRef.current;
+    const content = tabBarContentRef.current;
+    tabBarObserverRef.current?.disconnect();
+    tabBarObserverRef.current = null;
+    if (!bar || !content) return;
+    const check = () => setTabBarCollapsed(content.scrollWidth > bar.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(bar);
+    observer.observe(content);
+    tabBarObserverRef.current = observer;
+  }, []);
+  const tabBarRefCb = useCallback((el: HTMLDivElement | null) => {
+    tabBarRef.current = el;
+    setTabBarRefs();
+  }, [setTabBarRefs]);
+  const tabBarContentRefCb = useCallback((el: HTMLDivElement | null) => {
+    tabBarContentRef.current = el;
+    setTabBarRefs();
+  }, [setTabBarRefs]);
 
   // ── Autopilot ─────────────────────────────────────────────────────────────
   const [generatingMessage, setGeneratingMessage]   = useState(false);
@@ -441,6 +516,19 @@ function App() {
           break;
         case 'COMMIT_OP_RESULT':
           store.setLoading(false);
+          if (pendingCommitRef.current?.requestId === msg.requestId) {
+            const { repoIds } = pendingCommitRef.current;
+            pendingCommitRef.current = null;
+            // Only repos that actually committed consume the message/amend flag — a
+            // rejecting hook or missing identity in one repo of a multi-repo commit
+            // must not cost the user what they typed for the repos that did succeed.
+            if (msg.ok) {
+              store.setCommitMessage('');
+              repoIds.forEach(id => store.clearAmend(id));
+            } else if (msg.succeededRepoIds?.length) {
+              msg.succeededRepoIds.forEach(id => store.clearAmend(id));
+            }
+          }
           if (msg.ok) {
             // Refresh push tab after any successful operation (commit, undo, push, etc.)
             const currentRepos = useCommitStore.getState().status?.repos ?? [];
@@ -460,7 +548,11 @@ function App() {
           }
           break;
         case 'COMMIT_SET_MESSAGE':
+          if (msg.ifEmpty && useCommitStore.getState().commitMessage.trim()) break;
           store.setCommitMessage(msg.message);
+          break;
+        case 'COMMIT_PERSISTED_MESSAGE_RESULT':
+          if (!useCommitStore.getState().commitMessage.trim()) store.setCommitMessage(msg.message);
           break;
         case 'SHELVE_LIST_RESULT':
           setShelveLoading(prev => ({ ...prev, [msg.repoId]: false }));
@@ -540,9 +632,53 @@ function App() {
           if (!msg.ok && msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           break;
 
+        case 'PULLREQUEST_LIST_RESULT':
+          setPullRequestLoading(false);
+          setPullRequestRepos(msg.repos);
+          break;
+
+        case 'PULLREQUEST_LIST_START': {
+          pullRequestPendingRef.current = new Set(msg.repoIds);
+          setPullRequestLoading(true);
+          const metas = useCommitStore.getState().repoMetas;
+          setPullRequestRepos(msg.repoIds.map(repoId => {
+            const meta = metas.find(m => m.id === repoId);
+            return {
+              repoId, repoName: meta?.name ?? repoId, repoColor: meta?.color ?? '#888',
+              connection: { repoId, provider: 'unknown', host: '', connected: false, detectionFailed: false },
+              pullRequests: [], page: 1, hasMore: false, pending: true,
+            };
+          }));
+          break;
+        }
+
+        case 'PULLREQUEST_LIST_REPO_RESULT':
+          setPullRequestRepos(prev => {
+            const idx = prev.findIndex(r => r.repoId === msg.repo.repoId);
+            if (idx === -1) return [...prev, msg.repo];
+            const next = [...prev];
+            next[idx] = msg.repo;
+            return next;
+          });
+          pullRequestPendingRef.current.delete(msg.repo.repoId);
+          if (pullRequestPendingRef.current.size === 0) setPullRequestLoading(false);
+          break;
+
+        case 'PULLREQUEST_LOAD_MORE_RESULT':
+          setPullRequestLoadingMore(prev => ({ ...prev, [msg.repoId]: false }));
+          if (msg.repo) {
+            setPullRequestRepos(prev => prev.map(r => r.repoId === msg.repoId ? msg.repo! : r));
+          }
+          break;
+
+        case 'PULLREQUEST_INVALIDATED':
+          requestPullRequestList(true);
+          break;
+
         case 'COMMIT_SWITCH_TAB':
           setActiveTab(msg.tab);
           if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
+          if (msg.tab === 'pullrequests') requestPullRequestList();
           break;
 
         case 'COMMIT_DESELECT_FILE':
@@ -664,6 +800,59 @@ function App() {
 
   const handleWorktreeRequestCreate = useCallback((repoId: string) => {
     send({ type: 'WORKTREE_CREATE_PROMPT', repoId } as CommitToHostMsg);
+  }, [send]);
+
+  // ── Pull Request callbacks ────────────────────────────────────────────────
+
+  const requestPullRequestList = useCallback((forceRefresh?: boolean) => {
+    send({ type: 'PULLREQUEST_REQUEST_LIST', forceRefresh });
+  }, [send]);
+
+  // Loads PRs in the background on mount (regardless of the active tab) so the tab badge count is populated right away.
+  useEffect(() => {
+    requestPullRequestList();
+  }, [requestPullRequestList]);
+
+  const handlePrOpenFilters = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_FILTERS_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrOpenSearch = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_SEARCH_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrRefreshRepo = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_REFRESH_REPO', repoId });
+  }, [send]);
+
+  const handlePrLoadMore = useCallback((repoId: string) => {
+    setPullRequestLoadingMore(prev => ({ ...prev, [repoId]: true }));
+    send({ type: 'PULLREQUEST_LOAD_MORE', repoId });
+  }, [send]);
+
+  // Accordion — only one repo section can be expanded at a time.
+  const handlePrToggleExpanded = useCallback((repoId: string) => {
+    setExpandedPrRepoIds(prev => (prev.has(repoId) ? new Set() : new Set([repoId])));
+  }, []);
+
+  const handlePrOpenInBrowser = useCallback((url: string) => {
+    send({ type: 'PULLREQUEST_OPEN_IN_BROWSER', url });
+  }, [send]);
+
+  const handlePrOpenDetail = useCallback((repoId: string, pr: PullRequestSummary) => {
+    send({ type: 'PULLREQUEST_OPEN_DETAIL', repoId, pr });
+  }, [send]);
+
+  const handlePrOpenAccountPicker = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_OPEN_ACCOUNT_PICKER', repoId });
+  }, [send]);
+
+  const handlePrRequestCreate = useCallback((repoId: string) => {
+    send({ type: 'PULLREQUEST_CREATE_PROMPT', repoId });
+  }, [send]);
+
+  const handlePrSetHostOverride = useCallback((host: string, provider: ForgeProvider) => {
+    send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider });
   }, [send]);
 
   // ── Push / unpushed callbacks ─────────────────────────────────────────────
@@ -1093,9 +1282,9 @@ function App() {
       if (targets.length === 0) return;
       store.setLoading(true);
 
-      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
-      store.setCommitMessage('');
-      targets.forEach(t => store.clearAmend(t.repoId));
+      const requestId = generateId();
+      pendingCommitRef.current = { requestId, repoIds: targets.map(t => t.repoId) };
+      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush } satisfies CommitToHostMsg);
       return;
     }
 
@@ -1128,16 +1317,15 @@ function App() {
     if (targets.length === 0) return;
     store.setLoading(true);
     store.setError(null);
-    getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId: generateId(), repos: targets, andPush } satisfies CommitToHostMsg);
-    store.setCommitMessage('');
-    targets.forEach(t => store.clearAmend(t.repoId));
+    const requestId = generateId();
+    pendingCommitRef.current = { requestId, repoIds: targets.map(t => t.repoId) };
+    getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush } satisfies CommitToHostMsg);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={css.app} onContextMenu={e => e.preventDefault()}>
-
       {/* ── Tab bar ── */}
       {(() => {
         const totalToPush = repos.reduce((sum, r) => {
@@ -1148,43 +1336,119 @@ function App() {
           const paths = new Set([...r.stagedFiles.map(f => f.path), ...r.unstagedFiles.map(f => f.path)]);
           return sum + paths.size;
         }, 0);
+        // Prefer each repo's provider-reported totalCount (exact, filter-aware, no extra pages fetched) over the
+        // number of PRs actually downloaded so far — falls back to the downloaded count for providers/queries
+        // where no cheap total is available (see ListPullRequestsResult.totalCount).
+        const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + (r.totalCount ?? r.pullRequests.length), 0);
+        const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
+        const tabMeta = (tab: TabId) => ({
+          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : tab === 'pullrequests' ? 'Pull Requests' : 'Push',
+          iconName: tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload',
+          badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalToPush : tab === 'pullrequests' ? totalPullRequests : 0,
+        });
+        const selectTab = (tab: TabId) => {
+          setActiveTab(tab);
+          // Skip refetching data that's already loaded — avoids a jarring loading flash every time the
+          // tab is reopened; an explicit refresh (per-tab or per-repo) stays available for real refetches.
+          if (tab === 'shelf') repos.forEach(r => { if (!(r.repoId in shelveMap)) requestShelveList(r.repoId); });
+          if (tab === 'stash') repos.forEach(r => { if (!(r.repoId in stashMap)) requestStashList(r.repoId); });
+          if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
+          if (tab === 'worktree' && worktreeRepos.length === 0) requestWorktreeList();
+          if (tab === 'pullrequests' && pullRequestRepos.length === 0) requestPullRequestList();
+        };
+        const allTabs: TabId[] = ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
+        const activeMeta = tabMeta(activeTab);
+        // Longest label among all tabs — used by the width probe below as the one tab whose label
+        // gets expanded, since only one tab (the active one) is ever expanded at a time.
+        const widestTab = allTabs.reduce((a, b) => tabMeta(b).label.length > tabMeta(a).label.length ? b : a);
         return (
-          <div style={css.tabBar}>
-            {(['changes', 'shelf', 'stash', 'worktree', 'push'] as TabId[]).map(tab => {
-              const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
-              const label = tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : 'Push';
-              const iconName = tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : 'cloud-upload';
-              return (
-                <button
-                  key={tab}
-                  style={css.tab(activeTab === tab)}
-                  title={label}
-                  onClick={() => {
-                    setActiveTab(tab);
-                    if (tab === 'shelf') repos.forEach(r => requestShelveList(r.repoId));
-                    if (tab === 'stash') repos.forEach(r => requestStashList(r.repoId));
-                    if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
-                    if (tab === 'worktree') requestWorktreeList();
-                  }}
-                >
-                  <Codicon
-                    name={iconName}
-                    style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
-                  />
-                  {activeTab === tab && (
-                    <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
-                      {label}
-                    </span>
-                  )}
-                  {tab === 'changes' && totalChanges > 0 && (
-                    <span style={css.pushBadge}>{totalChanges}</span>
-                  )}
-                  {tab === 'push' && totalToPush > 0 && (
-                    <span style={css.pushBadge}>{totalToPush}</span>
-                  )}
-                </button>
-              );
-            })}
+          <div ref={tabBarRefCb} style={css.tabBar}>
+            {/* Real tab strip — hidden (not unmounted) when collapsed, so it keeps its state and re-appears instantly once space is available again. */}
+            <div style={tabBarCollapsed ? { display: 'none' } : { display: 'flex', minWidth: 0 }}>
+              {allTabs.map(tab => {
+                const { label, iconName, badge } = tabMeta(tab);
+                return (
+                  <button
+                    key={tab}
+                    style={css.tab(activeTab === tab)}
+                    title={label}
+                    onClick={() => selectTab(tab)}
+                  >
+                    <Codicon
+                      name={iconName}
+                      style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
+                    />
+                    {activeTab === tab && (
+                      <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
+                        {label}
+                      </span>
+                    )}
+                    {badge > 0 && (
+                      <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Width probe — always mounted off-screen. Only ever one tab has its label expanded at a
+                time (the active one), so the worst case is the widest label among all tabs expanded
+                alongside the rest icon-only — not every label expanded at once, which would reserve far
+                more space than any real state ever needs. This keeps the collapse threshold constant
+                regardless of which tab is active (activating "Pull Requests", the longest label, no
+                longer collapses the bar at a width where a shorter-labeled tab like "Changes" still fit). */}
+            <div
+              ref={tabBarContentRefCb}
+              aria-hidden="true"
+              style={{ display: 'flex', position: 'fixed', left: '-9999px', top: '-9999px', visibility: 'hidden' }}
+            >
+              {allTabs.map(tab => {
+                const { label, iconName, badge } = tabMeta(tab);
+                const isWidest = tab === widestTab;
+                return (
+                  <div key={tab} style={css.tab(isWidest)}>
+                    <Codicon name={iconName} style={{ marginRight: isWidest ? '5px' : '0', fontSize: '13px' }} />
+                    {isWidest && <span style={{ overflow: 'hidden', display: 'inline-block' }}>{label}</span>}
+                    {badge > 0 && (
+                      <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Collapsed fallback — single dropdown button showing the active tab. */}
+            {tabBarCollapsed && (
+              <button
+                data-tab-dropdown-btn
+                style={css.tabDropdownBtn}
+                title={activeMeta.label}
+                onClick={e => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setTabMenu({ x: rect.left, y: rect.bottom });
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                  <Codicon name={activeMeta.iconName} style={{ marginRight: '5px', fontSize: '13px', flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{activeMeta.label}</span>
+                </span>
+                {activeMeta.badge > 0 && <span style={{ ...css.pushBadge, flexShrink: 0 }}>{formatBadgeCount(activeMeta.badge)}</span>}
+                <Codicon name="chevron-down" style={{ marginLeft: 'auto', paddingLeft: '5px', fontSize: '13px', flexShrink: 0 }} />
+              </button>
+            )}
+
+            {tabMenu && (
+              <ContextMenu
+                x={tabMenu.x}
+                y={tabMenu.y}
+                items={allTabs.map(tab => {
+                  const { label, iconName, badge } = tabMeta(tab);
+                  return { id: tab, label: badge > 0 ? `${label} (${formatBadgeCount(badge)})` : label, icon: iconName };
+                })}
+                onSelect={id => selectTab(id as TabId)}
+                onClose={() => setTabMenu(null)}
+              />
+            )}
           </div>
         );
       })()}
@@ -1349,6 +1613,7 @@ function App() {
                     )}
                     <ProjectGroup
                       isFirst={idx === 0}
+                      isLast={idx === changesRepos.length - 1}
                       repoStatus={repoStatus}
                       repoName={repoName}
                       repoColor={repoColor}
@@ -1484,6 +1749,10 @@ function App() {
             generatingMessage={generatingMessage}
             activeProfile={store.activeProfile}
             onOpenProfiles={() => send({ type: 'OPEN_PROFILES_MENU' } satisfies CommitToHostMsg)}
+            onRebaseAction={(repoId, action) => {
+              store.setLoading(true);
+              send({ type: 'COMMIT_REBASE_ACTION', requestId: generateId(), repoId, action } satisfies CommitToHostMsg);
+            }}
             onShelve={() => {
               const name = store.commitMessage.trim();
               if (!name) return;
@@ -1538,6 +1807,7 @@ function App() {
                   onRename={handleRenameShelve}
                   onRequestList={requestShelveList}
                   onOpenFileDiff={handleOpenFileDiff}
+                  isLast={i === repos.length - 1}
                 />
               );
             })}
@@ -1576,6 +1846,7 @@ function App() {
                   onRename={handleRenameStash}
                   onRequestList={requestStashList}
                   onOpenFileDiff={handleStashShowFileDiff}
+                  isLast={i === repos.length - 1}
                 />
               );
             })}
@@ -1626,6 +1897,40 @@ function App() {
               onOpenInOS={handleWorktreeOpenInOS}
               onAddToWorkspace={handleWorktreeAddToWorkspace}
               onRequestCreate={handleWorktreeRequestCreate}
+            />
+          </ScrollArea>
+        )}
+
+        {activeTab === 'pullrequests' && (
+          /* Pull Requests tab */
+          <ScrollArea
+            style={css.repoList}
+            onScroll={e => {
+              const el = e.currentTarget;
+              const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 200;
+              if (!nearBottom) return;
+              const singleRepo = pullRequestRepos.length === 1;
+              for (const repo of pullRequestRepos) {
+                const isExpanded = singleRepo || expandedPrRepoIds.has(repo.repoId);
+                if (isExpanded && repo.hasMore && !pullRequestLoadingMore[repo.repoId]) handlePrLoadMore(repo.repoId);
+              }
+            }}
+          >
+            <PullRequestPanel
+              repos={pullRequestRepos}
+              loading={pullRequestLoading}
+              loadingMore={pullRequestLoadingMore}
+              multiRepo={multiRepo}
+              expandedRepoIds={expandedPrRepoIds}
+              onToggleExpanded={handlePrToggleExpanded}
+              onOpenInBrowser={handlePrOpenInBrowser}
+              onOpenDetail={handlePrOpenDetail}
+              onOpenAccountPicker={handlePrOpenAccountPicker}
+              onRequestCreate={handlePrRequestCreate}
+              onRefresh={handlePrRefreshRepo}
+              onSetHostOverride={handlePrSetHostOverride}
+              onOpenFilters={handlePrOpenFilters}
+              onOpenSearch={handlePrOpenSearch}
             />
           </ScrollArea>
         )}
@@ -1788,6 +2093,7 @@ function App() {
               const totalFiles = new Set([...(rs?.unstagedFiles ?? []).map(f => f.path), ...(rs?.stagedFiles ?? []).map(f => f.path)]).size;
               const noChanges = totalFiles === 0;
               let items = noChanges
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 ? repoItems.filter(i => !('id' in i) || !['rollback', 'shelve', 'stash'].includes((i as any).id))
                 : repoItems;
               if (noChanges) items = items.filter((item, i, arr) =>
@@ -1937,7 +2243,7 @@ const css = {
   tabBar: {
     display: 'flex', borderBottom: '1px solid var(--vscode-panel-border)',
     background: 'var(--vscode-sideBar-background)', flexShrink: 0,
-    overflowX: 'auto' as const, overflowY: 'hidden' as const,
+    position: 'relative' as const, overflow: 'hidden' as const,
   } as React.CSSProperties,
   tab: (active: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', flexShrink: 0,
@@ -1949,6 +2255,14 @@ const css = {
     fontWeight: active ? '600' : 'normal', whiteSpace: 'nowrap' as const,
     transition: 'opacity 0.1s, border-color 0.1s', color: 'var(--vscode-foreground)',
   }),
+  tabDropdownBtn: {
+    display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
+    padding: '5px 10px', fontSize: '12px',
+    cursor: 'pointer', background: 'transparent', border: 'none',
+    borderBottom: '2px solid transparent',
+    fontFamily: 'var(--vscode-font-family)', fontWeight: '600',
+    color: 'var(--vscode-foreground)', transition: 'background 0.1s',
+  } as React.CSSProperties,
   pushBadge: {
     background: 'var(--vscode-badge-background)',
     color: 'var(--vscode-badge-foreground)',

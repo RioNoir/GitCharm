@@ -13,6 +13,12 @@ import { FileAnnotationController } from './ui/FileAnnotationController';
 import { GitProfileService } from './git/GitProfileService';
 import { ProfileStatusBar } from './ui/ProfileStatusBar';
 import { initLogger, logInfo, logWarn, showLogChannel } from './utils/Logger';
+import { PullRequestManager } from './pullRequests/PullRequestManager';
+import { PatCredentialStore } from './pullRequests/PatCredentialStore';
+import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
+import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
+import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
+import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 
 async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void> {
   const SHOWN_KEY = 'hasShownViewModeQuickpick';
@@ -208,17 +214,25 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.registerTextDocumentContentProvider(ShelveDocumentProvider.scheme, shelveDocProvider)
   );
 
+  const prDocProvider = new PullRequestDocumentProvider();
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(PullRequestDocumentProvider.scheme, prDocProvider)
+  );
+
   const badge = new BadgeController();
   badge.startLoading();
 
   const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();
 
-  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState);
+  const patCredentialStore = new PatCredentialStore(context.secrets, context.globalState);
+  const pullRequestManager = new PullRequestManager(manager, patCredentialStore, context.workspaceState);
+
+  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState, pullRequestManager);
 
   let startupNotificationsDone = false;
   const badgeDisposable = manager.onStatusChange(status => { badge.update(status); });
-  const startupDisposable = manager.onStatusChange(async status => {
+  const startupDisposable = manager.onStatusChange(async _status => {
     if (!startupNotificationsDone) {
       startupNotificationsDone = true;
       startupDisposable.dispose();
@@ -230,10 +244,18 @@ export function activate(context: vscode.ExtensionContext): void {
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager, profileService);
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   const undockedPanel = new UndockedPanelProvider(context.extensionUri, commitPanel, logPanel);
+  const createPullRequestPanel = new CreatePullRequestPanel(context.extensionUri, manager, pullRequestManager, () => {
+    commitPanel.requestPullRequestRefresh();
+  });
+  const pullRequestDetailPanel = new PullRequestDetailPanel(context.extensionUri, manager, pullRequestManager, prDocProvider, () => {
+    commitPanel.requestPullRequestRefresh();
+  });
   commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
   commitPanel.setBadgeController(badge);
   commitPanel.setUndockedPanel(undockedPanel);
+  commitPanel.setCreatePullRequestPanel(createPullRequestPanel);
+  commitPanel.setPullRequestDetailPanel(pullRequestDetailPanel);
   logPanel.setCommitPanel(commitPanel);
   logPanel.setUndockedPanel(undockedPanel);
   // Changing the setting from the Settings UI: switching back to the bottom
@@ -253,7 +275,7 @@ export function activate(context: vscode.ExtensionContext): void {
   commitPanel.setBranchStatusBar(branchStatusBar);
   branchStatusBar.setLogPanel(logPanel);
 
-  const profileStatusBar = new ProfileStatusBar(profileService, manager);
+  const profileStatusBar = new ProfileStatusBar(profileService, manager, context.globalStorageUri.fsPath);
 
   const annotationController = new FileAnnotationController(manager, logPanel);
 
@@ -271,6 +293,15 @@ export function activate(context: vscode.ExtensionContext): void {
         return Promise.resolve();
       },
     }),
+    // Restore Commit Full Detail / Pull Request Detail panels left open across a window reload/restart
+    vscode.window.registerWebviewPanelSerializer('gitcharm.commitFullDetail', {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
+        deserializeCommitFullDetailPanel(panel, state, context.extensionUri, manager, profileService),
+    }),
+    vscode.window.registerWebviewPanelSerializer('gitcharm.pullRequestDetail', {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
+        pullRequestDetailPanel.restore(panel, state),
+    }),
     manager,
     badge,
     logPanel,
@@ -282,7 +313,7 @@ export function activate(context: vscode.ExtensionContext): void {
     annotationController,
   );
 
-  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri);
+  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, pullRequestManager);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gitcharm.undock', () => {

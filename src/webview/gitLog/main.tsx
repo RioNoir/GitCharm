@@ -157,7 +157,7 @@ function App() {
           filterRepoRef.current(msg.repoId, msg.branch ?? null);
           break;
         case 'LOG_STASHES_BATCH':
-          store.setStashes(msg.stashCommits);
+          store.setStashes(msg.stashCommits, msg.queriedRepoIds);
           break;
         case 'LOG_REMOTES_RESULT':
           break;
@@ -573,12 +573,6 @@ const noRepoOverlayStyle: React.CSSProperties = {
 
 const initRepoBtnStyle: React.CSSProperties = {
   background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)',
-  border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
-  fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-  background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)',
   border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer',
   fontSize: '13px', fontFamily: 'var(--vscode-font-family)', fontWeight: 500,
 };

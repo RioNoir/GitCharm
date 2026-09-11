@@ -428,7 +428,10 @@ export class BranchStatusBar implements vscode.Disposable {
         items.push({
           label: `$(cloud) ${fullName}`,
           description: '',
-          action: () => this.showCommonBranchActionMenu(baseName, metas, false, headLabel),
+          // Checkout/pull/rename work on the local branch, but merge, rebase and
+          // compare must use the remote ref the user actually picked — merging the
+          // same-named local branch instead is usually a silent no-op.
+          action: () => this.showCommonBranchActionMenu(baseName, metas, false, headLabel, fullName),
         });
       }
     }
@@ -688,6 +691,8 @@ export class BranchStatusBar implements vscode.Disposable {
     metas: RepoMeta[],
     isCurrent: boolean,
     currentBranchName: string,
+    /** Ref to merge/rebase/compare against — the remote ref for remote entries. */
+    ref: string = branchName,
   ): Promise<void> {
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
 
@@ -721,16 +726,16 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push(
         { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
         {
-          label: `$(git-compare) Compare with '${branchName}'…`,
-          action: () => this.compareBranchAllRepos(branchName, metas, currentBranchName),
+          label: `$(git-compare) Compare with '${ref}'…`,
+          action: () => this.compareBranchAllRepos(ref, metas, currentBranchName),
         },
         {
-          label: `$(repo-forked) Rebase '${currentBranchName}' onto '${branchName}'`,
-          action: () => this.rebaseAllRepos(branchName, metas),
+          label: `$(repo-forked) Rebase '${currentBranchName}' onto '${ref}'`,
+          action: () => this.rebaseAllRepos(ref, metas),
         },
         {
-          label: `$(git-merge) Merge '${branchName}' into '${currentBranchName}'`,
-          action: () => this.mergeBranchAllRepos(branchName, metas),
+          label: `$(git-merge) Merge '${ref}' into '${currentBranchName}'`,
+          action: () => this.mergeBranchAllRepos(ref, metas),
         },
       );
     }
@@ -1879,8 +1884,10 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
     try {
-      await repo.merge(from);
-      const msg = `[${meta.name}]: merged "${from}".`;
+      const { upToDate } = await repo.merge(from);
+      const msg = upToDate
+        ? `[${meta.name}]: "${from}" is already up to date — nothing to merge.`
+        : `[${meta.name}]: merged "${from}".`;
       vscode.window.showInformationMessage(msg);
       logInfo(`merge:${meta.name}`, msg);
     } catch (e: unknown) {
@@ -2082,11 +2089,12 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: `Merging "${from}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
+        let merged = 0;
         for (const meta of metas) {
           const repo = this.manager.getRepo(meta.id);
           if (!repo) continue;
           try {
-            await repo.merge(from);
+            if (!(await repo.merge(from)).upToDate) merged++;
           } catch (e: unknown) {
             const errMsg = formatGitError(e);
             const isDirty = errMsg.includes('Your local changes') || errMsg.includes('overwritten by merge') || (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree';
@@ -2105,7 +2113,7 @@ export class BranchStatusBar implements vscode.Disposable {
               if (pick?.value === 'stash') {
                 try {
                   await repo.stashPush(`WIP before merge of ${from}`);
-                  await repo.merge(from);
+                  if (!(await repo.merge(from)).upToDate) merged++;
                 } catch (e2: unknown) {
                   logError(`merge:${meta.name}`, formatGitError(e2), getRawErrorDetail(e2));
                   errors.push(`${meta.name}: ${String(e2)}`);
@@ -2121,7 +2129,9 @@ export class BranchStatusBar implements vscode.Disposable {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          const msg = `Merged "${from}" in ${metas.length} repos.`;
+          const msg = merged === 0
+            ? `"${from}" is already up to date — nothing to merge.`
+            : `Merged "${from}" in ${merged} ${merged === 1 ? 'repo' : 'repos'}.`;
           vscode.window.showInformationMessage(msg);
           logInfo('merge', msg);
         }

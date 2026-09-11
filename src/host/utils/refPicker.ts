@@ -3,9 +3,14 @@ import type { GitService } from '../git/GitService';
 
 export async function pickRefQuickPick(
   repo: GitService,
-  opts: { placeHolder: string; title: string },
+  opts: { placeHolder: string; title: string; includeRemote?: boolean; includeTags?: boolean },
 ): Promise<string | undefined> {
-  const [branches, tags] = await Promise.all([repo.getBranches(), repo.getTags()]);
+  const includeRemote = opts.includeRemote ?? true;
+  const includeTags = opts.includeTags ?? true;
+  const [branches, tags] = await Promise.all([
+    repo.getBranches(),
+    includeTags ? repo.getTags() : Promise.resolve([]),
+  ]);
   type RefItem = vscode.QuickPickItem & { ref: string };
   const items: RefItem[] = [
     { label: 'LOCAL BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
@@ -14,11 +19,13 @@ export async function pickRefQuickPick(
       description: b.isHead ? '(current)' : undefined,
       ref: b.name,
     })),
-    { label: 'REMOTE BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
-    ...branches.filter(b => b.isRemote).map(b => ({
-      label: `$(cloud) ${b.name}`,
-      ref: b.name,
-    })),
+    ...(includeRemote ? [
+      { label: 'REMOTE BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+      ...branches.filter(b => b.isRemote).map(b => ({
+        label: `$(cloud) ${b.name}`,
+        ref: b.name,
+      })),
+    ] : []),
     ...(tags.length ? [
       { label: 'TAGS', kind: vscode.QuickPickItemKind.Separator, ref: '' },
       ...tags.map(t => ({ label: `$(tag) ${t.name}`, ref: t.name })),

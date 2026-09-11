@@ -9,14 +9,10 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function buildInitialResult(rawLines: string[]): string {
-  return rawLines.join('\n');
-}
-
 function App() {
   const store = useMergeStore();
   const [currentConflictIndex, setCurrentConflictIndex] = useState(0);
-  const [rawFileContent, setRawFileContent] = useState<string>('');
+  const [, setRawFileContent] = useState<string>('');
 
   const send = useCallback((msg: MergeToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -27,7 +23,7 @@ function App() {
       const msg = event.data;
       if (!msg?.type) return;
       switch (msg.type) {
-        case 'MERGE_FILE_LOADED':
+        case 'MERGE_FILE_LOADED': {
           store.setFile(msg.file);
           // Build initial result: the raw file content with conflict markers
           // The user edits this directly
@@ -35,6 +31,7 @@ function App() {
           store.setResultContent(initialContent);
           setRawFileContent(initialContent);
           break;
+        }
         case 'MERGE_SAVE_RESULT':
           store.setSaving(false);
           if (msg.ok) {

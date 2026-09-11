@@ -27,6 +27,8 @@ interface Props {
   isFixed: boolean;
   multiRepo: boolean;
   singleRepo?: boolean;
+  /** Suppresses the group's bottom border when it's the last visible changelist group — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
   selectedFile: { repoId: string; path: string } | null;
   viewMode: ViewMode;
   isFileSelected: (repoId: string, path: string) => boolean;
@@ -54,7 +56,7 @@ interface Props {
 }
 
 export function ChangelistGroup({
-  changelist, repoGroups, isFixed, multiRepo, singleRepo,
+  changelist, repoGroups, isFixed: _isFixed, multiRepo, singleRepo, isLast = false,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
@@ -83,7 +85,7 @@ export function ChangelistGroup({
 
   const isUnversioned = changelist.id === CHANGELIST_UNVERSIONED_ID;
   const isDefault = changelist.id === CHANGELIST_DEFAULT_ID;
-  const headerIcon = isUnversioned ? 'question' : isDefault ? 'git-pull-request' : 'list-unordered';
+  const headerIcon = isUnversioned ? 'question' : isDefault ? 'circle-large-outline' : 'list-unordered';
 
   return (
     <div style={styles.container}>
@@ -124,6 +126,7 @@ export function ChangelistGroup({
               <RepoSubGroup
                 key={group.repoId}
                 isFirst={idx === 0}
+                isLast={isLast && idx === repoGroups.length - 1}
                 defaultCollapsed={group.files.length === 0}
                 repoId={group.repoId}
                 repoName={group.repoName}
@@ -205,6 +208,8 @@ interface RepoSubGroupProps {
   changelistId?: string;
   ctxFile?: { repoId: string; path: string } | null;
   isFirst?: boolean;
+  /** Suppresses the sub-group's bottom border when it's the last repo sub-group in the last visible changelist — avoids a dangling border with nothing below to visually merge into. */
+  isLast?: boolean;
   defaultCollapsed?: boolean;
   onMultiSelect?: (file: FileStatus) => void;
   multiSelectedFiles?: FileStatus[];
@@ -215,7 +220,7 @@ function RepoSubGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, defaultCollapsed = false,
+  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, isLast = false, defaultCollapsed = false,
   onMultiSelect, multiSelectedFiles,
 }: RepoSubGroupProps) {
   const collapseKey = `cl-repo:${changelistId ?? ''}:${repoId}`;
@@ -236,6 +241,7 @@ function RepoSubGroup({
     ? (repoStatus.branch.detachedTag ? tagColor() : branchColor(repoStatus.branch.name, false))
     : branchColor('main', true);
   const [hovered, setHovered] = useState(false);
+  const [branchHovered, setBranchHovered] = useState(false);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -277,8 +283,10 @@ function RepoSubGroup({
             )}
             {repoStatus && (
               <span
-                style={styles.branchBadge(branchClr)}
+                style={styles.branchBadge(branchClr, branchHovered)}
                 onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
+                onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
+                onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
                 title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
               >
                 <Codicon
@@ -309,35 +317,37 @@ function RepoSubGroup({
           </div>
         </div>
       )}
-      {files.length === 0 && (!multiRepo || singleRepo || !collapsed) && (
-        <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+      {(!multiRepo || singleRepo || !collapsed) && (
+        <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
+          {files.length === 0 ? (
+            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+          ) : (
+            <FileTree
+              repoId={repoId}
+              files={files}
+              iconTheme={iconTheme}
+              selectedFile={selectedFile}
+              onSelect={onSelectFile}
+              onToggleFile={onToggleFile}
+              onSetFiles={onSetFiles}
+              isFileSelected={isFileSelected}
+              isCollapsed={isCollapsed}
+              toggleCollapsed={toggleCollapsed}
+              onContextMenu={onContextMenu}
+              onFolderContextMenu={onFolderContextMenu}
+              onOpenFile={onOpenFile}
+              onRollback={onRollback}
+              onResolveMerge={onResolveMerge}
+              viewMode={viewMode}
+              basePad={multiRepo && !singleRepo ? 36 : 24}
+              activeFolderPath={activeFolderPath}
+              ctxFile={ctxFile}
+              onMultiSelect={onMultiSelect}
+              multiSelectedFiles={multiSelectedFiles}
+            />
+          )}
+        </div>
       )}
-      {files.length > 0 && (!multiRepo || singleRepo || !collapsed) && (
-        <FileTree
-          repoId={repoId}
-          files={files}
-          iconTheme={iconTheme}
-          selectedFile={selectedFile}
-          onSelect={onSelectFile}
-          onToggleFile={onToggleFile}
-          onSetFiles={onSetFiles}
-          isFileSelected={isFileSelected}
-          isCollapsed={isCollapsed}
-          toggleCollapsed={toggleCollapsed}
-          onContextMenu={onContextMenu}
-          onFolderContextMenu={onFolderContextMenu}
-          onOpenFile={onOpenFile}
-          onRollback={onRollback}
-          onResolveMerge={onResolveMerge}
-          viewMode={viewMode}
-          basePad={multiRepo && !singleRepo ? 36 : 24}
-          activeFolderPath={activeFolderPath}
-          ctxFile={ctxFile}
-          onMultiSelect={onMultiSelect}
-          multiSelectedFiles={multiSelectedFiles}
-        />
-      )}
-      <div style={{ borderBottom: '1px solid var(--vscode-panel-border)' }} />
     </div>
   );
 }
@@ -434,9 +444,11 @@ const styles = {
   repoHeader: (color: string): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
-    background: color + '14',
+    background: `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     height: '26px',
     boxSizing: 'border-box',
+    borderBottom: '1px solid var(--vscode-panel-border)',
+    position: 'sticky', top: 0, zIndex: 1,
   }),
 
   // Repo checkbox indented one level from changelist checkbox
@@ -481,7 +493,8 @@ const styles = {
     flexShrink: 10,
     minWidth: '20px',
   } as React.CSSProperties,
-  branchBadge: (color: string): React.CSSProperties => ({
+  /** `hovered` mirrors the Log panel's "selected row" badge look — solid background instead of the usual 20%-tint. */
+  branchBadge: (color: string, hovered = false): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
@@ -489,9 +502,9 @@ const styles = {
     fontWeight: 600,
     textTransform: 'none' as const,
     letterSpacing: 0,
-    background: `${color}33`,
-    color,
-    border: `1px solid ${color}88`,
+    background: hovered ? color : `${color}33`,
+    color: hovered ? 'var(--vscode-editor-background)' : color,
+    border: `1px solid ${hovered ? color : `${color}88`}`,
     borderRadius: '3px',
     padding: '1px 5px',
     flexShrink: 1,

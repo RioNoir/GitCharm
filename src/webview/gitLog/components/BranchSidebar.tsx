@@ -94,7 +94,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
-  onCheckout, onMerge, onRebase, onDelete, onFetchRepo, onPull, onPush,
+  onCheckout, onMerge, onRebase, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
 }, ref) {
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
@@ -190,7 +190,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
 
       <ScrollArea style={{ flex: 1, minHeight: 0 }}>
       {/* LOCAL section */}
-      <div style={styles.sectionHeader} onClick={() => toggle('local')}>
+      <div style={styles.sectionHeader()} onClick={() => toggle('local')}>
         <span style={styles.chevron}>{collapsed.has('local') ? '▶' : '▼'}</span>
         <Codicon name="git-branch" style={styles.sectionIcon} />
         <span style={styles.sectionLabel}>Local</span>
@@ -218,11 +218,17 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       ))}
 
       {/* REMOTE sections — one per remote name (origin, upstream, …) */}
-      {remoteGroups.map(({ name, merged }) => {
+      {remoteGroups.map(({ name, merged }, idx) => {
         const sectionKey = `remote:${name}`;
+        // The section immediately above (Local, or the previous remote group) suppresses its
+        // own separator only when it's expanded and non-empty — mirror that here so we don't
+        // end up with neither border (gap) or both (double line).
+        const prevExpandedNonEmpty = idx === 0
+          ? localMerged.length > 0 && !collapsed.has('local')
+          : remoteGroups[idx - 1].merged.length > 0 && !collapsed.has(`remote:${remoteGroups[idx - 1].name}`);
         return (
           <React.Fragment key={sectionKey}>
-            <div style={styles.sectionHeader} onClick={() => toggle(sectionKey)}>
+            <div style={styles.sectionHeader(prevExpandedNonEmpty)} onClick={() => toggle(sectionKey)}>
               <span style={styles.chevron}>{collapsed.has(sectionKey) ? '▶' : '▼'}</span>
               <Codicon name="cloud" style={styles.sectionIcon} />
               <span style={styles.sectionLabel}>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
@@ -253,9 +259,14 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       })}
 
       {/* TAGS section */}
-      {mergedTags.length > 0 && (
+      {mergedTags.length > 0 && (() => {
+        const lastRemote = remoteGroups[remoteGroups.length - 1];
+        const prevExpandedNonEmpty = lastRemote
+          ? lastRemote.merged.length > 0 && !collapsed.has(`remote:${lastRemote.name}`)
+          : localMerged.length > 0 && !collapsed.has('local');
+        return (
         <>
-          <div style={styles.sectionHeader} onClick={() => toggle('tags')}>
+          <div style={styles.sectionHeader(prevExpandedNonEmpty)} onClick={() => toggle('tags')}>
             <span style={styles.chevron}>{collapsed.has('tags') ? '▶' : '▼'}</span>
             <Codicon name="tag" style={styles.sectionIcon} />
             <span style={styles.sectionLabel}>Tags</span>
@@ -277,13 +288,17 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             />
           ))}
         </>
-      )}
+        );
+      })()}
 
       </ScrollArea>
 
       {/* Branch context menu */}
       {contextMenu && (() => {
         const inst = primaryInstance(contextMenu.merged);
+        // Merging or rebasing in the repo where this branch is already checked out
+        // does nothing — target a repo where it is not the current branch.
+        const opInst = contextMenu.merged.instances.find(i => !i.isHead) ?? inst;
         const localInstances = contextMenu.merged.instances.filter(instance => !instance.isRemote);
         const currentLocalRepoIds = localInstances.filter(instance => instance.isHead).map(instance => instance.repoId);
         const localRepoIds = localInstances.map(instance => instance.repoId);
@@ -295,8 +310,8 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             canDelete={!contextMenu.merged.isHead}
             onClose={() => setContextMenu(null)}
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
-            onMerge={() => { onMerge(inst.repoId, inst.name); setContextMenu(null); }}
-            onRebase={() => { onRebase(inst.repoId, inst.name); setContextMenu(null); }}
+            onMerge={() => { onMerge(opInst.repoId, opInst.name); setContextMenu(null); }}
+            onRebase={() => { onRebase(opInst.repoId, opInst.name); setContextMenu(null); }}
             onDelete={() => { onDelete(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onPull={currentLocalRepoIds.length > 0 ? () => { onPull(currentLocalRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
             onPush={localRepoIds.length > 0 ? () => { onPush(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
@@ -527,6 +542,10 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [onClose]);
+  const copyName = () => {
+    navigator.clipboard.writeText(merged.baseName).catch(() => {});
+    onClose();
+  };
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: `Checkout "${merged.baseName}"`, action: onCheckout },
     { sep: true },
@@ -537,6 +556,8 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
       ...(onPull ? [{ icon: 'cloud-download', label: `Pull "${merged.baseName}"`, action: onPull }] : []),
       ...(onPush ? [{ icon: 'cloud-upload', label: `Push "${merged.baseName}"...`, action: onPush }] : []),
     ] : []),
+    { sep: true },
+    { icon: 'copy', label: 'Copy Branch Name', action: copyName },
     ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete branch', action: onDelete, danger: true }] : []),
   ];
 
@@ -642,7 +663,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
   } as React.CSSProperties,
-  sectionHeader: {
+  sectionHeader: (topBorder?: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -651,9 +672,10 @@ const styles = {
     userSelect: 'none' as const,
     background: 'var(--vscode-sideBarSectionHeader-background)',
     borderBottom: '1px solid var(--vscode-panel-border)',
+    ...(topBorder ? { borderTop: '1px solid var(--vscode-panel-border)' } : {}),
     color: 'var(--vscode-foreground)',
     minWidth: 0,
-  },
+  }),
   chevron: {
     fontSize: '9px',
     opacity: 0.5,

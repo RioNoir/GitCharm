@@ -26,7 +26,6 @@ export function parseConflictFile(absolutePath: string, repoId: string): MergeCo
 
   let state: 'normal' | 'ours' | 'base' | 'theirs' = 'normal';
   let currentBlock: Partial<ConflictBlock> | null = null;
-  let lineIndex = 0;
   let oursLabel = 'OURS';
   let theirsLabel = 'THEIRS';
 
@@ -48,7 +47,6 @@ export function parseConflictFile(absolutePath: string, repoId: string): MergeCo
         theirsLines: [],
         startLine: i,
       };
-      lineIndex = i;
     } else if (baseMatch && state === 'ours') {
       state = 'base';
     } else if (line.match(SEPARATOR) && (state === 'ours' || state === 'base')) {

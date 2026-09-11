@@ -9,6 +9,9 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
 import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
+import type { PullRequestManager } from '../pullRequests/PullRequestManager';
+import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
+import { resolveAvatarIconPath } from '../utils/avatarCache';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -20,6 +23,7 @@ export function registerCommands(
   profileStatusBar: ProfileStatusBar,
   manager?: WorkspaceGitManager,
   extensionUri?: vscode.Uri,
+  pullRequestManager?: PullRequestManager,
 ): void {
   context.subscriptions.push(
     // Open the Git Log where the persisted default location says
@@ -661,6 +665,123 @@ export function registerCommands(
       commitPanel.handleSubmoduleCommand({ type: 'WORKTREE_PRUNE', requestId: Math.random().toString(36).slice(2), repoId });
     }),
 
+    // ── Pull Request commands ─────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.pullRequests.refresh', async () => {
+      await commitPanel.requestPullRequestRefresh();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', async () => {
+      if (!pullRequestManager || !manager) return;
+
+      const ADD_NEW = Symbol('add-new');
+      const accounts = pullRequestManager.listAccounts();
+      const grouped = [...accounts].sort((a, b) =>
+        forgeProviderLabel(a.provider).localeCompare(forgeProviderLabel(b.provider)) || a.label.localeCompare(b.label)
+      );
+
+      const avatars = await Promise.all(grouped.map(async account => {
+        const email = await pullRequestManager.getAccountEmail(account);
+        return email ? resolveAvatarIconPath(email, context.globalStorageUri.fsPath) : undefined;
+      }));
+
+      const items: (vscode.QuickPickItem & { accountId?: string | typeof ADD_NEW })[] = [];
+      let lastProvider: string | undefined;
+      grouped.forEach((account, i) => {
+        if (account.provider !== lastProvider) {
+          items.push({ label: forgeProviderLabel(account.provider), kind: vscode.QuickPickItemKind.Separator });
+          lastProvider = account.provider;
+        }
+        items.push({ label: account.label, description: account.host, iconPath: avatars[i], accountId: account.id });
+      });
+      items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+      items.push({ label: '$(add) Add account…', accountId: ADD_NEW });
+
+      const picked = await vscode.window.showQuickPick(items, { title: 'Pull Request Accounts', placeHolder: 'Select an account, or add a new one' });
+      if (!picked || !picked.accountId) return;
+
+      if (picked.accountId === ADD_NEW) {
+        const provider = await vscode.window.showQuickPick(
+          [
+            { label: 'GitLab', provider: 'gitlab' as const },
+            { label: 'Bitbucket Cloud', provider: 'bitbucket' as const },
+            { label: 'Gitea / Forgejo', provider: 'gitea' as const },
+          ],
+          { title: 'Add Account', placeHolder: 'Select a forge (GitHub uses your VS Code account, no token needed)' }
+        );
+        if (!provider) return;
+        const host = await vscode.window.showInputBox({
+          title: 'Add Account — Host',
+          prompt: 'Enter the host for this account',
+          placeHolder: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : 'gitea.example.com',
+          value: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : undefined,
+        });
+        if (!host?.trim()) return;
+
+        let email: string | undefined;
+        if (provider.provider === 'bitbucket') {
+          email = await vscode.window.showInputBox({ title: 'Add Account — Account Email', prompt: 'Enter your Atlassian account email', placeHolder: 'you@example.com' });
+          if (!email?.trim()) return;
+        }
+        const apiToken = await vscode.window.showInputBox({
+          title: `Add Account — ${provider.provider === 'bitbucket' ? 'API Token' : 'Personal Access Token'}`,
+          prompt: `Enter a ${provider.provider === 'bitbucket' ? 'Bitbucket API Token' : 'Personal Access Token'} for ${host.trim()}`,
+          placeHolder: 'Token is stored securely and never leaves this machine',
+          password: true,
+        });
+        if (!apiToken?.trim()) return;
+        const label = await vscode.window.showInputBox({
+          title: 'Add Account — Label',
+          prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
+          placeHolder: email?.trim() || host.trim(),
+        });
+
+        const result = await pullRequestManager.addAccountStandalone(
+          provider.provider, host.trim(), label?.trim() || email?.trim() || host.trim(),
+          { apiToken: apiToken.trim(), email: email?.trim() }
+        );
+        if (!result.ok) {
+          vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
+          return;
+        }
+        vscode.window.showInformationMessage(`Added account for ${host.trim()}. Assign it to a repo from the Pull Requests panel.`);
+        return;
+      }
+
+      // An existing account was picked — offer rename/remove.
+      const account = accounts.find(a => a.id === picked.accountId);
+      if (!account) return;
+
+      const accountAction = await vscode.window.showQuickPick(
+        [
+          { label: '$(edit) Rename', action: 'rename' as const },
+          { label: '$(trash) Remove', action: 'remove' as const },
+        ],
+        { title: account.label, placeHolder: `${forgeProviderLabel(account.provider)} — ${account.host}` }
+      );
+      if (!accountAction) return;
+
+      if (accountAction.action === 'rename') {
+        const newLabel = await vscode.window.showInputBox({
+          title: 'Rename Account',
+          prompt: 'Enter a new label for this account',
+          value: account.label,
+        });
+        if (!newLabel?.trim() || newLabel.trim() === account.label) return;
+        await pullRequestManager.renameAccount(account.id, newLabel.trim());
+        await commitPanel.requestPullRequestRefresh();
+        vscode.window.showInformationMessage(`Renamed to "${newLabel.trim()}".`);
+        return;
+      }
+
+      // accountAction.action === 'remove'
+      const confirm = await vscode.window.showWarningMessage(`Remove the "${account.label}" account? Any repo assigned to it will be disconnected.`, { modal: true }, 'Remove');
+      if (confirm !== 'Remove') return;
+      await pullRequestManager.removeAccount(account.id);
+      await commitPanel.requestPullRequestRefresh();
+      vscode.window.showInformationMessage(`Removed "${account.label}".`);
+    }),
+
     // ── File History ──────────────────────────────────────────────────────────
 
     vscode.commands.registerCommand('gitcharm.showFileHistory', async (uri?: vscode.Uri) => {
@@ -725,7 +846,7 @@ export function registerCommands(
 async function pickSubmodule(
   manager: WorkspaceGitManager | undefined,
   repoId: string | undefined,
-  requireInitialized: boolean,
+  _requireInitialized: boolean,
 ): Promise<{ parentRepoId: string; submodulePath: string } | undefined> {
   const metas = manager?.getRepoMetas().filter(m => m.isSubmodule) ?? [];
   if (metas.length === 0) {

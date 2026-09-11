@@ -159,10 +159,6 @@ interface PanelData {
 }
 
 function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData): string {
-  const STATUS_LABEL: Record<string, string> = {
-    A: 'Added', M: 'Modified', D: 'Deleted', R: 'Renamed', C: 'Copied', T: 'Type changed',
-  };
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

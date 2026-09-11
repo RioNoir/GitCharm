@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -10,7 +10,7 @@
     "url": "https://github.com/RioNoir/GitCharm.git"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "SCM Providers",
@@ -33,7 +33,9 @@
   "activationEvents": [
     "workspaceContains:**/.git",
     "onStartupFinished",
-    "onWebviewPanel:gitcharm.undocked"
+    "onWebviewPanel:gitcharm.undocked",
+    "onWebviewPanel:gitcharm.commitFullDetail",
+    "onWebviewPanel:gitcharm.pullRequestDetail"
   ],
   "main": "./out/host/extension.js",
   "contributes": {
@@ -324,6 +326,16 @@
       {
         "command": "gitcharm.worktree.prune",
         "title": "Prune Worktrees",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.pullRequests.manageCredentials",
+        "title": "Manage Pull Request Credentials",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.pullRequests.refresh",
+        "title": "Refresh Pull Requests",
         "category": "GitCharm"
       },
       {
@@ -1112,6 +1124,47 @@
         }
       },
       {
+        "title": "Pull Requests",
+        "properties": {
+          "gitcharm.pullRequests.hostProviderOverrides": {
+            "order": 1,
+            "type": "object",
+            "default": {},
+            "description": "Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. { \"git.mycompany.com\": \"gitea\" }. Valid values: github, gitlab, bitbucket, gitea."
+          },
+          "gitcharm.pullRequests.defaultTargetBranch": {
+            "order": 2,
+            "type": "string",
+            "default": "",
+            "description": "Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master)."
+          },
+          "gitcharm.pullRequests.defaultMergeStrategy": {
+            "order": 3,
+            "type": "string",
+            "enum": ["merge", "squash", "rebase", "fastForward"],
+            "enumDescriptions": [
+              "Create a merge commit",
+              "Squash and merge",
+              "Rebase and merge",
+              "Fast-forward merge"
+            ],
+            "default": "merge",
+            "description": "Default strategy pre-selected on the \"Merge pull request\" button in the Pull Request Detail panel. Falls back to the first strategy the forge/provider actually supports if this one isn't available for a given PR."
+          },
+          "gitcharm.pullRequests.defaultCheckoutAction": {
+            "order": 4,
+            "type": "string",
+            "enum": ["pr", "branch"],
+            "enumDescriptions": [
+              "Checkout Pull Request (creates/updates a local pr/{author}/{number} branch)",
+              "Checkout Branch (downloads or updates the PR's actual source branch)"
+            ],
+            "default": "pr",
+            "description": "Default action for the main \"Checkout\" button in the Pull Request Detail panel — the other option is still available from its dropdown."
+          }
+        }
+      },
+      {
         "title": "Experimental",
         "properties": {
           "gitcharm.resetViewLocationsOnStartup": {
@@ -1139,16 +1192,26 @@
     "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json"
   },
   "dependencies": {
+    "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "dompurify": "^3.4.14",
+    "marked": "^18.0.11",
     "prismjs": "^1.30.0",
-    "simple-git": "^3.22.0"
+    "simple-git": "^3.22.0",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.6.0",
     "@tanstack/react-virtual": "^3.2.0",
+    "@types/dompurify": "^3.2.0",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/vscode": "^1.85.0",
+    "@types/turndown": "^5.0.6",
+    "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-react": "^4.2.0",

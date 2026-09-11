@@ -12,7 +12,7 @@ import type {
   SubmoduleEntry,
 } from '../types/git';
 import type { StashEntry, UnpushedCommit } from '../types/messages';
-import { parseDiff, buildMonacoContents, detectLanguage } from './DiffParser';
+import { parseDiff, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
 
@@ -45,6 +45,11 @@ function vsStatusToGitFileStatus(s: Status): GitFileStatus {
     case Status.BOTH_MODIFIED:      return 'conflicted';
     default:                        return 'modified';
   }
+}
+
+/** Drops the comment lines git adds to prepared commit messages, the way `git commit` would. */
+function stripCommitComments(raw: string): string {
+  return raw.replace(/^\s*#.*$\n?/gm, '').trim();
 }
 
 export class GitService {
@@ -117,7 +122,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
   }
 
   private async getShortHash(): Promise<string | undefined> {
@@ -225,7 +230,7 @@ export class GitService {
       // or in both simultaneously. Query their real staged/unstaged state via
       // simple-git porcelain and handle them separately.
       const submoduleRelPaths = await this.getSubmoduleRelativePaths();
-      let submodulePorcelainFiles: FileStatus[] = [];
+      const submodulePorcelainFiles: FileStatus[] = [];
       if (submoduleRelPaths.size > 0) {
         const porcelain = await this.git.status();
         for (const file of porcelain.files) {
@@ -288,6 +293,7 @@ export class GitService {
         unstagedFiles,
         isDetachedHead: isDetached,
         conflictCount,
+        mergeRebaseState: await this.getMergeRebaseState() ?? undefined,
       };
     }
 
@@ -321,7 +327,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount };
+    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
   }
 
   async getCurrentBranch(): Promise<BranchInfo> {
@@ -483,6 +489,41 @@ export class GitService {
     return branches;
   }
 
+  /** Parses the null-byte-delimited `%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s` git log format shared by getLog and getCommitsBetween. */
+  private _parseLogOutput(raw: string): CommitNode[] {
+    const commits: CommitNode[] = [];
+    for (const line of raw.trim().split('\n')) {
+      if (!line.trim()) continue;
+      const parts = line.split('\x00');
+      if (parts.length < 9) continue;
+      const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message] = parts;
+      commits.push({ hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] });
+    }
+    return commits;
+  }
+
+  /** A single commit as a full `CommitNode` (including `refs`, unlike `getCommitMeta`) — works for root commits too, unlike `getCommitsBetween(hash~1, hash)` which has no base to diff against. */
+  async getCommitNode(hash: string): Promise<CommitNode | null> {
+    const raw = await this.git.raw([
+      'log', '--max-count=1',
+      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s',
+      '--decorate=full', '--date=iso-strict', '--abbrev=8',
+      hash,
+    ]);
+    return this._parseLogOutput(raw)[0] ?? null;
+  }
+
+  /** Commits reachable from `head` but not from `base` (i.e. `git log base..head`) — used to preview what a PR from `head` into `base` would bring in, before the PR exists. No unpushed/incoming marking (that's specific to local-branch-vs-upstream, not a branch-vs-branch comparison). */
+  async getCommitsBetween(base: string, head: string, limit = 200): Promise<CommitNode[]> {
+    const raw = await this.git.raw([
+      'log', '--date-order', `--max-count=${limit}`,
+      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s',
+      '--decorate=full', '--date=iso-strict', '--abbrev=8',
+      `${base}..${head}`,
+    ]);
+    return this._parseLogOutput(raw);
+  }
+
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
   async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
@@ -512,15 +553,8 @@ export class GitService {
     }
     const raw = await this.git.raw(args);
     const hashPrefix = isHashSearch ? opts!.filterText!.trim().toLowerCase() : null;
-    const commits: CommitNode[] = [];
-    for (const line of raw.trim().split('\n')) {
-      if (!line.trim()) continue;
-      const parts = line.split('\x00');
-      if (parts.length < 9) continue;
-      const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message] = parts;
-      if (hashPrefix && !hash.toLowerCase().startsWith(hashPrefix)) continue;
-      commits.push({ hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] });
-    }
+    let commits = this._parseLogOutput(raw);
+    if (hashPrefix) commits = commits.filter(c => c.hash.toLowerCase().startsWith(hashPrefix));
 
     // Mark unpushed commits: hashes ahead of the remote tracking branch.
     // 'all' means there is no upstream — every commit on this branch is local.
@@ -616,14 +650,28 @@ export class GitService {
     // For each secondary parent, list commits that it introduced (not in parents[0]).
     for (let i = 1; i < parents.length; i++) {
       const range = `${parents[0]}..${parents[i]}`;
+      // --shortstat appends one aggregate "N files changed, N insertions(+), N deletions(-)"
+      // line after each commit — cheap way to get per-commit totals for the Full Detail
+      // view without a second request per row.
       const raw = await this.git.raw([
         'log', range,
-        '--format=%H%x00%h%x00%an%x00%ai%x00%s', '--abbrev=8',
+        '--format=%x01%H%x00%h%x00%an%x00%ae%x00%ai%x00%s', '--abbrev=8', '--shortstat',
       ]).catch(() => '');
-      for (const line of raw.trim().split('\n')) {
-        if (!line.trim()) continue;
-        const [h, sh, an, ad, ...msgParts] = line.split('\x00');
-        result.push({ hash: h, shortHash: sh, message: msgParts.join('\x00'), authorName: an, authorDate: ad, parentIndex: i });
+      for (const entry of raw.split('\x01')) {
+        if (!entry.trim()) continue;
+        const [header, ...statLines] = entry.split('\n');
+        const [h, sh, an, ae, ad, ...msgParts] = header.split('\x00');
+        if (!h) continue;
+        const statLine = statLines.join('\n');
+        const filesMatch = statLine.match(/(\d+) files? changed/);
+        const addMatch = statLine.match(/(\d+) insertions?\(\+\)/);
+        const delMatch = statLine.match(/(\d+) deletions?\(-\)/);
+        result.push({
+          hash: h, shortHash: sh, message: msgParts.join('\x00'), authorName: an, authorEmail: ae, authorDate: ad, parentIndex: i,
+          ...(filesMatch ? { filesChanged: parseInt(filesMatch[1], 10) } : {}),
+          ...(addMatch ? { additions: parseInt(addMatch[1], 10) } : {}),
+          ...(delMatch ? { deletions: parseInt(delMatch[1], 10) } : {}),
+        });
       }
     }
     return result;
@@ -1065,7 +1113,6 @@ export class GitService {
     const isUntracked = status.trimStart().startsWith('??');
 
     if (isUntracked) {
-      const fs = require('fs') as typeof import('fs');
       try { fs.unlinkSync(absPath); } catch { /* already gone */ }
       return;
     }
@@ -1099,31 +1146,97 @@ export class GitService {
     return result.summary.changes.toString();
   }
 
-  async getMergeRebaseState(): Promise<'merge' | 'rebase' | null> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) {
-      if (vsRepo.state.rebaseCommit !== undefined) return 'rebase';
-      if (vsRepo.state.mergeChanges.length > 0) return 'merge';
-      return null;
+  /**
+   * Absolute path of the repo's git dir. It is a plain file for worktrees and
+   * submodules, so resolve it through git once and cache it.
+   */
+  private gitDirPromise?: Promise<string>;
+  private gitDir(): Promise<string> {
+    return this.gitDirPromise ??= this.git
+      .raw(['rev-parse', '--absolute-git-dir'])
+      .then(out => out.trim() || path.join(this.rootPath, '.git'))
+      .catch(() => path.join(this.rootPath, '.git'));
+  }
+
+  // ponytail: commit.template is resolved once per session; a mid-session config
+  // change needs a window reload. Watch .git/config if that ever matters.
+  private commitTemplatePromise?: Promise<string>;
+  private commitTemplate(): Promise<string> {
+    return this.commitTemplatePromise ??= (async () => {
+      const configured = (await this.git.raw(['config', '--get', 'commit.template']).catch(() => '')).trim();
+      if (!configured) return '';
+      // git expands a leading ~ / ~user itself — mirror that before reading.
+      let templatePath = configured.replace(/^~([^/]*)\//, (_m, user: string) =>
+        `${user ? path.join(path.dirname(os.homedir()), user) : os.homedir()}/`);
+      if (!path.isAbsolute(templatePath)) templatePath = path.join(this.rootPath, templatePath);
+      try {
+        return stripCommitComments(fs.readFileSync(templatePath, 'utf8'));
+      } catch {
+        return '';
+      }
+    })();
+  }
+
+  /** The message git prepared for an in-progress merge or squash, or '' if none. */
+  async getMergeSquashMessage(): Promise<string> {
+    const dir = await this.gitDir();
+    for (const name of ['MERGE_MSG', 'SQUASH_MSG']) {
+      let raw: string;
+      try {
+        raw = fs.readFileSync(path.join(dir, name), 'utf8');
+      } catch {
+        continue; // no merge / squash in progress
+      }
+      const message = stripCommitComments(raw);
+      if (message) return message;
     }
-    const mergeHead = await this.git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).catch(() => '');
-    if (mergeHead.trim()) return 'merge';
-    const rebaseDir = await this.git.raw(['rev-parse', '--git-path', 'rebase-merge']).catch(() => '');
-    try {
-      if (rebaseDir.trim() && fs.existsSync(rebaseDir.trim())) return 'rebase';
-    } catch { /* */ }
+    return '';
+  }
+
+  /**
+   * The message the commit box should seed itself with when empty — the same sources
+   * VS Code's Source Control input uses: the message git prepared for an in-progress
+   * merge or squash, otherwise the configured commit.template. Empty when there is
+   * nothing to seed.
+   */
+  async getInputTemplate(): Promise<string> {
+    const mergeSquash = await this.getMergeSquashMessage();
+    if (mergeSquash) return mergeSquash;
+    return this.commitTemplate();
+  }
+
+  /**
+   * Whether a merge or rebase is still open. Read off the git dir rather than the
+   * VS Code API, which only reports a merge while conflicts are unresolved — the
+   * operation is still in progress after they are staged, and that is exactly when
+   * the panel needs to offer Continue. Cheap enough for every status refresh.
+   */
+  async getMergeRebaseState(): Promise<'merge' | 'rebase' | null> {
+    const dir = await this.gitDir();
+    const exists = (name: string) => { try { return fs.existsSync(path.join(dir, name)); } catch { return false; } };
+    // Rebase wins: an interactive rebase can leave MERGE_HEAD behind on a conflicted pick.
+    if (exists('rebase-merge') || exists('rebase-apply')) return 'rebase';
+    if (exists('MERGE_HEAD')) return 'merge';
     return null;
   }
 
+  async rebaseContinue(): Promise<void> {
+    // `rebase --continue` opens an editor for the commit being replayed. core.editor=true
+    // is the no-op shell builtin, so the stored message is accepted unchanged and the
+    // command never blocks — simple-git needs allowUnsafeEditor to let the override past.
+    await simpleGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+      .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
+  }
+
+  // Raw git rather than vsRepo() — getMergeRebaseState() (which the panel uses to decide
+  // whether Abort should even be offered) reads the git dir directly, and VS Code's API
+  // state can disagree with it (e.g. once conflicts are staged); using the same source
+  // for both the check and the action avoids Abort silently no-op'ing against stale state.
   async abortMerge(): Promise<void> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.mergeAbort(); return; }
     await this.git.raw(['merge', '--abort']);
   }
 
   async abortRebase(): Promise<void> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.rebase('--abort' as string); return; }
     await this.git.raw(['rebase', '--abort']);
   }
 
@@ -1371,7 +1484,13 @@ export class GitService {
     await this.git.branch(from ? [branchName, from] : [branchName]);
   }
 
-  async merge(from: string): Promise<void> {
+  /**
+   * Merge `from` into the current branch. Returns whether HEAD actually moved:
+   * git exits 0 with "Already up to date" when there is nothing to merge, and
+   * callers must not report that as a completed merge.
+   */
+  async merge(from: string): Promise<{ upToDate: boolean }> {
+    const before = await this.getFullHash();
     try {
       await this.git.merge([from]);
     } catch (e: unknown) {
@@ -1394,6 +1513,7 @@ export class GitService {
       }
       await this.git.stash(['pop']);
     }
+    return { upToDate: !!before && before === await this.getFullHash() };
   }
 
   async rebase(onto: string): Promise<void> {
@@ -1422,6 +1542,56 @@ export class GitService {
     // VS Code API pull() doesn't accept remote/branch args — use simple-git
     const args = rebase ? ['pull', '--rebase', remote, branch] : ['pull', remote, branch];
     await this.git.raw(args);
+  }
+
+  async localBranchExists(branch: string): Promise<boolean> {
+    try {
+      await this.git.raw(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Fetches a forge PR's head ref into a local branch (creating or force-updating it) and checks it out.
+   * `remoteRef` is provider-specific — e.g. GitHub's `pull/{number}/head`.
+   * Mirrors merge()'s dirty-tree stash/retry pattern, since a force-updating fetch can't move the
+   * ref of the currently checked-out branch while the working tree has uncommitted changes.
+   */
+  async checkoutPullRequest(remote: string, remoteRef: string, localBranch: string): Promise<void> {
+    const currentBranch = await this.getCurrentBranch().catch(() => null);
+    const isCurrent = currentBranch?.name === localBranch;
+
+    const fetchAndMove = () => this.git.raw(['fetch', remote, `+${remoteRef}:refs/heads/${localBranch}`]);
+
+    if (!isCurrent) {
+      // Not checked out anywhere — force-updating the ref directly is always safe.
+      await fetchAndMove();
+      await this.checkout(localBranch);
+      return;
+    }
+
+    // Currently checked out: fetch into a temp ref first, then reset the branch onto it,
+    // so a dirty tree fails at the reset step (catchable) rather than corrupting refs mid-fetch.
+    await this.git.raw(['fetch', remote, `${remoteRef}:refs/pr-checkout-fetch-tmp`]);
+    try {
+      await this.git.reset(['--hard', 'refs/pr-checkout-fetch-tmp']);
+    } catch (e: unknown) {
+      const isDirty = (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree'
+        || String(e).includes('overwritten by checkout')
+        || String(e).includes('Your local changes');
+      if (!isDirty) throw e;
+      const stashRef = `WIP before checking out PR branch ${localBranch}`;
+      await this.git.stash(['push', '-m', stashRef]);
+      try {
+        await this.git.reset(['--hard', 'refs/pr-checkout-fetch-tmp']);
+      } finally {
+        await this.git.stash(['pop']).catch(() => {});
+      }
+    } finally {
+      await this.git.raw(['update-ref', '-d', 'refs/pr-checkout-fetch-tmp']).catch(() => {});
+    }
   }
 
   async cherryPick(hash: string): Promise<void> {
@@ -1596,12 +1766,34 @@ export class GitService {
     await this.git.raw(['merge', name]);
   }
 
+  // Refs that point AT this commit — never branches that merely contain it.
+  // --points-at peels annotated tags, so one call covers heads, remotes and tags.
+  async getRefsAt(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
+    const out = await this.git.raw(['for-each-ref', '--points-at', hash, '--format=%(refname)']).catch(() => '');
+    const local: string[] = [], remote: string[] = [], tags: string[] = [];
+    for (const ref of out.split('\n').map(r => r.trim()).filter(Boolean)) {
+      if (ref.startsWith('refs/heads/')) local.push(ref.slice('refs/heads/'.length));
+      else if (ref.startsWith('refs/tags/')) tags.push(ref.slice('refs/tags/'.length));
+      else if (ref.startsWith('refs/remotes/')) {
+        const name = ref.slice('refs/remotes/'.length);
+        // <remote>/HEAD is a symbolic alias, not a branch.
+        if (name.includes('/') && !name.endsWith('/HEAD')) remote.push(name);
+      }
+    }
+    return { local, remote, tags };
+  }
+
+  /**
+   * Branches/tags that descend from this commit without pointing at it directly —
+   * shown in a separate "descendant branches" section so that information isn't
+   * lost now that getRefsAt only reports exact matches.
+   */
   async getBranchesContaining(hash: string): Promise<{ local: string[]; remote: string[]; tags: string[] }> {
     const [localOut, remoteOut, tagOut] = await Promise.all([
       this.git.raw(['branch', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
       this.git.raw(['branch', '-r', '--contains', hash, '--format=%(refname:short)']).catch(() => ''),
-      // --points-at: only tags directly on this commit, not ancestors.
-      this.git.raw(['tag', '--points-at', hash]).catch(() => ''),
+      // --contains: every tag reachable from the commit, not just ones directly on it.
+      this.git.raw(['tag', '--contains', hash]).catch(() => ''),
     ]);
     const parse = (out: string) => out.split('\n').map(b => b.trim()).filter(Boolean);
     // Local branches must not contain a slash — anything with '/' is a remote ref
@@ -1614,7 +1806,18 @@ export class GitService {
       .map(b => b.replace(/^remotes\//, ''))
       .filter(b => !b.endsWith('/HEAD') && b.includes('/'));
     const tags = parse(tagOut);
-    return { local, remote, tags };
+
+    // Exclude anything getRefsAt would already show as an exact match on this commit —
+    // this method exists to report ADDITIONAL descendant branches, not duplicate them.
+    const { local: exactLocal, remote: exactRemote, tags: exactTags } = await this.getRefsAt(hash);
+    const exactLocalSet = new Set(exactLocal);
+    const exactRemoteSet = new Set(exactRemote);
+    const exactTagSet = new Set(exactTags);
+    return {
+      local: local.filter(b => !exactLocalSet.has(b)),
+      remote: remote.filter(b => !exactRemoteSet.has(b)),
+      tags: tags.filter(t => !exactTagSet.has(t)),
+    };
   }
 
   async getFullCommitMessage(hash: string): Promise<string> {
@@ -1672,7 +1875,7 @@ export class GitService {
       const message = branchMatch ? subject.slice(branchMatch[0].length).trim() : subject;
 
       // Get files for this stash entry
-      let files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
+      const files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
       try {
         const stats = new Map<string, { added: number; removed: number }>();
         const numstatRaw = await this.git.raw(['stash', 'show', '--numstat', ref]).catch(() => '');
@@ -1922,7 +2125,7 @@ export class GitService {
     // then get full messages separately per hash.
     // GS before each record; fields separated by NUL.
     const GS = '\x1D';
-    const FORMAT = `%x1D%H%x00%h%x00%s%x00%an%x00%ci`;
+    const FORMAT = `%x1D%H%x00%h%x00%s%x00%an%x00%ae%x00%ci`;
 
     const parseRecords = (raw: string): UnpushedCommit[] => {
       const commits: UnpushedCommit[] = [];
@@ -1931,13 +2134,14 @@ export class GitService {
         if (!trimmed) continue;
         const lines = trimmed.split('\n');
         const parts = lines[0].split('\x00');
-        if (parts.length < 5) continue;
+        if (parts.length < 6) continue;
         const commit: UnpushedCommit = {
           hash: parts[0].trim(),
           shortHash: parts[1].trim(),
           message: parts[2].trim(),
           author: parts[3].trim(),
-          date: parts.slice(4).join('\x00').trim(),
+          authorEmail: parts[4].trim(),
+          date: parts.slice(5).join('\x00').trim(),
         };
         const statLine = lines.find(l => l.includes('changed'));
         if (statLine) {
@@ -2039,7 +2243,7 @@ export interface WorktreeEntry {
   isInWorkspace: boolean; // path is inside a VS Code workspace folder
 }
 
-function parseWorktreePorcelain(raw: string, mainPath: string): WorktreeEntry[] {
+function parseWorktreePorcelain(raw: string, _mainPath: string): WorktreeEntry[] {
   const entries: WorktreeEntry[] = [];
   const blocks = raw.trim().split(/\n\n+/);
   for (const block of blocks) {

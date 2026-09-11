@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 interface Props {
   repoId: string;
@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function CommitForm({
-  repoId, repoName, repoColor, message, amend, stagedCount, branchName, aheadBehind,
+  repoId: _repoId, repoName, repoColor, message, amend, stagedCount, branchName, aheadBehind,
   onMessageChange, onAmendChange, onCommit, onCommitAndPush, onPull, loading,
 }: Props) {
   const canCommit = (message.trim().length > 0 || amend) && (stagedCount > 0 || amend);
@@ -127,6 +127,11 @@ const styles = {
   repoName: {
     fontWeight: 'bold' as const,
     fontSize: '12px',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    flexShrink: 1,
   },
   branch: {
     display: 'flex',

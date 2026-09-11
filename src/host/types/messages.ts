@@ -10,14 +10,31 @@ import type {
 import type { WorktreeEntry } from '../git/WorkspaceGitManager';
 import type { IconThemeData } from '../utils/IconThemeService';
 import type { ViewAndSortSettings, ViewAndSortUserPrefs } from './settings';
+import type { PullRequestFilters, RepoPullRequests } from '../pullRequests/PullRequestManager';
+import type {
+  ChangedFile, CiCheck, CreatePullRequestInput, FileDiffContent, FileDiffRefs, ForgeProvider, MergeStrategy, PullRequestAuthorFilter,
+  PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput,
+} from '../pullRequests/types';
+
+export type {
+  RepoPullRequests, CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary,
+  PullRequestFilters, PullRequestStateFilter, PullRequestAuthorFilter, PullRequestDetail, ChangedFile,
+  MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, PullRequestEvent, FileDiffContent, FileDiffRefs, ReviewEvent,
+  PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
+};
 
 export interface MergeParentCommit {
   hash: string;
   shortHash: string;
   message: string;
   authorName: string;
+  authorEmail: string;
   authorDate: string;
   parentIndex: number; // which parent branch (1 = first non-main, 2 = second, ...)
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 // ─── Shelve (patch-based, PhpStorm-style) ────────────────────────────────────
@@ -52,6 +69,7 @@ export interface UnpushedCommit {
   shortHash: string;
   message: string;
   author: string;
+  authorEmail: string;
   date: string;
   filesChanged?: number;
   additions?: number;
@@ -62,8 +80,9 @@ export interface UnpushedCommit {
 
 export type HostToCommitMsg =
   | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } }
+  | { type: 'COMMIT_PERSISTED_MESSAGE_RESULT'; message: string }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
-  | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
+  | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string; succeededRepoIds?: string[] }
   | { type: 'COMMIT_BRANCHES_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'COMMIT_REMOTES_RESULT'; requestId: string; remotes: string[]; error?: string }
   | { type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT'; requestId: string; message: string; error?: string }
@@ -79,7 +98,7 @@ export type HostToCommitMsg =
   | { type: 'PUSH_DROP_RESULT'; requestId: string; ok: boolean; error?: string }
   | { type: 'PUSH_REVERT_RESULT'; requestId: string; ok: boolean; error?: string }
   | { type: 'PUSH_EDIT_MSG_RESULT'; requestId: string; ok: boolean; error?: string }
-  | { type: 'COMMIT_SET_MESSAGE'; message: string }
+  | { type: 'COMMIT_SET_MESSAGE'; message: string; ifEmpty?: boolean }
   | { type: 'CHANGELISTS_UPDATE'; changelists: ChangelistData[]; viewMode: 'simplified' | 'changelists' | 'vscode' }
   | { type: 'SUBMODULE_OP_RESULT'; requestId: string; parentRepoId: string; submodulePath: string; op: 'init' | 'deinit' | 'update'; ok: boolean; error?: string }
   | { type: 'SUBMODULE_PUSH_RESULT'; requestId: string; repoId: string; ok: boolean; error?: string }
@@ -87,14 +106,21 @@ export type HostToCommitMsg =
   | { type: 'SUBMODULE_DETACHED_HEAD_WARNING'; repoId: string; headCommit: string }
   | { type: 'WORKTREE_LIST_RESULT'; repos: Array<{ repoId: string; repoName: string; repoColor: string; worktrees: WorktreeEntry[]; isLinkedWorktree: boolean }> }
   | { type: 'WORKTREE_OP_RESULT'; requestId: string; repoId: string; op: 'create' | 'delete' | 'prune' | 'lock' | 'unlock'; ok: boolean; error?: string }
+  | { type: 'PULLREQUEST_LIST_RESULT'; repos: RepoPullRequests[] }
+  | { type: 'PULLREQUEST_LIST_START'; repoIds: string[] }
+  | { type: 'PULLREQUEST_LIST_REPO_RESULT'; repo: RepoPullRequests }
+  | { type: 'PULLREQUEST_LOAD_MORE_RESULT'; repoId: string; repo: RepoPullRequests | null }
+  | { type: 'PULLREQUEST_INVALIDATED' }
+  | { type: 'PULLREQUEST_CONNECTION_STATUS'; statuses: PullRequestConnectionStatus[] }
   | ({ type: 'COMMIT_VIEW_SORT_SETTINGS_UPDATE' } & ViewAndSortSettings)
-  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' }
+  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests' }
   | { type: 'COMMIT_DESELECT_FILE'; filePath: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
 export type CommitToHostMsg =
   | { type: 'COMMIT_REQUEST_STATUS' }
+  | { type: 'COMMIT_PERSIST_MESSAGE'; message: string }
   | { type: 'COMMIT_REQUEST_DIFF'; requestId: string; repoId: string; filePath: string; staged: boolean }
   | { type: 'COMMIT_STAGE_FILES'; requestId: string; repoId: string; paths: string[] }
   | { type: 'COMMIT_UNSTAGE_FILES'; requestId: string; repoId: string; paths: string[] }
@@ -103,6 +129,7 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_DO_COMMIT'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_PUSH'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean }
+  | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'abort' }
   | { type: 'COMMIT_PULL_ALL' }
   | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_REMOTES'; requestId: string; repoId: string }
@@ -185,6 +212,18 @@ export type CommitToHostMsg =
   | { type: 'WORKTREE_OPEN_IN_NEW_WINDOW'; worktreePath: string }
   | { type: 'WORKTREE_OPEN_IN_OS'; worktreePath: string }
   | { type: 'WORKTREE_ADD_TO_WORKSPACE'; worktreePath: string }
+  | { type: 'PULLREQUEST_REQUEST_LIST'; forceRefresh?: boolean }
+  | { type: 'PULLREQUEST_REFRESH_REPO'; repoId: string }
+  | { type: 'PULLREQUEST_LOAD_MORE'; repoId: string }
+  | { type: 'PULLREQUEST_CREATE_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_CONNECT_PAT_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_OPEN_ACCOUNT_PICKER'; repoId: string }
+  | { type: 'PULLREQUEST_DISCONNECT'; repoId: string }
+  | { type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE'; host: string; provider: ForgeProvider }
+  | { type: 'PULLREQUEST_FILTERS_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_SEARCH_PROMPT'; repoId: string }
+  | { type: 'PULLREQUEST_OPEN_IN_BROWSER'; url: string }
+  | { type: 'PULLREQUEST_OPEN_DETAIL'; repoId: string; pr: PullRequestSummary }
   | { type: 'COMMIT_INIT_REPO' }
   | { type: 'COMMIT_OPEN_FOLDER' }
   | { type: 'COMMIT_CLONE_REPO' }
@@ -226,7 +265,7 @@ export type HostToLogMsg =
   | { type: 'LOG_SCROLL_TO_COMMIT'; hash: string; repoId: string }
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
-  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[] }
+  | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[]; queriedRepoIds: string[] }
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
   | { type: 'LOG_DESELECT_FILE'; filePath: string };
 
@@ -315,3 +354,123 @@ export type HostToMergeMsg =
 export type MergeToHostMsg =
   | { type: 'MERGE_SAVE_FILE'; requestId: string; resolvedContent: string }
   | { type: 'MERGE_OPEN_FILE'; filePath: string };
+
+// ─── Create Pull Request: Host → WebView ─────────────────────────────────────
+
+export type HostToPrCreateMsg =
+  | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider }
+  | { type: 'PRCREATE_BRANCHES_RESULT'; branches: BranchInfo[]; error?: string }
+  | { type: 'PRCREATE_ICON_THEME'; iconTheme: IconThemeData }
+  | { type: 'PRCREATE_BRANCH_PICKED'; requestId: string; role: 'source' | 'target'; branch?: string }
+  | { type: 'PRCREATE_COMPARE_RESULT'; requestId: string; files: ChangedFile[]; commits: CommitNode[]; error?: string }
+  | { type: 'PRCREATE_SUBMIT_RESULT'; ok: boolean; pr?: PullRequestSummary; error?: string };
+
+// ─── Create Pull Request: WebView → Host ─────────────────────────────────────
+
+export type PrCreateToHostMsg =
+  | { type: 'PRCREATE_REQUEST_BRANCHES' }
+  | { type: 'PRCREATE_PICK_BRANCH'; requestId: string; role: 'source' | 'target'; current?: string }
+  | { type: 'PRCREATE_REQUEST_COMPARE'; requestId: string; sourceBranch: string; targetBranch: string }
+  | { type: 'PRCREATE_OPEN_FILE_DIFF'; sourceBranch: string; targetBranch: string; file: ChangedFile }
+  | { type: 'PRCREATE_OPEN_NATIVE_COMPARE'; sourceBranch: string; targetBranch: string }
+  | { type: 'PRCREATE_SUBMIT'; input: CreatePullRequestInput }
+  | { type: 'PRCREATE_CANCEL' };
+
+// ─── Pull Request Detail: Host → WebView ─────────────────────────────────────
+
+export type HostToPrDetailMsg =
+  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string; aiEnabled: boolean; aiModelLabel: string; defaultMergeStrategy: MergeStrategy; defaultCheckoutAction: 'pr' | 'branch' }
+  | { type: 'PRDETAIL_ICON_THEME'; iconTheme: IconThemeData }
+  | { type: 'PRDETAIL_LOADED'; detail: PullRequestDetail }
+  | { type: 'PRDETAIL_LOAD_ERROR'; error: string }
+  | { type: 'PRDETAIL_COMMENTS_RESULT'; comments: PullRequestComment[]; error?: string }
+  | { type: 'PRDETAIL_COMMENT_POSTED'; ok: boolean; comment?: PullRequestComment; error?: string }
+  | { type: 'PRDETAIL_COMMENT_UPDATED'; ok: boolean; comment?: PullRequestComment; error?: string }
+  | { type: 'PRDETAIL_COMMENT_DELETED'; ok: boolean; commentId?: string; error?: string }
+  | { type: 'PRDETAIL_COMMENT_HIDDEN'; ok: boolean; commentId?: string; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_COMMENT_UNHIDDEN'; ok: boolean; commentId?: string; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_FILES_RESULT'; files: ChangedFile[]; error?: string }
+  | { type: 'PRDETAIL_FILE_DIFF_ERROR'; path: string; error: string }
+  | { type: 'PRDETAIL_COMMITS_RESULT'; commits: PullRequestCommit[]; error?: string }
+  | { type: 'PRDETAIL_EVENTS_RESULT'; events: PullRequestEvent[]; error?: string }
+  | { type: 'PRDETAIL_COMMIT_FILES_RESULT'; sha: string; files: ChangedFile[]; error?: string }
+  | { type: 'PRDETAIL_MERGE_RESULT'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_CLOSE_RESULT'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_REOPEN_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_REVIEW_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_CHECKOUT_RESULT'; ok: boolean; branchName?: string; error?: string }
+  | { type: 'PRDETAIL_UPDATE_RESULT'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_UPDATE_LABELS_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
+  | { type: 'PRDETAIL_CHECKS_RESULT'; checks: CiCheck[]; error?: string };
+
+// ─── Pull Request Detail: WebView → Host ─────────────────────────────────────
+
+export type PrDetailToHostMsg =
+  | { type: 'PRDETAIL_REQUEST_DETAIL' }
+  | { type: 'PRDETAIL_REQUEST_COMMENTS' }
+  | { type: 'PRDETAIL_POST_COMMENT'; body: string }
+  | { type: 'PRDETAIL_UPDATE_COMMENT'; commentId: string; body: string }
+  | { type: 'PRDETAIL_DELETE_COMMENT'; commentId: string }
+  | { type: 'PRDETAIL_HIDE_COMMENT'; commentId: string }
+  | { type: 'PRDETAIL_UNHIDE_COMMENT'; commentId: string }
+  | { type: 'PRDETAIL_REQUEST_FILES' }
+  | { type: 'PRDETAIL_OPEN_FILE_DIFF'; file: ChangedFile }
+  | { type: 'PRDETAIL_REQUEST_COMMITS' }
+  | { type: 'PRDETAIL_REQUEST_EVENTS' }
+  | { type: 'PRDETAIL_REQUEST_COMMIT_FILES'; sha: string }
+  | { type: 'PRDETAIL_OPEN_COMMIT_FILE_DIFF'; file: ChangedFile; commitSha: string; parentSha?: string }
+  | { type: 'PRDETAIL_OPEN_COMMIT_ALL_CHANGES'; commitSha: string; parentSha?: string }
+  | { type: 'PRDETAIL_MERGE'; strategy: MergeStrategy }
+  | { type: 'PRDETAIL_CLOSE' }
+  | { type: 'PRDETAIL_REOPEN' }
+  | { type: 'PRDETAIL_SUBMIT_REVIEW'; input: SubmitReviewInput }
+  | { type: 'PRDETAIL_OPEN_IN_BROWSER' }
+  | { type: 'PRDETAIL_VIEW_ALL_CHANGES' }
+  | { type: 'PRDETAIL_CHECKOUT_PR' }
+  | { type: 'PRDETAIL_CHECKOUT_BRANCH' }
+  | { type: 'PRDETAIL_PICK_TITLE' }
+  | { type: 'PRDETAIL_PICK_TARGET_BRANCH' }
+  | { type: 'PRDETAIL_PICK_REVIEWERS' }
+  | { type: 'PRDETAIL_PICK_ASSIGNEES' }
+  | { type: 'PRDETAIL_PICK_LABELS' }
+  | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string }
+  | { type: 'PRDETAIL_EXPLAIN' };
+
+// ─── Commit Full Detail: Host → WebView ──────────────────────────────────────
+// Reuses LogToHostMsg/HostToLogMsg for its file-tree/context-menu interactions
+// (see src/webview/gitLog/components/CommitDetail.tsx) — this panel is a
+// standalone single-commit view built around that same component, so only the
+// init payload and the AI explain result/request are panel-specific.
+
+export type HostToCommitFullDetailMsg =
+  | {
+      type: 'COMMITFULLDETAIL_INIT';
+      repoId: string;
+      repoName: string;
+      commit: CommitNode;
+      fullMessage: string;
+      files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>;
+      iconTheme?: IconThemeData;
+      aiEnabled: boolean;
+      aiModelLabel: string;
+      autoExplain: boolean;
+      activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+    }
+  | { type: 'COMMITFULLDETAIL_ICON_THEME'; iconTheme: IconThemeData };
+
+// ─── AI Explain Detail: Host → WebView ───────────────────────────────────────
+// A small standalone panel (opened beside the commit/PR detail panel it was triggered from) that just
+// displays one AI-generated explanation — subject metadata + model label + markdown result/error. It never
+// re-generates itself; the host re-posts AIEXPLAIN_RESULT into the same already-open panel when the user
+// hits "Regenerate" on the originating panel's floating action button.
+
+export type HostToAiExplainMsg =
+  | { type: 'AIEXPLAIN_INIT'; subjectKind: 'commit' | 'pull-request'; subjectTitle: string; subjectSubtitle?: string; modelLabel: string }
+  | { type: 'AIEXPLAIN_RESULT'; explanation?: string; error?: string };
+
+// ─── Commit Full Detail: WebView → Host ──────────────────────────────────────
+
+export type CommitFullDetailToHostMsg =
+  | { type: 'COMMITFULLDETAIL_EXPLAIN'; repoId: string; hash: string };

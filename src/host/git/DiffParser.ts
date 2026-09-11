@@ -1,4 +1,4 @@
-import type { DiffHunk, DiffLine, FileDiff } from '../types/git';
+import type { DiffHunk, FileDiff } from '../types/git';
 import * as path from 'path';
 
 const LANG_MAP: Record<string, string> = {

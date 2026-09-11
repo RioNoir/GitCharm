@@ -8,10 +8,14 @@ const isWatch = argv.includes('--watch');
 const isProd = !isWatch;
 
 const apps = [
-  { name: 'commitPanel',   entry: 'src/webview/commitPanel/main.tsx' },
-  { name: 'gitLog',        entry: 'src/webview/gitLog/main.tsx' },
-  { name: 'mergeEditor',   entry: 'src/webview/mergeEditor/main.tsx' },
-  { name: 'undockedPanel', entry: 'src/webview/undockedPanel/main.tsx' },
+  { name: 'commitPanel',       entry: 'src/webview/commitPanel/main.tsx' },
+  { name: 'gitLog',            entry: 'src/webview/gitLog/main.tsx' },
+  { name: 'mergeEditor',       entry: 'src/webview/mergeEditor/main.tsx' },
+  { name: 'undockedPanel',     entry: 'src/webview/undockedPanel/main.tsx' },
+  { name: 'pullRequestCreate', entry: 'src/webview/pullRequestCreate/main.tsx' },
+  { name: 'pullRequestDetail', entry: 'src/webview/pullRequestDetail/main.tsx' },
+  { name: 'commitFullDetail',  entry: 'src/webview/commitFullDetail/main.tsx' },
+  { name: 'aiExplainDetail',   entry: 'src/webview/aiExplainDetail/main.tsx' },
 ];
 
 /** @returns {import('esbuild').BuildOptions} */
