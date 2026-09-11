@@ -492,6 +492,10 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   onSelect(commit);
                 }
               }}
+              onDoubleClick={e => {
+                e.stopPropagation();
+                getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg);
+              }}
               onContextMenu={e => {
                 e.preventDefault();
                 e.stopPropagation();

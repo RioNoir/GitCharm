@@ -2,7 +2,7 @@ import React from 'react';
 import type { CiCheck } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
-import { formatRelativeTime } from '../formatRelativeTime';
+import { formatRelativeTime } from '../../shared/formatRelativeTime';
 
 interface Props {
   checks: CiCheck[];

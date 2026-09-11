@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import type { ChangedFile, IconThemeData } from '../../../host/types/messages';
-import { Codicon } from '../../shared/Codicon';
-import { GenericFileTree, type GenericTreeFile } from '../../shared/GenericFileTree';
+import type { ChangedFile, IconThemeData } from '../../host/types/messages';
+import { Codicon } from './Codicon';
+import { GenericFileTree, type GenericTreeFile } from './GenericFileTree';
 
 interface Props {
   files: ChangedFile[];

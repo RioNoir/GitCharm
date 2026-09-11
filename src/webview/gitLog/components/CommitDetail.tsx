@@ -3,13 +3,15 @@ import type { CommitNode, RepoMeta, MergeParentCommit } from '../../shared/types
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg, HostToLogMsg, IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { FileIcon } from '../../shared/FileIcon';
 import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import { formatDateTime } from '../../shared/dateUtils';
 import type { RefGroup } from '../utils/refs';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
+import { CommitRow } from '../../shared/CommitRow';
+import { FileTreeView } from '../../shared/FileTreeView';
 import { GenericFileTree } from '../../shared/GenericFileTree';
+import type { ChangedFile } from '../../../host/types/messages';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -160,6 +162,19 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? 'var(--vscode-foreground)';
 }
 
+const CHANGED_FILE_STATUS: Record<string, ChangedFile['status']> = {
+  A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added',
+};
+
+/** Maps the Git Log's single-letter file status (from a raw git diff) to FileTreeView's ChangedFile shape. */
+function toChangedFile(f: { path: string; status: string; added?: number; removed?: number; oldPath?: string }): ChangedFile {
+  return {
+    path: f.path, oldPath: f.oldPath,
+    status: CHANGED_FILE_STATUS[f.status] ?? 'modified',
+    additions: f.added, deletions: f.removed,
+  };
+}
+
 /* ─── Badge helpers ───────────────────────────────────────────────────────── */
 
 function remoteLabel(group: RefGroup): string {
@@ -224,9 +239,12 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
   };
   const [mergeCommits, setMergeCommits] = useState<MergeParentCommit[]>([]);
   const [loadingMerge, setLoadingMerge] = useState(false);
-  const [selectedMergeHash, setSelectedMergeHash] = useState<string | null>(null);
-  const [mergeFiles, setMergeFiles] = useState<Array<{ path: string; status: string; added?: number; removed?: number }>>([]);
-  const [loadingMergeFiles, setLoadingMergeFiles] = useState(false);
+  // Expanding a merged-commit row only shows its files inline (like the PR detail's
+  // commit list) — it never affects the file list/context-menu in the right sidebar,
+  // which always stays on the commit this panel is showing.
+  const [expandedMergeHash, setExpandedMergeHash] = useState<string | null>(null);
+  const [mergeCommitFiles, setMergeCommitFiles] = useState<Record<string, Array<{ path: string; status: string; added?: number; removed?: number }>>>({});
+  const [mergeCommitFilesLoading, setMergeCommitFilesLoading] = useState<Record<string, boolean>>({});
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
   const [refsExpanded, setRefsExpanded] = useState(false);
@@ -239,8 +257,48 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     if (!activeCommit) return null;
     return repos.find(r => r.id === activeCommit.repoId)?.name ?? null;
   }, [commit, range, repos]);
+  // A repo color only helps tell repos apart — with a single repo in the workspace
+  // there's nothing to distinguish it from, so the name stays in the plain foreground color.
+  const effectiveRepoColor = repos.length > 1 ? repoColor : undefined;
 
-  const isMerge = !range && (commit?.parents.length ?? 0) >= 2;
+  // A stash entry has 2-3 parents (base + index + untracked commits) but is never a
+  // real merge — never show the Merged Commits section for one.
+  const isMerge = !range && !commit?.isStash && (commit?.parents.length ?? 0) >= 2;
+
+  // Only refs that point AT this commit — never branches that merely contain it.
+  // Order: HEAD, tags, primary locals, other locals, primary remotes, other remotes.
+  // Shared between the Log Panel's and Full Detail's "Branches" rendering below.
+  const branchBadges = useMemo(() => {
+    if (!commit) return [];
+    const refGroups = groupRefs(commit.refs);
+    const other = (g: RefGroup) => !g.isHead && !g.isTag;
+    const pick = (f: (g: RefGroup) => boolean) => refGroups.filter(f);
+    return [
+      ...pick(g => g.isHead),
+      ...pick(g => g.isTag),
+      ...pick(g => other(g) && g.isLocal && isPrimaryBranch(g.label)),
+      ...pick(g => other(g) && g.isLocal && !isPrimaryBranch(g.label)),
+      ...pick(g => other(g) && !g.isLocal && isPrimaryBranch(g.label)),
+      ...pick(g => other(g) && !g.isLocal && !isPrimaryBranch(g.label)),
+    ];
+  }, [commit]);
+
+  const nonDetachedBranchHead = branchBadges.find(g => g.isHead && !g.isDetached && !g.isRemoteHead);
+
+  function renderBranchBadge(g: RefGroup) {
+    const isSpecialHead = g.isRemoteHead || (g.isHead && g.isDetached);
+    const rid = commit!.repoId;
+    const remoteRefKey = g.remoteName ? `${rid}:${g.remoteName}/${g.label}` : null;
+    const resolvedRefColor = (remoteRefKey ? refColors?.get(remoteRefKey) : undefined) ?? refColors?.get(`${rid}:${g.label}`);
+    const color = g.isTag ? tagColor() : isSpecialHead ? headColor() : (resolvedRefColor ?? branchColor(g.label, false));
+    const label = g.isRemoteHead ? `${g.remoteName}/HEAD` : g.isRemote ? remoteLabel(g) : g.label;
+    return (
+      <span key={g.key} style={styles.refBadge(color, (g.isHead || g.isDetached) && !g.isRemoteHead)} title={badgeTitle(g)}>
+        <RefBadgeIcon group={g} />
+        {label}
+      </span>
+    );
+  }
 
   useEffect(() => {
     const handler = (event: MessageEvent<HostToLogMsg>) => {
@@ -261,9 +319,10 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
   // Descendant branches/tags — those that contain this commit without pointing at it
   // directly — are fetched separately from the exact-match refs shown as badges above,
   // so a lazy `git branch --contains` scan never blocks or clutters the primary view.
+  // Full Detail only — the Log Panel's compact commit detail hides this section entirely.
   useEffect(() => {
     setDescendantsExpanded(false);
-    if (range || !commit || commit.isStash) { setDescendantBranches({ local: [], remote: [], tags: [] }); setLoadingDescendants(false); return; }
+    if (!twoColumnLayout || range || !commit || commit.isStash) { setDescendantBranches({ local: [], remote: [], tags: [] }); setLoadingDescendants(false); return; }
     setLoadingDescendants(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -278,11 +337,12 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
       repoId: commit.repoId,
       hash: commit.hash,
     } satisfies LogToHostMsg);
-  }, [commit?.hash, range]);
+  }, [commit?.hash, range, twoColumnLayout]);
 
   useEffect(() => {
-    setSelectedMergeHash(null);
-    setMergeFiles([]);
+    setExpandedMergeHash(null);
+    setMergeCommitFiles({});
+    setMergeCommitFilesLoading({});
     if (range || !commit || !isMerge || commit.isStash) { setMergeCommits([]); return; }
     setLoadingMerge(true);
     const reqId = generateId();
@@ -366,12 +426,12 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
       type: 'LOG_CHERRY_PICK_FILE',
       requestId: reqId,
       repoId: commit.repoId,
-      hash: selectedMergeHash ?? commit.hash,
+      hash: commit.hash,
       filePath: ctxMenu.file.path,
       oldPath: ctxMenu.file.oldPath,
     } as LogToHostMsg);
     setCtxMenu(null);
-  }, [ctxMenu, commit, selectedMergeHash]);
+  }, [ctxMenu, commit]);
 
   const handleCtxRevealExplorer = useCallback(() => {
     if (!ctxMenu || !commit) return;
@@ -396,26 +456,25 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     getVsCodeApi().postMessage({
       type: 'LOG_COMPARE_FILE_WITH',
       repoId: commit.repoId,
-      hash: selectedMergeHash ?? commit.hash,
+      hash: commit.hash,
       filePath: ctxMenu.file.path,
     } as LogToHostMsg);
     setCtxMenu(null);
-  }, [ctxMenu, commit, selectedMergeHash]);
+  }, [ctxMenu, commit]);
 
-  function selectMergeCommit(c: MergeParentCommit) {
-    if (selectedMergeHash === c.hash) {
-      setSelectedMergeHash(null);
-      setMergeFiles([]);
+  function toggleMergeCommit(c: MergeParentCommit) {
+    if (expandedMergeHash === c.hash) {
+      setExpandedMergeHash(null);
       return;
     }
-    setSelectedMergeHash(c.hash);
-    setMergeFiles([]);
-    setLoadingMergeFiles(true);
+    setExpandedMergeHash(c.hash);
+    if (mergeCommitFiles[c.hash]) return;
+    setMergeCommitFilesLoading(s => ({ ...s, [c.hash]: true }));
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
       if (msg.type === 'LOG_COMMIT_FILES') {
-        setMergeFiles(msg.files);
-        setLoadingMergeFiles(false);
+        setMergeCommitFiles(s => ({ ...s, [c.hash]: msg.files }));
+        setMergeCommitFilesLoading(s => ({ ...s, [c.hash]: false }));
       }
     });
     getVsCodeApi().postMessage({
@@ -434,9 +493,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     );
   }
 
-  const activeFiles = !range && selectedMergeHash ? mergeFiles : files;
-  const activeLoading = !range && selectedMergeHash ? loadingMergeFiles : loadingFiles;
-  const activeHash = !range && selectedMergeHash ? selectedMergeHash : commit?.hash;
+  const activeFiles = files;
+  const activeLoading = loadingFiles;
+  const activeHash = commit?.hash;
 
   return (
     <div
@@ -485,7 +544,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             {repoName && (
               <div style={styles.repoRow}>
                 <Codicon name="repo" style={styles.repoIcon} />
-                <span style={styles.repoName(repoColor)}>{repoName}</span>
+                <span style={styles.repoName(effectiveRepoColor)}>{repoName}</span>
               </div>
             )}
             <div style={styles.rangeTitle}>
@@ -504,7 +563,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             {repoName && !twoColumnLayout && (
               <div style={styles.repoRow}>
             <Codicon name="repo" style={styles.repoIcon} />
-            <span style={styles.repoName(repoColor)}>{repoName}</span>
+            <span style={styles.repoName(effectiveRepoColor)}>{repoName}</span>
           </div>
         )}
         {!twoColumnLayout && (
@@ -539,7 +598,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                 </div>
               )}
             </div>
-            {commit.stashBranch && (
+            {!twoColumnLayout && commit.stashBranch && (
               <div style={styles.refsRow}>
                 <span style={styles.refBadge(branchColor(commit.stashBranch, false))}>
                   <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
@@ -589,75 +648,93 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             </div>
           </div>
         )}
-        {(() => {
+        {!twoColumnLayout && branchBadges.length > 0 && (() => {
           const LIMIT = 5;
-          // Only refs that point AT this commit — never branches that merely contain it.
-          const refGroups = groupRefs(commit.refs);
-          const other = (g: RefGroup) => !g.isHead && !g.isTag;
-          const pick = (f: (g: RefGroup) => boolean) => refGroups.filter(f);
-
-          // Order: HEAD, tags, primary locals, other locals, primary remotes, other remotes.
-          const allBadges: RefGroup[] = [
-            ...pick(g => g.isHead),
-            ...pick(g => g.isTag),
-            ...pick(g => other(g) && g.isLocal && isPrimaryBranch(g.label)),
-            ...pick(g => other(g) && g.isLocal && !isPrimaryBranch(g.label)),
-            ...pick(g => other(g) && !g.isLocal && isPrimaryBranch(g.label)),
-            ...pick(g => other(g) && !g.isLocal && !isPrimaryBranch(g.label)),
-          ];
-          if (allBadges.length === 0) return null;
-
-          const visible = refsExpanded ? allBadges : allBadges.slice(0, LIMIT);
-          const hiddenCount = allBadges.length - LIMIT;
-
-          function renderBadge(g: RefGroup) {
-            const isSpecialHead = g.isRemoteHead || (g.isHead && g.isDetached);
-            const rid = commit!.repoId;
-            const remoteRefKey = g.remoteName ? `${rid}:${g.remoteName}/${g.label}` : null;
-            const resolvedRefColor = (remoteRefKey ? refColors?.get(remoteRefKey) : undefined) ?? refColors?.get(`${rid}:${g.label}`);
-            const color = g.isTag ? tagColor() : isSpecialHead ? headColor() : (resolvedRefColor ?? branchColor(g.label, false));
-            const label = g.isRemoteHead ? `${g.remoteName}/HEAD` : g.isRemote ? remoteLabel(g) : g.label;
-            return (
-              <span key={g.key} style={styles.refBadge(color, (g.isHead || g.isDetached) && !g.isRemoteHead)} title={badgeTitle(g)}>
-                <RefBadgeIcon group={g} />
-                {label}
-              </span>
-            );
-          }
-
-          const nonDetachedHeadGroup = refGroups.find(g => g.isHead && !g.isDetached && !g.isRemoteHead);
+          const visible = refsExpanded ? branchBadges : branchBadges.slice(0, LIMIT);
+          const hiddenCount = branchBadges.length - LIMIT;
           return (
-            <div style={refsExpanded ? styles.refsRowExpanded : styles.refsRow}>
-              {nonDetachedHeadGroup && (
-                <span style={styles.refBadge(headColor(), true)} title={`HEAD → ${nonDetachedHeadGroup.label}`}>
-                  <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />
-                  HEAD
-                </span>
-              )}
-              {visible.map(renderBadge)}
-              {!refsExpanded && hiddenCount > 0 && (
-                <span
-                  style={styles.refsShowMore}
-                  onClick={() => setRefsExpanded(true)}
-                  title={`Show ${hiddenCount} more`}
-                >
-                  +{hiddenCount} more
-                </span>
-              )}
-              {refsExpanded && allBadges.length > LIMIT && (
-                <span
-                  style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
-                  onClick={() => setRefsExpanded(false)}
-                >
-                  Show less
-                </span>
-              )}
+            <div>
+              <div style={refsExpanded ? styles.refsRowExpanded : styles.refsRow}>
+                {nonDetachedBranchHead && (
+                  <span style={styles.refBadge(headColor(), true)} title={`HEAD → ${nonDetachedBranchHead.label}`}>
+                    <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />
+                    HEAD
+                  </span>
+                )}
+                {visible.map(renderBranchBadge)}
+                {!refsExpanded && hiddenCount > 0 && (
+                  <span
+                    style={styles.refsShowMore}
+                    onClick={() => setRefsExpanded(true)}
+                    title={`Show ${hiddenCount} more`}
+                  >
+                    +{hiddenCount} more
+                  </span>
+                )}
+                {refsExpanded && branchBadges.length > LIMIT && (
+                  <span
+                    style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
+                    onClick={() => setRefsExpanded(false)}
+                  >
+                    Show less
+                  </span>
+                )}
+              </div>
             </div>
           );
         })()}
 
-        {(() => {
-          if (!commit || commit.isStash) return null;
+        {twoColumnLayout && (commit.isStash ? !!commit.stashBranch : branchBadges.length > 0) && (() => {
+          if (commit.isStash) {
+            return (
+              <div>
+                <div style={styles.detailsLabel}>Branches</div>
+                <div style={styles.refsRow}>
+                  <span style={styles.refBadge(branchColor(commit.stashBranch!, false))}>
+                    <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                    {commit.stashBranch}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+          const LIMIT = 5;
+          const visible = refsExpanded ? branchBadges : branchBadges.slice(0, LIMIT);
+          const hiddenCount = branchBadges.length - LIMIT;
+          return (
+            <div>
+              <div style={styles.detailsLabel}>Branches</div>
+              <div style={refsExpanded ? styles.refsRowExpanded : styles.refsRow}>
+                {nonDetachedBranchHead && (
+                  <span style={styles.refBadge(headColor(), true)} title={`HEAD → ${nonDetachedBranchHead.label}`}>
+                    <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />
+                    HEAD
+                  </span>
+                )}
+                {visible.map(renderBranchBadge)}
+                {!refsExpanded && hiddenCount > 0 && (
+                  <span
+                    style={styles.refsShowMore}
+                    onClick={() => setRefsExpanded(true)}
+                    title={`Show ${hiddenCount} more`}
+                  >
+                    +{hiddenCount} more
+                  </span>
+                )}
+                {refsExpanded && branchBadges.length > LIMIT && (
+                  <span
+                    style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
+                    onClick={() => setRefsExpanded(false)}
+                  >
+                    Show less
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {twoColumnLayout && !commit.isStash && (() => {
           const total = descendantBranches.local.length + descendantBranches.remote.length + descendantBranches.tags.length;
           if (!loadingDescendants && total === 0) return null;
           const DLIMIT = 8;
@@ -670,11 +747,8 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           const visibleDesc = descendantsExpanded ? allDescBadges : allDescBadges.slice(0, DLIMIT);
           const hiddenDescCount = allDescBadges.length - DLIMIT;
           return (
-            <div style={styles.mergeSection}>
-              <div style={styles.mergeSectionTitle}>
-                <Codicon name="git-branch" style={{ fontSize: '11px', opacity: 0.7 }} />
-                <span>Descendant branches</span>
-              </div>
+            <div>
+              <div style={styles.detailsLabel}>Descendant Branches</div>
               {loadingDescendants && <div style={styles.mergeLoading}>Loading...</div>}
               {!loadingDescendants && (
                 <div style={styles.refsRow}>
@@ -717,65 +791,64 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           </div>
         )}
 
-        {/* Merged commits section */}
-            {isMerge && (
-              <div style={styles.mergeSection}>
-            <div style={styles.mergeSectionTitle}>
-              <Codicon name="git-merge" style={{ fontSize: '11px', opacity: 0.7 }} />
-              <span>Merged commits</span>
-            </div>
+        {/* Merged commits section — a minimal hash+message list in the Log Panel,
+            an expanded one with author/date/stats in Full Detail. */}
+        {isMerge && (
+          <div style={twoColumnLayout ? undefined : styles.mergeSection}>
+            {twoColumnLayout ? (
+              <div style={styles.detailsLabel}>Merged Commits</div>
+            ) : (
+              <div style={styles.mergeSectionTitle}>
+                <Codicon name="git-merge" style={{ fontSize: '11px', opacity: 0.7 }} />
+                <span>Merged commits</span>
+              </div>
+            )}
             {loadingMerge && <div style={styles.mergeLoading}>Loading...</div>}
             {!loadingMerge && mergeCommits.length === 0 && (
               <div style={styles.mergeLoading}>No commits found</div>
             )}
-            {!loadingMerge && mergeCommits.map(c => {
-              const isActive = selectedMergeHash === c.hash;
-              return (
-                <div key={c.hash}>
-                  <div
-                    style={styles.mergeCommitRow(isActive)}
-                    title={`${c.hash}\nClick to view files`}
-                    onClick={() => selectMergeCommit(c)}
-                  >
-                    <Codicon name={isActive ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
-                    <span style={styles.mergeHash}>{c.shortHash}</span>
-                    <span style={styles.mergeMessage}>{c.message}</span>
-                    <span style={styles.mergeMeta}>{c.authorName}</span>
-                  </div>
-                  {isActive && (
-                    <div style={styles.mergeFileList}>
-                      {loadingMergeFiles && <div style={styles.mergeLoading}>Loading files...</div>}
-                      {!loadingMergeFiles && mergeFiles.length === 0 && <div style={styles.mergeLoading}>No changed files</div>}
-                      {!loadingMergeFiles && mergeFiles.map(f => {
-                        const statusColor = STATUS_COLORS[f.status] ?? 'var(--vscode-foreground)';
-                        const fileName = f.path.split('/').pop() ?? f.path;
-                        return (
-                          <div
-                            key={f.path}
-                            style={styles.mergeFileRow}
-                            title={f.path}
-                            onClick={() => openVscodeDiff(f, c.hash)}
-                          >
-                            <FileIcon name={fileName} theme={iconTheme} size={13} style={{ opacity: 0.85, flexShrink: 0 }} />
-                            <span style={{ ...styles.mergeMessage, color: statusColor }}>{fileName}</span>
-                            {(f.added != null || f.removed != null) && (
-                              <span style={styles.lineStats}>
-                                {f.added != null && <span style={styles.added}>+{f.added}</span>}
-                                {f.removed != null && <span style={styles.removed}>-{f.removed}</span>}
-                              </span>
-                            )}
-                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: statusColor, flexShrink: 0 }}>{f.status}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {!loadingMerge && !twoColumnLayout && mergeCommits.map(c => (
+              <div key={c.hash} style={styles.mergeCommitRowMinimal} title={c.hash}>
+                <span style={styles.mergeHash}>{c.shortHash}</span>
+                <span style={styles.mergeMessage}>{c.message}</span>
+              </div>
+            ))}
+            {!loadingMerge && twoColumnLayout && mergeCommits.length > 0 && (
+              // Same bordered-list container as the Pull Request detail's commit list.
+              <div style={styles.mergeCommitsList}>
+                {mergeCommits.map((c, i) => (
+                  <CommitRow
+                    key={c.hash}
+                    commit={{
+                      hash: c.hash, shortHash: c.shortHash, message: c.message,
+                      authorName: c.authorName, authorEmail: c.authorEmail, authoredAt: c.authorDate,
+                      filesChanged: c.filesChanged, additions: c.additions, deletions: c.deletions,
+                    }}
+                    expanded={expandedMergeHash === c.hash}
+                    isLast={i === mergeCommits.length - 1}
+                    onToggle={() => toggleMergeCommit(c)}
+                    renderFiles={() => {
+                      const rawFiles = mergeCommitFiles[c.hash] ?? [];
+                      return mergeCommitFilesLoading[c.hash] ? (
+                        <div style={styles.mergeLoading}>Loading files...</div>
+                      ) : (
+                        <FileTreeView
+                          files={rawFiles.map(toChangedFile)}
+                          iconTheme={iconTheme ?? null}
+                          onOpenFile={changed => {
+                            const original = rawFiles.find(f => f.path === changed.path);
+                            if (original) openVscodeDiff(original, c.hash);
+                          }}
+                        />
+                      );
+                    }}
+                  />
+                ))}
               </div>
             )}
-          </>
+          </div>
+        )}
+        </>
         )}
       </div>
 
@@ -795,7 +868,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             <Codicon name="diff-multiple" style={{ fontSize: twoColumnLayout ? '16px' : '14px' }} />
           </button>
         )}
-        <span style={styles.fileCount}>{activeFiles.length} file{activeFiles.length !== 1 ? 's' : ''}{selectedMergeHash ? ` · ${mergeCommits.find(c => c.hash === selectedMergeHash)?.shortHash}` : ''}</span>
+        <span style={styles.fileCount}>{activeFiles.length} file{activeFiles.length !== 1 ? 's' : ''}</span>
         {viewMode === 'tree' && (
           <div style={styles.expandBtns}>
             <button
@@ -1132,6 +1205,17 @@ const styles = {
     overflowY: 'auto' as const,
     flexShrink: 0,
   },
+  // Same bordered-list container the Pull Request detail's commit list uses.
+  mergeCommitsList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    border: '1px solid var(--vscode-panel-border)',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    maxHeight: '360px',
+    overflowY: 'auto' as const,
+    flexShrink: 0,
+  } as React.CSSProperties,
   mergeSectionTitle: {
     display: 'flex',
     alignItems: 'center',
@@ -1146,39 +1230,21 @@ const styles = {
     opacity: 0.45,
     padding: '2px 0',
   } as React.CSSProperties,
-  mergeCommitRow: (active: boolean): React.CSSProperties => ({
+  // Log Panel: hash + message only, not clickable — a quick-reference list, not a
+  // secondary navigation surface (that stays the job of the main commit list).
+  mergeCommitRowMinimal: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     padding: '2px 4px',
     fontSize: '11px',
-    cursor: 'pointer',
-    borderRadius: '3px',
-    background: active ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
-    color: active ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-foreground)',
-  }),
-  mergeFileList: {
-    marginLeft: '16px',
-    marginBottom: '2px',
-    borderLeft: '1px solid var(--vscode-panel-border)',
-    paddingLeft: '6px',
-  } as React.CSSProperties,
-  mergeFileRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '1px 4px',
-    fontSize: '11px',
-    cursor: 'pointer',
-    borderRadius: '2px',
+    color: 'var(--vscode-foreground)',
   } as React.CSSProperties,
   mergeHash: {
     fontFamily: 'monospace',
     fontSize: '10px',
-    color: 'var(--vscode-badge-foreground)',
-    background: 'var(--vscode-badge-background)',
-    padding: '0 3px',
-    borderRadius: '2px',
+    color: 'var(--vscode-foreground)',
+    opacity: 0.55,
     flexShrink: 0,
   } as React.CSSProperties,
   mergeMessage: {
@@ -1248,19 +1314,6 @@ const styles = {
   } as React.CSSProperties,
   rightColumnInline: {
     display: 'contents',
-  } as React.CSSProperties,
-  lineStats: {
-    display: 'flex',
-    gap: '3px',
-    flexShrink: 0,
-    fontSize: '10px',
-    fontFamily: 'monospace',
-  } as React.CSSProperties,
-  added: {
-    color: 'var(--vscode-gitDecoration-addedResourceForeground)',
-  } as React.CSSProperties,
-  removed: {
-    color: 'var(--vscode-gitDecoration-deletedResourceForeground)',
   } as React.CSSProperties,
   loading: {
     padding: '8px',

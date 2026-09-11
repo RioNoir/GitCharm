@@ -650,14 +650,28 @@ export class GitService {
     // For each secondary parent, list commits that it introduced (not in parents[0]).
     for (let i = 1; i < parents.length; i++) {
       const range = `${parents[0]}..${parents[i]}`;
+      // --shortstat appends one aggregate "N files changed, N insertions(+), N deletions(-)"
+      // line after each commit — cheap way to get per-commit totals for the Full Detail
+      // view without a second request per row.
       const raw = await this.git.raw([
         'log', range,
-        '--format=%H%x00%h%x00%an%x00%ai%x00%s', '--abbrev=8',
+        '--format=%x01%H%x00%h%x00%an%x00%ae%x00%ai%x00%s', '--abbrev=8', '--shortstat',
       ]).catch(() => '');
-      for (const line of raw.trim().split('\n')) {
-        if (!line.trim()) continue;
-        const [h, sh, an, ad, ...msgParts] = line.split('\x00');
-        result.push({ hash: h, shortHash: sh, message: msgParts.join('\x00'), authorName: an, authorDate: ad, parentIndex: i });
+      for (const entry of raw.split('\x01')) {
+        if (!entry.trim()) continue;
+        const [header, ...statLines] = entry.split('\n');
+        const [h, sh, an, ae, ad, ...msgParts] = header.split('\x00');
+        if (!h) continue;
+        const statLine = statLines.join('\n');
+        const filesMatch = statLine.match(/(\d+) files? changed/);
+        const addMatch = statLine.match(/(\d+) insertions?\(\+\)/);
+        const delMatch = statLine.match(/(\d+) deletions?\(-\)/);
+        result.push({
+          hash: h, shortHash: sh, message: msgParts.join('\x00'), authorName: an, authorEmail: ae, authorDate: ad, parentIndex: i,
+          ...(filesMatch ? { filesChanged: parseInt(filesMatch[1], 10) } : {}),
+          ...(addMatch ? { additions: parseInt(addMatch[1], 10) } : {}),
+          ...(delMatch ? { deletions: parseInt(delMatch[1], 10) } : {}),
+        });
       }
     }
     return result;

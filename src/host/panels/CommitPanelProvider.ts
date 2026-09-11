@@ -1988,7 +1988,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_OPEN_DETAIL': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, {}, this.profileService);
         break;
       }
 
@@ -2017,7 +2017,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_EXPLAIN_COMMIT': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true }, this.profileService);
         break;
       }
 

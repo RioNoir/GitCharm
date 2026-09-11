@@ -296,7 +296,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Restore Commit Full Detail / Pull Request Detail panels left open across a window reload/restart
     vscode.window.registerWebviewPanelSerializer('gitcharm.commitFullDetail', {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
-        deserializeCommitFullDetailPanel(panel, state, context.extensionUri, manager),
+        deserializeCommitFullDetailPanel(panel, state, context.extensionUri, manager, profileService),
     }),
     vscode.window.registerWebviewPanelSerializer('gitcharm.pullRequestDetail', {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>

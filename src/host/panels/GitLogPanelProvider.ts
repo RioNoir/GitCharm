@@ -1767,7 +1767,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_OPEN_EXTENDED_DETAIL': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash);
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, {}, this.profileService);
         break;
       }
 
@@ -1869,7 +1869,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_EXPLAIN_COMMIT': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true });
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true }, this.profileService);
         break;
       }
 

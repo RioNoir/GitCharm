@@ -34,6 +34,7 @@ export async function openCommitFullDetailPanel(
   repoId: string,
   hash: string,
   opts: { autoExplain?: boolean } = {},
+  profileService?: import('../git/GitProfileService').GitProfileService,
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
@@ -52,7 +53,7 @@ export async function openCommitFullDetailPanel(
       localResourceRoots: getLocalResourceRoots(extensionUri),
     }
   );
-  await setupPanel(panel, extensionUri, manager, repoId, hash, opts);
+  await setupPanel(panel, extensionUri, manager, repoId, hash, opts, profileService);
 }
 
 /** Re-hydrates a Commit Full Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharm.commitFullDetail', ...) in extension.ts. */
@@ -61,6 +62,7 @@ export async function deserializeCommitFullDetailPanel(
   state: unknown,
   extensionUri: vscode.Uri,
   manager: WorkspaceGitManager,
+  profileService?: import('../git/GitProfileService').GitProfileService,
 ): Promise<void> {
   const s = state as { repoId?: unknown; hash?: unknown } | null;
   if (!s || typeof s.repoId !== 'string' || typeof s.hash !== 'string') {
@@ -73,7 +75,7 @@ export async function deserializeCommitFullDetailPanel(
     panel.dispose();
     return;
   }
-  await setupPanel(panel, extensionUri, manager, s.repoId, s.hash, {});
+  await setupPanel(panel, extensionUri, manager, s.repoId, s.hash, {}, profileService);
 }
 
 async function setupPanel(
@@ -83,6 +85,7 @@ async function setupPanel(
   repoId: string,
   hash: string,
   opts: { autoExplain?: boolean },
+  profileService?: import('../git/GitProfileService').GitProfileService,
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
@@ -92,23 +95,43 @@ async function setupPanel(
     return;
   }
 
-  let commitInfo: Awaited<ReturnType<typeof repo.getCommitMeta>> | null = null;
+  const isStash = hash.startsWith('stash@{');
+
+  let commitInfo: { hash: string; shortHash: string; message: string; authorName: string; authorEmail: string; authorDate: string; committerDate: string; parents: string[] };
   let files: Array<{ path: string; status: string; added?: number; removed?: number }> = [];
   let refs: string[] = [];
   let fullMessage = '';
+  let stashBranch: string | undefined;
+  let stashFiles: Array<{ path: string; status: string; added?: number; removed?: number }> | undefined;
 
   try {
-    // getCommitNode reuses GitService's batch-log parser (%D decoration token) to get real
-    // refs pointing at this commit — getCommitMeta has no refs at all.
-    const [node, meta, msg] = await Promise.all([
-      repo.getCommitNode(hash).catch(() => null),
-      repo.getCommitMeta(hash),
-      repo.getFullCommitMessage(hash),
-    ]);
-    commitInfo = meta;
-    refs = node?.refs ?? [];
-    fullMessage = msg.trim();
-    files = await repo.getCommitFiles(hash, commitInfo.parents);
+    if (isStash) {
+      // A stash ref isn't a real commit git log can decorate — read it from the stash
+      // list instead, the same way the Git Log panel builds a stash's CommitNode.
+      const stash = (await repo.stashList()).find(s => s.ref === hash);
+      if (!stash) throw new Error('Stash not found');
+      commitInfo = {
+        hash: stash.ref, shortHash: stash.ref, message: stash.message || `WIP on ${stash.branch}`,
+        authorName: '', authorEmail: '', authorDate: stash.date, committerDate: stash.date,
+        parents: stash.parentHash ? [stash.parentHash] : [],
+      };
+      fullMessage = commitInfo.message;
+      files = stash.files;
+      stashBranch = stash.branch;
+      stashFiles = stash.files;
+    } else {
+      // getCommitNode reuses GitService's batch-log parser (%D decoration token) to get real
+      // refs pointing at this commit — getCommitMeta has no refs at all.
+      const [node, meta, msg] = await Promise.all([
+        repo.getCommitNode(hash).catch(() => null),
+        repo.getCommitMeta(hash),
+        repo.getFullCommitMessage(hash),
+      ]);
+      commitInfo = meta;
+      refs = node?.refs ?? [];
+      fullMessage = msg.trim();
+      files = await repo.getCommitFiles(hash, commitInfo.parents);
+    }
   } catch (e: unknown) {
     showGitError('commitFullDetail:load', e);
     panel.dispose();
@@ -118,8 +141,9 @@ async function setupPanel(
   const repoMeta = manager.getRepoMetas().find(r => r.id === repoId);
   const repoName = repoMeta?.name ?? repoId;
 
-  panel.title = commitInfo.message ? `Commit ${commitInfo.shortHash} - ${truncateTitle(commitInfo.message)}` : `Commit ${commitInfo.shortHash}`;
-  panel.iconPath = new vscode.ThemeIcon('git-commit');
+  const titlePrefix = isStash ? 'Stash' : 'Commit';
+  panel.title = commitInfo.message ? `${titlePrefix} ${commitInfo.shortHash} - ${truncateTitle(commitInfo.message)}` : `${titlePrefix} ${commitInfo.shortHash}`;
+  panel.iconPath = new vscode.ThemeIcon(isStash ? 'archive' : 'git-commit');
 
   // Re-applied here (not just at createWebviewPanel time) so a panel restored via
   // registerWebviewPanelSerializer also gets the icon theme extension roots.
@@ -142,6 +166,17 @@ async function setupPanel(
   const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
   const cfg = vscode.workspace.getConfiguration('gitcharm');
 
+  // Only needed for a stash — its author section shows "you" (the active profile),
+  // matching how it's committed, not a fixed author baked into the entry.
+  let activeProfile: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } | undefined;
+  if (isStash && profileService) {
+    const result = await profileService.getEffectiveProfile(repo.rootPath);
+    if (result) {
+      const { profile } = result;
+      activeProfile = { name: profile.name, gitName: profile.gitName, gitEmail: profile.gitEmail, ...(profile.builtIn ? { builtIn: profile.builtIn } : {}) };
+    }
+  }
+
   panel.webview.postMessage({
     type: 'COMMITFULLDETAIL_INIT',
     repoId,
@@ -157,10 +192,12 @@ async function setupPanel(
       committerDate: commitInfo.committerDate,
       parents: commitInfo.parents,
       refs,
+      ...(isStash ? { isStash: true as const, stashRef: hash, stashBranch, stashFiles } : {}),
     },
     fullMessage,
     files,
     iconTheme,
+    activeProfile,
     aiEnabled: cfg.get('ai.enabled', true),
     aiModelLabel: getAiModelLabel(cfg),
     autoExplain: opts.autoExplain ?? false,

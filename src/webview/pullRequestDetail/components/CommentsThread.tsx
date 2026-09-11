@@ -4,7 +4,7 @@ import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '..
 import { Codicon } from '../../shared/Codicon';
 import { renderMarkdown } from '../../shared/renderMarkdown';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
-import { formatRelativeTime } from '../formatRelativeTime';
+import { formatRelativeTime } from '../../shared/formatRelativeTime';
 import { SkeletonList } from '../../shared/Skeleton';
 import { LabelChip } from './LabelsPanel';
 

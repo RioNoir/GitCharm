@@ -12,8 +12,12 @@ export interface MergeParentCommit {
   shortHash: string;
   message: string;
   authorName: string;
+  authorEmail: string;
   authorDate: string;
   parentIndex: number;
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 export interface RepoMeta {

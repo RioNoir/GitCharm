@@ -29,8 +29,12 @@ export interface MergeParentCommit {
   shortHash: string;
   message: string;
   authorName: string;
+  authorEmail: string;
   authorDate: string;
   parentIndex: number; // which parent branch (1 = first non-main, 2 = second, ...)
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 // ─── Shelve (patch-based, PhpStorm-style) ────────────────────────────────────

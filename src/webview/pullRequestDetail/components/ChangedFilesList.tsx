@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChangedFile, IconThemeData } from '../../../host/types/messages';
-import { FileTreeView } from './FileTreeView';
+import { FileTreeView } from '../../shared/FileTreeView';
 import { SkeletonList } from '../../shared/Skeleton';
 
 interface Props {
