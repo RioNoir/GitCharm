@@ -448,10 +448,16 @@ export class BitbucketProvider implements PullRequestProvider {
           const { data: permData } = await httpJson<{ values: { permission: 'admin' | 'write' | 'read' }[] }>(
             `${this.apiBase()}/user/permissions/repositories?q=${query}`, { headers },
           );
+          // This workspace-scoped endpoint is known to return an empty `values` array for users who do have
+          // real write access (e.g. access inherited via group membership rather than an explicit workspace
+          // listing) — an empty result is inconclusive, not proof of read-only access, so default to allowing
+          // the write actions and let the actual PUT/POST surface a visible error if access is truly missing.
+          if (permData.values.length === 0) return true;
           return permData.values[0]?.permission === 'admin' || permData.values[0]?.permission === 'write';
         } catch {
-          // Permission check is best-effort — default to no write access rather than fail the whole detail load.
-          return false;
+          // Permission check itself failing is likewise inconclusive — default to allowing write actions
+          // rather than silently hiding them; a real permission problem still surfaces via formatApiError.
+          return true;
         }
       })(),
       this.getCiStatusForCommit(owner, repo, data.source.commit.hash).catch(() => undefined),
