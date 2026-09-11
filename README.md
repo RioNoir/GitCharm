@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.85%2B-007ACC">
+  <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.93%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
   <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-red">
   <img alt="GitHub forks" src="https://img.shields.io/github/forks/RioNoir/GitCharm?style=flat&logo=github&label=Forks&color=orange">
@@ -335,6 +335,8 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.ai.geminiApiKey` | `""` | API key for the Gemini API provider. |
 | `gitcharm.pullRequests.hostProviderOverrides` | `{}` | Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. `{ "git.mycompany.com": "gitea" }`. Valid values: `github`, `gitlab`, `bitbucket`, `gitea`. |
 | `gitcharm.pullRequests.defaultTargetBranch` | `""` | Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master). |
+| `gitcharm.pullRequests.defaultMergeStrategy` | `"merge"` | Default strategy pre-selected on the "Merge pull request" button in the Pull Request detail panel: `merge`, `squash`, `rebase`, or `fastForward`. Falls back to the first strategy the forge/provider supports if this one isn't available for a given PR. |
+| `gitcharm.pullRequests.defaultCheckoutAction` | `"pr"` | Default action for the main "Checkout" button in the Pull Request detail panel: `pr` (Checkout Pull Request) or `branch` (Checkout Branch). The other option is still available from its dropdown. |
 
 Example:
 
