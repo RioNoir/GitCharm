@@ -787,15 +787,41 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(repoId);
         if (!repo) break;
         const current = await repo.getCurrentBranch().catch(() => null);
-        if (!current || current.name !== msg.branchName || current.detachedTag || current.detachedHash) {
-          vscode.window.showWarningMessage(`Cannot pull "${msg.branchName}" because it is no longer the current branch.`);
+        const isCurrent = !!current && current.name === msg.branchName && !current.detachedTag && !current.detachedHash;
+
+        if (isCurrent) {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `Pulling "${msg.branchName}"`, cancellable: false },
+            async () => {
+              try {
+                await repo.pull();
+                post({ type: 'LOG_REFRESH' });
+              } catch (e: unknown) {
+                logError('pullBranch', formatGitError(e), getRawErrorDetail(e));
+                showGitError('pullBranch', e);
+              }
+            }
+          );
+          break;
+        }
+
+        // Not the current branch: update it in place via a fast-forward-only fetch,
+        // same upstream resolution as LOG_PUSH_BRANCH_PICK below.
+        const branches = await repo.getBranches().catch(() => []);
+        if (!branches.some(branch => !branch.isRemote && branch.name === msg.branchName)) {
+          vscode.window.showWarningMessage(`Local branch "${msg.branchName}" was not found.`);
+          break;
+        }
+        const upstream = await repo.getBranchUpstream(msg.branchName);
+        if (!upstream) {
+          vscode.window.showWarningMessage(`Branch "${msg.branchName}" has no upstream to pull from.`);
           break;
         }
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: `Pulling "${msg.branchName}"`, cancellable: false },
           async () => {
             try {
-              await repo.pull();
+              await repo.pullBranchFastForward(upstream.remote, upstream.branchName, msg.branchName);
               post({ type: 'LOG_REFRESH' });
             } catch (e: unknown) {
               logError('pullBranch', formatGitError(e), getRawErrorDetail(e));

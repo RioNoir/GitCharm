@@ -20,6 +20,7 @@ interface Props {
   className?: string;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   onClick?: () => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -28,7 +29,7 @@ interface Props {
  * The native scrollbar is hidden; a custom thumb is rendered in absolute
  * position over the content and fades out when idle.
  */
-export function ScrollArea({ children, style, className, onScroll, onClick, scrollRef }: Props) {
+export function ScrollArea({ children, style, className, onScroll, onClick, onKeyDown, scrollRef }: Props) {
   useEffect(() => { ensureScrollbarHideStyle(); }, []);
   const internalRef = useRef<HTMLDivElement>(null);
   const viewportRef = (scrollRef as React.RefObject<HTMLDivElement>) ?? internalRef;
@@ -137,6 +138,7 @@ export function ScrollArea({ children, style, className, onScroll, onClick, scro
       style={{ position: 'relative', overflow: 'hidden', ...style }}
       className={className}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

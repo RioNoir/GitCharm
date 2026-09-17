@@ -3,6 +3,7 @@ import type { IconThemeData } from '../../host/types/messages';
 import { Codicon } from './Codicon';
 import { FileIcon } from './FileIcon';
 import { TreeGuideLines, useTreeGuideHoverStyle } from './TreeGuides';
+import { focusOnHover } from './keyboardNav';
 
 /**
  * Shared file-tree renderer used everywhere a set of changed files needs to be shown nested by
@@ -139,20 +140,28 @@ function FileRow<F extends GenericTreeFile>({ file, depth, basePad, ...shared }:
 >) {
   const { iconTheme, statusColor, statusLetter, onOpenFile, isFileSelected, isFileContextActive, onContextMenuFile, renderFileActions } = shared;
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const fname = file.path.split('/').pop() ?? file.path;
   const dir = file.path.includes('/') ? file.path.split('/').slice(0, -1).join('/') : '';
   const color = statusColor(file.status);
   const letter = statusLetter(file.status);
   const selected = isFileSelected?.(file) ?? false;
-  const ctxActive = !selected && (isFileContextActive?.(file) ?? false);
+  const ctxActive = !selected && ((isFileContextActive?.(file) ?? false) || focused);
 
   return (
     <div
+      data-nav-row=""
+      tabIndex={-1}
       style={{ ...styles.row(selected, hovered, ctxActive), position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
       onClick={(e) => onOpenFile(file, e)}
       onContextMenu={onContextMenuFile ? (e) => { e.preventDefault(); onContextMenuFile(e, file); } : undefined}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={(e) => { setHovered(true); focusOnHover(e.currentTarget); }}
       onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      // No caller reads the mouse event's fields (all take just the file), so a keyboard
+      // event stands in fine for the shared (file, e) signature.
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenFile(file, e as unknown as React.MouseEvent); } }}
       title={file.path}
     >
       <TreeGuideLines depth={depth} offset={basePad + GUIDE_OFFSET} step={LEVEL_PAD} />
@@ -178,18 +187,24 @@ function TreeDirNode<F extends GenericTreeFile>({ node, depth, basePad, ...share
 >) {
   const { iconTheme, isDirOpen, toggleDir, onContextMenuDir, isDirContextActive, renderDirActions } = shared;
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const open = isDirOpen(node.path);
   const allFiles = collectFiles(node);
-  const ctxActive = isDirContextActive?.(node.path) ?? false;
+  const ctxActive = (isDirContextActive?.(node.path) ?? false) || focused;
 
   return (
     <div>
       <div
+        data-nav-row=""
+        tabIndex={-1}
         style={{ ...styles.dirRow(hovered, ctxActive), position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px` }}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={(e) => { setHovered(true); focusOnHover(e.currentTarget); }}
         onMouseLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onContextMenu={onContextMenuDir ? (e) => { e.preventDefault(); onContextMenuDir(e, node.path, allFiles); } : undefined}
         onClick={() => toggleDir(node.path)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDir(node.path); } }}
       >
         <TreeGuideLines depth={depth} offset={basePad + GUIDE_OFFSET} step={LEVEL_PAD} />
         <div style={styles.dirInner}>
@@ -243,7 +258,7 @@ const styles = {
   container: { display: 'flex', flexDirection: 'column' as const },
   row: (selected: boolean, hovered: boolean, ctxActive = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: `${ROW_GAP}px`, minHeight: '22px', fontSize: '12px',
-    paddingRight: '8px', cursor: 'pointer', borderRadius: '2px',
+    paddingRight: '8px', cursor: 'pointer', borderRadius: '2px', outline: 'none',
     background: selected
       ? 'var(--vscode-list-activeSelectionBackground)'
       : ctxActive
@@ -255,7 +270,7 @@ const styles = {
   }),
   dirRow: (hovered: boolean, ctxActive = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', minHeight: '22px', fontSize: '12px',
-    paddingRight: '8px', gap: '0', borderRadius: '2px', cursor: 'pointer',
+    paddingRight: '8px', gap: '0', borderRadius: '2px', cursor: 'pointer', outline: 'none',
     background: ctxActive
       ? 'var(--vscode-list-inactiveSelectionBackground)'
       : hovered

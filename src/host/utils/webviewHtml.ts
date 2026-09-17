@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 
 export function generateNonce(): string {
   return crypto.randomBytes(16).toString('base64');
@@ -14,9 +15,12 @@ export function getWebviewHtml(
 ): string {
   const nonce = generateNonce();
 
-  const jsUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, 'out', 'webview', appName, 'index.js')
-  );
+  const jsPath = vscode.Uri.joinPath(extensionUri, 'out', 'webview', appName, 'index.js');
+  // Cache-bust with the bundle's mtime: some webviews (esp. sidebar WebviewViews, which can
+  // outlive an extension host reload) reuse Chromium's disk cache for vscode-webview-resource
+  // URIs, so a rebuilt bundle at the same URL can silently keep serving the stale one.
+  const jsMtime = fs.statSync(jsPath.fsPath).mtimeMs;
+  const jsUri = webview.asWebviewUri(jsPath).with({ query: `v=${jsMtime}` });
 
   const codiconCssUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, 'media', 'codicons', 'codicon.css')

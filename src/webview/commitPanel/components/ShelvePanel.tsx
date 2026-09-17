@@ -6,6 +6,7 @@ import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import type { ViewMode } from '../store/commitStore';
 import { useCommitStore } from '../store/commitStore';
 import { GenericFileTree } from '../../shared/GenericFileTree';
+import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
 
 interface Props {
   repoId: string;
@@ -128,7 +129,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
 
       {/* Expanded body: file list (flat or tree) */}
       {expanded && (
-        <div style={rowStyle.fileList}>
+        <div style={rowStyle.fileList} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
           <GenericFileTree<ShelfFile>
             files={entry.files}
             viewMode={viewMode}

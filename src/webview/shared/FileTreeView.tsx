@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { ChangedFile, IconThemeData } from '../../host/types/messages';
 import { Codicon } from './Codicon';
 import { GenericFileTree, type GenericTreeFile } from './GenericFileTree';
+import { handleTreeNavKeyDown } from './keyboardNav';
 
 interface Props {
   files: ChangedFile[];
@@ -88,7 +89,7 @@ export function FileTreeView({ files, iconTheme, onOpenFile }: Props) {
           <Codicon name="list-flat" style={{ fontSize: '14px' }} />
         </button>
       </div>
-      <div style={css.root}>
+      <div style={css.root} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
         <GenericFileTree<TreeFile>
           files={treeFiles}
           viewMode={viewMode}

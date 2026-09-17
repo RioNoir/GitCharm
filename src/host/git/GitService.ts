@@ -1544,6 +1544,15 @@ export class GitService {
     await this.git.raw(args);
   }
 
+  /**
+   * Updates a local branch from its upstream without checking it out, by fetching straight
+   * into the local ref. Git refuses this fetch when it isn't a fast-forward, which is the
+   * right outcome here — there's no working tree to merge into for a branch that isn't current.
+   */
+  async pullBranchFastForward(remote: string, remoteBranchName: string, localBranch: string): Promise<void> {
+    await this.git.raw(['fetch', remote, `${remoteBranchName}:${localBranch}`]);
+  }
+
   async localBranchExists(branch: string): Promise<boolean> {
     try {
       await this.git.raw(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);

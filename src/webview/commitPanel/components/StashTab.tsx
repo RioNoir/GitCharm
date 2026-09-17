@@ -6,6 +6,7 @@ import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import type { ViewMode } from '../store/commitStore';
 import { useCommitStore } from '../store/commitStore';
 import { GenericFileTree } from '../../shared/GenericFileTree';
+import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
 
 interface Props {
   repoId: string;
@@ -164,7 +165,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
 
       {/* Expanded body */}
       {expanded && (
-        <div style={row.fileList}>
+        <div style={row.fileList} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
           {entry.files.length === 0 ? (
             <div style={row.emptyFiles}>No files</div>
           ) : (

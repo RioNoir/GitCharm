@@ -27,7 +27,7 @@ const PAGE_SIZE = 150;
 function App() {
   const store = useLogStore();
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
-  const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 220, 120, 400);
+  const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 250, 120, 400);
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
