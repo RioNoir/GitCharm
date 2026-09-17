@@ -1,3 +1,5 @@
+import { resolveSshHostAlias } from './sshConfigResolver';
+
 export type ForgeProvider = 'github' | 'gitlab' | 'bitbucket' | 'gitea' | 'unknown';
 
 const FORGE_PROVIDER_LABELS: Record<ForgeProvider, string> = {
@@ -49,7 +51,7 @@ export function parseRemoteUrl(url: string): ParsedRemote | null {
 
   const scpMatch = trimmed.match(SCP_STYLE);
   if (scpMatch) {
-    host = scpMatch[2];
+    host = resolveSshHostAlias(scpMatch[2]);
     path = scpMatch[3];
   } else {
     let parsed: URL;
@@ -59,7 +61,7 @@ export function parseRemoteUrl(url: string): ParsedRemote | null {
       return null;
     }
     if (!/^https?:$|^ssh:$|^git:$/.test(parsed.protocol)) return null;
-    host = parsed.hostname;
+    host = parsed.protocol === 'ssh:' ? resolveSshHostAlias(parsed.hostname) : parsed.hostname;
     path = parsed.pathname.replace(/^\/+/, '');
   }
 
