@@ -552,10 +552,14 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 setHoveredIndex(vrow.index);
                 // Hovering makes the list keyboard-navigable from that row without a click
                 // first — but never steal focus away from a text field the user is typing
-                // into (e.g. the filter box) just because the mouse passed over the list.
-                const active = document.activeElement;
-                const isTyping = active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
-                if (!isTyping) parentRef.current?.focus({ preventScroll: true });
+                // into (e.g. the filter box) just because the mouse passed over the list, and
+                // never steal focus from outside the webview (e.g. an open VS Code QuickPick,
+                // which lives in the host window and would close if this webview took focus).
+                if (document.hasFocus()) {
+                  const active = document.activeElement;
+                  const isTyping = active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+                  if (!isTyping) parentRef.current?.focus({ preventScroll: true });
+                }
                 if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
                 // Don't restart the open-timer if popover for this commit is already showing

@@ -29,10 +29,16 @@ export function isHoverSuppressed(): boolean {
 }
 
 /** Hovering a row makes it keyboard-navigable without a click first — but never steals focus
- * away from a text field the user is typing into, and never reacts to a "mouseenter" that
- * only happened because a keyboard-driven scroll moved a row under a stationary cursor. */
+ * away from a text field the user is typing into, never reacts to a "mouseenter" that only
+ * happened because a keyboard-driven scroll moved a row under a stationary cursor, and never
+ * steals focus from outside the webview: a VS Code QuickPick/InputBox lives in the host window,
+ * not this webview's document, so `document.activeElement` still points at whatever had focus
+ * in here before the QuickPick opened — `document.hasFocus()` is what actually reflects whether
+ * this webview currently owns keyboard focus. Calling `el.focus()` while it doesn't would pull
+ * focus away from the QuickPick and close it out from under the user. */
 export function focusOnHover(el: HTMLElement): void {
   if (isHoverSuppressed()) return;
+  if (!document.hasFocus()) return;
   const active = document.activeElement;
   const isTyping = active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
   if (!isTyping) el.focus({ preventScroll: true });

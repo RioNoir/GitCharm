@@ -2,6 +2,24 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.4.8
+
+### ✨ New Features
+- Branch/tag tree view for the Log panel's sidebar, grouping slash-namespaced names into a collapsible folder tree, with repo dots, aggregated ahead/behind counts, and a "Pull" action for non-current local branches
+- Keyboard navigation (arrows, Home/End, PageUp/PageDown) for the branch sidebar, commit list, and file trees, with hover-to-focus and auto-scroll
+- Detect local branches whose remote was deleted (e.g. after a PR merge) and offer to delete them, via a post-fetch notification or the new "Check for Orphaned Branches" command
+- Renaming a branch now offers to rename (or delete) its remote counterpart to match, from both the status bar and the new "Rename…" action in the Log panel's branch context menu
+- Checking out a branch with uncommitted changes in the Log panel now offers the same stash/force recovery menu as the status bar, instead of failing silently
+- Renamed the "GitCharm Commit" panel to "GitCharm"
+
+### 🐛 Bug Fixes
+- Fixed PR provider detection for SSH remotes using a custom `Host` alias (e.g. `git@github-personal:owner/repo.git`)
+- Fixed hovering a branch/file/commit row stealing focus from an open VS Code quick pick or input box and closing it
+- Fixed the missing branch/tag icon in the commit detail's Descendant Branches badges
+- Fixed a stale-render flash in the commit list after a programmatic scroll
+- Fixed stash author names not being abbreviated like regular commits
+- Fixed the webview bundle being served from Chromium's disk cache after a rebuild
+
 ## v0.4.7
 
 ### ✨ New Features
