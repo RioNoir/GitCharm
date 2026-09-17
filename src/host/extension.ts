@@ -13,6 +13,7 @@ import { FileAnnotationController } from './ui/FileAnnotationController';
 import { GitProfileService } from './git/GitProfileService';
 import { ProfileStatusBar } from './ui/ProfileStatusBar';
 import { initLogger, logInfo, logWarn, showLogChannel } from './utils/Logger';
+import { presentOrphanBranches } from './utils/orphanBranches';
 import { PullRequestManager } from './pullRequests/PullRequestManager';
 import { PatCredentialStore } from './pullRequests/PatCredentialStore';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
@@ -191,6 +192,11 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
   }
 }
 
+function notifyOrphanBranches(manager: WorkspaceGitManager, logPanel: GitLogPanelProvider, newlyOrphaned: Array<{ repoId: string; branchName: string }>): void {
+  if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnOrphanBranches', true)) return;
+  presentOrphanBranches(manager, logPanel, newlyOrphaned, 'lost its remote (likely deleted after a merge)');
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const log = initLogger(context);
   // Set before any view renders: hides the bottom-panel Git Log view while the
@@ -242,6 +248,9 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(badgeDisposable);
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager, profileService);
+  context.subscriptions.push(
+    manager.onOrphanBranches(newlyOrphaned => notifyOrphanBranches(manager, logPanel, newlyOrphaned))
+  );
   const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   const undockedPanel = new UndockedPanelProvider(context.extensionUri, commitPanel, logPanel);
   const createPullRequestPanel = new CreatePullRequestPanel(context.extensionUri, manager, pullRequestManager, () => {

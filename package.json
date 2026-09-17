@@ -137,6 +137,12 @@
         "icon": "$(repo-fetch)"
       },
       {
+        "command": "gitcharm.checkOrphanBranches",
+        "title": "Check for Orphaned Branches",
+        "category": "GitCharm",
+        "icon": "$(cloud-offline)"
+      },
+      {
         "command": "gitcharm.syncAll",
         "title": "Sync All (Pull + Push)",
         "category": "GitCharm",
@@ -564,6 +570,9 @@
           "command": "gitcharm.fetchAll"
         },
         {
+          "command": "gitcharm.checkOrphanBranches"
+        },
+        {
           "command": "gitcharm.updateProject"
         },
         {
@@ -864,6 +873,12 @@
             "type": "boolean",
             "default": true,
             "description": "Show a notification on startup when there are unpushed commits ready to push"
+          },
+          "gitcharm.notifyOnOrphanBranches": {
+            "order": 57,
+            "type": "boolean",
+            "default": true,
+            "description": "Show a notification after fetching when local branches have lost their remote (upstream deleted, e.g. after a PR merge)"
           },
           "gitcharm.projectColors": {
             "order": 110,

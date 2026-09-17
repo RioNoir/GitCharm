@@ -759,6 +759,10 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                       style={styles.refBadge(b.kind === 'tag' ? tagColor() : branchColor(b.name, false), false)}
                       title={`${b.name} contains this commit`}
                     >
+                      <Codicon
+                        name={b.kind === 'tag' ? 'tag' : b.kind === 'remote' ? 'cloud' : 'git-branch'}
+                        style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }}
+                      />
                       {b.name}
                     </span>
                   ))}

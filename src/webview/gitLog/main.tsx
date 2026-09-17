@@ -479,6 +479,9 @@ function App() {
             const reqId = generateId();
             getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: reqId, repoId, onto } satisfies LogToHostMsg);
           }}
+          onRename={(repoIds, branchName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_RENAME_BRANCH_MULTI', requestId: generateId(), repoIds, oldName: branchName } satisfies LogToHostMsg);
+          }}
           onDelete={(repoIds, branchName) => {
             getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds, branchName } satisfies LogToHostMsg);
           }}

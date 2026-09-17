@@ -13,6 +13,8 @@ import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
+import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
 import {
   getGitLogDefaultLayout,
   getGitLogDefaultLocation,
@@ -756,8 +758,19 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
           post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
-          logError('checkout', formatGitError(e), getRawErrorDetail(e));
-          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          const repoLabel = this.getNonWorktreeRepos().find(m => m.id === msg.repoId)?.name ?? msg.repoId;
+          const handled = await handleDirtyCheckout(repo, repoLabel, msg.branchName, e);
+          if (handled) {
+            post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+            const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+            const merged = mergeCurrentIntoBranches(branches, current);
+            post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
+            post({ type: 'LOG_REFRESH' });
+          } else {
+            logError('checkout', formatGitError(e), getRawErrorDetail(e));
+            showGitError('checkout', e);
+            post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          }
         }
         break;
       }
@@ -996,7 +1009,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           return;
         }
         try {
-          await repo.deleteBranch(msg.branchName, msg.force);
+          const branchInfo = (await repo.getBranches()).find(b => b.name === msg.branchName);
+          if (branchInfo?.isRemote) {
+            const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
+            const bareName = msg.branchName.slice(remote.length + 1);
+            await repo.deleteRemoteBranch(remote, bareName);
+          } else {
+            await repo.deleteBranch(msg.branchName, msg.force);
+          }
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           logInfo('deleteBranch', `Deleted branch "${msg.branchName}".`);
           const branches = await repo.getBranches();
@@ -1048,7 +1068,17 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const repo = this.manager.getRepo(repoId);
           if (!repo) continue;
           try {
-            await repo.deleteBranch(msg.branchName, force);
+            // A remote-tracking ref (e.g. "origin/feature/x") can't be deleted with
+            // `git branch -d` — that only works on local branches. Deleting it for real
+            // requires pushing the deletion to the remote itself.
+            const branchInfo = (await repo.getBranches()).find(b => b.name === msg.branchName);
+            if (branchInfo?.isRemote) {
+              const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
+              const bareName = msg.branchName.slice(remote.length + 1);
+              await repo.deleteRemoteBranch(remote, bareName);
+            } else {
+              await repo.deleteBranch(msg.branchName, force);
+            }
             const branches = await repo.getBranches();
             post({ type: 'LOG_REFS_UPDATE', repoId, branches });
           } catch (e: unknown) {
@@ -1065,6 +1095,51 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } else {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
+        }
+        break;
+      }
+
+      case 'LOG_RENAME_BRANCH_MULTI': {
+        const repoCount = msg.repoIds.length;
+        const newName = await vscode.window.showInputBox({
+          title: repoCount === 1 ? `Rename branch '${msg.oldName}'` : `Rename branch '${msg.oldName}' in ${repoCount} repos`,
+          value: msg.oldName,
+          validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
+        });
+        if (!newName || newName === msg.oldName) {
+          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+          return;
+        }
+
+        const errors: string[] = [];
+        const renamed: Array<{ repoId: string; label: string; oldUpstream: { remote: string; branchName: string } | null }> = [];
+        for (const repoId of msg.repoIds) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
+          const oldUpstream = await repo.getBranchUpstream(msg.oldName).catch(() => null);
+          try {
+            await repo.renameBranch(msg.oldName, newName);
+            renamed.push({ repoId, label: meta?.name ?? repoId, oldUpstream });
+            const branches = await repo.getBranches();
+            post({ type: 'LOG_REFS_UPDATE', repoId, branches });
+          } catch (e: unknown) {
+            logError('renameBranchMulti', formatGitError(e), getRawErrorDetail(e));
+            errors.push(`${meta?.name ?? repoId}: ${formatGitError(e)}`);
+          }
+        }
+        if (errors.length > 0) {
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log').then(choice => {
+            if (choice === 'Show Log') showLogChannel();
+          });
+          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
+        } else {
+          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+          post({ type: 'LOG_REFRESH' });
+        }
+        for (const { repoId, label, oldUpstream } of renamed) {
+          const repo = this.manager.getRepo(repoId);
+          if (repo) await offerRenameBranchRemoteSync(repo, label, oldUpstream, newName);
         }
         break;
       }
@@ -1785,8 +1860,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const merged = mergeCurrentIntoBranches(branches, current);
           post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
         } catch (e: unknown) {
-          logError('checkoutCommit', formatGitError(e), getRawErrorDetail(e));
-          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          const repoLabel = this.getNonWorktreeRepos().find(m => m.id === msg.repoId)?.name ?? msg.repoId;
+          const handled = await handleDirtyCheckout(repo, repoLabel, target, e);
+          if (handled) {
+            post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
+            const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+            const merged = mergeCurrentIntoBranches(branches, current);
+            post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: merged });
+          } else {
+            logError('checkoutCommit', formatGitError(e), getRawErrorDetail(e));
+            showGitError('checkoutCommit', e);
+            post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+          }
         }
         break;
       }

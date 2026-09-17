@@ -12,6 +12,8 @@ import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
 import { resolveAvatarIconPath } from '../utils/avatarCache';
+import { presentOrphanBranches } from '../utils/orphanBranches';
+import type { BranchInfo } from '../types/git';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -145,6 +147,24 @@ export function registerCommands(
       if (!manager) return;
       await branchStatusBar.fetchAll();
       commitPanel.refresh();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.checkOrphanBranches', async () => {
+      if (!manager) return;
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Checking for orphaned branches…', cancellable: false },
+        async () => {
+          await manager.fetchAll();
+          const metas = manager.getRepoMetas().filter(m => !m.isWorktree);
+          const results = await Promise.allSettled(
+            metas.map(async m => ({ repoId: m.id, branches: await manager.getRepo(m.id)?.getBranches() ?? [] }))
+          );
+          const orphaned = results
+            .filter((r): r is PromiseFulfilledResult<{ repoId: string; branches: BranchInfo[] }> => r.status === 'fulfilled')
+            .flatMap(r => r.value.branches.filter(b => !b.isRemote && b.upstreamGone).map(b => ({ repoId: r.value.repoId, branchName: b.name })));
+          presentOrphanBranches(manager, logPanel, orphaned, 'has no valid remote');
+        }
+      );
     }),
 
     vscode.commands.registerCommand('gitcharm.syncAll', async () => {

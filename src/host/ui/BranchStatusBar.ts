@@ -1,11 +1,14 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
+import type { GitService } from '../git/GitService';
 import type { RepoMeta } from '../types/git';
 import { isPrimaryBranch } from '../utils/branchUtils';
 import type { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
+import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
 
 export class BranchStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -1609,74 +1612,10 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showInformationMessage(msg);
       logInfo(`checkout:${meta.name}`, msg);
     } catch (e: unknown) {
-      const handled = await this.handleDirtyCheckout(repo, meta, branchName, e);
+      const handled = await handleDirtyCheckout(repo, meta.name, branchName, e);
       if (!handled) showGitError(`checkout:${meta.name}`, e);
     }
     await this.refresh();
-  }
-
-  private async handleDirtyCheckout(
-    repo: import('../git/GitService').GitService,
-    meta: RepoMeta,
-    branchName: string,
-    originalError: unknown
-  ): Promise<boolean> {
-    const msg = String(originalError);
-    // Only offer the menu for "dirty working tree" errors
-    if (!msg.includes('Your local changes') && !msg.includes('local changes') && !msg.includes('overwritten by checkout')) {
-      return false;
-    }
-
-    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> };
-    const items: ActionItem[] = [
-      {
-        label: '$(archive) Stash and checkout',
-        detail: 'Save changes to stash, then switch to the branch',
-        action: async () => {
-          await repo.stashPush(`WIP before checkout to ${branchName}`);
-          await repo.checkout(branchName);
-          const msg = `[${meta.name}]: changes stashed, switched to "${branchName}"`;
-          vscode.window.showInformationMessage(msg);
-          logInfo(`checkout:${meta.name}`, msg);
-        },
-      },
-      {
-        label: '$(arrow-right) Bring changes to new branch',
-        detail: 'Carry uncommitted changes into the new branch',
-        action: async () => {
-          await repo.stashPush(`WIP migrating to ${branchName}`);
-          await repo.checkout(branchName);
-          await repo.stashPop();
-          const msg = `[${meta.name}]: changes migrated to "${branchName}"`;
-          vscode.window.showInformationMessage(msg);
-          logInfo(`checkout:${meta.name}`, msg);
-        },
-      },
-      {
-        label: '$(warning) Force checkout',
-        detail: 'Discard local changes and switch to the branch',
-        action: async () => {
-          await repo.checkoutForce(branchName);
-          const msg = `[${meta.name}]: force checkout to "${branchName}" (changes discarded)`;
-          vscode.window.showInformationMessage(msg);
-          logInfo(`checkout:${meta.name}`, msg);
-        },
-      },
-      {
-        label: '$(close) Cancel',
-        detail: '',
-        action: async () => { /* no-op */ },
-      },
-    ];
-
-    const pick = await vscode.window.showQuickPick(items, {
-      title: `[${meta.name}]: Uncommitted changes`,
-      placeHolder: `Choose how to handle local changes before switching to "${branchName}"`,
-      ignoreFocusOut: true,
-    });
-
-    if (pick) await pick.action();
-    return true;
   }
 
   private async checkoutBranchAllRepos(branchName: string, metas: RepoMeta[]): Promise<void> {
@@ -1717,7 +1656,7 @@ export class BranchStatusBar implements vscode.Disposable {
           try {
             await repo.checkout(fullName ?? branchName);
           } catch (e: unknown) {
-            const handled = await this.handleDirtyCheckout(repo, meta, fullName ?? branchName, e);
+            const handled = await handleDirtyCheckout(repo, meta.name, fullName ?? branchName, e);
             if (!handled) {
               logError(`checkout:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
               errors.push(`${meta.name}: ${formatGitError(e)}`);
@@ -1804,11 +1743,13 @@ export class BranchStatusBar implements vscode.Disposable {
     });
     if (!newName || newName === oldName) return;
 
+    const oldUpstream = await repo.getBranchUpstream(oldName).catch(() => null);
     try {
       await repo.renameBranch(oldName, newName);
       const msg = `[${meta.name}]: renamed "${oldName}" → "${newName}".`;
       vscode.window.showInformationMessage(msg);
       logInfo(`rename-branch:${meta.name}`, msg);
+      await offerRenameBranchRemoteSync(repo, meta.name, oldUpstream, newName);
     } catch (e: unknown) {
       showGitError(`rename-branch:${meta.name}`, e);
     }
@@ -2027,11 +1968,14 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: `Renaming "${oldName}" → "${newName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
+        const renamed: Array<{ repo: GitService; label: string; oldUpstream: { remote: string; branchName: string } | null }> = [];
         for (const meta of metas) {
           const repo = this.manager.getRepo(meta.id);
           if (!repo) continue;
+          const oldUpstream = await repo.getBranchUpstream(oldName).catch(() => null);
           try {
             await repo.renameBranch(oldName, newName);
+            renamed.push({ repo, label: meta.name, oldUpstream });
           } catch (e: unknown) {
             logError(`rename-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
@@ -2044,6 +1988,9 @@ export class BranchStatusBar implements vscode.Disposable {
           const msg = `Renamed "${oldName}" → "${newName}" in ${metas.length} repos.`;
           vscode.window.showInformationMessage(msg);
           logInfo('rename-branch', msg);
+        }
+        for (const { repo, label, oldUpstream } of renamed) {
+          await offerRenameBranchRemoteSync(repo, label, oldUpstream, newName);
         }
       }
     );

@@ -19,6 +19,7 @@ interface Props {
   onCheckout: (repoIds: string[], branchName: string) => void;
   onMerge: (repoId: string, from: string) => void;
   onRebase: (repoId: string, onto: string) => void;
+  onRename: (repoIds: string[], branchName: string) => void;
   onDelete: (repoIds: string[], branchName: string) => void;
   onFetchRepo: (repoId: string) => void;
   onPull: (repoIds: string[], branchName: string) => void;
@@ -186,7 +187,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
-  onCheckout, onMerge, onRebase, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
+  onCheckout, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
 }, ref) {
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
@@ -478,6 +479,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onMerge={() => { onMerge(opInst.repoId, opInst.name); setContextMenu(null); }}
             onRebase={() => { onRebase(opInst.repoId, opInst.name); setContextMenu(null); }}
+            onRename={localRepoIds.length > 0 ? () => { onRename(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
             onDelete={() => { onDelete(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onPull={localRepoIds.length > 0 ? () => { onPull(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
             onPush={localRepoIds.length > 0 ? () => { onPush(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
@@ -573,6 +575,12 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
         <span style={styles.aheadBehind}>
           {merged.instances[0].aheadBehind.ahead > 0 && <span>↑{merged.instances[0].aheadBehind.ahead}</span>}
           {merged.instances[0].aheadBehind.behind > 0 && <span>↓{merged.instances[0].aheadBehind.behind}</span>}
+        </span>
+      )}
+
+      {!isRemote && merged.instances.some(i => i.upstreamGone) && (
+        <span style={styles.orphanBadge} title="Remote branch no longer exists (likely deleted after a merge)">
+          <Codicon name="cloud-offline" style={{ fontSize: '12px' }} />
         </span>
       )}
     </div>
@@ -984,7 +992,7 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   );
 }
 
-function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, onRebase, onDelete, onPull, onPush }: {
+function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, onRebase, onRename, onDelete, onPull, onPush }: {
   merged: MergedBranch;
   x: number; y: number;
   canDelete: boolean;
@@ -992,6 +1000,7 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
   onCheckout: () => void;
   onMerge: () => void;
   onRebase: () => void;
+  onRename?: () => void;
   onDelete: () => void;
   onPull?: () => void;
   onPush?: () => void;
@@ -1025,6 +1034,7 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
       ...(onPush ? [{ icon: 'cloud-upload', label: `Push "${merged.baseName}"...`, action: onPush }] : []),
     ] : []),
     { sep: true },
+    ...(onRename ? [{ icon: 'edit', label: 'Rename…', action: onRename }] : []),
     { icon: 'copy', label: 'Copy Branch Name', action: copyName },
     ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete branch', action: onDelete, danger: true }] : []),
   ];
@@ -1252,6 +1262,13 @@ const styles = {
     opacity: 0.65,
     flexShrink: 0,
   },
+  orphanBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    opacity: 0.75,
+    color: 'var(--vscode-editorWarning-foreground, #cca700)',
+  } as React.CSSProperties,
   folderRow: (depth: number, hovered = false, keyboardFocused = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',

@@ -29,6 +29,7 @@ export interface BranchInfo {
   isRemote: boolean;
   remoteName?: string;
   upstream?: string;
+  upstreamGone?: boolean;
   aheadBehind?: { ahead: number; behind: number };
   lastCommitHash?: string;
   lastCommitDate?: string;

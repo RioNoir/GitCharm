@@ -407,6 +407,19 @@ export class GitService {
       }
     } catch { /* branch refs still come from the primary provider */ }
 
+    const goneBranches = new Set<string>();
+    try {
+      const raw = await this.git.raw([
+        'for-each-ref',
+        '--format=%(refname:short)%00%(upstream:track)',
+        'refs/heads/',
+      ]);
+      for (const line of raw.trim().split('\n')) {
+        const [name, track] = line.split('\0');
+        if (name && track === '[gone]') goneBranches.add(name);
+      }
+    } catch { /* upstream:track unsupported or no upstream configured — treat as not gone */ }
+
     const vsRepo = this.vsRepo();
     if (vsRepo) {
       // getBranches({ remote: false }) returns local branches (RefType.Head),
@@ -429,6 +442,7 @@ export class GitService {
           fullName: `refs/heads/${name}`,
           isHead,
           isRemote: false,
+          upstreamGone: goneBranches.has(name),
           lastCommitHash: ref.commit ?? tipMetadata.get(name)?.hash,
           lastCommitDate: tipMetadata.get(name)?.date,
           aheadBehind: (isHead && head!.ahead !== undefined && head!.behind !== undefined)
@@ -481,6 +495,7 @@ export class GitService {
         isHead: branch.current,
         isRemote,
         remoteName,
+        upstreamGone: !isRemote && goneBranches.has(cleanName),
         lastCommitHash: tipMetadata.get(cleanName)?.hash ?? branch.commit,
         lastCommitDate: tipMetadata.get(cleanName)?.date,
         aheadBehind,
@@ -1526,6 +1541,13 @@ export class GitService {
     const vsRepo = this.vsRepo();
     if (vsRepo) { await vsRepo.deleteBranch(branchName, force); return; }
     await this.git.deleteLocalBranch(branchName, force);
+  }
+
+  /** Deletes a branch on the remote itself (`git push <remote> --delete <branch>`), not just
+   * the local remote-tracking ref — `branchName` is the bare branch name, without the
+   * `<remote>/` prefix a remote-tracking BranchInfo carries in its `name`. */
+  async deleteRemoteBranch(remote: string, branchName: string): Promise<void> {
+    await this.git.raw(['push', remote, '--delete', `refs/heads/${branchName}`]);
   }
 
   async checkoutForce(branchName: string): Promise<void> {
