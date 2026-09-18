@@ -97,6 +97,17 @@ export function isPushRejected(e: unknown): boolean {
   return /\(non-fast-forward\)|\(fetch first\)|\(stale info\)|failed to push some refs/i.test(text);
 }
 
+/** True when branch creation failed because a branch with that name already exists. */
+export function isBranchAlreadyExistsError(e: unknown): boolean {
+  if (!(e instanceof Error) && typeof e !== 'object') return false;
+  const err = e as { stderr?: string; stdout?: string; message?: string };
+  const text = stripAnsi([err.stderr, err.stdout, err.message].filter(Boolean).join('\n'));
+  // Matches git's own wording verbatim (e.g. "fatal: a branch named 'foo' already exists")
+  // rather than a loose "branch" + "already exists" combination, which could false-positive
+  // on unrelated text that happens to mention both in the same combined stderr/stdout/message.
+  return /a branch named .+ already exists/i.test(text);
+}
+
 /** Full, untruncated error detail (stderr/stdout/message) for the output log. */
 export function getRawErrorDetail(e: unknown): string | undefined {
   if (!(e instanceof Error) && typeof e !== 'object') return undefined;

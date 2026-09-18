@@ -9,6 +9,8 @@ export interface RepoMeta {
   depth?: number;          // 0 = repo normale, 1 = submodule diretto, 2 = nested
   isWorktree?: boolean;    // true when this workspace folder is a linked git worktree
   mainWorktreePath?: string; // rootPath of the main worktree repo
+  /** Bare name of the remote's actual default branch (e.g. "main"), from GitService.getRemoteDefaultBranch. */
+  defaultBranch?: string;
 }
 
 export interface SubmoduleEntry {
@@ -33,6 +35,9 @@ export interface BranchInfo {
   aheadBehind?: { ahead: number; behind: number };
   lastCommitHash?: string;
   lastCommitDate?: string;
+  lastCommitDateRelative?: string;
+  lastCommitMessage?: string;
+  lastCommitAuthor?: string;
   detachedTag?: string;        // set when HEAD is detached on a tag
   detachedHash?: string;       // short hash for display
   detachedFullHash?: string;   // full hash for commit matching

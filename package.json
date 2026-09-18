@@ -856,6 +856,15 @@
             },
             "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
           },
+          "gitcharm.branchNameModels": {
+            "order": 75,
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "Branch name prefixes suggested when creating a new branch (e.g. \"feature/\", \"bugfix/\", \"revert-\"). Stored normalized with a trailing \"*\" (e.g. \"feature/*\"); entries already containing a wildcard (e.g. \"feature/**\") are kept as-is."
+          },
           "gitcharm.fetchOnStartup": {
             "order": 40,
             "type": "boolean",

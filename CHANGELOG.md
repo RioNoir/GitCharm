@@ -11,6 +11,14 @@ All notable changes to GitCharm are documented in this file.
 - Renaming a branch now offers to rename (or delete) its remote counterpart to match, from both the status bar and the new "Rename…" action in the Log panel's branch context menu
 - Checking out a branch with uncommitted changes in the Log panel now offers the same stash/force recovery menu as the status bar, instead of failing silently
 - Renamed the "GitCharm Commit" panel to "GitCharm"
+- New **Branch Name Models** setting: configure prefixes (e.g. `feature/`, `bugfix/`, `revert-`) that show up as selectable, completable suggestions when creating a new branch
+- Branch menus (status bar and Log panel) now show each branch's last commit — hash, author, message, and relative time — for both single- and multi-repo views
+- New **"Checkout detached…"** action in the repo branch menu, to check out any branch without moving HEAD onto it
+- New **"Checkout '<branch>' and merge '<current>' into it"** action, combining a checkout with merging the previously active branch in one step
+- New generic **"Compare '<branch>' with…"** action to diff any branch or tag against another, not just against the current branch
+- The repository's actual primary branch (e.g. `main` vs. a stale `master`) is now detected from the remote's real default branch (`origin/HEAD`) instead of a name-based guess, and deleting it from the remote is now blocked in both the status bar and the Log panel
+- The main Git Menu is now grouped into Fetch/Pull/Push/Sync, New Branch/Tag, and Commit/Log sections, and drops "all repositories" wording when the workspace has only one repository
+- Creating a branch that already exists now offers to check it out instead of failing, and creating/checking out a branch with uncommitted changes now offers the same stash/force recovery menu everywhere
 
 ### 🐛 Bug Fixes
 - Fixed PR provider detection for SSH remotes using a custom `Host` alias (e.g. `git@github-personal:owner/repo.git`)
@@ -19,6 +27,9 @@ All notable changes to GitCharm are documented in this file.
 - Fixed a stale-render flash in the commit list after a programmatic scroll
 - Fixed stash author names not being abbreviated like regular commits
 - Fixed the webview bundle being served from Chromium's disk cache after a rebuild
+- Fixed `origin/HEAD` showing up as a phantom remote branch in branch lists
+- Fixed remote branch names losing their `<remote>/` prefix in some menu labels
+- Fixed a false "success" notification after a multi-repo checkout when one of the repositories actually failed
 
 ## v0.4.7
 

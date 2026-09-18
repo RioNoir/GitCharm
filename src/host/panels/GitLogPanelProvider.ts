@@ -3,7 +3,7 @@ import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
-import type { BranchInfo } from '../types/git';
+import type { BranchInfo, RepoMeta } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
@@ -15,6 +15,7 @@ import { pickRefQuickPick } from '../utils/refPicker';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
+import { promptBranchName } from '../utils/branchNamePrompt';
 import {
   getGitLogDefaultLayout,
   getGitLogDefaultLocation,
@@ -96,6 +97,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private commitPanel?: CommitPanelProvider;
   private undockedPanel?: UndockedPanelProvider;
   private hiddenRepoIds: string[] = [];
+  private defaultBranchCache = new Map<string, string | undefined>();
   private pendingFilterRepoId: string | null = null;
   private pendingFilterBranch: string | null = null;
   private pendingScrollHash: string | null = null;
@@ -201,7 +203,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   /** Re-query repos and branches and push them to the webview. */
   private async pushInitData(): Promise<void> {
-    const repos = this.getVisibleRepos();
+    const repos = await this.getVisibleReposWithDefaultBranch();
     const branches = await this.getFilteredBranches();
     await this.refreshActiveProfile();
     this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
@@ -282,9 +284,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.colorTheme')) {
           if (this.view) {
-            Promise.all([loadIconTheme(this.view.webview), this.getFilteredBranches()]).then(([iconTheme, branches]) => {
-              this.post({ type: 'LOG_INIT_DATA', repos: this.getVisibleRepos(), branches, iconTheme });
-            });
+            Promise.all([loadIconTheme(this.view.webview), this.getFilteredBranches(), this.getVisibleReposWithDefaultBranch()])
+              .then(([iconTheme, branches, repos]) => {
+                this.post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
+              });
           }
         }
       })
@@ -438,6 +441,28 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     return this.getNonWorktreeRepos().filter(m => !this.hiddenRepoIds.includes(m.id));
   }
 
+  /**
+   * Same as getVisibleRepos(), but with each RepoMeta's `defaultBranch` resolved to the
+   * remote's actual default branch — the source of truth the webview's "primary branch"
+   * star/delete-protection should use instead of its own naming heuristic. Cached per repoId
+   * since the remote symref rarely changes and a miss falls back to a network round trip.
+   */
+  private async getVisibleReposWithDefaultBranch(): Promise<RepoMeta[]> {
+    const repos = this.getVisibleRepos();
+    return Promise.all(repos.map(async meta => {
+      if (this.defaultBranchCache.has(meta.id)) {
+        return { ...meta, defaultBranch: this.defaultBranchCache.get(meta.id) };
+      }
+      const repo = this.manager.getRepo(meta.id);
+      if (!repo) return meta;
+      const remotes = await repo.getRemotes().catch(() => [] as string[]);
+      const remote = remotes.includes('origin') ? 'origin' : remotes[0];
+      const defaultBranch = remote ? await repo.getRemoteDefaultBranch(remote).catch(() => undefined) : undefined;
+      this.defaultBranchCache.set(meta.id, defaultBranch);
+      return { ...meta, defaultBranch };
+    }));
+  }
+
   private async getFilteredBranches() {
     const ids = new Set(this.getNonWorktreeRepos().map(r => r.id));
     const all = await this.manager.getAllBranches();
@@ -488,13 +513,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const maxCommits = vscode.workspace.getConfiguration('gitcharm').get<number>('graphMaxCommits', 1000);
         const limit = Math.min(msg.limit, Math.max(0, maxCommits - msg.skip));
 
-        const repos = this.getVisibleRepos();
         // Resolve the icon theme against the webview that asked, so the undocked
         // panel still gets file icons when the bottom-panel view is hidden.
         const iconWebview = origin === 'undocked'
           ? this.undockedPanel?.webview
           : this.view?.webview;
-        const [branches, iconTheme] = await Promise.all([
+        const [repos, branches, iconTheme] = await Promise.all([
+          this.getVisibleReposWithDefaultBranch(),
           this.getFilteredBranches(),
           iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
         ]);
@@ -1001,6 +1026,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_DELETE_BRANCH': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+
+        const branchInfo = (await repo.getBranches()).find(b => b.name === msg.branchName);
+        if (branchInfo?.isRemote) {
+          const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
+          const bareName = msg.branchName.slice(remote.length + 1);
+          const defaultBranch = await repo.getRemoteDefaultBranch(remote);
+          if (defaultBranch && bareName === defaultBranch) {
+            const warnMsg = `"${bareName}" is the default branch on "${remote}" — it can't be deleted from the remote.`;
+            vscode.window.showWarningMessage(warnMsg);
+            logWarn('deleteBranch', warnMsg);
+            post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Default branch' });
+            return;
+          }
+        }
+
         const confirm = await vscode.window.showWarningMessage(
           `Delete branch "${msg.branchName}"?`, { modal: true }, 'Delete'
         );
@@ -1009,7 +1049,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           return;
         }
         try {
-          const branchInfo = (await repo.getBranches()).find(b => b.name === msg.branchName);
           if (branchInfo?.isRemote) {
             const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
             const bareName = msg.branchName.slice(remote.length + 1);
@@ -1031,16 +1070,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_DELETE_BRANCH_MULTI': {
         // Check if the branch is currently checked out in any of the target repos
         const checkedOutIn: string[] = [];
-        for (const repoId of msg.repoIds) {
+        await Promise.all(msg.repoIds.map(async repoId => {
           const repo = this.manager.getRepo(repoId);
-          if (!repo) continue;
+          if (!repo) return;
           const current = await repo.getCurrentBranch().catch(() => null);
           if (current && (current.name === msg.branchName || current.detachedTag === msg.branchName)) {
             const meta = this.getNonWorktreeRepos().find(m => m.id === repoId);
             checkedOutIn.push(meta?.name ?? repoId);
           }
-        }
-        const eligibleRepoIds = msg.repoIds.filter(id => {
+        }));
+        let eligibleRepoIds = msg.repoIds.filter(id => {
           const meta = this.getNonWorktreeRepos().find(m => m.id === id);
           return !checkedOutIn.includes(meta?.name ?? id);
         });
@@ -1050,12 +1089,40 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Checked out' });
           return;
         }
-        const skippedMsg = checkedOutIn.length > 0
-          ? ` (skipped in: ${checkedOutIn.join(', ')} — currently checked out)`
-          : '';
+
+        // A remote-tracking ref pointing at the remote's default branch (e.g. "origin/main")
+        // can't be deleted from the remote — skip those repos rather than let the push fail.
+        const defaultBranchChecks = await Promise.all(eligibleRepoIds.map(async repoId => {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) return { repoId, isDefaultOnRemote: false };
+          const branchInfo = (await repo.getBranches()).find(b => b.name === msg.branchName);
+          if (branchInfo?.isRemote) {
+            const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
+            const bareName = msg.branchName.slice(remote.length + 1);
+            const defaultBranch = await repo.getRemoteDefaultBranch(remote);
+            if (defaultBranch && bareName === defaultBranch) return { repoId, isDefaultOnRemote: true };
+          }
+          return { repoId, isDefaultOnRemote: false };
+        }));
+        const isDefaultOnRemote = defaultBranchChecks
+          .filter(r => r.isDefaultOnRemote)
+          .map(r => this.getNonWorktreeRepos().find(m => m.id === r.repoId)?.name ?? r.repoId);
+        eligibleRepoIds = defaultBranchChecks.filter(r => !r.isDefaultOnRemote).map(r => r.repoId);
+        if (eligibleRepoIds.length === 0) {
+          const warnMsg = `Cannot delete "${msg.branchName}" — it's the default branch on the remote in: ${isDefaultOnRemote.join(', ')}.`;
+          vscode.window.showWarningMessage(warnMsg);
+          logWarn('deleteBranchMulti', warnMsg);
+          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Default branch' });
+          return;
+        }
+
+        const skippedMsg = [
+          checkedOutIn.length > 0 ? `currently checked out in: ${checkedOutIn.join(', ')}` : undefined,
+          isDefaultOnRemote.length > 0 ? `default branch on the remote in: ${isDefaultOnRemote.join(', ')}` : undefined,
+        ].filter(Boolean).join('; ');
         const repoCount = eligibleRepoIds.length;
         const confirm = await vscode.window.showWarningMessage(
-          `Delete branch "${msg.branchName}" in ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}?${skippedMsg}`,
+          `Delete branch "${msg.branchName}" in ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}?${skippedMsg ? ` (skipped — ${skippedMsg})` : ''}`,
           { modal: true }, 'Delete', 'Force Delete'
         );
         if (!confirm) {
@@ -1149,8 +1216,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           { location: vscode.ProgressLocation.Notification, title: 'Fetching all', cancellable: false },
           async () => { await this.manager.fetchAll(); }
         );
-        const branches = await this.getFilteredBranches();
-        const repos = this.getVisibleRepos();
+        // A fetch can move the remote's default branch (e.g. origin/HEAD repointed after a
+        // rename on GitHub/GitLab) — drop the cache so it's re-resolved, not stale.
+        this.defaultBranchCache.clear();
+        const [repos, branches] = await Promise.all([
+          this.getVisibleReposWithDefaultBranch(),
+          this.getFilteredBranches(),
+        ]);
         post({ type: 'LOG_INIT_DATA', repos, branches });
         post({ type: 'LOG_REFRESH' });
         break;
@@ -1483,10 +1555,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_NEW_BRANCH_FROM_COMMIT': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
-        const branchName = await vscode.window.showInputBox({
+        const branchName = await promptBranchName({
+          title: `Create new branch from ${msg.hash.slice(0, 8)}`,
           prompt: `Create new branch from ${msg.hash.slice(0, 8)}`,
           placeHolder: 'my-feature-branch',
-          validateInput: v => v.trim() ? undefined : 'Branch name cannot be empty',
         });
         if (!branchName) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect, useEffect, useCallback, forwardRef } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, useCallback, useMemo, forwardRef } from 'react';
 import { ScrollArea } from '../../shared/ScrollArea';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { isPrimaryBranch } from '../../shared/branchUtils';
@@ -47,19 +47,28 @@ interface MergedBranch {
   repoIds: string[];
 }
 
-function buildMergedBranches(branches: BranchInfo[]): MergedBranch[] {
+/**
+ * `defaultBranchByRepo` maps repoId → the remote's actual default branch name (from
+ * RepoMeta.defaultBranch), the source of truth for "primary" when known. A branch merged
+ * across repos with disagreeing defaults (different remotes) is primary if it matches in any
+ * of them. Falls back to the naming heuristic for a repo whose default couldn't be resolved.
+ */
+function buildMergedBranches(branches: BranchInfo[], defaultBranchByRepo: Map<string, string | undefined>): MergedBranch[] {
   const map = new Map<string, MergedBranch>();
   for (const b of branches) {
     const baseName = b.isRemote ? stripRemotePrefix(b.name) : b.name;
+    const actualDefault = defaultBranchByRepo.get(b.repoId);
+    const isPrimaryHere = actualDefault ? baseName === actualDefault : isPrimaryBranch(baseName);
     const existing = map.get(baseName);
     if (existing) {
       existing.instances.push(b);
       if (!existing.repoIds.includes(b.repoId)) existing.repoIds.push(b.repoId);
       if (b.isHead) existing.isHead = true;
+      if (isPrimaryHere) existing.isPrimary = true;
     } else {
       map.set(baseName, {
         baseName,
-        isPrimary: isPrimaryBranch(baseName),
+        isPrimary: isPrimaryHere,
         isHead: b.isHead,
         instances: [b],
         repoIds: [b.repoId],
@@ -190,6 +199,10 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   onCheckout, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
 }, ref) {
+  const defaultBranchByRepo = useMemo(
+    () => new Map(repos.map(r => [r.id, r.defaultBranch])),
+    [repos]
+  );
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
   const [tagContextMenu, setTagContextMenu] = useState<{ mergedTag: MergedTag; x: number; y: number } | null>(null);
@@ -235,7 +248,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   // expanded would re-collapse the moment the filter made it briefly disappear from the tree.
   const knownFolderKeysRef = useRef<Set<SectionKey>>(new Set());
   useEffect(() => {
-    const allLocal = sortMerged(buildMergedBranches(branches.filter(b => !b.isRemote && b.name !== 'HEAD')));
+    const allLocal = sortMerged(buildMergedBranches(branches.filter(b => !b.isRemote && b.name !== 'HEAD'), defaultBranchByRepo));
     const localKeys = collectFolderPaths(buildBranchTree(splitPinned(allLocal).rest, m => m.baseName)).map(p => `folder:local:${p}`);
     const remoteByName = new Map<string, BranchInfo[]>();
     for (const b of branches.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD')) {
@@ -245,7 +258,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     }
     const remoteKeys = Array.from(remoteByName.entries()).flatMap(([name, bs]) => {
       const sectionKey = `remote:${name}`;
-      const allMerged = sortMerged(buildMergedBranches(bs));
+      const allMerged = sortMerged(buildMergedBranches(bs, defaultBranchByRepo));
       return collectFolderPaths(buildBranchTree(splitPinned(allMerged).rest, m => m.baseName)).map(p => `folder:${sectionKey}:${p}`);
     });
     const allMergedTags = buildMergedTags(tags);
@@ -265,14 +278,14 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     } else {
       knownFolderKeysRef.current = new Set(allKeys);
     }
-  }, [branches, tags]);
+  }, [branches, tags, defaultBranchByRepo]);
 
   const filtered = filter
     ? branches.filter(b => b.name.toLowerCase().includes(filter.toLowerCase()))
     : branches;
 
   // Exclude detached HEAD pseudo-branch from Local list — it shows up as a tag row instead
-  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD')));
+  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD'), defaultBranchByRepo));
   const localFolderPaths = collectFolderPaths(buildBranchTree(splitPinned(localMerged).rest, m => m.baseName))
     .map(p => `folder:local:${p}`);
 
@@ -287,7 +300,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const remoteGroups: { name: string; merged: MergedBranch[]; folderPaths: string[] }[] = Array.from(remoteGroupsMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, bs]) => {
-      const merged = sortMerged(buildMergedBranches(bs));
+      const merged = sortMerged(buildMergedBranches(bs, defaultBranchByRepo));
       const sectionKey = `remote:${name}`;
       const folderPaths = collectFolderPaths(buildBranchTree(splitPinned(merged).rest, m => m.baseName))
         .map(p => `folder:${sectionKey}:${p}`);
@@ -474,7 +487,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             merged={contextMenu.merged}
             x={contextMenu.x}
             y={contextMenu.y}
-            canDelete={!contextMenu.merged.isHead}
+            canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isPrimary)}
             onClose={() => setContextMenu(null)}
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onMerge={() => { onMerge(opInst.repoId, opInst.name); setContextMenu(null); }}
