@@ -27,7 +27,7 @@ const PAGE_SIZE = 150;
 function App() {
   const store = useLogStore();
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
-  const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 220, 120, 400);
+  const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 250, 120, 400);
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -478,6 +478,9 @@ function App() {
           onRebase={(repoId, onto) => {
             const reqId = generateId();
             getVsCodeApi().postMessage({ type: 'LOG_REBASE', requestId: reqId, repoId, onto } satisfies LogToHostMsg);
+          }}
+          onRename={(repoIds, branchName) => {
+            getVsCodeApi().postMessage({ type: 'LOG_RENAME_BRANCH_MULTI', requestId: generateId(), repoIds, oldName: branchName } satisfies LogToHostMsg);
           }}
           onDelete={(repoIds, branchName) => {
             getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds, branchName } satisfies LogToHostMsg);

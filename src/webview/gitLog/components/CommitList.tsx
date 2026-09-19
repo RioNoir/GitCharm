@@ -54,6 +54,21 @@ function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// Suppresses hover handling for a brief window after a keyboard-driven scroll. Comparing the
+// cursor's exact coordinates isn't reliable here: arrowing down snaps the new row to the
+// bottom edge of the viewport, which is exactly where a user holding the down arrow tends to
+// rest the mouse — so ordinary hardware jitter reads as "real" movement and defeats a
+// position check. A short timed suppression window sidesteps that: any hover event that
+// fires immediately after a scroll-into-view is almost certainly the scroll sliding a row
+// under the pointer, not the user choosing to hover it.
+let suppressHoverUntil = 0;
+function suppressHoverBriefly(): void {
+  suppressHoverUntil = Date.now() + 150;
+}
+function isHoverSuppressed(): boolean {
+  return Date.now() < suppressHoverUntil;
+}
+
 const BG_ANIM_STYLE = `
 @keyframes gitcharm-bg-load {
   0%   { transform: translateX(-100%); }
@@ -63,6 +78,10 @@ const BG_ANIM_STYLE = `
 @keyframes gitcharm-skeleton-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
+}
+.gitcharm-commit-list:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 `;
 
@@ -305,13 +324,32 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   const scrollToIndexExact = useCallback((index: number, offset: number) => {
     const el = parentRef.current;
     if (!el) return;
-    el.scrollTop = Math.max(0, index * ROW_HEIGHT + offset);
+    // Go through the virtualizer's own scrollToOffset (rather than writing el.scrollTop
+    // directly) so its scheduleScrollReconcile() loop still supervises the browser actually
+    // landing on the target and retries if the write gets clamped (e.g. total size not yet
+    // grown to the new bottom).
+    virtualizer.scrollToOffset(Math.max(0, index * ROW_HEIGHT + offset), { align: 'start' });
+    // scrollToOffset() only writes the DOM (el.scrollTo), which the browser applies to
+    // el.scrollTop SYNCHRONOUSLY — but the virtualizer's own idea of the scroll position
+    // (`virtualizer.scrollOffset`, the field getVirtualItems()/calculateRange() actually
+    // render from) is a SEPARATE internal field that virtual-core only updates once it
+    // observes the real native `scroll` event, which the browser always dispatches on a
+    // later task/frame, never synchronously. Any render that happens in between — e.g. the
+    // setMultiSelectHashes() call right after this returns in handleKeyDown — reads the
+    // virtualizer's STALE range while el.scrollTop is already at the NEW position, painting
+    // rows from the wrong part of the list for one frame before the real scroll event
+    // corrects it. `scrollOffset` is a plain public field, so we patch it ourselves,
+    // synchronously, from the scrollTop the browser just committed — closing the gap
+    // outright instead of racing it. The eventual real scroll event reconciles onto the
+    // same value (within its own tolerance), so this never fights the library, it just
+    // tells it the truth one tick early.
+    virtualizer.scrollOffset = el.scrollTop;
     // Read back rather than reusing the requested value: the browser clamps at
     // both ends, and `offset` may be negative when centring a row. Re-capturing
     // from the real scrollTop keeps the anchor normalised (offset always within
     // one row) so a later restore can't derive an out-of-range index.
     captureAnchor(el.scrollTop);
-  }, [captureAnchor]);
+  }, [captureAnchor, virtualizer]);
 
   // Restore the scroll anchor whenever the commit array is replaced under us.
   //
@@ -369,6 +407,67 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     });
   }
 
+  // Keyboard navigation: Up/Down/PageUp/PageDown/Home/End move the single selection through
+  // the loaded commits, same as a click would — always through onSelect, so main.tsx stays
+  // the single writer of the store's selectedCommit. Scrolls the new row into view only when
+  // it isn't already visible, so repeated presses inside the viewport don't fight the user's
+  // own scroll position.
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (commits.length === 0) return;
+    const currentIndex = selectedHash ? commits.findIndex(c => `${c.hash}:${c.repoId}` === selectedHash) : -1;
+    // With nothing selected yet, start from the row the mouse is hovering — the first
+    // Up/Down press lands on that row itself rather than jumping past it.
+    const baseIndex = currentIndex >= 0 ? currentIndex : (hoveredIndex ?? -1);
+    const hasBase = baseIndex >= 0;
+
+    let nextIndex: number | null = null;
+    switch (e.key) {
+      case 'ArrowDown':
+        nextIndex = !hasBase ? 0 : currentIndex < 0 ? baseIndex : Math.min(commits.length - 1, baseIndex + 1);
+        break;
+      case 'ArrowUp':
+        nextIndex = !hasBase ? 0 : currentIndex < 0 ? baseIndex : Math.max(0, baseIndex - 1);
+        break;
+      case 'PageDown': {
+        const pageSize = Math.max(1, Math.floor((parentRef.current?.clientHeight ?? ROW_HEIGHT) / ROW_HEIGHT));
+        nextIndex = Math.min(commits.length - 1, (hasBase ? baseIndex : 0) + pageSize);
+        break;
+      }
+      case 'PageUp': {
+        const pageSize = Math.max(1, Math.floor((parentRef.current?.clientHeight ?? ROW_HEIGHT) / ROW_HEIGHT));
+        nextIndex = Math.max(0, (hasBase ? baseIndex : 0) - pageSize);
+        break;
+      }
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = commits.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    e.preventDefault();
+    if (nextIndex === null || nextIndex === currentIndex) return;
+
+    const el = parentRef.current;
+    if (el) {
+      const rowTop = nextIndex * ROW_HEIGHT;
+      const rowBottom = rowTop + ROW_HEIGHT;
+      if (rowTop < el.scrollTop) {
+        suppressHoverBriefly();
+        scrollToIndexExact(nextIndex, 0);
+      } else if (rowBottom > el.scrollTop + el.clientHeight) {
+        suppressHoverBriefly();
+        scrollToIndexExact(nextIndex, el.clientHeight - ROW_HEIGHT);
+      }
+    }
+
+    setMultiSelectHashes(new Set());
+    onSelect(commits[nextIndex]);
+  }, [commits, selectedHash, hoveredIndex, onSelect, scrollToIndexExact]);
+
   if (showSkeleton) {
     return <CommitSkeleton />;
   }
@@ -385,7 +484,14 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
 
   return (
     <div style={styles.outerWrapper}>
-    <div ref={containerRefCb} style={styles.container} onClick={() => { setContextMenu(null); setPopover(null); }}>
+    <div
+      ref={containerRefCb}
+      className="gitcharm-commit-list"
+      style={styles.container}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onClick={() => { setContextMenu(null); setPopover(null); }}
+    >
       <style>{BG_ANIM_STYLE}</style>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
@@ -442,7 +548,18 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               key={commit.hash}
               style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash && contextMenu?.commit.repoId === commit.repoId), paddingLeft: textStart }}
               onMouseEnter={(e) => {
+                if (isHoverSuppressed()) return;
                 setHoveredIndex(vrow.index);
+                // Hovering makes the list keyboard-navigable from that row without a click
+                // first — but never steal focus away from a text field the user is typing
+                // into (e.g. the filter box) just because the mouse passed over the list, and
+                // never steal focus from outside the webview (e.g. an open VS Code QuickPick,
+                // which lives in the host window and would close if this webview took focus).
+                if (document.hasFocus()) {
+                  const active = document.activeElement;
+                  const isTyping = active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+                  if (!isTyping) parentRef.current?.focus({ preventScroll: true });
+                }
                 if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
                 // Don't restart the open-timer if popover for this commit is already showing
@@ -456,7 +573,8 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   setPopover({ commit, rowTop: rect.top, listRect, mouseX });
                 }, 1000);
               }}
-              onMouseLeave={() => {
+              onMouseLeave={(e) => {
+                if (isHoverSuppressed()) return;
                 setHoveredIndex(null);
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
                 // Delay closing so mouse can travel into the popover
@@ -465,6 +583,10 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 }, 120);
               }}
               onClick={(e) => {
+                // Row divs aren't focusable themselves, and a click doesn't bubble focus to
+                // an ancestor tabIndex on its own — grab it explicitly so arrow-key nav works
+                // immediately after clicking a commit, not just after clicking empty space.
+                parentRef.current?.focus();
                 if (e.ctrlKey || e.metaKey) {
                   setMultiSelectHashes(prev => {
                     const next = new Set(prev);
@@ -630,7 +752,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               )}
               <div style={styles.meta}>
                 <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
-                {containerWidth > 550 && <span style={styles.author}>{commit.isStash ? (activeProfile?.gitName ?? 'You') : formatAuthorName(commit.authorName)}</span>}
+                {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName)}</span>}
               </div>
               {containerWidth > 330 && (
                 <span style={styles.date}>
@@ -1676,6 +1798,7 @@ const styles = {
     overflowX: 'hidden' as const,
     position: 'relative' as const,
     background: 'var(--vscode-editor-background)',
+    outline: 'none',
   },
   repoStrip: (top: number, height: number, color: string, expanded: boolean): React.CSSProperties => ({
     position: 'absolute',

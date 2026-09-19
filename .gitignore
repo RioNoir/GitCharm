@@ -9,3 +9,4 @@ MEMORY.md
 .vscode/gitcharm-changelists.json
 .vscode/changelists.json
 *.tsbuildinfo
+.ai/

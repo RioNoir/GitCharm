@@ -36,6 +36,7 @@ const DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS = ['node_modules'];
 type StatusListener = (status: WorkspaceStatus) => void;
 type BranchListener = () => void;
 type WorktreeListener = (repoId: string) => void;
+type OrphanListener = (newlyOrphaned: Array<{ repoId: string; branchName: string }>) => void;
 
 export type { WorktreeEntry };
 
@@ -51,6 +52,18 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private graphListeners: BranchListener[] = [];
   private reposListeners: BranchListener[] = [];
   private worktreeListeners: WorktreeListener[] = [];
+  private orphanListeners: OrphanListener[] = [];
+  /** Local branches already known to be missing their upstream, so re-fetching doesn't re-notify for the same branch every time. Cleared per-repo when the branch disappears or regains an upstream. */
+  private knownOrphanBranches = new Map<string, Set<string>>();
+  /**
+   * Repos whose gone-upstream branches haven't been baselined yet. `[gone]` also fires for a
+   * branch whose upstream config never pointed at a real remote branch (e.g. a rename or
+   * push -u that didn't complete) — indistinguishable from a real "merged, then deleted
+   * upstream" by git's own tracking status alone. So the first fetchAll() per repo only
+   * records the current gone set as the baseline instead of notifying; only a branch that
+   * transitions from tracked-and-not-gone to gone (a state we actually observed) is reported.
+   */
+  private orphanBaselineDone = new Set<string>();
   private refreshDebounce: NodeJS.Timeout | null = null;
   private refreshFollowUp: NodeJS.Timeout | null = null;
   private branchDebounce: NodeJS.Timeout | null = null;
@@ -759,6 +772,14 @@ export class WorkspaceGitManager implements vscode.Disposable {
     });
   }
 
+  /** Fires with only the branches that just became orphaned (upstream gone) by the most recent fetchAll(), not ones already known. */
+  onOrphanBranches(listener: OrphanListener): vscode.Disposable {
+    this.orphanListeners.push(listener);
+    return new vscode.Disposable(() => {
+      this.orphanListeners = this.orphanListeners.filter(l => l !== listener);
+    });
+  }
+
   async getWorktrees(repoId: string): Promise<WorktreeEntry[]> {
     const repo = this.repos.get(repoId);
     if (!repo) return [];
@@ -985,7 +1006,33 @@ export class WorkspaceGitManager implements vscode.Disposable {
   }
 
   async fetchAll(): Promise<void> {
-    await Promise.allSettled(Array.from(this.repos.values()).map(r => r.fetchAll()));
+    const repos = Array.from(this.repos.values());
+    await Promise.allSettled(repos.map(r => r.fetchAll()));
+    if (this.orphanListeners.length > 0) await this.detectNewlyOrphanedBranches(repos);
+  }
+
+  /** Diffs each repo's gone-upstream branches against knownOrphanBranches so listeners only hear about branches that just became orphaned, not ones already surfaced on a previous fetch. */
+  private async detectNewlyOrphanedBranches(repos: GitService[]): Promise<void> {
+    const newlyOrphaned: Array<{ repoId: string; branchName: string }> = [];
+    const results = await Promise.allSettled(repos.map(r => r.getBranches()));
+    results.forEach((result, i) => {
+      if (result.status !== 'fulfilled') return;
+      const repo = repos[i];
+      const currentlyGone = new Set(result.value.filter(b => !b.isRemote && b.upstreamGone).map(b => b.name));
+      if (!this.orphanBaselineDone.has(repo.repoId)) {
+        // First observation for this repo: we don't know whether these branches just lost
+        // a real upstream or never had one, so seed the baseline silently rather than guess.
+        this.orphanBaselineDone.add(repo.repoId);
+        this.knownOrphanBranches.set(repo.repoId, currentlyGone);
+        return;
+      }
+      const known = this.knownOrphanBranches.get(repo.repoId) ?? new Set<string>();
+      for (const name of currentlyGone) {
+        if (!known.has(name)) newlyOrphaned.push({ repoId: repo.repoId, branchName: name });
+      }
+      this.knownOrphanBranches.set(repo.repoId, currentlyGone);
+    });
+    if (newlyOrphaned.length > 0) this.orphanListeners.forEach(l => l(newlyOrphaned));
   }
 
   async pullAll(rebase = false): Promise<Array<{ repoId: string; ok: boolean; message: string }>> {

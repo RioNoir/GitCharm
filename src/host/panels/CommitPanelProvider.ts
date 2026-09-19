@@ -263,7 +263,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       webviewView.webview,
       this.extensionUri,
       'commitPanel',
-      'GitCharm Commit'
+      'GitCharm'
     );
 
     webviewView.webview.onDidReceiveMessage((msg: CommitToHostMsg) =>

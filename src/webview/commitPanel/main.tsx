@@ -15,6 +15,7 @@ import { PullRequestPanel } from './components/PullRequestPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
+import { handleTreeNavKeyDown } from '../shared/keyboardNav';
 import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary } from '../shared/msgTypes';
 import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
@@ -1459,7 +1460,7 @@ function App() {
         {activeTab === 'changes' && (<>
 
           {/* File list */}
-          <ScrollArea style={css.repoList}>
+          <ScrollArea style={css.repoList} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
             {hideReposWithoutChanges && changesRepos.length === 0 ? (
               <div style={css.filteredEmptyState}>
                 <Codicon name="filter" style={{ fontSize: '18px', opacity: 0.55 }} />

@@ -393,19 +393,46 @@ export class GitService {
   }
 
   async getBranches(): Promise<BranchInfo[]> {
-    const tipMetadata = new Map<string, { hash: string; date?: string }>();
+    const tipMetadata = new Map<string, {
+      hash: string;
+      date?: string;
+      dateRelative?: string;
+      message?: string;
+      author?: string;
+    }>();
     try {
       const raw = await this.git.raw([
         'for-each-ref',
-        '--format=%(objectname)%00%(committerdate:iso-strict)%00%(refname:short)',
+        '--format=%(objectname)%00%(committerdate:iso-strict)%00%(committerdate:relative)%00%(authorname)%00%(contents:subject)%00%(refname:short)',
         'refs/heads/',
         'refs/remotes/',
       ]);
       for (const line of raw.trim().split('\n')) {
-        const [hash, date, name] = line.split('\0');
-        if (hash && name) tipMetadata.set(name, { hash, date: date || undefined });
+        const [hash, date, dateRelative, author, message, name] = line.split('\0');
+        if (hash && name) {
+          tipMetadata.set(name, {
+            hash,
+            date: date || undefined,
+            dateRelative: dateRelative || undefined,
+            author: author || undefined,
+            message: message || undefined,
+          });
+        }
       }
     } catch { /* branch refs still come from the primary provider */ }
+
+    const goneBranches = new Set<string>();
+    try {
+      const raw = await this.git.raw([
+        'for-each-ref',
+        '--format=%(refname:short)%00%(upstream:track)',
+        'refs/heads/',
+      ]);
+      for (const line of raw.trim().split('\n')) {
+        const [name, track] = line.split('\0');
+        if (name && track === '[gone]') goneBranches.add(name);
+      }
+    } catch { /* upstream:track unsupported or no upstream configured — treat as not gone */ }
 
     const vsRepo = this.vsRepo();
     if (vsRepo) {
@@ -429,8 +456,12 @@ export class GitService {
           fullName: `refs/heads/${name}`,
           isHead,
           isRemote: false,
+          upstreamGone: goneBranches.has(name),
           lastCommitHash: ref.commit ?? tipMetadata.get(name)?.hash,
           lastCommitDate: tipMetadata.get(name)?.date,
+          lastCommitDateRelative: tipMetadata.get(name)?.dateRelative,
+          lastCommitMessage: tipMetadata.get(name)?.message,
+          lastCommitAuthor: tipMetadata.get(name)?.author,
           aheadBehind: (isHead && head!.ahead !== undefined && head!.behind !== undefined)
             ? { ahead: head!.ahead, behind: head!.behind }
             : undefined,
@@ -442,6 +473,9 @@ export class GitService {
         // Use ref.remote for the remote name — splitting ref.name on '/' breaks for branch
         // names that themselves contain slashes.
         const name = ref.name ?? '';
+        // Skip the remote's symbolic default-branch pointer (e.g. "origin/HEAD") — it's not
+        // a real branch, just an alias, and would otherwise show up as a phantom branch.
+        if (name.endsWith('/HEAD')) continue;
         const remoteName = ref.remote ?? name.split('/')[0];
         branches.push({
           repoId: this.repoId,
@@ -452,6 +486,9 @@ export class GitService {
           remoteName,
           lastCommitHash: ref.commit ?? tipMetadata.get(name)?.hash,
           lastCommitDate: tipMetadata.get(name)?.date,
+          lastCommitDateRelative: tipMetadata.get(name)?.dateRelative,
+          lastCommitMessage: tipMetadata.get(name)?.message,
+          lastCommitAuthor: tipMetadata.get(name)?.author,
         });
       }
 
@@ -466,6 +503,9 @@ export class GitService {
       if (branch.current && name.startsWith('(HEAD detached')) continue;
       const isRemote = name.startsWith('remotes/');
       const cleanName = isRemote ? name.replace(/^remotes\//, '') : name;
+      // Skip the remote's symbolic default-branch pointer (e.g. "origin/HEAD") — it's not
+      // a real branch, just an alias, and would otherwise show up as a phantom branch.
+      if (isRemote && cleanName.endsWith('/HEAD')) continue;
       const remoteName = isRemote ? cleanName.split('/')[0] : undefined;
       let aheadBehind: { ahead: number; behind: number } | undefined;
       const full = branch.label?.match(/\[.+?: ahead (\d+), behind (\d+)\]/);
@@ -481,8 +521,12 @@ export class GitService {
         isHead: branch.current,
         isRemote,
         remoteName,
+        upstreamGone: !isRemote && goneBranches.has(cleanName),
         lastCommitHash: tipMetadata.get(cleanName)?.hash ?? branch.commit,
         lastCommitDate: tipMetadata.get(cleanName)?.date,
+        lastCommitDateRelative: tipMetadata.get(cleanName)?.dateRelative,
+        lastCommitMessage: tipMetadata.get(cleanName)?.message,
+        lastCommitAuthor: tipMetadata.get(cleanName)?.author,
         aheadBehind,
       });
     }
@@ -1478,6 +1522,18 @@ export class GitService {
     await this.git.checkout(branchName);
   }
 
+  async checkoutDetached(ref: string): Promise<void> {
+    // VS Code's Repository.checkout(treeish) has no detached option and would follow
+    // a branch name instead of detaching from it, so this always shells out directly.
+    this._pendingDetachedTag = undefined;
+    await this.git.raw(['checkout', '--detach', ref]);
+  }
+
+  async checkoutDetachedForce(ref: string): Promise<void> {
+    this._pendingDetachedTag = undefined;
+    await this.git.raw(['checkout', '--detach', '-f', ref]);
+  }
+
   async createBranch(branchName: string, from?: string): Promise<void> {
     const vsRepo = this.vsRepo();
     if (vsRepo) { await vsRepo.createBranch(branchName, false, from); return; }
@@ -1528,6 +1584,38 @@ export class GitService {
     await this.git.deleteLocalBranch(branchName, force);
   }
 
+  /** Deletes a branch on the remote itself (`git push <remote> --delete <branch>`), not just
+   * the local remote-tracking ref — `branchName` is the bare branch name, without the
+   * `<remote>/` prefix a remote-tracking BranchInfo carries in its `name`. */
+  async deleteRemoteBranch(remote: string, branchName: string): Promise<void> {
+    await this.git.raw(['push', remote, '--delete', `refs/heads/${branchName}`]);
+  }
+
+  /**
+   * Resolves the remote's actual default branch (bare name, e.g. "main") via the
+   * `refs/remotes/<remote>/HEAD` symref — the same pointer `git clone` sets up and that
+   * GitHub/GitLab/etc. report as the repository's default branch. Falls back to asking the
+   * remote directly (`ls-remote --symref`, no local state changed) when the symref hasn't
+   * been set up locally (e.g. a shallow clone, or after `git remote add` without a fetch).
+   * Returns undefined if neither resolves (offline, remote unreachable, no such remote).
+   */
+  async getRemoteDefaultBranch(remote: string): Promise<string | undefined> {
+    try {
+      const raw = await this.git.raw(['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]);
+      const ref = raw.trim();
+      if (ref.startsWith(`${remote}/`)) return ref.slice(remote.length + 1);
+    } catch { /* symref not set up locally — fall through to asking the remote */ }
+
+    try {
+      const raw = await this.git.raw(['ls-remote', '--symref', remote, 'HEAD']);
+      // e.g. "ref: refs/heads/main\tHEAD"
+      const match = raw.match(/^ref:\s*refs\/heads\/(\S+)\s+HEAD/m);
+      if (match) return match[1];
+    } catch { /* remote unreachable — caller falls back to the naming heuristic */ }
+
+    return undefined;
+  }
+
   async checkoutForce(branchName: string): Promise<void> {
     // VS Code API has no force checkout — use simple-git
     await this.git.checkout(['-f', branchName]);
@@ -1542,6 +1630,15 @@ export class GitService {
     // VS Code API pull() doesn't accept remote/branch args — use simple-git
     const args = rebase ? ['pull', '--rebase', remote, branch] : ['pull', remote, branch];
     await this.git.raw(args);
+  }
+
+  /**
+   * Updates a local branch from its upstream without checking it out, by fetching straight
+   * into the local ref. Git refuses this fetch when it isn't a fast-forward, which is the
+   * right outcome here — there's no working tree to merge into for a branch that isn't current.
+   */
+  async pullBranchFastForward(remote: string, remoteBranchName: string, localBranch: string): Promise<void> {
+    await this.git.raw(['fetch', remote, `${remoteBranchName}:${localBranch}`]);
   }
 
   async localBranchExists(branch: string): Promise<boolean> {
@@ -1726,17 +1823,37 @@ export class GitService {
     return (await this.git.revparse(['--verify', ref])).trim();
   }
 
-  async getTags(): Promise<Array<{ name: string; hash: string; date: string }>> {
+  async getTags(): Promise<Array<{
+    name: string;
+    hash: string;
+    date: string;
+    dateRelative?: string;
+    message?: string;
+    author?: string;
+  }>> {
     // Use %(refname:strip=2) instead of %(refname:short) to always strip refs/tags/
     // prefix — %(refname:short) may return "tags/<name>" when a branch with the
     // same name exists, which causes display and matching issues.
+    // %(objectname:short) and %(creatordate) reflect the tag object itself for annotated
+    // tags; %(*authorname)/%(*contents:subject) fall back to the pointed-at commit for both
+    // annotated and lightweight tags (empty %(*...) fields when not applicable).
     const out = await this.git.raw([
       'tag', '--sort=-creatordate',
-      '--format=%(refname:strip=2)%09%(objectname:short)%09%(creatordate:iso)',
+      '--format=%(refname:strip=2)%09%(objectname:short)%09%(creatordate:iso)%09%(creatordate:relative)%09%(*authorname)%(authorname)%09%(*contents:subject)%(contents:subject)',
     ]).catch(() => '');
     return out.trim().split('\n').filter(Boolean).map(line => {
-      const [name, hash, ...dateParts] = line.split('\t');
-      return { name: name.trim(), hash: hash.trim(), date: dateParts.join('\t').trim() };
+      // Subject (the trailing field) may itself contain a literal tab — reassemble the
+      // remainder instead of a straight positional split so it isn't silently truncated.
+      const [name, hash, date, dateRelative, author, ...messageParts] = line.split('\t');
+      const message = messageParts.join('\t');
+      return {
+        name: name.trim(),
+        hash: hash.trim(),
+        date: date.trim(),
+        dateRelative: dateRelative?.trim() || undefined,
+        author: author?.trim() || undefined,
+        message: message?.trim() || undefined,
+      };
     });
   }
 

@@ -6,6 +6,7 @@ import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { TreeGuideLines, useTreeGuideHoverStyle } from '../../shared/TreeGuides';
+import { focusOnHover } from '../../shared/keyboardNav';
 
 interface Props {
   repoId: string;
@@ -153,15 +154,21 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
   const allSelected = selectedCount === allFiles.length;
   const someSelected = selectedCount > 0 && !allSelected;
   const [hovered, setHovered] = useState(false);
-  const ctxActive = activeFolderPath === node.path;
+  const [focused, setFocused] = useState(false);
+  const ctxActive = activeFolderPath === node.path || focused;
 
   return (
     <div>
       <div
+        data-nav-row=""
+        tabIndex={-1}
         style={{ ...styles.treeDir, position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px`, background: ctxActive ? 'var(--vscode-list-inactiveSelectionBackground)' : hovered ? 'var(--vscode-list-hoverBackground)' : undefined, borderRadius: '2px' }}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={(e) => { setHovered(true); focusOnHover(e.currentTarget); }}
         onMouseLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onContextMenu={(e) => { e.preventDefault(); onFolderContextMenu(e, repoId, node.path, allFiles); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCollapsed(collapseKey); } }}
       >
         <TreeGuideLines depth={depth} offset={basePad + GUIDE_ICON_CENTER} step={LEVEL_PAD} />
         <Checkbox
@@ -202,12 +209,15 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
   const fileName = file.path.split('/').pop() ?? file.path;
   const dir = (() => { const p = file.path.split('/'); return p.length > 1 ? p.slice(0, -1).join('/') : ''; })();
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const isSubmodule = file.status === 'submodule';
 
   return (
     <div
-      style={{ ...styles.row(isSelected, isCtxActive, hovered), position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
+      data-nav-row=""
+      tabIndex={-1}
+      style={{ ...styles.row(isSelected, isCtxActive || focused, hovered), position: 'relative', paddingLeft: `${basePad + depth * LEVEL_PAD}px`, ...(isMultiSelected && !isSelected ? { background: 'color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 70%, var(--vscode-focusBorder, #007acc) 30%)' } : {}) }}
       onClick={isSubmodule ? undefined : (e) => {
         if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
           e.stopPropagation();
@@ -217,8 +227,14 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
         onSelect(file);
       }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={(e) => { setHovered(true); focusOnHover(e.currentTarget); }}
       onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onKeyDown={isSubmodule ? undefined : (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); onSelect(file); }
+        else if (e.key === ' ') { e.preventDefault(); onToggleFile(repoId, file.path); }
+      }}
       title={file.path}
     >
       <TreeGuideLines depth={depth} offset={basePad + GUIDE_ICON_CENTER} step={LEVEL_PAD} />
@@ -286,6 +302,7 @@ const styles = {
     alignItems: 'center',
     paddingRight: '8px',
     cursor: 'pointer',
+    outline: 'none',
     background: selected
       ? 'var(--vscode-list-activeSelectionBackground)'
       : ctxActive
@@ -350,6 +367,7 @@ const styles = {
     color: 'var(--vscode-foreground)',
     paddingRight: '8px',
     gap: '0',
+    outline: 'none',
   } as React.CSSProperties,
   treeDirInner: {
     display: 'flex',

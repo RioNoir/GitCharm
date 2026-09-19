@@ -11,6 +11,7 @@ import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { CommitRow } from '../../shared/CommitRow';
 import { FileTreeView } from '../../shared/FileTreeView';
 import { GenericFileTree } from '../../shared/GenericFileTree';
+import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import type { ChangedFile } from '../../../host/types/messages';
 
 function generateId() {
@@ -758,6 +759,10 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                       style={styles.refBadge(b.kind === 'tag' ? tagColor() : branchColor(b.name, false), false)}
                       title={`${b.name} contains this commit`}
                     >
+                      <Codicon
+                        name={b.kind === 'tag' ? 'tag' : b.kind === 'remote' ? 'cloud' : 'git-branch'}
+                        style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }}
+                      />
                       {b.name}
                     </span>
                   ))}
@@ -930,7 +935,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
       )}
 
       {/* File list */}
-      <div style={styles.fileList}>
+      <div style={styles.fileList} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
         {activeLoading && <div style={styles.loading}>Loading files...</div>}
         {!activeLoading && activeFiles.length === 0 && (
           <div style={styles.loading}>No changed files</div>

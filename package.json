@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -61,7 +61,7 @@
       "activitybar": [
         {
           "id": "gitcharm-commit",
-          "title": "GitCharm Commit",
+          "title": "GitCharm",
           "icon": "media/icons/git-commit.svg"
         }
       ],
@@ -78,7 +78,7 @@
         {
           "type": "webview",
           "id": "gitcharm.commitPanel",
-          "name": "GitCharm Commit",
+          "name": "GitCharm",
           "retainContextWhenHidden": true
         },
         {
@@ -135,6 +135,12 @@
         "title": "Fetch All Remotes",
         "category": "GitCharm",
         "icon": "$(repo-fetch)"
+      },
+      {
+        "command": "gitcharm.checkOrphanBranches",
+        "title": "Check for Orphaned Branches",
+        "category": "GitCharm",
+        "icon": "$(cloud-offline)"
       },
       {
         "command": "gitcharm.syncAll",
@@ -564,6 +570,9 @@
           "command": "gitcharm.fetchAll"
         },
         {
+          "command": "gitcharm.checkOrphanBranches"
+        },
+        {
           "command": "gitcharm.updateProject"
         },
         {
@@ -847,6 +856,15 @@
             },
             "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
           },
+          "gitcharm.branchNameModels": {
+            "order": 75,
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "Branch name prefixes suggested when creating a new branch (e.g. \"feature/\", \"bugfix/\", \"revert-\"). Stored normalized with a trailing \"*\" (e.g. \"feature/*\"); entries already containing a wildcard (e.g. \"feature/**\") are kept as-is."
+          },
           "gitcharm.fetchOnStartup": {
             "order": 40,
             "type": "boolean",
@@ -864,6 +882,12 @@
             "type": "boolean",
             "default": true,
             "description": "Show a notification on startup when there are unpushed commits ready to push"
+          },
+          "gitcharm.notifyOnOrphanBranches": {
+            "order": 57,
+            "type": "boolean",
+            "default": true,
+            "description": "Show a notification after fetching when local branches have lost their remote (upstream deleted, e.g. after a PR merge)"
           },
           "gitcharm.projectColors": {
             "order": 110,

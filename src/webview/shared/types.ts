@@ -31,6 +31,8 @@ export interface RepoMeta {
   depth?: number;
   isWorktree?: boolean;
   mainWorktreePath?: string;
+  /** Bare name of the remote's actual default branch (e.g. "main"). */
+  defaultBranch?: string;
 }
 
 export interface BranchInfo {
@@ -41,9 +43,13 @@ export interface BranchInfo {
   isRemote: boolean;
   remoteName?: string;
   upstream?: string;
+  upstreamGone?: boolean;
   aheadBehind?: { ahead: number; behind: number };
   lastCommitHash?: string;
   lastCommitDate?: string;
+  lastCommitDateRelative?: string;
+  lastCommitMessage?: string;
+  lastCommitAuthor?: string;
   detachedTag?: string;
   detachedHash?: string;       // short hash for display
   detachedFullHash?: string;   // full hash for commit matching

@@ -1,11 +1,23 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { RepoMeta } from '../types/git';
+import type { GitService } from '../git/GitService';
+import type { RepoMeta, BranchInfo } from '../types/git';
 import { isPrimaryBranch } from '../utils/branchUtils';
 import type { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
-import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
+import { formatGitError, showGitError, getRawErrorDetail, isBranchAlreadyExistsError } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
+import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
+import { promptBranchName } from '../utils/branchNamePrompt';
+import { pickRefQuickPick } from '../utils/refPicker';
+
+/** Formats a branch's last commit as "hash  •  author  •  message" for a QuickPick detail line. */
+function formatCommitDetail(b: BranchInfo | undefined): string | undefined {
+  if (!b) return undefined;
+  const parts = [b.lastCommitHash?.slice(0, 8), b.lastCommitAuthor, b.lastCommitMessage].filter(Boolean);
+  return parts.length > 0 ? parts.join('  •  ') : undefined;
+}
 
 export class BranchStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -159,7 +171,7 @@ export class BranchStatusBar implements vscode.Disposable {
     const hasRemote = isCurrent ? !!currentBranch.upstream : remoteNames.has(branchName);
     const hasUnpushed = !hasRemote || ((branch?.aheadBehind?.ahead ?? 0) > 0);
     const effectiveBranchName = currentBranch.detachedTag ?? currentBranch.detachedHash ?? currentBranch.name;
-    await this.showSingleBranchActionMenu(branchName, meta, isCurrent, false, hasUnpushed, effectiveBranchName);
+    await this.showSingleBranchActionMenu(branchName, meta, isCurrent, false, hasUnpushed, effectiveBranchName, false);
   }
 
   async showMenu(repoId?: string): Promise<void> {
@@ -214,36 +226,40 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} } as unknown as MenuItem);
     }
 
+    const isSingleRepo = metas.length === 1;
+
     items.push(
       {
-        label: '$(repo-fetch) Fetch All',
-        description: 'Fetch from all remotes in all repositories',
+        label: `$(repo-fetch) Fetch${isSingleRepo ? '' : ' All'}`,
+        description: isSingleRepo ? 'Fetch from all remotes' : 'Fetch from all remotes in all repositories',
         action: () => this.fetchAll(),
       },
       {
-        label: `${this.hasBehind ? '$(arrow-down) ' : '$(repo-pull) '}Pull All (Update Project)…`,
-        description: this.hasBehind ? `Pull all repositories (${this.totalBehind} incoming commit${this.totalBehind !== 1 ? 's' : ''})` : 'Pull all repositories',
+        label: `${this.hasBehind ? '$(arrow-down) ' : '$(repo-pull) '}Pull${isSingleRepo ? '' : ' All'} (Update Project)…`,
+        description: this.hasBehind
+          ? `Pull ${isSingleRepo ? '' : 'all repositories '}(${this.totalBehind} incoming commit${this.totalBehind !== 1 ? 's' : ''})`
+          : isSingleRepo ? 'Pull from remote' : 'Pull all repositories from remote',
         action: () => this.updateProject(),
       },
       {
-        label: `${this.hasUnpushed ? '$(arrow-up) ' : '$(repo-push) '}Push All…`,
+        label: `${this.hasUnpushed ? '$(arrow-up) ' : '$(repo-push) '}Push${isSingleRepo ? '' : ' All'}…`,
         description: this.hasUnpushed
           ? `Push commits to remote (${this.totalAhead} commit${this.totalAhead !== 1 ? 's' : ''} to push${this.hasNoUpstream ? ', some branches have no upstream' : ''})`
-          : this.hasNoUpstream ? 'Some branches have no upstream set' : 'Push all repositories to remote',
+          : this.hasNoUpstream ? 'Some branches have no upstream set' : `Push${isSingleRepo ? '' : ' all repositories'} to remote`,
         action: async () => { await vscode.commands.executeCommand('gitcharm.push'); },
       },
       {
-        label: '$(repo-force-push) Force Push All…',
-        description: 'Force push all repositories',
+        label: `$(repo-force-push) Force Push${isSingleRepo ? '' : ' All'}…`,
+        description: isSingleRepo ? 'Force push to remote' : 'Force push all repositories to remote',
         action: async () => {
           const confirm = await vscode.window.showWarningMessage(
-            'Force push all repositories? This will overwrite remote history.',
+            isSingleRepo ? 'Force push? This will overwrite remote history.' : 'Force push all repositories? This will overwrite remote history.',
             { modal: true }, 'Force Push'
           );
           if (confirm !== 'Force Push') return;
           const metas = this.manager.getRepoMetas();
           await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Force pushing all repositories…', cancellable: false },
+            { location: vscode.ProgressLocation.Notification, title: isSingleRepo ? 'Force pushing…' : 'Force pushing all repositories…', cancellable: false },
             async () => {
               const errors: string[] = [];
               for (const meta of metas) {
@@ -268,28 +284,30 @@ export class BranchStatusBar implements vscode.Disposable {
         },
       },
       {
-        label: '$(sync) Sync All…',
-        description: 'Pull then push all repositories',
+        label: `$(sync) Sync${isSingleRepo ? '' : ' All'}…`,
+        description: isSingleRepo ? 'Pull then push' : 'Pull then push all repositories',
         action: async () => { await vscode.commands.executeCommand('gitcharm.syncAll'); },
       },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      {
+        label: '$(add) New Branch…',
+        description: isSingleRepo ? 'Create a new branch' : 'Create a new branch in all repositories',
+        action: () => this.newBranch(metas),
+      },
+      {
+        label: '$(tag) New Tag…',
+        description: isSingleRepo ? 'Create a new tag on HEAD' : 'Create a new tag on HEAD of all repositories',
+        action: () => this.newTagAllRepos(metas),
+      },
+      { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
         label: '$(git-commit) Commit',
         description: 'Open Commit panel',
         action: () => this.commitPanelReveal(),
       },
       {
-        label: '$(add) New Branch…',
-        description: 'Create a new branch',
-        action: () => this.newBranch(metas),
-      },
-      {
-        label: '$(tag) New Tag…',
-        description: 'Create a new tag on HEAD of all repositories',
-        action: () => this.newTagAllRepos(metas),
-      },
-      {
         label: '$(history) Log',
-        description: 'Open Git Log panel',
+        description: 'Open Log panel',
         action: async () => { await vscode.commands.executeCommand('gitcharm.openLog'); },
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
@@ -353,8 +371,17 @@ export class BranchStatusBar implements vscode.Disposable {
         return repo ? repo.getBranches() : [];
       })
     );
+    const isSingleRepo = metas.length === 1;
+    // Only meaningful with exactly one repo — with several, a same-named branch
+    // can point at different commits per repo, so per-commit info can't be shown as shared.
+    const singleRepoBranches = isSingleRepo && perRepo[0]?.status === 'fulfilled' ? perRepo[0].value : [];
+    const singleRepoService = isSingleRepo ? this.manager.getRepo(metas[0]!.id) : undefined;
+    const singleRepoPrimaryRemote = singleRepoBranches.find(b => b.isRemote)?.remoteName;
+    const actualDefaultBranch = singleRepoService && singleRepoPrimaryRemote
+      ? await singleRepoService.getRemoteDefaultBranch(singleRepoPrimaryRemote)
+      : undefined;
 
-    // Count local branches present in ALL repos
+    // Count local branches present in ALL repositories
     const localCount = new Map<string, number>();
     // For remote branches: key = full "remote/branch" name, count per repo
     const remoteCount = new Map<string, number>();
@@ -399,6 +426,9 @@ export class BranchStatusBar implements vscode.Disposable {
       if (head) heads.add(head.name);
     }
     const headLabel = [...heads].join(', ');
+    // With repositories on different branches, "current" is ambiguous for a shared branch
+    // entry — only show the checkmark/"current" label when every repo agrees on one branch.
+    const hasDivergence = heads.size > 1;
 
     if (commonLocal.length > 0) {
       items.push({
@@ -408,11 +438,17 @@ export class BranchStatusBar implements vscode.Disposable {
       } as unknown as typeof items[0]);
       for (const name of commonLocal) {
         const isCurrentSomewhere = heads.has(name);
-        const icon = isCurrentSomewhere ? '$(check)' : isPrimaryBranch(name) ? '$(star)' : '$(git-branch)';
+        const showAsCurrent = isCurrentSomewhere && !hasDivergence;
+        const icon = showAsCurrent ? '$(check)' : isPrimaryBranch(name, actualDefaultBranch) ? '$(star)' : '$(git-branch)';
+        const b = singleRepoBranches.find(x => !x.isRemote && x.name === name);
+        const aheadBehindLabel = b?.aheadBehind ? `↑${b.aheadBehind.ahead} ↓${b.aheadBehind.behind}` : '';
         items.push({
           label: `${icon} ${name}`,
-          description: isCurrentSomewhere ? 'current' : '',
-          action: () => this.showCommonBranchActionMenu(name, metas, isCurrentSomewhere, headLabel),
+          description: isSingleRepo
+            ? [aheadBehindLabel, showAsCurrent ? 'current' : undefined, b?.lastCommitDateRelative].filter(Boolean).join('  ')
+            : (showAsCurrent ? 'current' : ''),
+          detail: isSingleRepo ? formatCommitDetail(b) : undefined,
+          action: () => this.showCommonBranchActionMenu(name, metas, isCurrentSomewhere, headLabel, undefined, undefined, false, false, hasDivergence),
         });
       }
     }
@@ -425,13 +461,16 @@ export class BranchStatusBar implements vscode.Disposable {
       } as unknown as typeof items[0]);
       for (const fullName of commonRemote) {
         const baseName = fullName.includes('/') ? fullName.slice(fullName.indexOf('/') + 1) : fullName;
+        const b = singleRepoBranches.find(x => x.isRemote && x.name === fullName);
+        const primary = isPrimaryBranch(fullName, actualDefaultBranch);
         items.push({
           label: `$(cloud) ${fullName}`,
-          description: '',
+          description: isSingleRepo ? (b?.lastCommitDateRelative ?? '') : '',
+          detail: isSingleRepo ? formatCommitDetail(b) : undefined,
           // Checkout/pull/rename work on the local branch, but merge, rebase and
           // compare must use the remote ref the user actually picked — merging the
           // same-named local branch instead is usually a silent no-op.
-          action: () => this.showCommonBranchActionMenu(baseName, metas, false, headLabel, fullName),
+          action: () => this.showCommonBranchActionMenu(baseName, metas, false, headLabel, fullName, fullName, true, primary, hasDivergence),
         });
       }
     }
@@ -441,7 +480,7 @@ export class BranchStatusBar implements vscode.Disposable {
     items: Array<vscode.QuickPickItem & { action: () => Promise<void> | void }>,
     metas: RepoMeta[]
   ): Promise<void> {
-    // Fetch tags and current branch for all repos in parallel
+    // Fetch tags and current branch for all repositories in parallel
     const [perRepoTags, perRepoCurrent] = await Promise.all([
       Promise.allSettled(metas.map(async m => {
         const repo = this.manager.getRepo(m.id);
@@ -476,8 +515,8 @@ export class BranchStatusBar implements vscode.Disposable {
       }
     }
 
-    // For multi-repo: only show tags present in ALL repos that responded.
-    // fulfilled count tells us how many repos actually loaded tags.
+    // For multi-repo: only show tags present in ALL repositories that responded.
+    // fulfilled count tells us how many repositories actually loaded tags.
     const fulfilledCount = perRepoTags.filter(r => r.status === 'fulfilled').length;
     const minCount = metas.length === 1 ? 1 : fulfilledCount;
 
@@ -488,6 +527,11 @@ export class BranchStatusBar implements vscode.Disposable {
 
     if (tagNames.length === 0) return;
 
+    const isSingleRepo = metas.length === 1;
+    // Per-commit tag info (hash/author/message) is only meaningful with a single repo —
+    // with several, the "same" tag name can point at different commits per repo.
+    const singleRepoTags = isSingleRepo && perRepoTags[0]?.status === 'fulfilled' ? perRepoTags[0].value.tags : [];
+
     const sectionLabel = metas.length === 1 ? 'TAGS' : 'COMMON TAGS';
     items.push({
       label: sectionLabel,
@@ -497,12 +541,16 @@ export class BranchStatusBar implements vscode.Disposable {
 
     for (const tagName of tagNames) {
       const isActive = activeDetachedTags.has(tagName);
-      // Only pass the repos that actually have this tag
+      // Only pass the repositories that actually have this tag
       const tagMetas = metas.filter(m => tagRepoIds.get(tagName)?.includes(m.id));
       const icon = isActive ? '$(check)' : '$(tag)';
+      const t = singleRepoTags.find(x => x.name === tagName);
       items.push({
         label: `${icon} ${tagName}`,
-        description: isActive ? 'current' : '',
+        description: isSingleRepo
+          ? [isActive ? 'current' : undefined, t?.dateRelative].filter(Boolean).join('  ')
+          : (isActive ? 'current' : ''),
+        detail: isSingleRepo && t ? [t.author, t.hash, t.message].filter(Boolean).join('  •  ') : undefined,
         action: () => this.showCommonTagActionMenu(tagName, tagMetas),
       });
     }
@@ -557,7 +605,7 @@ export class BranchStatusBar implements vscode.Disposable {
               void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
                 .then(choice => { if (choice === 'Show Log') showLogChannel(); });
             } else {
-              const msg = `tag "${tagName}" pushed to "${remote}" in ${metas.length} repos.`;
+              const msg = `tag "${tagName}" pushed to "${remote}" in ${metas.length} repositories.`;
               vscode.window.showInformationMessage(msg);
               logInfo('push-tag', msg);
             }
@@ -574,7 +622,7 @@ export class BranchStatusBar implements vscode.Disposable {
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
         label: '$(arrow-right) Checkout',
-        description: `Checkout tag "${tagName}" in all repos (detached HEAD)`,
+        description: metas.length === 1 ? `Checkout tag "${tagName}" (detached HEAD)` : `Checkout tag "${tagName}" in all repositories (detached HEAD)`,
         action: async () => {
           await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: `Checking out tag "${tagName}"…`, cancellable: false },
@@ -592,7 +640,7 @@ export class BranchStatusBar implements vscode.Disposable {
                 void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
                   .then(choice => { if (choice === 'Show Log') showLogChannel(); });
               } else {
-                const msg = `checked out tag "${tagName}" in ${metas.length} repos.`;
+                const msg = `checked out tag "${tagName}" in ${metas.length} repositories.`;
                 vscode.window.showInformationMessage(msg);
                 logInfo('checkout-tag', msg);
               }
@@ -620,7 +668,7 @@ export class BranchStatusBar implements vscode.Disposable {
                 void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
                   .then(choice => { if (choice === 'Show Log') showLogChannel(); });
               } else {
-                const msg = `merged tag "${tagName}" in ${metas.length} repos.`;
+                const msg = `merged tag "${tagName}" in ${metas.length} repositories.`;
                 vscode.window.showInformationMessage(msg);
                 logInfo('merge-tag', msg);
               }
@@ -633,7 +681,7 @@ export class BranchStatusBar implements vscode.Disposable {
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
         label: '$(trash) Delete tag',
-        description: `Delete tag "${tagName}" in all repos`,
+        description: metas.length === 1 ? `Delete tag "${tagName}"` : `Delete tag "${tagName}" in all repositories`,
         action: async () => {
           const pick = await vscode.window.showWarningMessage(
             `Delete tag "${tagName}" in ${metas.length} ${metas.length === 1 ? 'repository' : 'repositories'}?`,
@@ -666,7 +714,7 @@ export class BranchStatusBar implements vscode.Disposable {
                 void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
                   .then(choice => { if (choice === 'Show Log') showLogChannel(); });
               } else {
-                const msg = `deleted tag "${tagName}" in ${metas.length} repos.`;
+                const msg = `deleted tag "${tagName}" in ${metas.length} repositories.`;
                 vscode.window.showInformationMessage(msg);
                 logInfo('delete-tag', msg);
               }
@@ -693,6 +741,12 @@ export class BranchStatusBar implements vscode.Disposable {
     currentBranchName: string,
     /** Ref to merge/rebase/compare against — the remote ref for remote entries. */
     ref: string = branchName,
+    /** Name to show in labels — the full "remote/branch" for remote entries, else same as branchName. */
+    displayName: string = branchName,
+    isRemote: boolean = false,
+    isPrimary: boolean = false,
+    /** True when the target repositories aren't all on the same current branch. */
+    hasDivergence: boolean = metas.length > 1,
   ): Promise<void> {
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
 
@@ -704,52 +758,74 @@ export class BranchStatusBar implements vscode.Disposable {
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
         label: '$(arrow-right) Checkout',
-        description: `Switch all repos to ${branchName}`,
+        description: metas.length === 1 ? `Switch to ${displayName}` : `Switch all repositories to ${displayName}`,
         action: () => this.checkoutBranchAllRepos(branchName, metas),
       },
       {
-        label: `$(add) New branch from '${branchName}'…`,
+        label: `$(add) New branch from '${displayName}'…`,
+        description: metas.length === 1 ? '' : 'in all repositories',
         action: () => this.newBranchFrom(branchName, metas),
       },
       {
         label: '$(cloud-download) Update (Pull)',
-        description: `Pull ${branchName} in all repos`,
+        description: metas.length === 1 ? `Pull ${displayName}` : `Pull ${displayName} in all repositories`,
         action: () => this.pullBranchAllRepos(branchName, metas),
       },
       {
         label: '$(edit) Rename…',
+        description: metas.length === 1 ? '' : 'in all repositories',
         action: () => this.renameBranchAllRepos(branchName, metas),
+      },
+      {
+        label: `$(git-compare) Compare '${displayName}' with…`,
+        description: metas.length === 1 ? '' : 'in all repositories',
+        action: () => this.compareBranchAllReposWith(branchName, metas),
       },
     ];
 
-    if (!isCurrent) {
+    // These act against a single "current branch" ref, which is ambiguous across repositories
+    // that aren't all on the same branch — only offer them when every repo agrees on one.
+    if (!isCurrent && !hasDivergence) {
       items.push(
         { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
         {
-          label: `$(git-compare) Compare with '${ref}'…`,
+          label: `$(git-compare) Compare '${currentBranchName}' with '${ref}'`,
+          description: metas.length === 1 ? '' : 'in all repositories',
           action: () => this.compareBranchAllRepos(ref, metas, currentBranchName),
         },
         {
           label: `$(repo-forked) Rebase '${currentBranchName}' onto '${ref}'`,
+          description: metas.length === 1 ? '' : 'in all repositories',
           action: () => this.rebaseAllRepos(ref, metas),
         },
         {
           label: `$(git-merge) Merge '${ref}' into '${currentBranchName}'`,
+          description: metas.length === 1 ? '' : 'in all repositories',
           action: () => this.mergeBranchAllRepos(ref, metas),
+        },
+        {
+          label: `$(git-merge) Checkout '${ref}' and merge '${currentBranchName}' into it`,
+          description: metas.length === 1 ? '' : 'in all repositories',
+          action: () => this.checkoutAndMergeBranchAllRepos(ref, currentBranchName, metas),
         },
       );
     }
 
     items.push(
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
-      {
-        label: '$(trash) Delete…',
-        action: () => this.deleteBranchAllRepos(branchName, metas),
-      },
     );
+    // The remote's default branch (e.g. "origin/main") can't be deleted from the remote —
+    // don't offer the action at all rather than let it fail.
+    if (!(isRemote && isPrimary)) {
+      items.push({
+        label: '$(trash) Delete…',
+        description: metas.length === 1 ? '' : 'in all repositories',
+        action: () => this.deleteBranchAllRepos(branchName, metas),
+      });
+    }
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: branchName,
+      title: displayName,
       matchOnDescription: true,
     }) as ActionItem | undefined;
 
@@ -897,10 +973,9 @@ export class BranchStatusBar implements vscode.Disposable {
 
   private async newBranch(metas: RepoMeta[]): Promise<void> {
     // Step 1: branch name
-    const branchName = await vscode.window.showInputBox({
+    const branchName = await promptBranchName({
       title: 'New Branch — Name',
       prompt: 'Enter the new branch name',
-      validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
     });
     if (!branchName) return;
 
@@ -923,7 +998,7 @@ export class BranchStatusBar implements vscode.Disposable {
     if (!basePick) return;
     const baseFrom = basePick.value === BASE_CURRENT ? undefined : basePick.value;
 
-    // Step 3: target repos
+    // Step 3: target repositories
     const repoItems = metas.map(m => ({
       label: `$(root-folder) ${m.name}`,
       description: m.rootPath,
@@ -932,7 +1007,7 @@ export class BranchStatusBar implements vscode.Disposable {
     }));
     const pickedRepos = await vscode.window.showQuickPick(repoItems, {
       title: 'New Branch — Repositories',
-      placeHolder: 'Select repos to create the branch in',
+      placeHolder: 'Select repositories to create the branch in',
       canPickMany: true,
     });
     if (!pickedRepos || pickedRepos.length === 0) return;
@@ -953,6 +1028,8 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: `Creating branch "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
+        const alreadyExisted: string[] = [];
+        let succeeded = 0;
         for (const item of pickedRepos) {
           const repo = this.manager.getRepo((item as typeof repoItems[number]).repoId);
           if (!repo) continue;
@@ -962,16 +1039,55 @@ export class BranchStatusBar implements vscode.Disposable {
             } else {
               await repo.createBranch(branchName, baseFrom);
             }
+            succeeded++;
           } catch (e: unknown) {
-            logError(`new-branch:${item.label}`, formatGitError(e), getRawErrorDetail(e));
-            errors.push(`${item.label}: ${formatGitError(e)}`);
+            if (isBranchAlreadyExistsError(e)) {
+              alreadyExisted.push(item.label);
+              if (doCheckout) {
+                try {
+                  await repo.checkout(branchName);
+                  succeeded++;
+                } catch (e2: unknown) {
+                  const { matched, succeeded: recovered } = await handleDirtyCheckout(repo, item.label, branchName, e2, {
+                    checkout: () => repo.checkout(branchName),
+                    checkoutForce: () => repo.checkoutForce(branchName),
+                  });
+                  if (recovered) {
+                    succeeded++;
+                  } else if (!matched) {
+                    logError(`new-branch:${item.label}`, formatGitError(e2), getRawErrorDetail(e2));
+                    errors.push(`${item.label}: ${formatGitError(e2)}`);
+                  }
+                }
+              } else {
+                succeeded++;
+              }
+            } else if (doCheckout) {
+              const { matched, succeeded: recovered } = await handleDirtyCheckout(repo, item.label, branchName, e, {
+                checkout: () => repo.checkout(branchName, true, baseFrom),
+                checkoutForce: async () => { await repo.createBranch(branchName, baseFrom); await repo.checkoutForce(branchName); },
+              });
+              if (recovered) {
+                succeeded++;
+              } else if (!matched) {
+                logError(`new-branch:${item.label}`, formatGitError(e), getRawErrorDetail(e));
+                errors.push(`${item.label}: ${formatGitError(e)}`);
+              }
+            } else {
+              logError(`new-branch:${item.label}`, formatGitError(e), getRawErrorDetail(e));
+              errors.push(`${item.label}: ${formatGitError(e)}`);
+            }
           }
         }
         if (errors.length > 0) {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
-        } else {
-          const msg = `Branch "${branchName}" created in ${pickedRepos.length} ${pickedRepos.length === 1 ? 'repo' : 'repos'}.`;
+        } else if (alreadyExisted.length > 0) {
+          const msg = `Branch "${branchName}" already existed in ${alreadyExisted.length} ${alreadyExisted.length === 1 ? 'repository' : 'repositories'}${doCheckout ? ' — checked out' : ''}; created in the rest.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('new-branch', msg);
+        } else if (succeeded > 0) {
+          const msg = `Branch "${branchName}" created in ${succeeded} ${succeeded === 1 ? 'repository' : 'repositories'}.`;
           vscode.window.showInformationMessage(msg);
           logInfo('new-branch', msg);
         }
@@ -991,6 +1107,8 @@ export class BranchStatusBar implements vscode.Disposable {
     ]);
     const local = branches.filter(b => !b.isRemote);
     const remote = branches.filter(b => b.isRemote);
+    const primaryRemoteName = remote[0]?.remoteName;
+    const actualDefaultBranch = primaryRemoteName ? await repo.getRemoteDefaultBranch(primaryRemoteName) : undefined;
     const effectiveBranchName = currentBranch.detachedTag ?? currentBranch.detachedHash ?? currentBranch.name;
     const isDetached = !!currentBranch.detachedTag || !!currentBranch.detachedHash || currentBranch.name === 'HEAD';
 
@@ -1140,40 +1258,48 @@ export class BranchStatusBar implements vscode.Disposable {
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
         label: '$(add) New Branch…',
-        description: `Create a new branch in ${meta.name}`,
+        description: `Create a new branch`,
         action: () => this.newBranchSingleRepo(meta),
       },
       {
         label: '$(tag) New Tag…',
-        description: `Create a new tag on HEAD in ${meta.name}`,
+        description: `Create a new tag on HEAD`,
         action: () => this.newTagSingleRepo(meta),
       },
       {
+        label: '$(git-commit) Checkout detached…',
+        description: 'Checkout a branch without attaching HEAD',
+        action: () => this.checkoutDetachedSingleRepo(meta),
+      },
+      {
         label: '$(remote-explorer) Manage Remotes…',
-        description: 'Add, remove, or edit remote repositories',
+        description: 'Add, remove, or edit remotes',
         action: () => this.showRepoRemotesMenu(meta),
       },
       { label: 'LOCAL', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       ...local.map(b => {
-        const primary = isPrimaryBranch(b.name);
+        const primary = isPrimaryBranch(b.name, actualDefaultBranch);
         const icon = b.isHead ? '$(check)' : primary ? '$(star)' : '$(git-branch)';
         const remoteNames = new Set(remote.map(r => r.name.replace(/^[^/]+\//, '')));
         const hasRemote = b.isHead ? !!currentBranch.upstream : remoteNames.has(b.name);
         const hasUnpushed = !hasRemote || (b.aheadBehind?.ahead ?? 0) > 0;
+        const aheadBehindLabel = b.aheadBehind ? `↑${b.aheadBehind.ahead} ↓${b.aheadBehind.behind}` : '';
         return {
           label: `${icon} ${b.name}`,
-          description: b.aheadBehind ? `↑${b.aheadBehind.ahead} ↓${b.aheadBehind.behind}` : '',
-          action: () => this.showSingleBranchActionMenu(b.name, meta, b.isHead, false, hasUnpushed, effectiveBranchName),
+          description: [aheadBehindLabel, b.lastCommitDateRelative].filter(Boolean).join('  '),
+          detail: formatCommitDetail(b),
+          action: () => this.showSingleBranchActionMenu(b.name, meta, b.isHead, false, hasUnpushed, effectiveBranchName, primary),
         };
       }),
       { label: 'REMOTE', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       ...remote.map(b => {
-        const primary = isPrimaryBranch(b.name);
+        const primary = isPrimaryBranch(b.name, actualDefaultBranch);
         const icon = primary ? '$(star)' : '$(cloud)';
         return {
           label: `${icon} ${b.name}`,
-          description: '',
-          action: () => this.showSingleBranchActionMenu(b.name, meta, false, true, false, effectiveBranchName),
+          description: b.lastCommitDateRelative ?? '',
+          detail: formatCommitDetail(b),
+          action: () => this.showSingleBranchActionMenu(b.name, meta, false, true, false, effectiveBranchName, primary),
         };
       }),
     ];
@@ -1185,7 +1311,8 @@ export class BranchStatusBar implements vscode.Disposable {
         const icon = isActiveTag ? '$(check)' : '$(tag)';
         items.push({
           label: `${icon} ${tag.name}`,
-          description: isActiveTag ? 'current' : tag.hash,
+          description: [isActiveTag ? 'current' : undefined, tag.dateRelative].filter(Boolean).join('  '),
+          detail: [tag.author, tag.hash, tag.message].filter(Boolean).join('  •  '),
           action: () => this.showSingleTagActionMenu(tag.name, meta, effectiveBranchName, isDetached),
         });
       }
@@ -1350,6 +1477,7 @@ export class BranchStatusBar implements vscode.Disposable {
     isRemote: boolean,
     hasUnpushed: boolean,
     currentBranchName: string,
+    isPrimary: boolean = false,
   ): Promise<void> {
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
 
@@ -1375,6 +1503,10 @@ export class BranchStatusBar implements vscode.Disposable {
         label: '$(edit) Rename…',
         action: () => this.renameBranchSingleRepo(branchName, meta),
       },
+      {
+        label: `$(git-compare) Compare '${branchName}' with…`,
+        action: () => this.compareSingleRepoWith(branchName, meta),
+      },
     ];
 
     if (hasUnpushed) {
@@ -1388,7 +1520,7 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push(
         { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
         {
-          label: `$(git-compare) Compare with '${branchName}'…`,
+          label: `$(git-compare) Compare '${currentBranchName}' with '${branchName}'`,
           action: () => this.compareSingleRepo(branchName, meta, currentBranchName),
         },
         {
@@ -1399,12 +1531,21 @@ export class BranchStatusBar implements vscode.Disposable {
           label: `$(git-merge) Merge '${branchName}' into '${currentBranchName}'`,
           action: () => this.mergeSingleRepo(branchName, meta),
         },
-        { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
         {
+          label: `$(git-merge) Checkout '${branchName}' and merge '${currentBranchName}' into it`,
+          action: () => this.checkoutAndMergeSingleRepo(branchName, currentBranchName, meta),
+        },
+        { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
+      );
+      // The remote's default branch (e.g. "origin/main") can't be deleted from the remote —
+      // don't offer the action at all rather than let it fail. Deleting a local branch that
+      // happens to share the primary name is still fine, since it doesn't touch the remote.
+      if (!(isRemote && isPrimary)) {
+        items.push({
           label: '$(trash) Delete…',
           action: () => this.deleteSingleRepo(branchName, meta),
-        },
-      );
+        });
+      }
     }
 
     if (isRemote) {
@@ -1433,10 +1574,9 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
 
-    const branchName = await vscode.window.showInputBox({
+    const branchName = await promptBranchName({
       title: `New Branch in ${meta.name}`,
       prompt: 'Enter the new branch name',
-      validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
     });
     if (!branchName) return;
 
@@ -1476,7 +1616,32 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showInformationMessage(msg);
       logInfo(`new-branch:${meta.name}`, msg);
     } catch (e: unknown) {
-      showGitError(`new-branch:${meta.name}`, e);
+      if (isBranchAlreadyExistsError(e)) {
+        if (checkoutPick.value) {
+          try {
+            await repo.checkout(branchName);
+            const msg = `[${meta.name}]: branch "${branchName}" already exists — checked out.`;
+            vscode.window.showInformationMessage(msg);
+            logInfo(`new-branch:${meta.name}`, msg);
+          } catch (e2: unknown) {
+            const { matched } = await handleDirtyCheckout(repo, meta.name, branchName, e2, {
+              checkout: () => repo.checkout(branchName),
+              checkoutForce: () => repo.checkoutForce(branchName),
+            });
+            if (!matched) showGitError(`new-branch:${meta.name}`, e2);
+          }
+        } else {
+          vscode.window.showInformationMessage(`[${meta.name}]: branch "${branchName}" already exists.`);
+        }
+      } else if (checkoutPick.value) {
+        const { matched } = await handleDirtyCheckout(repo, meta.name, branchName, e, {
+          checkout: () => repo.checkout(branchName, true, baseFrom),
+          checkoutForce: async () => { await repo.createBranch(branchName, baseFrom); await repo.checkoutForce(branchName); },
+        });
+        if (!matched) showGitError(`new-branch:${meta.name}`, e);
+      } else {
+        showGitError(`new-branch:${meta.name}`, e);
+      }
     }
     await this.refresh();
   }
@@ -1609,78 +1774,62 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showInformationMessage(msg);
       logInfo(`checkout:${meta.name}`, msg);
     } catch (e: unknown) {
-      const handled = await this.handleDirtyCheckout(repo, meta, branchName, e);
-      if (!handled) showGitError(`checkout:${meta.name}`, e);
+      const { matched } = await handleDirtyCheckout(repo, meta.name, branchName, e);
+      if (!matched) showGitError(`checkout:${meta.name}`, e);
     }
     await this.refresh();
   }
 
-  private async handleDirtyCheckout(
-    repo: import('../git/GitService').GitService,
-    meta: RepoMeta,
-    branchName: string,
-    originalError: unknown
-  ): Promise<boolean> {
-    const msg = String(originalError);
-    // Only offer the menu for "dirty working tree" errors
-    if (!msg.includes('Your local changes') && !msg.includes('local changes') && !msg.includes('overwritten by checkout')) {
-      return false;
-    }
+  private async checkoutDetachedSingleRepo(meta: RepoMeta): Promise<void> {
+    const repo = this.manager.getRepo(meta.id);
+    if (!repo) return;
 
-    type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> };
-    const items: ActionItem[] = [
-      {
-        label: '$(archive) Stash and checkout',
-        detail: 'Save changes to stash, then switch to the branch',
-        action: async () => {
-          await repo.stashPush(`WIP before checkout to ${branchName}`);
-          await repo.checkout(branchName);
-          const msg = `[${meta.name}]: changes stashed, switched to "${branchName}"`;
-          vscode.window.showInformationMessage(msg);
-          logInfo(`checkout:${meta.name}`, msg);
-        },
-      },
-      {
-        label: '$(arrow-right) Bring changes to new branch',
-        detail: 'Carry uncommitted changes into the new branch',
-        action: async () => {
-          await repo.stashPush(`WIP migrating to ${branchName}`);
-          await repo.checkout(branchName);
-          await repo.stashPop();
-          const msg = `[${meta.name}]: changes migrated to "${branchName}"`;
-          vscode.window.showInformationMessage(msg);
-          logInfo(`checkout:${meta.name}`, msg);
-        },
-      },
-      {
-        label: '$(warning) Force checkout',
-        detail: 'Discard local changes and switch to the branch',
-        action: async () => {
-          await repo.checkoutForce(branchName);
-          const msg = `[${meta.name}]: force checkout to "${branchName}" (changes discarded)`;
-          vscode.window.showInformationMessage(msg);
-          logInfo(`checkout:${meta.name}`, msg);
-        },
-      },
-      {
-        label: '$(close) Cancel',
-        detail: '',
-        action: async () => { /* no-op */ },
-      },
+    const branches = await repo.getBranches();
+    type BranchPick = vscode.QuickPickItem & { ref: string };
+    const local = branches.filter(b => !b.isRemote);
+    const remote = branches.filter(b => b.isRemote);
+
+    const items: BranchPick[] = [
+      { label: 'LOCAL', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+      ...local.map(b => ({
+        label: `${b.isHead ? '$(check)' : '$(git-branch)'} ${b.name}`,
+        description: [b.isHead ? 'current' : undefined, b.lastCommitDateRelative].filter(Boolean).join('  '),
+        detail: formatCommitDetail(b),
+        ref: b.name,
+      })),
+      { label: 'REMOTE', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+      ...remote.map(b => ({
+        label: `$(cloud) ${b.name}`,
+        description: b.lastCommitDateRelative ?? '',
+        detail: formatCommitDetail(b),
+        ref: b.name,
+      })),
     ];
 
-    const pick = await vscode.window.showQuickPick(items, {
-      title: `[${meta.name}]: Uncommitted changes`,
-      placeHolder: `Choose how to handle local changes before switching to "${branchName}"`,
-      ignoreFocusOut: true,
+    const picked = await vscode.window.showQuickPick(items, {
+      title: `Checkout detached — ${meta.name}`,
+      placeHolder: 'Select a branch to checkout in detached HEAD mode',
+      matchOnDescription: true,
     });
+    if (!picked?.ref) return;
 
-    if (pick) await pick.action();
-    return true;
+    try {
+      await repo.checkoutDetached(picked.ref);
+      const msg = `[${meta.name}]: checked out "${picked.ref}" (detached HEAD).`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`checkout-detached:${meta.name}`, msg);
+    } catch (e: unknown) {
+      const { matched } = await handleDirtyCheckout(repo, meta.name, picked.ref, e, {
+        checkout: () => repo.checkoutDetached(picked.ref),
+        checkoutForce: () => repo.checkoutDetachedForce(picked.ref),
+      });
+      if (!matched) showGitError(`checkout-detached:${meta.name}`, e);
+    }
+    await this.refresh();
   }
 
   private async checkoutBranchAllRepos(branchName: string, metas: RepoMeta[]): Promise<void> {
-    // Find which repos have this branch
+    // Find which repositories have this branch
     const results = await Promise.allSettled(
       metas.map(async m => {
         const repo = this.manager.getRepo(m.id);
@@ -1711,14 +1860,18 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: `Checking out "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
+        let succeeded = 0;
         for (const { meta, fullName } of candidates) {
           const repo = this.manager.getRepo(meta.id);
           if (!repo) continue;
           try {
             await repo.checkout(fullName ?? branchName);
+            succeeded++;
           } catch (e: unknown) {
-            const handled = await this.handleDirtyCheckout(repo, meta, fullName ?? branchName, e);
-            if (!handled) {
+            const { matched, succeeded: recovered } = await handleDirtyCheckout(repo, meta.name, fullName ?? branchName, e);
+            if (recovered) {
+              succeeded++;
+            } else if (!matched) {
               logError(`checkout:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
               errors.push(`${meta.name}: ${formatGitError(e)}`);
             }
@@ -1727,8 +1880,8 @@ export class BranchStatusBar implements vscode.Disposable {
         if (errors.length > 0) {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
-        } else {
-          const msg = `Checked out "${branchName}" in ${candidates.length} ${candidates.length === 1 ? 'repo' : 'repos'}.`;
+        } else if (succeeded > 0) {
+          const msg = `Checked out "${branchName}" in ${succeeded} ${succeeded === 1 ? 'repository' : 'repositories'}.`;
           vscode.window.showInformationMessage(msg);
           logInfo('checkout', msg);
         }
@@ -1743,10 +1896,9 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
 
-    const branchName = await vscode.window.showInputBox({
+    const branchName = await promptBranchName({
       title: `New Branch from '${fromBranch}' in ${meta.name}`,
       prompt: 'Enter the new branch name',
-      validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
     });
     if (!branchName) return;
 
@@ -1769,7 +1921,32 @@ export class BranchStatusBar implements vscode.Disposable {
       vscode.window.showInformationMessage(msg);
       logInfo(`new-branch:${meta.name}`, msg);
     } catch (e: unknown) {
-      showGitError(`new-branch:${meta.name}`, e);
+      if (isBranchAlreadyExistsError(e)) {
+        if (checkoutPick.value) {
+          try {
+            await repo.checkout(branchName);
+            const msg = `[${meta.name}]: branch "${branchName}" already exists — checked out.`;
+            vscode.window.showInformationMessage(msg);
+            logInfo(`new-branch:${meta.name}`, msg);
+          } catch (e2: unknown) {
+            const { matched } = await handleDirtyCheckout(repo, meta.name, branchName, e2, {
+              checkout: () => repo.checkout(branchName),
+              checkoutForce: () => repo.checkoutForce(branchName),
+            });
+            if (!matched) showGitError(`new-branch:${meta.name}`, e2);
+          }
+        } else {
+          vscode.window.showInformationMessage(`[${meta.name}]: branch "${branchName}" already exists.`);
+        }
+      } else if (checkoutPick.value) {
+        const { matched } = await handleDirtyCheckout(repo, meta.name, branchName, e, {
+          checkout: () => repo.checkout(branchName, true, fromBranch),
+          checkoutForce: async () => { await repo.createBranch(branchName, fromBranch); await repo.checkoutForce(branchName); },
+        });
+        if (!matched) showGitError(`new-branch:${meta.name}`, e);
+      } else {
+        showGitError(`new-branch:${meta.name}`, e);
+      }
     }
     await this.refresh();
   }
@@ -1804,11 +1981,13 @@ export class BranchStatusBar implements vscode.Disposable {
     });
     if (!newName || newName === oldName) return;
 
+    const oldUpstream = await repo.getBranchUpstream(oldName).catch(() => null);
     try {
       await repo.renameBranch(oldName, newName);
       const msg = `[${meta.name}]: renamed "${oldName}" → "${newName}".`;
       vscode.window.showInformationMessage(msg);
       logInfo(`rename-branch:${meta.name}`, msg);
+      await offerRenameBranchRemoteSync(repo, meta.name, oldUpstream, newName);
     } catch (e: unknown) {
       showGitError(`rename-branch:${meta.name}`, e);
     }
@@ -1829,7 +2008,12 @@ export class BranchStatusBar implements vscode.Disposable {
     await this.refresh();
   }
 
-  private async compareSingleRepo(branchName: string, meta: RepoMeta, currentBranchName: string): Promise<void> {
+  private async compareSingleRepo(
+    branchName: string,
+    meta: RepoMeta,
+    currentBranchName: string,
+    baseRef: string = 'HEAD',
+  ): Promise<void> {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
     let branchHash: string;
@@ -1837,7 +2021,7 @@ export class BranchStatusBar implements vscode.Disposable {
     try {
       [branchHash, headHash] = await Promise.all([
         repo.resolveRef(branchName),
-        repo.resolveRef('HEAD'),
+        repo.resolveRef(baseRef),
       ]);
     } catch (e: unknown) {
       vscode.window.showErrorMessage(`Cannot resolve refs for comparison in "${meta.name}".`);
@@ -1866,6 +2050,17 @@ export class BranchStatusBar implements vscode.Disposable {
     await vscode.commands.executeCommand('vscode.changes', `${currentBranchName} vs ${branchName} [${meta.name}]`, resources);
   }
 
+  private async compareSingleRepoWith(branchName: string, meta: RepoMeta): Promise<void> {
+    const repo = this.manager.getRepo(meta.id);
+    if (!repo) return;
+    const otherRef = await pickRefQuickPick(repo, {
+      title: `Compare '${branchName}' with…`,
+      placeHolder: 'Select a branch or tag to compare against',
+    });
+    if (!otherRef || otherRef === branchName) return;
+    await this.compareSingleRepo(branchName, meta, otherRef, otherRef);
+  }
+
   private async rebaseSingleRepo(onto: string, meta: RepoMeta): Promise<void> {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
@@ -1892,6 +2087,29 @@ export class BranchStatusBar implements vscode.Disposable {
       logInfo(`merge:${meta.name}`, msg);
     } catch (e: unknown) {
       showGitError(`merge:${meta.name}`, e);
+    }
+    await this.refresh();
+  }
+
+  private async checkoutAndMergeSingleRepo(targetBranch: string, sourceBranch: string, meta: RepoMeta): Promise<void> {
+    const repo = this.manager.getRepo(meta.id);
+    if (!repo) return;
+    try {
+      await repo.checkout(targetBranch);
+    } catch (e: unknown) {
+      const { matched, succeeded } = await handleDirtyCheckout(repo, meta.name, targetBranch, e);
+      if (!matched) { showGitError(`checkout:${meta.name}`, e); await this.refresh(); return; }
+      if (!succeeded) { await this.refresh(); return; }
+    }
+    try {
+      const { upToDate } = await repo.merge(sourceBranch);
+      const msg = upToDate
+        ? `[${meta.name}]: checked out "${targetBranch}" — "${sourceBranch}" is already up to date, nothing to merge.`
+        : `[${meta.name}]: checked out "${targetBranch}" and merged "${sourceBranch}" into it.`;
+      vscode.window.showInformationMessage(msg);
+      logInfo(`checkout-and-merge:${meta.name}`, msg);
+    } catch (e: unknown) {
+      showGitError(`checkout-and-merge:${meta.name}`, e);
     }
     await this.refresh();
   }
@@ -1940,10 +2158,9 @@ export class BranchStatusBar implements vscode.Disposable {
   // ── Multi-repo branch actions ────────────────────────────────────────────
 
   private async newBranchFrom(fromBranch: string, metas: RepoMeta[]): Promise<void> {
-    const branchName = await vscode.window.showInputBox({
+    const branchName = await promptBranchName({
       title: `New Branch from '${fromBranch}'`,
       prompt: 'Enter the new branch name',
-      validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
     });
     if (!branchName) return;
 
@@ -1960,6 +2177,8 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: `Creating branch "${branchName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
+        const alreadyExisted: string[] = [];
+        let succeeded = 0;
         for (const meta of metas) {
           const repo = this.manager.getRepo(meta.id);
           if (!repo) continue;
@@ -1969,16 +2188,55 @@ export class BranchStatusBar implements vscode.Disposable {
             } else {
               await repo.createBranch(branchName, fromBranch);
             }
+            succeeded++;
           } catch (e: unknown) {
-            logError(`new-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
-            errors.push(`${meta.name}: ${formatGitError(e)}`);
+            if (isBranchAlreadyExistsError(e)) {
+              alreadyExisted.push(meta.name);
+              if (checkoutPick.value) {
+                try {
+                  await repo.checkout(branchName);
+                  succeeded++;
+                } catch (e2: unknown) {
+                  const { matched, succeeded: recovered } = await handleDirtyCheckout(repo, meta.name, branchName, e2, {
+                    checkout: () => repo.checkout(branchName),
+                    checkoutForce: () => repo.checkoutForce(branchName),
+                  });
+                  if (recovered) {
+                    succeeded++;
+                  } else if (!matched) {
+                    logError(`new-branch:${meta.name}`, formatGitError(e2), getRawErrorDetail(e2));
+                    errors.push(`${meta.name}: ${formatGitError(e2)}`);
+                  }
+                }
+              } else {
+                succeeded++;
+              }
+            } else if (checkoutPick.value) {
+              const { matched, succeeded: recovered } = await handleDirtyCheckout(repo, meta.name, branchName, e, {
+                checkout: () => repo.checkout(branchName, true, fromBranch),
+                checkoutForce: async () => { await repo.createBranch(branchName, fromBranch); await repo.checkoutForce(branchName); },
+              });
+              if (recovered) {
+                succeeded++;
+              } else if (!matched) {
+                logError(`new-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                errors.push(`${meta.name}: ${formatGitError(e)}`);
+              }
+            } else {
+              logError(`new-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+              errors.push(`${meta.name}: ${formatGitError(e)}`);
+            }
           }
         }
         if (errors.length > 0) {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
-        } else {
-          const msg = `Branch "${branchName}" created in ${metas.length} repos.`;
+        } else if (alreadyExisted.length > 0) {
+          const msg = `Branch "${branchName}" already existed in ${alreadyExisted.length} ${alreadyExisted.length === 1 ? 'repository' : 'repositories'}${checkoutPick.value ? ' — checked out' : ''}; created in the rest.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('new-branch', msg);
+        } else if (succeeded > 0) {
+          const msg = `Branch "${branchName}" created in ${succeeded} ${succeeded === 1 ? 'repository' : 'repositories'}.`;
           vscode.window.showInformationMessage(msg);
           logInfo('new-branch', msg);
         }
@@ -2006,7 +2264,7 @@ export class BranchStatusBar implements vscode.Disposable {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          const msg = `Pulled in ${metas.length} repos.`;
+          const msg = `Pulled in ${metas.length} repositories.`;
           vscode.window.showInformationMessage(msg);
           logInfo('pull', msg);
         }
@@ -2017,7 +2275,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
   private async renameBranchAllRepos(oldName: string, metas: RepoMeta[]): Promise<void> {
     const newName = await vscode.window.showInputBox({
-      title: `Rename branch '${oldName}' in all repos`,
+      title: metas.length === 1 ? `Rename branch '${oldName}'` : `Rename branch '${oldName}' in all repositories`,
       value: oldName,
       validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
     });
@@ -2027,11 +2285,14 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: `Renaming "${oldName}" → "${newName}"…`, cancellable: false },
       async () => {
         const errors: string[] = [];
+        const renamed: Array<{ repo: GitService; label: string; oldUpstream: { remote: string; branchName: string } | null }> = [];
         for (const meta of metas) {
           const repo = this.manager.getRepo(meta.id);
           if (!repo) continue;
+          const oldUpstream = await repo.getBranchUpstream(oldName).catch(() => null);
           try {
             await repo.renameBranch(oldName, newName);
+            renamed.push({ repo, label: meta.name, oldUpstream });
           } catch (e: unknown) {
             logError(`rename-branch:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);
@@ -2041,9 +2302,12 @@ export class BranchStatusBar implements vscode.Disposable {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          const msg = `Renamed "${oldName}" → "${newName}" in ${metas.length} repos.`;
+          const msg = `Renamed "${oldName}" → "${newName}" in ${metas.length} repositories.`;
           vscode.window.showInformationMessage(msg);
           logInfo('rename-branch', msg);
+        }
+        for (const { repo, label, oldUpstream } of renamed) {
+          await offerRenameBranchRemoteSync(repo, label, oldUpstream, newName);
         }
       }
     );
@@ -2054,6 +2318,63 @@ export class BranchStatusBar implements vscode.Disposable {
     for (const meta of metas) {
       await this.compareSingleRepo(branchName, meta, currentBranchName);
     }
+  }
+
+  private async compareBranchAllReposWith(branchName: string, metas: RepoMeta[]): Promise<void> {
+    if (metas.length === 1) { await this.compareSingleRepoWith(branchName, metas[0]!); return; }
+
+    const firstRepo = metas.map(m => this.manager.getRepo(m.id)).find((r): r is GitService => !!r);
+    if (!firstRepo) return;
+    const otherRef = await pickRefQuickPick(firstRepo, {
+      title: `Compare '${branchName}' with…`,
+      placeHolder: 'Select a branch or tag to compare against',
+    });
+    if (!otherRef || otherRef === branchName) return;
+    for (const meta of metas) {
+      await this.compareSingleRepo(branchName, meta, otherRef, otherRef);
+    }
+  }
+
+  private async checkoutAndMergeBranchAllRepos(branchName: string, currentBranchName: string, metas: RepoMeta[]): Promise<void> {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Checking out "${branchName}" and merging "${currentBranchName}"…`, cancellable: false },
+      async () => {
+        const errors: string[] = [];
+        let succeeded = 0;
+        for (const meta of metas) {
+          const repo = this.manager.getRepo(meta.id);
+          if (!repo) continue;
+          try {
+            await repo.checkout(branchName);
+          } catch (e: unknown) {
+            const { matched, succeeded: recovered } = await handleDirtyCheckout(repo, meta.name, branchName, e);
+            if (!recovered) {
+              if (!matched) {
+                logError(`checkout-and-merge:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+                errors.push(`${meta.name}: ${formatGitError(e)}`);
+              }
+              continue;
+            }
+          }
+          try {
+            await repo.merge(currentBranchName);
+            succeeded++;
+          } catch (e: unknown) {
+            logError(`checkout-and-merge:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
+            errors.push(`${meta.name}: ${formatGitError(e)}`);
+          }
+        }
+        if (errors.length > 0) {
+          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
+            .then(choice => { if (choice === 'Show Log') showLogChannel(); });
+        } else if (succeeded > 0) {
+          const msg = `Checked out "${branchName}" and merged "${currentBranchName}" in ${succeeded} ${succeeded === 1 ? 'repository' : 'repositories'}.`;
+          vscode.window.showInformationMessage(msg);
+          logInfo('checkout-and-merge', msg);
+        }
+      }
+    );
+    await this.refresh();
   }
 
   private async rebaseAllRepos(onto: string, metas: RepoMeta[]): Promise<void> {
@@ -2075,7 +2396,7 @@ export class BranchStatusBar implements vscode.Disposable {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          const msg = `Rebased onto "${onto}" in ${metas.length} repos.`;
+          const msg = `Rebased onto "${onto}" in ${metas.length} repositories.`;
           vscode.window.showInformationMessage(msg);
           logInfo('rebase', msg);
         }
@@ -2131,7 +2452,7 @@ export class BranchStatusBar implements vscode.Disposable {
         } else {
           const msg = merged === 0
             ? `"${from}" is already up to date — nothing to merge.`
-            : `Merged "${from}" in ${merged} ${merged === 1 ? 'repo' : 'repos'}.`;
+            : `Merged "${from}" in ${merged} ${merged === 1 ? 'repository' : 'repositories'}.`;
           vscode.window.showInformationMessage(msg);
           logInfo('merge', msg);
         }
@@ -2146,7 +2467,7 @@ export class BranchStatusBar implements vscode.Disposable {
         { label: '$(trash) Delete', description: branchName, value: 'delete' },
         { label: '$(warning) Force delete', description: 'even if not merged', value: 'force' },
       ],
-      { title: `Delete branch '${branchName}' in all repos?` }
+      { title: metas.length === 1 ? `Delete branch '${branchName}'?` : `Delete branch '${branchName}' in all repositories?` }
     ) as { label: string; value: string } | undefined;
     if (!confirm) return;
 
@@ -2168,7 +2489,7 @@ export class BranchStatusBar implements vscode.Disposable {
           void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log')
             .then(choice => { if (choice === 'Show Log') showLogChannel(); });
         } else {
-          const msg = `Deleted "${branchName}" in ${metas.length} repos.`;
+          const msg = `Deleted "${branchName}" in ${metas.length} repositories.`;
           vscode.window.showInformationMessage(msg);
           logInfo('delete-branch', msg);
         }
