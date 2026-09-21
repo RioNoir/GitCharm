@@ -12,8 +12,10 @@
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.93%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
   <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-red">
+  <a href="https://marketplace.visualstudio.com/items?itemName=RioNoir.gitcharm"><img alt="VS Code Marketplace Version" src="https://vsmarketplacebadges.dev/version-short/RioNoir.gitcharm.png"></a>
   <img alt="GitHub forks" src="https://img.shields.io/github/forks/RioNoir/GitCharm?style=flat&logo=github&label=Forks&color=orange">
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/RioNoir/GitCharm?style=flat&logo=GitHub&label=Stars&color=yellow">
+  <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
 GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), and a 3-way merge editor for conflict resolution.
@@ -396,29 +398,7 @@ out/                      Built extension and webview bundles
 
 ## 🤝 Contributing
 
-Contributions are welcome! To contribute:
-
-1. **Fork** the repository
-2. **Create** a branch for changes (`git checkout -b feature/your-feature`)
-3. **Commit** the changes (`git commit -m 'Added your-feature'`)
-4. **Push** to the branch (`git push origin feature/your-feature`)
-5. **Open** a Pull Request
-
-### 🐛 Bug Reporting
-
-To report bugs, open an issue including:
-- Extension version
-- VSCode version
-- Operating system
-- What is the problem
-- Full error log
-
-### 💡 Feature Requests
-
-For new features, open an issue describing:
-- Desired functionality
-- Specific use case
-- Priority (low/medium/high)
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, the development workflow, and how to report bugs or request features.
 
 ## 🙏 Acknowledgements
 

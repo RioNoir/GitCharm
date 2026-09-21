@@ -9,6 +9,9 @@
     "type": "git",
     "url": "https://github.com/RioNoir/GitCharm.git"
   },
+  "sponsor": {
+    "url": "https://ko-fi.com/rionoir"
+  },
   "engines": {
     "vscode": "^1.93.0"
   },
