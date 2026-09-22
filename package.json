@@ -1,7 +1,7 @@
 {
   "name": "gitcharm",
   "displayName": "GitCharm",
-  "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
+  "description": "Jetbrains-style Git management for VS Code — Commit panel, Multi-repo, Shelf, Stash, Pull Requests, Git Log with graph and more.",
   "version": "0.4.9",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
@@ -26,7 +26,16 @@
     "log",
     "merge",
     "intellij",
-    "phpstorm"
+    "phpstorm",
+    "jetbrains",
+    "pull request",
+    "stash",
+    "shelve",
+    "changelist",
+    "worktree",
+    "submodule",
+    "annotations",
+    "ghost text"
   ],
   "icon": "media/icons/gitcharm.png",
   "galleryBanner": {
