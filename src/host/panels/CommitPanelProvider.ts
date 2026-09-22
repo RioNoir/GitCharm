@@ -73,10 +73,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'gitcharm.commitPanel';
   private readonly viewAndSortSettings: ViewAndSortSettingsService;
   private view?: vscode.WebviewView;
-
-  isVisible(): boolean {
-    return this.view?.visible === true;
-  }
   private logProvider?: GitLogPanelProvider;
   private undockedPanel?: UndockedPanelProvider;
   private branchStatusBar?: BranchStatusBar;

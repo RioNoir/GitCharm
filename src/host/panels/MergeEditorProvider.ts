@@ -83,7 +83,9 @@ export class MergeEditorProvider implements vscode.Disposable {
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: true });
           logInfo('mergeEditor:save', `File resolved and staged: ${path.basename(filePath)}`);
           vscode.window.showInformationMessage(`File resolved and staged: ${path.basename(filePath)}`);
-          vscode.commands.executeCommand('gitcharm.commitPanel.focus');
+          if (vscode.workspace.getConfiguration('gitcharm').get<boolean>('openCommitPanelOnConflictResolved', true)) {
+            vscode.commands.executeCommand('gitcharm.commitPanel.focus');
+          }
         } catch (e: unknown) {
           logError('mergeEditor:save', formatGitError(e), getRawErrorDetail(e));
           post({ type: 'MERGE_SAVE_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
