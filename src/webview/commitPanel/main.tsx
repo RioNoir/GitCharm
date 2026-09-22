@@ -1514,10 +1514,10 @@ function App() {
                   }
                 }}
                 onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
-                onStageFiles={(rid, paths) => { store.isCollapsed('vscode-section:staged') && store.toggleCollapsed('vscode-section:staged'); send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths }); }}
-                onUnstageFiles={(rid, paths) => { store.isCollapsed('vscode-section:unstaged') && store.toggleCollapsed('vscode-section:unstaged'); send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths }); }}
-                onStageAll={rid => { store.isCollapsed('vscode-section:staged') && store.toggleCollapsed('vscode-section:staged'); send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid }); }}
-                onUnstageAll={rid => { store.isCollapsed('vscode-section:unstaged') && store.toggleCollapsed('vscode-section:unstaged'); send({ type: 'COMMIT_UNSTAGE_ALL', requestId: generateId(), repoId: rid }); }}
+                onStageFiles={(rid, paths) => send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths })}
+                onUnstageFiles={(rid, paths) => send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths })}
+                onStageAll={rid => send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid })}
+                onUnstageAll={rid => send({ type: 'COMMIT_UNSTAGE_ALL', requestId: generateId(), repoId: rid })}
                 onRepoContextMenu={(e, rid, staged) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, stagedSection: staged })}
                 onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
                 onOpenStagedChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid, section: 'staged' })}
