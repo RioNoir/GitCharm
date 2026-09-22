@@ -3,9 +3,7 @@ out/
 *.vsix
 .DS_Store
 MEMORY.md
-.claude/*
-!.claude/skills/
-!.claude/skills/**/
+.claude/
 .vscode/settings.json
 .idea/
 .vscode/gitcharm-changelists.json
