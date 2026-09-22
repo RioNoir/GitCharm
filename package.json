@@ -1005,6 +1005,12 @@
             "default": "stash",
             "description": "Default action for the Save button in the Commit Panel."
           },
+          "gitcharm.openCommitPanelOnConflictResolved": {
+            "order": 22,
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically open the GitCharm sidebar when a merge conflict is resolved. Matches VS Code Source Control, which opens after completing a merge."
+          },
           "gitcharm.suppressDivergedBranchWarning": {
             "order": 35,
             "type": "boolean",
