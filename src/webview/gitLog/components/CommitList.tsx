@@ -759,6 +759,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
                 </span>
               )}
+              <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
             </div>
           );
         })}
@@ -2009,6 +2010,13 @@ const styles = {
     opacity: 0.65,
     marginLeft: '8px',
   },
+  shortHash: {
+    fontFamily: 'var(--vscode-editor-font-family, monospace)',
+    fontSize: '11px',
+    opacity: 0.55,
+    flexShrink: 0,
+    marginLeft: '8px',
+  } as React.CSSProperties,
   inlineActions: {
     display: 'flex',
     alignItems: 'center',
