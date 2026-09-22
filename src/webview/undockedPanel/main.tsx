@@ -369,7 +369,16 @@ function LogApp() {
             activeRepoId={store.commitFilters.repoId}
             currentBranchByRepo={currentBranchByRepo}
             headHashByRepo={headHashByRepo}
-            onSelect={(commit) => { store.selectCommit(commit); setDetailCollapsed(false); }}
+            onSelect={(commit) => {
+              const same = store.selectedCommit?.hash === commit.hash && store.selectedCommit?.repoId === commit.repoId;
+              if (same) {
+                if (detailCollapsed) { setDetailCollapsed(false); return; }
+                store.selectCommit(null);
+                return;
+              }
+              store.selectCommit(commit);
+              setDetailCollapsed(false);
+            }}
             onLoadMore={loadMore}
             hasMore={store.hasMore}
             storeHasMore={store.hasMore}
