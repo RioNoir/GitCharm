@@ -420,6 +420,18 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     const baseIndex = currentIndex >= 0 ? currentIndex : (hoveredIndex ?? -1);
     const hasBase = baseIndex >= 0;
 
+    const nearestNavigable = (idx: number, prefer: 1 | -1): number | null => {
+      if (idx < 0 || idx >= commits.length) return null;
+      if (!commits[idx].isUncommitted) return idx;
+      for (let d = 1; d < commits.length; d++) {
+        const a = idx + prefer * d;
+        if (a >= 0 && a < commits.length && !commits[a].isUncommitted) return a;
+        const b = idx - prefer * d;
+        if (b >= 0 && b < commits.length && !commits[b].isUncommitted) return b;
+      }
+      return null;
+    };
+
     let nextIndex: number | null = null;
     switch (e.key) {
       case 'ArrowDown':
@@ -449,6 +461,8 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     }
 
     e.preventDefault();
+    const prefer: 1 | -1 = (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'Home') ? -1 : 1;
+    nextIndex = nearestNavigable(nextIndex, prefer);
     if (nextIndex === null || nextIndex === currentIndex) return;
 
     const el = parentRef.current;
@@ -534,9 +548,10 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
         {items.map((vrow) => {
           const commit = commits[vrow.index];
           if (!commit) return null;
-          const isSelected = `${commit.hash}:${commit.repoId}` === selectedHash;
-          const isCurrentHead = headHashByRepo[commit.repoId] === commit.hash;
-          const isMultiSelected = multiSelectHashes.has(`${commit.hash}:${commit.repoId}`);
+          const isUncommitted = !!commit.isUncommitted;
+          const isSelected = !isUncommitted && `${commit.hash}:${commit.repoId}` === selectedHash;
+          const isCurrentHead = !isUncommitted && headHashByRepo[commit.repoId] === commit.hash;
+          const isMultiSelected = !isUncommitted && multiSelectHashes.has(`${commit.hash}:${commit.repoId}`);
           const rowMaxX = Math.max(getRowMaxX(vrow.index, segments), laneX(commit.lane ?? 0));
           const rawTextStart = rowMaxX + LANE_WIDTH / 2 + 10;
           // Snap to the nearest LANE_WIDTH boundary so adjacent rows with near-identical
@@ -546,7 +561,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
           return (
             <div
               key={commit.hash}
-              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && contextMenu?.commit.hash === commit.hash && contextMenu?.commit.repoId === commit.repoId), paddingLeft: textStart }}
+              style={{ ...styles.row(vrow.start, isSelected, isMultiSelected, hoveredIndex === vrow.index, !isSelected && !isUncommitted && contextMenu?.commit.hash === commit.hash && contextMenu?.commit.repoId === commit.repoId), paddingLeft: textStart }}
               onMouseEnter={(e) => {
                 if (isHoverSuppressed()) return;
                 setHoveredIndex(vrow.index);
@@ -560,6 +575,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   const isTyping = active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
                   if (!isTyping) parentRef.current?.focus({ preventScroll: true });
                 }
+                if (isUncommitted) return;
                 if (closePopoverTimerRef.current) clearTimeout(closePopoverTimerRef.current);
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
                 // Don't restart the open-timer if popover for this commit is already showing
@@ -587,6 +603,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 // an ancestor tabIndex on its own — grab it explicitly so arrow-key nav works
                 // immediately after clicking a commit, not just after clicking empty space.
                 parentRef.current?.focus();
+                if (isUncommitted) return;
                 if (e.ctrlKey || e.metaKey) {
                   setMultiSelectHashes(prev => {
                     const next = new Set(prev);
@@ -616,11 +633,13 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               }}
               onDoubleClick={e => {
                 e.stopPropagation();
+                if (isUncommitted) return;
                 getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg);
               }}
               onContextMenu={e => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (isUncommitted) return;
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
                 setPopover(null);
                 const key = `${commit.hash}:${commit.repoId}`;
@@ -721,10 +740,15 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                     <span style={styles.refBadgeLabel}>{commit.stashRef}</span>
                   </span>
                 )}
-                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message.split('\n')[0]}</span>
+                <span style={{
+                  ...styles.message,
+                  ...(isCurrentHead ? { fontWeight: 700 } : {}),
+                  ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}),
+                  ...(isUncommitted ? { fontStyle: 'italic', opacity: 0.7 } : {}),
+                }}>{commit.message.split('\n')[0]}</span>
               </div>
 
-              {hoveredIndex === vrow.index && (
+              {!isUncommitted && hoveredIndex === vrow.index && (
                 <div style={styles.inlineActions}>
                   <button
                     data-log-action-btn=""
@@ -750,16 +774,20 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               {commit.unpushed && (
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
               )}
-              <div style={styles.meta}>
-                <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
-                {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName)}</span>}
-              </div>
-              {containerWidth > 330 && (
+              {!isUncommitted && (
+                <div style={styles.meta}>
+                  <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
+                  {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName)}</span>}
+                </div>
+              )}
+              {!isUncommitted && containerWidth > 330 && (
                 <span style={styles.date}>
                   {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
                 </span>
               )}
-              <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
+              {!isUncommitted && (
+                <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
+              )}
             </div>
           );
         })}

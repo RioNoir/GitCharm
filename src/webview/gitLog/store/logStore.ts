@@ -37,6 +37,7 @@ interface LogState {
   pendingScrollTarget: { hash: string; repoId: string } | null;
   fileLoadSeq: number;
   stashes: CommitNode[];
+  uncommittedCounts: Record<string, number>;
 
   hasWorkspaceFolder: boolean;
   aiEnabled: boolean;
@@ -64,6 +65,7 @@ interface LogState {
   setError: (err: string | null) => void;
   setPendingScrollTarget: (target: { hash: string; repoId: string } | null) => void;
   setStashes: (stashes: CommitNode[], queriedRepoIds: string[]) => void;
+  setUncommittedCounts: (counts: Record<string, number>) => void;
 }
 
 const defaultCommitFilters: CommitFilters = {
@@ -109,6 +111,13 @@ function stringsEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
+function countsEqual(a: Record<string, number>, b: Record<string, number>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const k of keys) if (a[k] !== b[k]) return false;
+  return true;
+}
+
 export const useLogStore = create<LogState>((set, _get) => ({
   repos: [],
   initialized: false,
@@ -119,6 +128,7 @@ export const useLogStore = create<LogState>((set, _get) => ({
   iconTheme: null,
   commits: [],
   stashes: [],
+  uncommittedCounts: {},
   hasMore: true,
   reloading: false,
   selectedCommit: null,
@@ -205,4 +215,5 @@ export const useLogStore = create<LogState>((set, _get) => ({
     // re-trigger assignLanes on every refresh and undo that fast path.
     return commitListsEqual(s.stashes, merged) ? {} : { stashes: merged };
   }),
+  setUncommittedCounts: (counts) => set(s => countsEqual(s.uncommittedCounts, counts) ? {} : { uncommittedCounts: counts }),
 }));
