@@ -672,7 +672,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 ];
 
                 const refsSpace = containerWidth - labelColWidth - 340;
-                const MAX = refsSpace < 80 ? 0 : refsSpace < 170 ? 1 : 2;
+                const MAX = refsSpace < 130 ? 0 : refsSpace < 220 ? 1 : 2;
                 const visible = displayItems.slice(0, MAX);
                 const overflow = displayItems.slice(MAX);
 
@@ -708,7 +708,10 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                     {visible.map((item, i) => renderBadge(item, i))}
                     {overflow.length > 0 && (() => {
                       const STEP = 4;
-                      const layers = overflow.slice(0, 3).reverse();
+                      // The front label itself stands in for overflow[0] — only the remaining
+                      // items get a stacked layer behind it, so the number of visible "cards"
+                      // (layers + label) always matches overflow.length instead of over-counting.
+                      const layers = overflow.slice(1, 4).reverse();
                       const totalShift = layers.length * STEP;
                       const frontColor = overflowColor(overflow[0]);
                       return (
@@ -762,7 +765,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               {commit.unpushed && (
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title="Not pushed" />
               )}
-              <div style={styles.meta}>
+              <div style={containerWidth > 550 ? styles.metaWithAuthor : styles.meta}>
                 <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
                 {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? 'You') : commit.authorName)}</span>}
               </div>
@@ -771,7 +774,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
                 </span>
               )}
-              {containerWidth > 330 && (
+              {containerWidth > 550 && (
                 <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
               )}
             </div>
@@ -1988,6 +1991,21 @@ const styles = {
     // Never shrink below the avatar's own size (20px) — otherwise this box
     // compresses faster than the date next to it and clips/squishes the avatar.
     minWidth: '20px',
+    fontSize: '11px',
+    opacity: 0.65,
+    overflow: 'hidden',
+    marginLeft: '8px',
+  },
+  // Used instead of `meta` whenever the author name span is rendered alongside the avatar:
+  // avatar (20px) + gap (6px) + ~5 characters (~34px) — below that the name would shrink
+  // to an unreadable ellipsis-clipped sliver instead of just not being there.
+  metaWithAuthor: {
+    display: 'flex',
+    gap: '6px',
+    alignItems: 'center',
+    flex: '0 4 auto',
+    maxWidth: '300px',
+    minWidth: '60px',
     fontSize: '11px',
     opacity: 0.65,
     overflow: 'hidden',
