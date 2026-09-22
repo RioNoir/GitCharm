@@ -201,6 +201,8 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     return () => { if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current); };
   }, [commits.length, repos.length, storeHasMore]);
 
+  useEffect(() => () => { if (clickTimerRef.current) clearTimeout(clickTimerRef.current); }, []);
+
   useEffect(() => {
     const id = 'gitcharm-log-action-btn-hover';
     if (document.getElementById(id)) return;
@@ -219,6 +221,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popoverHoveredRef = useRef(false);
   const closePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const multiSelectedCommits = useMemo(
     () => commits.filter(c => multiSelectHashes.has(`${c.hash}:${c.repoId}`)),
@@ -611,11 +614,20 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   });
                 } else {
                   setMultiSelectHashes(new Set());
-                  onSelect(commit);
+                  // Defer: a double-click fires this same onClick twice before onDoubleClick
+                  // — selecting/toggling on every click would flash the detail pane open and
+                  // shut right before onDoubleClick opens the full detail view. Wait a tick so
+                  // onDoubleClick can cancel it first.
+                  if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+                  clickTimerRef.current = setTimeout(() => {
+                    clickTimerRef.current = null;
+                    onSelect(commit);
+                  }, 200);
                 }
               }}
               onDoubleClick={e => {
                 e.stopPropagation();
+                if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
                 getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg);
               }}
               onContextMenu={e => {
