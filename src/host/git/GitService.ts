@@ -1221,10 +1221,11 @@ export class GitService {
     })();
   }
 
-  /** The message git prepared for an in-progress merge or squash, or '' if none. */
+  /** The message git prepared for an in-progress rebase, merge, or squash, or '' if none. */
   async getMergeSquashMessage(): Promise<string> {
     const dir = await this.gitDir();
-    for (const name of ['MERGE_MSG', 'SQUASH_MSG']) {
+    // Rebase message files first: a conflicted pick can leave MERGE_MSG behind from a merge commit.
+    for (const name of ['rebase-merge/message', 'rebase-apply/message', 'MERGE_MSG', 'SQUASH_MSG']) {
       let raw: string;
       try {
         raw = fs.readFileSync(path.join(dir, name), 'utf8');

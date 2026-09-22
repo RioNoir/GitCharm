@@ -550,6 +550,7 @@ function App() {
           break;
         case 'COMMIT_SET_MESSAGE':
           if (msg.ifEmpty && useCommitStore.getState().commitMessage.trim()) break;
+          if (msg.ifEquals !== undefined && useCommitStore.getState().commitMessage.trim() !== msg.ifEquals.trim()) break;
           store.setCommitMessage(msg.message);
           break;
         case 'COMMIT_PERSISTED_MESSAGE_RESULT':
