@@ -759,7 +759,9 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
                 </span>
               )}
-              <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
+              {containerWidth > 330 && (
+                <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
+              )}
             </div>
           );
         })}
