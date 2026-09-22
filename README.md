@@ -12,7 +12,6 @@
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.93%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
   <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-red">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RioNoir.gitcharm"><img alt="VS Code Marketplace Version" src="https://vsmarketplacebadges.dev/version-short/RioNoir.gitcharm.png"></a>
   <img alt="GitHub forks" src="https://img.shields.io/github/forks/RioNoir/GitCharm?style=flat&logo=github&label=Forks&color=orange">
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/RioNoir/GitCharm?style=flat&logo=GitHub&label=Stars&color=yellow">
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
