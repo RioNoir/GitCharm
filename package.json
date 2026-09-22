@@ -1246,7 +1246,7 @@
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "dompurify": "^3.4.14",
-    "marked": "^18.0.11",
+    "marked": "^18.0.13",
     "prismjs": "^1.30.0",
     "simple-git": "^3.22.0",
     "turndown": "^7.2.4"
