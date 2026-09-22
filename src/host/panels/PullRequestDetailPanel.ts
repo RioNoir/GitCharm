@@ -301,6 +301,10 @@ export class PullRequestDetailPanel {
           if (result.ok) {
             logInfo('pullrequest-merge', `Merged PR #${pr.number} for ${repoId}`);
             this.onChanged();
+            // The merge happened remotely (via the provider's API), so the local repo's
+            // remote-tracking refs are stale until we fetch — without this the Log panel
+            // keeps showing the PR's branch as unmerged.
+            void this.manager.fetchAll();
           }
         } catch (e: unknown) {
           logError('pullrequest-merge', formatGitError(e), getRawErrorDetail(e));

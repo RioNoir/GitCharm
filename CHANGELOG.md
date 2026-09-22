@@ -2,6 +2,14 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.4.9
+
+### ✨ New Features
+- Branch and tag menus (status bar and Log panel) can now show each branch's or tag's last commit — hash, author, message, and relative time — for both single- and multi-repo views, via the new **Show Last Commit In Branch Menu** setting (off by default)
+
+### 🐛 Bug Fixes
+- Merging a pull request now fetches the remote afterward, so the Log panel reflects the merge instead of still showing the source branch as unmerged
+
 ## v0.4.8
 
 ### ✨ New Features

@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "JetBrains-like Git management for VS Code — Commit panel, Git Log with graph, multi-repo support and more.",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -891,6 +891,12 @@
             "type": "boolean",
             "default": true,
             "description": "Show a notification after fetching when local branches have lost their remote (upstream deleted, e.g. after a PR merge)"
+          },
+          "gitcharm.showLastCommitInBranchMenu": {
+            "order": 58,
+            "type": "boolean",
+            "default": false,
+            "description": "Show each branch's or tag's last commit (hash, author, message, relative time) in the branch and tag menus"
           },
           "gitcharm.projectColors": {
             "order": 110,

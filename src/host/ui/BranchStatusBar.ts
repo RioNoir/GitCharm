@@ -12,11 +12,35 @@ import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
 import { promptBranchName } from '../utils/branchNamePrompt';
 import { pickRefQuickPick } from '../utils/refPicker';
 
+/** Whether the "gitcharm.showLastCommitInBranchMenu" setting is enabled (off by default). */
+function showLastCommitInBranchMenu(): boolean {
+  return vscode.workspace.getConfiguration('gitcharm').get<boolean>('showLastCommitInBranchMenu') === true;
+}
+
 /** Formats a branch's last commit as "hash  •  author  •  message" for a QuickPick detail line. */
 function formatCommitDetail(b: BranchInfo | undefined): string | undefined {
-  if (!b) return undefined;
+  if (!showLastCommitInBranchMenu() || !b) return undefined;
   const parts = [b.lastCommitHash?.slice(0, 8), b.lastCommitAuthor, b.lastCommitMessage].filter(Boolean);
   return parts.length > 0 ? parts.join('  •  ') : undefined;
+}
+
+/** Returns the branch's relative last-commit date, or '' when the setting is disabled. */
+function lastCommitDateLabel(b: BranchInfo | undefined): string {
+  return showLastCommitInBranchMenu() ? (b?.lastCommitDateRelative ?? '') : '';
+}
+
+type TagCommitInfo = { author?: string; hash?: string; message?: string } | undefined;
+
+/** Formats a tag's commit as "hash  •  author  •  message" for a QuickPick detail line. */
+function formatTagDetail(t: TagCommitInfo): string | undefined {
+  if (!showLastCommitInBranchMenu() || !t) return undefined;
+  const parts = [t.hash?.slice(0, 8), t.author, t.message].filter(Boolean);
+  return parts.length > 0 ? parts.join('  •  ') : undefined;
+}
+
+/** Returns the tag's relative date, or '' when the setting is disabled. */
+function tagDateLabel(t: { dateRelative?: string } | undefined): string {
+  return showLastCommitInBranchMenu() ? (t?.dateRelative ?? '') : '';
 }
 
 export class BranchStatusBar implements vscode.Disposable {
@@ -445,7 +469,7 @@ export class BranchStatusBar implements vscode.Disposable {
         items.push({
           label: `${icon} ${name}`,
           description: isSingleRepo
-            ? [aheadBehindLabel, showAsCurrent ? 'current' : undefined, b?.lastCommitDateRelative].filter(Boolean).join('  ')
+            ? [aheadBehindLabel, showAsCurrent ? 'current' : undefined, lastCommitDateLabel(b)].filter(Boolean).join('  ')
             : (showAsCurrent ? 'current' : ''),
           detail: isSingleRepo ? formatCommitDetail(b) : undefined,
           action: () => this.showCommonBranchActionMenu(name, metas, isCurrentSomewhere, headLabel, undefined, undefined, false, false, hasDivergence),
@@ -465,7 +489,7 @@ export class BranchStatusBar implements vscode.Disposable {
         const primary = isPrimaryBranch(fullName, actualDefaultBranch);
         items.push({
           label: `$(cloud) ${fullName}`,
-          description: isSingleRepo ? (b?.lastCommitDateRelative ?? '') : '',
+          description: isSingleRepo ? lastCommitDateLabel(b) : '',
           detail: isSingleRepo ? formatCommitDetail(b) : undefined,
           // Checkout/pull/rename work on the local branch, but merge, rebase and
           // compare must use the remote ref the user actually picked — merging the
@@ -548,9 +572,9 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push({
         label: `${icon} ${tagName}`,
         description: isSingleRepo
-          ? [isActive ? 'current' : undefined, t?.dateRelative].filter(Boolean).join('  ')
+          ? [isActive ? 'current' : undefined, tagDateLabel(t)].filter(Boolean).join('  ')
           : (isActive ? 'current' : ''),
-        detail: isSingleRepo && t ? [t.author, t.hash, t.message].filter(Boolean).join('  •  ') : undefined,
+        detail: isSingleRepo ? formatTagDetail(t) : undefined,
         action: () => this.showCommonTagActionMenu(tagName, tagMetas),
       });
     }
@@ -1286,7 +1310,7 @@ export class BranchStatusBar implements vscode.Disposable {
         const aheadBehindLabel = b.aheadBehind ? `↑${b.aheadBehind.ahead} ↓${b.aheadBehind.behind}` : '';
         return {
           label: `${icon} ${b.name}`,
-          description: [aheadBehindLabel, b.lastCommitDateRelative].filter(Boolean).join('  '),
+          description: [aheadBehindLabel, lastCommitDateLabel(b)].filter(Boolean).join('  '),
           detail: formatCommitDetail(b),
           action: () => this.showSingleBranchActionMenu(b.name, meta, b.isHead, false, hasUnpushed, effectiveBranchName, primary),
         };
@@ -1297,7 +1321,7 @@ export class BranchStatusBar implements vscode.Disposable {
         const icon = primary ? '$(star)' : '$(cloud)';
         return {
           label: `${icon} ${b.name}`,
-          description: b.lastCommitDateRelative ?? '',
+          description: lastCommitDateLabel(b),
           detail: formatCommitDetail(b),
           action: () => this.showSingleBranchActionMenu(b.name, meta, false, true, false, effectiveBranchName, primary),
         };
@@ -1311,8 +1335,8 @@ export class BranchStatusBar implements vscode.Disposable {
         const icon = isActiveTag ? '$(check)' : '$(tag)';
         items.push({
           label: `${icon} ${tag.name}`,
-          description: [isActiveTag ? 'current' : undefined, tag.dateRelative].filter(Boolean).join('  '),
-          detail: [tag.author, tag.hash, tag.message].filter(Boolean).join('  •  '),
+          description: [isActiveTag ? 'current' : undefined, tagDateLabel(tag)].filter(Boolean).join('  '),
+          detail: formatTagDetail(tag),
           action: () => this.showSingleTagActionMenu(tag.name, meta, effectiveBranchName, isDetached),
         });
       }
@@ -1793,14 +1817,14 @@ export class BranchStatusBar implements vscode.Disposable {
       { label: 'LOCAL', kind: vscode.QuickPickItemKind.Separator, ref: '' },
       ...local.map(b => ({
         label: `${b.isHead ? '$(check)' : '$(git-branch)'} ${b.name}`,
-        description: [b.isHead ? 'current' : undefined, b.lastCommitDateRelative].filter(Boolean).join('  '),
+        description: [b.isHead ? 'current' : undefined, lastCommitDateLabel(b)].filter(Boolean).join('  '),
         detail: formatCommitDetail(b),
         ref: b.name,
       })),
       { label: 'REMOTE', kind: vscode.QuickPickItemKind.Separator, ref: '' },
       ...remote.map(b => ({
         label: `$(cloud) ${b.name}`,
-        description: b.lastCommitDateRelative ?? '',
+        description: lastCommitDateLabel(b),
         detail: formatCommitDetail(b),
         ref: b.name,
       })),
