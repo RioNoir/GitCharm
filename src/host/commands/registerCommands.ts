@@ -854,6 +854,8 @@ export function registerCommands(
       if (!conflictedFiles.has(doc.uri.fsPath)) return;
       if (!doc.getText().includes('<<<<<<<')) {
         conflictedFiles.delete(doc.uri.fsPath);
+        // Don't steal the sidebar if the user is on Explorer / Search / etc.
+        if (!commitPanel.isVisible()) return;
         // Delay to run after VS Code's built-in SCM view focus
         setTimeout(() => {
           vscode.commands.executeCommand('gitcharm.commitPanel.focus');
