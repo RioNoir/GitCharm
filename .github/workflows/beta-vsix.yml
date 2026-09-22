@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout beta
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: beta
           fetch-depth: 0
