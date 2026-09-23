@@ -402,3 +402,113 @@ export function assignLanes(commits: CommitNode[], _isFiltered = false): GraphLa
 
   return { commits: laidOut, segments, totalCols, refColors };
 }
+
+export const UNCOMMITTED_COLOR = '#808080';
+export const UNCOMMITTED_HASH_PREFIX = '__uncommitted__:';
+
+export function uncommittedHash(repoId: string): string {
+  return `${UNCOMMITTED_HASH_PREFIX}${repoId}`;
+}
+
+function makeUncommittedCommit(
+  repoId: string,
+  count: number,
+  lane: number,
+  totalCols: number,
+  parentHash?: string,
+): LaidOutCommit {
+  return {
+    hash: uncommittedHash(repoId),
+    shortHash: '',
+    repoId,
+    message: `Uncommitted changes (${count})`,
+    authorName: '',
+    authorEmail: '',
+    authorDate: '',
+    committerDate: '',
+    parents: parentHash ? [parentHash] : [],
+    refs: [],
+    isUncommitted: true,
+    lane,
+    totalLanes: totalCols,
+    dotColor: UNCOMMITTED_COLOR,
+  };
+}
+
+/** Prepend a gray working-tree row per repo that has uncommitted files. */
+export function insertUncommittedRows(
+  layout: GraphLayout,
+  counts: Record<string, number>,
+  headHashByRepo: Record<string, string>,
+): GraphLayout {
+  const dirty = Object.entries(counts).filter(([, n]) => n > 0);
+  if (dirty.length === 0) return layout;
+
+  if (layout.commits.length === 0) {
+    const commits = dirty.map(([repoId, count]) =>
+      makeUncommittedCommit(repoId, count, 0, 1),
+    );
+    return { ...layout, commits, totalCols: Math.max(layout.totalCols, 1) };
+  }
+
+  const inserts: Array<{ index: number; repoId: string; count: number }> = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < layout.commits.length; i++) {
+    const { repoId } = layout.commits[i];
+    if (seen.has(repoId)) continue;
+    seen.add(repoId);
+    const count = counts[repoId] ?? 0;
+    if (count > 0) inserts.push({ index: i, repoId, count });
+  }
+  if (inserts.length === 0) return layout;
+
+  inserts.sort((a, b) => b.index - a.index);
+  const commits = layout.commits.slice();
+  const segments = layout.segments.map(s => ({ ...s }));
+
+  for (const ins of inserts) {
+    const headHash = headHashByRepo[ins.repoId];
+    const headCommit = (headHash
+      ? commits.find(c => c.hash === headHash && c.repoId === ins.repoId)
+      : undefined)
+      ?? commits.find(c => c.repoId === ins.repoId && !c.isStash && !c.isUncommitted);
+    const lane = headCommit?.lane ?? 0;
+
+    for (const s of segments) {
+      if (s.p1y >= ins.index) s.p1y += 1;
+      if (s.p2y >= ins.index) s.p2y += 1;
+    }
+
+    commits.splice(
+      ins.index,
+      0,
+      makeUncommittedCommit(ins.repoId, ins.count, lane, layout.totalCols, headCommit?.hash),
+    );
+
+    if (headCommit) {
+      const headRow = commits.findIndex(c => c.hash === headCommit.hash && c.repoId === ins.repoId);
+      if (headRow > ins.index) {
+        segments.push({
+          p1x: lane, p1y: ins.index,
+          p2x: lane, p2y: headRow,
+          color: UNCOMMITTED_COLOR,
+          lockedFirst: false,
+          branchId: -1,
+        });
+      }
+    }
+  }
+
+  return { ...layout, commits, segments };
+}
+
+export function buildLogGraph(
+  commits: CommitNode[],
+  isFiltered: boolean,
+  uncommittedCounts: Record<string, number>,
+  headHashByRepo: Record<string, string>,
+): GraphLayout {
+  const layout = assignLanes(commits, isFiltered);
+  if (isFiltered) return layout;
+  return insertUncommittedRows(layout, uncommittedCounts, headHashByRepo);
+}

@@ -21,7 +21,7 @@ import { BranchSidebar } from '../gitLog/components/BranchSidebar';
 import { CommitList } from '../gitLog/components/CommitList';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
 import { CommitFiltersBar, RepoTabs } from '../gitLog/components/CommitFiltersBar';
-import { assignLanes } from '../gitLog/utils/graphLayout';
+import { buildLogGraph } from '../gitLog/utils/graphLayout';
 import type { GraphLayout } from '../gitLog/utils/graphLayout';
 
 // ── Commit sub-app — mounts the full commit panel ────────────────────────────
@@ -113,6 +113,9 @@ function LogApp() {
         case 'LOG_STASHES_BATCH':
           store.setStashes(msg.stashCommits, msg.queriedRepoIds);
           break;
+        case 'LOG_UNCOMMITTED_COUNTS':
+          store.setUncommittedCounts(msg.counts);
+          break;
         case 'LOG_SCROLL_TO_COMMIT':
           store.setPendingScrollTarget({ hash: msg.hash, repoId: msg.repoId });
           break;
@@ -198,6 +201,10 @@ function LogApp() {
       store.setCommitFiles(selectedCommit.stashFiles ?? []);
       return;
     }
+    if (selectedCommit.isUncommitted) {
+      store.setCommitFiles([]);
+      return;
+    }
     store.setLoadingFiles(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -232,21 +239,12 @@ function LogApp() {
     return merged;
   }, [store.commits, store.stashes, store.commitFilters.branch]);
 
-  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() => assignLanes(commitsWithStashes, isFiltered));
+  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() => buildLogGraph(commitsWithStashes, isFiltered, store.uncommittedCounts, {}));
   const layoutRafRef = useRef<number | null>(null);
   const pendingCommitsRef = useRef(commitsWithStashes);
   const pendingFilteredRef = useRef(isFiltered);
   pendingCommitsRef.current = commitsWithStashes;
   pendingFilteredRef.current = isFiltered;
-
-  useEffect(() => {
-    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
-    layoutRafRef.current = requestAnimationFrame(() => {
-      layoutRafRef.current = null;
-      setGraphLayout(assignLanes(pendingCommitsRef.current, pendingFilteredRef.current));
-    });
-    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
-  }, [commitsWithStashes, isFiltered, themeVersion]);
 
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -264,6 +262,17 @@ function LogApp() {
     });
     return map;
   }, [store.branches]);
+
+  useEffect(() => {
+    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
+    const counts = store.uncommittedCounts;
+    const heads = headHashByRepo;
+    layoutRafRef.current = requestAnimationFrame(() => {
+      layoutRafRef.current = null;
+      setGraphLayout(buildLogGraph(pendingCommitsRef.current, pendingFilteredRef.current, counts, heads));
+    });
+    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
+  }, [commitsWithStashes, isFiltered, themeVersion, store.uncommittedCounts, headHashByRepo]);
 
   const selectedRepoColor = store.selectedCommit ? repoColors[store.selectedCommit.repoId] : undefined;
 

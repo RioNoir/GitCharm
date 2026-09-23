@@ -3,7 +3,7 @@ import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
-import type { BranchInfo, RepoMeta } from '../types/git';
+import type { BranchInfo, RepoMeta, WorkspaceStatus } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
@@ -23,6 +23,17 @@ import {
   type GitLogLayout,
   type GitLogLocation,
 } from '../settings/GitLogLocationSettings';
+
+function uncommittedCountsFrom(status: WorkspaceStatus): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const r of status.repos) {
+    const paths = new Set<string>();
+    for (const f of r.stagedFiles) paths.add(f.path);
+    for (const f of r.unstagedFiles) paths.add(f.path);
+    if (paths.size > 0) counts[r.repoId] = paths.size;
+  }
+  return counts;
+}
 
 function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): BranchInfo[] {
   if (!current.detachedTag && !current.detachedHash) return branches; // normal branch — already in list
@@ -234,7 +245,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.managerListeners.push(
       this.manager.onGraphChange(onGraphOrBranchChange),
       this.manager.onBranchChange(onGraphOrBranchChange),
-      this.manager.onReposChange(onGraphOrBranchChange)
+      this.manager.onReposChange(onGraphOrBranchChange),
+      this.manager.onStatusChange(status => {
+        this.broadcast({ type: 'LOG_UNCOMMITTED_COUNTS', counts: uncommittedCountsFrom(status) });
+      }),
     );
 
     this.profileService?.onProfileChange(async () => {
@@ -524,6 +538,9 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
         ]);
         post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
+        void this.manager.getAllStatuses().then(status => {
+          post({ type: 'LOG_UNCOMMITTED_COUNTS', counts: uncommittedCountsFrom(status) });
+        }).catch(() => {});
 
         // Send tags for all repos
         for (const meta of repos) {

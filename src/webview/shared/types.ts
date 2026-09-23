@@ -72,6 +72,7 @@ export interface CommitNode {
   stashRef?: string;
   stashBranch?: string;
   stashFiles?: Array<{ path: string; status: string; added?: number; removed?: number }>;
+  isUncommitted?: boolean;
 }
 
 export type GitFileStatus =

@@ -5,7 +5,7 @@ import { BranchSidebar } from './components/BranchSidebar';
 import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
 import { CommitFiltersBar, RepoTabs } from './components/CommitFiltersBar';
-import { assignLanes } from './utils/graphLayout';
+import { buildLogGraph } from './utils/graphLayout';
 import type { GraphLayout } from './utils/graphLayout';
 import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
@@ -159,6 +159,9 @@ function App() {
         case 'LOG_STASHES_BATCH':
           store.setStashes(msg.stashCommits, msg.queriedRepoIds);
           break;
+        case 'LOG_UNCOMMITTED_COUNTS':
+          store.setUncommittedCounts(msg.counts);
+          break;
         case 'LOG_REMOTES_RESULT':
           break;
         case 'LOG_DESELECT_FILE': {
@@ -262,6 +265,10 @@ function App() {
       store.setCommitFiles(selectedCommit.stashFiles ?? []);
       return;
     }
+    if (selectedCommit.isUncommitted) {
+      store.setCommitFiles([]);
+      return;
+    }
     store.setLoadingFiles(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -305,7 +312,7 @@ function App() {
   // assignLanes is expensive — run it off the render path via useEffect + rAF
   // so scroll events never block the UI thread waiting for layout recalc.
   const [graphLayout, setGraphLayout] = useState<GraphLayout>(() =>
-    assignLanes(commitsWithStashes, isFiltered)
+    buildLogGraph(commitsWithStashes, isFiltered, store.uncommittedCounts, {})
   );
 
   const layoutRafRef = useRef<number | null>(null);
@@ -313,15 +320,6 @@ function App() {
   const pendingFilteredRef = useRef(isFiltered);
   pendingCommitsRef.current = commitsWithStashes;
   pendingFilteredRef.current = isFiltered;
-
-  useEffect(() => {
-    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
-    layoutRafRef.current = requestAnimationFrame(() => {
-      layoutRafRef.current = null;
-      setGraphLayout(assignLanes(pendingCommitsRef.current, pendingFilteredRef.current));
-    });
-    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
-  }, [commitsWithStashes, isFiltered, themeVersion]);
 
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -341,6 +339,17 @@ function App() {
     });
     return map;
   }, [store.branches]);
+
+  useEffect(() => {
+    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
+    const counts = store.uncommittedCounts;
+    const heads = headHashByRepo;
+    layoutRafRef.current = requestAnimationFrame(() => {
+      layoutRafRef.current = null;
+      setGraphLayout(buildLogGraph(pendingCommitsRef.current, pendingFilteredRef.current, counts, heads));
+    });
+    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
+  }, [commitsWithStashes, isFiltered, themeVersion, store.uncommittedCounts, headHashByRepo]);
 
   const selectedRepoColor = rangeEndpoints
     ? repoColors[rangeEndpoints.newer.repoId]
