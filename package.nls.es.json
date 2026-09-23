@@ -8,7 +8,7 @@
   "command.openLog.title": "Mostrar Git Log",
   "command.showOutputLog.title": "Mostrar registro de salida",
   "command.commit.title": "Commit",
-  "command.commitAndPush.title": "Commit y push",
+  "command.commitAndPush.title": "Commit & Push",
   "command.pull.title": "Pull",
   "command.push.title": "Hacer push de todo",
   "command.fetchAll.title": "Hacer fetch de todos los remotos",
