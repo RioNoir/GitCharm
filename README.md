@@ -391,7 +391,7 @@ out/                      Built extension and webview bundles
 
 ## 🌐 Languages
 
-GitCharm follows VS Code's display language. Available translations: English, Italiano, 简体中文 (zh-cn), 繁體中文 (zh-tw).
+GitCharm follows VS Code's display language. Available translations: English, Deutsch, Español, Français, Italiano, 简体中文 (zh-cn), 繁體中文 (zh-tw).
 Translations are welcome — see [Localization](CONTRIBUTING.md#localization).
 
 ## 📌 Notes
