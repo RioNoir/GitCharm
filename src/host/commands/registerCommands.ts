@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import { CommitPanelProvider } from '../panels/CommitPanelProvider';
 import { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
-import { MergeEditorProvider } from '../panels/MergeEditorProvider';
 import { BranchStatusBar } from '../ui/BranchStatusBar';
 import { FileAnnotationController } from '../ui/FileAnnotationController';
 import { ProfileStatusBar } from '../ui/ProfileStatusBar';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
+import { hasConflictMarkers } from '../git/ConflictParser';
 import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
@@ -19,7 +19,6 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   commitPanel: CommitPanelProvider,
   logPanel: GitLogPanelProvider,
-  mergeEditor: MergeEditorProvider,
   branchStatusBar: BranchStatusBar,
   annotationController: FileAnnotationController,
   profileStatusBar: ProfileStatusBar,
@@ -98,8 +97,23 @@ export function registerCommands(
       commitPanel.setHideReposWithoutChanges(true);
     }),
 
-    vscode.commands.registerCommand('gitcharm.openMergeEditor', () => {
-      mergeEditor.openCurrentEditorFile();
+    vscode.commands.registerCommand('gitcharm.openMergeEditor', async (uri?: vscode.Uri) => {
+      // Invoked from the editor context menu VS Code passes the file's URI; from the
+      // Command Palette it passes nothing, so fall back to the active editor.
+      const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!target) {
+        logWarn('mergeEditor:open', 'No active file');
+        vscode.window.showWarningMessage('No active file');
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument(target);
+      if (!hasConflictMarkers(doc.getText())) {
+        logWarn('mergeEditor:open', 'No conflict markers found in the current file');
+        vscode.window.showWarningMessage('No conflict markers found in the current file');
+        return;
+      }
+      await vscode.commands.executeCommand('git.openMergeEditor', target)
+        .then(undefined, () => vscode.window.showTextDocument(target));
     }),
 
     vscode.commands.registerCommand('gitcharm.commit', () => {

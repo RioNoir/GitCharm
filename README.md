@@ -359,13 +359,12 @@ Example:
 ```text
 src/host/                 VS Code extension host code
 src/host/git/             Git, diff, conflict, blame, workspace, and shelve services
-src/host/panels/          Webview providers for Commit, Log, Merge Editor, Undocked Panel, and Pull Requests
+src/host/panels/          Webview providers for Commit, Log, Undocked Panel, and Pull Requests
 src/host/pullRequests/    Multi-provider Pull Request manager, per-provider API clients, and credential storage
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
 src/webview/gitLog/       React Git Log panel
 src/webview/commitFullDetail/ React commit "Full Detail" editor-tab panel
-src/webview/mergeEditor/  React 3-way merge editor
 src/webview/undockedPanel/ React undocked panel (Commit + Log side by side)
 src/webview/pullRequestCreate/ React Create Pull Request panel
 src/webview/pullRequestDetail/ React Pull Request detail panel
@@ -407,8 +406,7 @@ GitCharm is built on top of the excellent work of the open-source community. It 
 | Package | Role |
 |:--|:--|
 | [simple-git](https://github.com/steveukx/git-js) | Direct Git operations fallback when the VS Code Git API is unavailable. |
-| [Monaco Editor](https://github.com/microsoft/monaco-editor) / [@monaco-editor/react](https://github.com/suren-atoyan/monaco-react) | Diff and 3-way merge editor views. |
-| [React](https://react.dev/) | Renders every webview panel (Commit, Log, Merge Editor, Undocked Panel). |
+| [React](https://react.dev/) | Renders every webview panel (Commit, Log, Undocked Panel). |
 | [Zustand](https://github.com/pmndrs/zustand) | State management across all webview panels. |
 | [@tanstack/react-virtual](https://github.com/TanStack/virtual) | Virtualized rendering of large commit and file lists. |
 | [Prism.js](https://prismjs.com/) | Syntax highlighting in diff and file previews. |
