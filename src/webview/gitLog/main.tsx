@@ -29,7 +29,7 @@ function App() {
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
   const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 250, 120, 400);
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
-  const [detailCollapsed, setDetailCollapsed] = useState(false);
+  const [clearSelectionToken, setClearSelectionToken] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [themeVersion, setThemeVersion] = useState(0);
   const [multiSelectedCommits, setMultiSelectedCommits] = useState<CommitNode[]>([]);
@@ -102,7 +102,6 @@ function App() {
 
   const handleMultiSelectionChange = useCallback((commits: CommitNode[]) => {
     setMultiSelectedCommits(commits);
-    if (commits.length === 2) setDetailCollapsed(false);
   }, []);
 
   useEffect(() => {
@@ -519,6 +518,7 @@ function App() {
           <CommitList
             layout={graphLayout}
             selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
+            clearSelectionToken={clearSelectionToken}
             repoColors={repoColors}
             repos={store.repos}
             activeRepoId={store.commitFilters.repoId}
@@ -526,13 +526,7 @@ function App() {
             headHashByRepo={headHashByRepo}
             onSelect={(commit) => {
               const same = store.selectedCommit?.hash === commit.hash && store.selectedCommit?.repoId === commit.repoId;
-              if (same) {
-                if (detailCollapsed) { setDetailCollapsed(false); return; }
-                store.selectCommit(null);
-                return;
-              }
-              store.selectCommit(commit);
-              setDetailCollapsed(false);
+              store.selectCommit(same ? null : commit);
             }}
             onMultiSelectionChange={handleMultiSelectionChange}
             onLoadMore={handleLoadMore}
@@ -548,10 +542,10 @@ function App() {
           />
         </div>
 
-        {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
+        {hasSelectedCommit && <ResizeHandle onMouseDown={onDetailResize} />}
 
-        {/* Commit detail (right) — hidden when no commit selected or closed */}
-        {hasSelectedCommit && !detailCollapsed && (
+        {/* Commit detail (right) — hidden when no commit selected */}
+        {hasSelectedCommit && (
           <div ref={detailRef} style={detailPane}>
             <CommitDetail
               commit={rangeEndpoints?.newer ?? store.selectedCommit}
@@ -563,7 +557,7 @@ function App() {
               repos={store.repos}
               iconTheme={store.iconTheme}
               onSelectFile={store.selectFile}
-              onClose={() => setDetailCollapsed(true)}
+              onClose={() => { store.selectCommit(null); setClearSelectionToken(t => t + 1); }}
               refColors={graphLayout.refColors}
               themeVersion={themeVersion}
               activeProfile={store.activeProfile}
