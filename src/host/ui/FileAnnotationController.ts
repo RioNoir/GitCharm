@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { BlameService, type BlameLine } from '../git/BlameService';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
+import { plural } from '../utils/plural';
 
 const GHOST_MAX_SUMMARY_LEN = 72;
 const CONTEXT_KEY = 'gitcharm.annotationsVisible';
@@ -25,12 +26,12 @@ function formatRelativeDate(date: Date): string {
   const diffMonths = Math.floor(diffDays / 30.44);
   const diffYears = Math.floor(diffDays / 365.25);
 
-  if (diffYears >= 1) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
-  if (diffMonths >= 1) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
-  if (diffDays >= 1) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  if (diffHours >= 1) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  if (diffMins >= 1) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-  return 'just now';
+  if (diffYears >= 1) return plural(diffYears, vscode.l10n.t('1 year ago'), vscode.l10n.t('{0} years ago', diffYears));
+  if (diffMonths >= 1) return plural(diffMonths, vscode.l10n.t('1 month ago'), vscode.l10n.t('{0} months ago', diffMonths));
+  if (diffDays >= 1) return plural(diffDays, vscode.l10n.t('1 day ago'), vscode.l10n.t('{0} days ago', diffDays));
+  if (diffHours >= 1) return plural(diffHours, vscode.l10n.t('1 hour ago'), vscode.l10n.t('{0} hours ago', diffHours));
+  if (diffMins >= 1) return plural(diffMins, vscode.l10n.t('1 minute ago'), vscode.l10n.t('{0} minutes ago', diffMins));
+  return vscode.l10n.t('just now');
 }
 
 function formatDateFull(date: Date): string {
@@ -503,9 +504,10 @@ export class FileAnnotationController implements vscode.Disposable {
     // Give every before attachment the same explicit width. Character-count padding
     // is not stable enough here: "Not committed" and date/author labels can measure
     // a little differently and shift indentation guides on modified lines.
+    const notCommitted = vscode.l10n.t('Not committed');
     const maxLabelLen = blameLines
       .filter(l => !l.isUncommitted)
-      .reduce((max, l) => Math.max(max, blameLabel(l).length), 13 /* 'Not committed' */);
+      .reduce((max, l) => Math.max(max, blameLabel(l).length), notCommitted.length);
     const annotationWidthCh = maxLabelLen + 1; // +1 visual gap before border
 
     // Uncommitted lines — neutral type, no background
@@ -516,7 +518,7 @@ export class FileAnnotationController implements vscode.Disposable {
       const extendsCodeLens = codeLensLines.has(l.lineNumber);
       const decoration = {
         range: new vscode.Range(l.lineNumber, 0, l.lineNumber, 0),
-        renderOptions: { before: annotationAttachment('Not committed', annotationWidthCh, extendsCodeLens) },
+        renderOptions: { before: annotationAttachment(notCommitted, annotationWidthCh, extendsCodeLens) },
       };
       if (extendsCodeLens) codeLensUncommittedDecorations.push(decoration);
       else uncommittedDecorations.push(decoration);
@@ -577,7 +579,7 @@ export class FileAnnotationController implements vscode.Disposable {
       `$(account) **${escapeMarkdown(line.author)}** &nbsp;·&nbsp; $(calendar) ${formatDateFull(line.date)}\n\n` +
       `${escapeMarkdown(line.summary)}\n\n` +
       `---\n\n` +
-      `[$(history) Open in Git Log](${commandUri})`
+      `[$(history) ${vscode.l10n.t('Open in Git Log')}](${commandUri})`
     );
     md.isTrusted = true;
     md.supportThemeIcons = true;

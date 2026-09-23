@@ -703,11 +703,12 @@ export class WorkspaceGitManager implements vscode.Disposable {
   ): Promise<void> {
     const names = files.map(f => f.relPath);
     const label = names.length === 1
-      ? `Do you want to add "${names[0]}" to Git?`
-      : `Do you want to add ${names.length} new files to Git?`;
+      ? vscode.l10n.t('Do you want to add "{0}" to Git?', names[0])
+      : vscode.l10n.t('Do you want to add {0} new files to Git?', names.length);
 
-    const answer = await vscode.window.showInformationMessage(label, 'Add', 'Cancel');
-    if (answer !== 'Add') return;
+    const add = vscode.l10n.t('Add');
+    const answer = await vscode.window.showInformationMessage(label, add, vscode.l10n.t('Cancel'));
+    if (answer !== add) return;
 
     for (const { repo, relPath } of files) {
       await repo.stageFiles([relPath]).catch(() => {});

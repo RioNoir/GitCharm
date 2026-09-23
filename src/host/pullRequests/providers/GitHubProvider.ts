@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
@@ -875,7 +876,7 @@ export class GitHubProvider implements PullRequestProvider {
 
   async submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult> {
     if ((input.event === 'requestChanges' || input.event === 'comment') && !input.body?.trim()) {
-      return { ok: false, error: 'A comment body is required for this review type' };
+      return { ok: false, error: vscode.l10n.t('A comment body is required for this review type') };
     }
     const headers = await this.headers();
     try {

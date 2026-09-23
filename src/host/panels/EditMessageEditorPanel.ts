@@ -15,7 +15,7 @@ export async function openEditMessageEditor(
     const nonce = generateNonce();
     const panel = vscode.window.createWebviewPanel(
       'gitcharmEditMsg',
-      `Edit commit message (${shortHash})`,
+      vscode.l10n.t('Edit commit message ({0})', shortHash),
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: false }
     );
@@ -50,15 +50,15 @@ export async function openEditMessageEditor(
   });
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function getHtml(nonce: string, csp: string, codiconUri: string, shortHash: string, currentMessage: string): string {
-  const escaped = currentMessage
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  const escaped = escapeHtml(currentMessage);
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(vscode.env.language)}">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -143,24 +143,24 @@ function getHtml(nonce: string, csp: string, codiconUri: string, shortHash: stri
   <div class="header">
     <span class="codicon codicon-edit header-icon"></span>
     <div>
-      <div class="header-title">Edit commit message</div>
+      <div class="header-title">${escapeHtml(vscode.l10n.t('Edit commit message'))}</div>
       <div class="header-sub">${shortHash}</div>
     </div>
   </div>
   <div class="body">
     <div>
-      <div class="label">Commit message</div>
+      <div class="label">${escapeHtml(vscode.l10n.t('Commit message'))}</div>
       <textarea id="msg" autofocus spellcheck="false">${escaped}</textarea>
     </div>
   </div>
   <div class="footer">
     <button class="btn-cancel" id="cancelBtn">
       <span class="codicon codicon-close" style="font-size:13px"></span>
-      Cancel
+      ${escapeHtml(vscode.l10n.t('Cancel'))}
     </button>
     <button class="btn-confirm" id="confirmBtn">
       <span class="codicon codicon-check" style="font-size:13px"></span>
-      Save
+      ${escapeHtml(vscode.l10n.t('Save'))}
     </button>
   </div>
   <script nonce="${nonce}">

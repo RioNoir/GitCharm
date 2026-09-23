@@ -18,6 +18,15 @@ export function showLogChannel(): void {
   channel?.show(true);
 }
 
+/** Shows a notification with a "Show Log" action that reveals the output channel. */
+export function notifyWithLogAction(severity: 'warning' | 'error', message: string): void {
+  const showLog = vscode.l10n.t('Show Log');
+  const show = severity === 'error' ? vscode.window.showErrorMessage : vscode.window.showWarningMessage;
+  void show(message, showLog).then(choice => {
+    if (choice === showLog) showLogChannel();
+  });
+}
+
 // Debug-level messages are hidden by the Output panel unless the user raises this
 // channel's log level manually — use for high-frequency internal diagnostics that would
 // otherwise flood the default view (e.g. profile resolution on every status refresh).

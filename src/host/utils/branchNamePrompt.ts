@@ -63,14 +63,14 @@ export async function promptBranchName(options: BranchNamePromptOptions): Promis
       prompt: options.prompt,
       placeHolder: options.placeHolder,
       value: options.value,
-      validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
+      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
     });
   }
 
   return new Promise<string | undefined>(resolve => {
     const qp = vscode.window.createQuickPick<vscode.QuickPickItem & { fullValue?: string }>();
     qp.title = options.title;
-    qp.placeholder = options.placeHolder ?? options.prompt ?? 'Enter the new branch name';
+    qp.placeholder = options.placeHolder ?? options.prompt ?? vscode.l10n.t('Enter the new branch name');
     qp.value = options.value ?? '';
     qp.ignoreFocusOut = true;
     qp.matchOnDescription = false;
@@ -81,7 +81,7 @@ export async function promptBranchName(options: BranchNamePromptOptions): Promis
       const items: Array<vscode.QuickPickItem & { fullValue?: string; isPrefixOnly?: boolean }> = [];
 
       if (trimmed.length > 0) {
-        items.push({ label: trimmed, description: 'Use this branch name', alwaysShow: true, fullValue: trimmed });
+        items.push({ label: trimmed, description: vscode.l10n.t('Use this branch name'), alwaysShow: true, fullValue: trimmed });
       }
 
       for (const model of models) {
@@ -120,7 +120,7 @@ export async function promptBranchName(options: BranchNamePromptOptions): Promis
 
       const picked = (selected?.fullValue ?? qp.value).trim();
       if (!picked) {
-        qp.validationMessage = 'Branch name cannot be empty';
+        qp.validationMessage = vscode.l10n.t('Branch name cannot be empty');
         return;
       }
       resolved = true;

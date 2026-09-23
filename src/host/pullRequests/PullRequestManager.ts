@@ -238,7 +238,7 @@ export class PullRequestManager {
       const resolved = await this.resolveOrigin(repoId);
       const provider = resolved?.provider ? this.makeProvider(repoId, resolved.provider) : null;
       if (!resolved || !provider) {
-        result = { repoId, repoName, repoColor, connection, pullRequests: [], page: 1, hasMore: false, error: 'Unable to resolve provider for this repo' };
+        result = { repoId, repoName, repoColor, connection, pullRequests: [], page: 1, hasMore: false, error: vscode.l10n.t('Unable to resolve provider for this repo') };
       } else {
         try {
           const { items, hasMore, totalCount } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, 1));
@@ -321,9 +321,9 @@ export class PullRequestManager {
 
   async createPullRequest(repoId: string, input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
     const resolved = await this.resolveOrigin(repoId);
-    if (!resolved || !resolved.provider) return { ok: false, error: 'Unable to resolve provider for this repo' };
+    if (!resolved || !resolved.provider) return { ok: false, error: vscode.l10n.t('Unable to resolve provider for this repo') };
     const provider = this.makeProvider(repoId, resolved.provider);
-    if (!provider) return { ok: false, error: 'Unsupported or undetected provider for this repo' };
+    if (!provider) return { ok: false, error: vscode.l10n.t('Unsupported or undetected provider for this repo') };
     const result = await provider.createPullRequest(resolved.owner, resolved.repo, input);
     if (result.ok) this.invalidate(repoId);
     else logError('pullrequest-create', `Failed to create pull request for ${resolved.owner}/${resolved.repo}`, result.error);
@@ -338,10 +338,10 @@ export class PullRequestManager {
   async connectWithPat(repoId: string, token: string, label: string): Promise<{ ok: boolean; error?: string }> {
     const resolved = await this.resolveOrigin(repoId);
     if (!resolved || !resolved.provider || resolved.provider.provider === 'unknown') {
-      return { ok: false, error: 'Unable to resolve a forge provider for this repo' };
+      return { ok: false, error: vscode.l10n.t('Unable to resolve a forge provider for this repo') };
     }
     const { provider: forgeProvider, host } = resolved.provider;
-    if (forgeProvider === 'bitbucket') return { ok: false, error: 'Bitbucket requires an account email in addition to the API token' };
+    if (forgeProvider === 'bitbucket') return { ok: false, error: vscode.l10n.t('Bitbucket requires an account email in addition to the API token') };
     const valid = await validateToken(forgeProvider, host, { apiToken: token });
     if (!valid.ok) {
       logWarn('pullrequest-connect-pat', `Token validation failed for ${host}`, valid.error);
@@ -360,7 +360,7 @@ export class PullRequestManager {
   async connectBitbucket(repoId: string, label: string, credentials: BitbucketCredentials): Promise<{ ok: boolean; error?: string }> {
     const resolved = await this.resolveOrigin(repoId);
     if (!resolved || !resolved.provider || resolved.provider.provider !== 'bitbucket') {
-      return { ok: false, error: 'This repo is not detected as a Bitbucket repository' };
+      return { ok: false, error: vscode.l10n.t('This repo is not detected as a Bitbucket repository') };
     }
     const valid = await validateToken('bitbucket', resolved.host, credentials);
     if (!valid.ok) {
@@ -422,9 +422,9 @@ export class PullRequestManager {
 
   private async resolveProviderAndTarget(repoId: string): Promise<{ owner: string; repo: string; provider: PullRequestProvider } | { error: string }> {
     const resolved = await this.resolveOrigin(repoId);
-    if (!resolved || !resolved.provider) return { error: 'Unable to resolve provider for this repo' };
+    if (!resolved || !resolved.provider) return { error: vscode.l10n.t('Unable to resolve provider for this repo') };
     const provider = this.makeProvider(repoId, resolved.provider);
-    if (!provider) return { error: 'Unsupported or undetected provider for this repo' };
+    if (!provider) return { error: vscode.l10n.t('Unsupported or undetected provider for this repo') };
     return { owner: resolved.owner, repo: resolved.repo, provider };
   }
 
@@ -465,7 +465,7 @@ export class PullRequestManager {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
     const [owner, repo] = targetRepoFullName.split('/');
-    if (!owner || !repo) return { items: [], error: `Invalid repository name: ${targetRepoFullName}` };
+    if (!owner || !repo) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
     try {
       return { items: await target.provider.listBranches(owner, repo) };
     } catch (err) {
@@ -480,7 +480,7 @@ export class PullRequestManager {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
     const [owner, repo] = targetRepoFullName.split('/');
-    if (!owner || !repo) return { items: [], error: `Invalid repository name: ${targetRepoFullName}` };
+    if (!owner || !repo) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
     try {
       return { items: await target.provider.listCollaborators(owner, repo) };
     } catch (err) {
@@ -513,7 +513,7 @@ export class PullRequestManager {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
     const [owner, repo] = targetRepoFullName.split('/');
-    if (!owner || !repo) return { items: [], error: `Invalid repository name: ${targetRepoFullName}` };
+    if (!owner || !repo) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
     try {
       return { items: await target.provider.listAvailableLabels(owner, repo) };
     } catch (err) {
@@ -713,13 +713,13 @@ export class PullRequestManager {
    */
   async checkoutPullRequest(repoId: string, pr: PullRequestSummary, mode: 'pr' | 'branch'): Promise<ActionResult & { branchName?: string }> {
     const repo = this.manager.getRepo(repoId);
-    if (!repo) return { ok: false, error: 'Repository not found' };
+    if (!repo) return { ok: false, error: vscode.l10n.t('Repository not found') };
 
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { ok: false, error: target.error };
 
     const remotes = await repo.getRemotesWithUrls();
-    if (remotes.length === 0) return { ok: false, error: 'No remote configured for this repository' };
+    if (remotes.length === 0) return { ok: false, error: vscode.l10n.t('No remote configured for this repository') };
 
     // Spaces become hyphens (e.g. "Riccardo Morandi" -> "riccardo-morandi"); any other non-branch-safe
     // character is also hyphenated. Lowercased throughout — git branch names are case-sensitive and this
@@ -762,17 +762,17 @@ async function validateToken(provider: ForgeProvider, host: string, credentials:
         headers = { Authorization: `token ${credentials.apiToken}` };
         break;
       case 'bitbucket': {
-        if (!credentials.email) return { ok: false, error: 'Bitbucket requires an account email' };
+        if (!credentials.email) return { ok: false, error: vscode.l10n.t('Bitbucket requires an account email') };
         url = 'https://api.bitbucket.org/2.0/user';
         const basic = Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString('base64');
         headers = { Authorization: `Basic ${basic}` };
         break;
       }
       default:
-        return { ok: false, error: `Unsupported provider: ${provider}` };
+        return { ok: false, error: vscode.l10n.t('Unsupported provider: {0}', provider) };
     }
     const res = await fetch(url, { headers });
-    if (!res.ok) return { ok: false, error: `Token validation failed: HTTP ${res.status} ${res.statusText}` };
+    if (!res.ok) return { ok: false, error: vscode.l10n.t('Token validation failed: HTTP {0} {1}', res.status, res.statusText) };
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

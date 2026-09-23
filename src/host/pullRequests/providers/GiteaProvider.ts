@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
@@ -594,11 +595,11 @@ export class GiteaProvider implements PullRequestProvider {
   }
 
   async hideComment(): Promise<UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Gitea has no concept of hiding a comment.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Gitea has no concept of hiding a comment.') };
   }
 
   async unhideComment(): Promise<UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Gitea has no concept of hiding a comment.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Gitea has no concept of hiding a comment.') };
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -731,7 +732,7 @@ export class GiteaProvider implements PullRequestProvider {
 
   async submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult> {
     if ((input.event === 'requestChanges' || input.event === 'comment') && !input.body?.trim()) {
-      return { ok: false, error: 'A comment body is required for this review type' };
+      return { ok: false, error: vscode.l10n.t('A comment body is required for this review type') };
     }
     const headers = await this.headers();
     try {

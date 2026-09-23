@@ -17,7 +17,7 @@ export async function generateWithAI(
 
     case 'claude-api': {
       const apiKey: string = cfg.get('ai.claudeApiKey', '');
-      if (!apiKey) throw new Error('Anthropic API key not set. Configure gitcharm.ai.claudeApiKey in settings.');
+      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Configure {1} in settings.', 'Anthropic', 'gitcharm.ai.claudeApiKey'));
       const model: string = cfg.get('ai.claudeModel', 'claude-sonnet-4-6');
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -32,16 +32,16 @@ export async function generateWithAI(
           messages: [{ role: 'user', content: prompt }],
         }),
       });
-      if (!res.ok) throw new Error(`Anthropic API error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(vscode.l10n.t('{0} error {1}: {2}', 'Anthropic API', res.status, await res.text()));
       const data = await res.json() as { content?: Array<{ type: string; text?: string }> };
       const text = data.content?.find(b => b.type === 'text')?.text?.trim();
-      if (!text) throw new Error('Anthropic API returned an empty response');
+      if (!text) throw new Error(vscode.l10n.t('{0} returned an empty response', 'Anthropic API'));
       return text;
     }
 
     case 'openai-api': {
       const apiKey: string = cfg.get('ai.openaiApiKey', '');
-      if (!apiKey) throw new Error('OpenAI API key not set. Configure gitcharm.ai.openaiApiKey in settings.');
+      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Configure {1} in settings.', 'OpenAI', 'gitcharm.ai.openaiApiKey'));
       const model: string = cfg.get('ai.openaiModel', 'gpt-4o');
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -54,10 +54,10 @@ export async function generateWithAI(
           messages: [{ role: 'user', content: prompt }],
         }),
       });
-      if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(vscode.l10n.t('{0} error {1}: {2}', 'OpenAI API', res.status, await res.text()));
       const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
       const text = data.choices?.[0]?.message?.content?.trim();
-      if (!text) throw new Error('OpenAI API returned an empty response');
+      if (!text) throw new Error(vscode.l10n.t('{0} returned an empty response', 'OpenAI API'));
       return text;
     }
 
@@ -69,17 +69,17 @@ export async function generateWithAI(
 
     case 'gemini-api': {
       const apiKey: string = cfg.get('ai.geminiApiKey', '');
-      if (!apiKey) throw new Error('Gemini API key not set. Configure gitcharm.ai.geminiApiKey in settings.');
+      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Configure {1} in settings.', 'Gemini', 'gitcharm.ai.geminiApiKey'));
       const model: string = cfg.get('ai.geminiModel', 'gemini-2.0-flash');
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       });
-      if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(vscode.l10n.t('{0} error {1}: {2}', 'Gemini API', res.status, await res.text()));
       const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (!text) throw new Error('Gemini API returned an empty response');
+      if (!text) throw new Error(vscode.l10n.t('{0} returned an empty response', 'Gemini API'));
       return text;
     }
 
@@ -102,10 +102,10 @@ export async function generateWithAI(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, stream: false, messages: [{ role: 'user', content: prompt }] }),
       });
-      if (!res.ok) throw new Error(`Ollama error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(vscode.l10n.t('{0} error {1}: {2}', 'Ollama', res.status, await res.text()));
       const data = await res.json() as { message?: { content?: string } };
       const text = data.message?.content?.trim();
-      if (!text) throw new Error('Ollama returned an empty response');
+      if (!text) throw new Error(vscode.l10n.t('{0} returned an empty response', 'Ollama'));
       return text;
     }
 
@@ -117,10 +117,10 @@ export async function generateWithAI(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: model || undefined, stream: false, messages: [{ role: 'user', content: prompt }] }),
       });
-      if (!res.ok) throw new Error(`LM Studio error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(vscode.l10n.t('{0} error {1}: {2}', 'LM Studio', res.status, await res.text()));
       const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
       const text = data.choices?.[0]?.message?.content?.trim();
-      if (!text) throw new Error('LM Studio returned an empty response');
+      if (!text) throw new Error(vscode.l10n.t('{0} returned an empty response', 'LM Studio'));
       return text;
     }
 
@@ -138,7 +138,7 @@ export async function generateWithAI(
         const all = await vscode.lm.selectChatModels();
         model = all[0];
       }
-      if (!model) throw new Error('No VS Code LM model available. Install GitHub Copilot or use the "GitCharm: Select AI Provider" command to switch provider.');
+      if (!model) throw new Error(vscode.l10n.t('No VS Code LM model available. Install GitHub Copilot or use the "GitCharm: Select AI Provider" command to switch provider.'));
       const response = await model.sendRequest(
         [vscode.LanguageModelChatMessage.User(prompt)],
         {},
@@ -162,7 +162,7 @@ function runCli(
     execFile(bin, args, { timeout: 60_000, maxBuffer: 1024 * 1024, input } as any, (err: Error | null, stdout: string, stderr: string) => {
       if (err) { reject(new Error(stderr.trim() || err.message)); return; }
       const message = extractOutput(stdout);
-      if (!message) reject(new Error('CLI returned an empty response'));
+      if (!message) reject(new Error(vscode.l10n.t('{0} returned an empty response', 'CLI')));
       else resolve(message);
     });
   }).then(undefined, (firstErr: Error) => {
@@ -180,7 +180,7 @@ function runCli(
           (err2: Error | null, stdout2: string, stderr2: string) => {
             if (err2) { reject(new Error(stderr2.trim() || err2.message || firstErr.message)); return; }
             const message = extractOutput(stdout2);
-            if (!message) reject(new Error('CLI returned an empty response'));
+            if (!message) reject(new Error(vscode.l10n.t('{0} returned an empty response', 'CLI')));
             else resolve(message);
           });
       });

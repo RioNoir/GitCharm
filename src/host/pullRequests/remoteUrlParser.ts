@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { resolveSshHostAlias } from './sshConfigResolver';
 
 export type ForgeProvider = 'github' | 'gitlab' | 'bitbucket' | 'gitea' | 'unknown';
@@ -11,7 +12,7 @@ const FORGE_PROVIDER_LABELS: Record<ForgeProvider, string> = {
 };
 
 export function forgeProviderLabel(provider: ForgeProvider): string {
-  return FORGE_PROVIDER_LABELS[provider];
+  return provider === 'unknown' ? vscode.l10n.t('Unknown') : FORGE_PROVIDER_LABELS[provider];
 }
 
 export interface ParsedRemote {

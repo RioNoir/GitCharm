@@ -15,7 +15,7 @@ function gitUri(rootPath: string, ref: string, filePath: string): vscode.Uri {
 export async function compareFileWithRef(repo: GitService, filePath: string, ref: string): Promise<void> {
   const original = gitUri(repo.rootPath, ref, filePath);
   const modified = vscode.Uri.file(path.join(repo.rootPath, filePath));
-  await vscode.commands.executeCommand('vscode.diff', original, modified, `${filePath} (Working Tree) vs ${ref}`);
+  await vscode.commands.executeCommand('vscode.diff', original, modified, vscode.l10n.t('{0} (Working Tree) vs {1}', filePath, ref));
 }
 
 export async function compareFolderWithRef(repo: GitService, folderPath: string, ref: string): Promise<void> {
@@ -28,7 +28,7 @@ export async function compareFolderWithRef(repo: GitService, folderPath: string,
       const modified = vscode.Uri.file(path.join(repo.rootPath, f.path));
       return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
     });
-  const title = `${folderPath || path.basename(repo.rootPath)} vs ${ref}`;
+  const title = vscode.l10n.t('{0} vs {1}', folderPath || path.basename(repo.rootPath), ref);
   await vscode.commands.executeCommand('vscode.changes', title, resources);
 }
 
@@ -38,13 +38,13 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
     ?? metas.find(m => fileUri.fsPath.startsWith(m.rootPath));
   if (!meta) {
     logWarn('compareWith', 'No git repository found for this path.');
-    vscode.window.showErrorMessage('No git repository found for this path.');
+    vscode.window.showErrorMessage(vscode.l10n.t('No git repository found for this path.'));
     return;
   }
   const repo = manager.getRepo(meta.id);
   if (!repo) {
     logWarn('compareWith', 'Repository not found.');
-    vscode.window.showErrorMessage('Repository not found.');
+    vscode.window.showErrorMessage(vscode.l10n.t('Repository not found.'));
     return;
   }
 
@@ -56,13 +56,13 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
     isDirectory = (stat.type & vscode.FileType.Directory) !== 0;
   } catch {
     logWarn('compareWith', 'Path not found.');
-    vscode.window.showErrorMessage('Path not found.');
+    vscode.window.showErrorMessage(vscode.l10n.t('Path not found.'));
     return;
   }
 
   const pickedRef = await pickRefQuickPick(repo, {
-    placeHolder: `Compare ${relPath || '.'} with…`,
-    title: 'GitCharm - Compare With',
+    placeHolder: vscode.l10n.t('Compare {0} with…', relPath || '.'),
+    title: vscode.l10n.t('GitCharm - Compare With'),
   });
   if (!pickedRef) return;
 
@@ -71,7 +71,7 @@ export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: 
     refHash = await repo.resolveRef(pickedRef);
   } catch {
     logError('compareWith', `Cannot resolve ref "${pickedRef}"`);
-    vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
+    vscode.window.showErrorMessage(vscode.l10n.t('Cannot resolve ref "{0}"', pickedRef));
     return;
   }
 

@@ -95,11 +95,11 @@ export class GitProfileService implements vscode.Disposable {
   // ── Built-in Local / Global ───────────────────────────────────────────────────
 
   private makeLocalPlaceholder(): GitProfile {
-    return { id: LOCAL_PROFILE_ID, name: 'Local', gitName: '', gitEmail: '', builtIn: 'local' };
+    return { id: LOCAL_PROFILE_ID, name: vscode.l10n.t('Local'), gitName: '', gitEmail: '', builtIn: 'local' };
   }
 
   private makeGlobalPlaceholder(): GitProfile {
-    return { id: GLOBAL_PROFILE_ID, name: 'Global', gitName: '', gitEmail: '', builtIn: 'global' };
+    return { id: GLOBAL_PROFILE_ID, name: vscode.l10n.t('Global'), gitName: '', gitEmail: '', builtIn: 'global' };
   }
 
   async readLocalCreds(repoPath: string): Promise<{ gitName: string; gitEmail: string } | undefined> {

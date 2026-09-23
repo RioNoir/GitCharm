@@ -12,7 +12,8 @@ import { ShelveDocumentProvider } from './utils/ShelveDocumentProvider';
 import { FileAnnotationController } from './ui/FileAnnotationController';
 import { GitProfileService } from './git/GitProfileService';
 import { ProfileStatusBar } from './ui/ProfileStatusBar';
-import { initLogger, logInfo, logWarn, showLogChannel } from './utils/Logger';
+import { initLogger, logInfo, logWarn, notifyWithLogAction } from './utils/Logger';
+import { plural } from './utils/plural';
 import { presentOrphanBranches } from './utils/orphanBranches';
 import { PullRequestManager } from './pullRequests/PullRequestManager';
 import { PatCredentialStore } from './pullRequests/PatCredentialStore';
@@ -28,28 +29,28 @@ async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void>
   type Item = vscode.QuickPickItem & { value: string };
   const items: Item[] = [
     {
-      label: '$(layout) Simplified',
-      description: 'Default',
-      detail: 'Staged and Unstaged sections grouped per repository',
+      label: `$(layout) ${vscode.l10n.t('Simplified')}`,
+      description: vscode.l10n.t('Default'),
+      detail: vscode.l10n.t('Staged and Unstaged sections grouped per repository'),
       value: 'simplified',
     },
     {
-      label: '$(list-tree) Changelists',
-      description: 'PhpStorm-style',
-      detail: 'Files grouped into named changelists across repositories',
+      label: `$(list-tree) ${vscode.l10n.t('Changelists')}`,
+      description: vscode.l10n.t('PhpStorm-style'),
+      detail: vscode.l10n.t('Files grouped into named changelists across repositories'),
       value: 'changelists',
     },
     {
       label: '$(source-control) VS Code',
-      description: 'Native-style',
-      detail: 'Staged Changes / Changes sections with inline stage/unstage buttons',
+      description: vscode.l10n.t('Native-style'),
+      detail: vscode.l10n.t('Staged Changes / Changes sections with inline stage/unstage buttons'),
       value: 'vscode',
     },
   ];
 
   const picked = await vscode.window.showQuickPick(items, {
-    title: 'GitCharm — Choose your preferred view mode',
-    placeHolder: 'Select how changed files are displayed (you can change this later in Settings)',
+    title: vscode.l10n.t('GitCharm — Choose your preferred view mode'),
+    placeHolder: vscode.l10n.t('Select how changed files are displayed (you can change this later in Settings)'),
     ignoreFocusOut: true,
   });
 
@@ -72,18 +73,21 @@ async function maybeShowSupportNotification(globalState: vscode.Memento): Promis
 
   await globalState.update(LAST_SHOWN_KEY, Date.now());
 
+  const star = vscode.l10n.t('Leave a Star');
+  const support = vscode.l10n.t('Support');
+  const doNotShow = vscode.l10n.t('Do Not Show Again');
   const picked = await vscode.window.showInformationMessage(
-    'Do you like GitCharm?',
-    'Leave a Star',
-    'Support',
-    'Do Not Show Again',
+    vscode.l10n.t('Do you like GitCharm?'),
+    star,
+    support,
+    doNotShow,
   );
 
-  if (picked === 'Do Not Show Again') {
+  if (picked === doNotShow) {
     await globalState.update(DO_NOT_SHOW_KEY, true);
-  } else if (picked === 'Leave a Star') {
+  } else if (picked === star) {
     await vscode.env.openExternal(vscode.Uri.parse('https://github.com/RioNoir/GitCharm'));
-  } else if (picked === 'Support') {
+  } else if (picked === support) {
     await vscode.env.openExternal(vscode.Uri.parse('https://ko-fi.com/rionoir'));
   }
 }
@@ -108,15 +112,14 @@ async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPa
 
   const reposWithAhead = counts.filter(c => c > 0).length;
 
-  const commitWord = totalAhead === 1 ? 'commit' : 'commits';
-  const repoWord = reposWithAhead === 1 ? 'repository' : 'repositories';
   const message = reposWithAhead === 1
-    ? `${totalAhead} unpushed ${commitWord} ready to push.`
-    : `${totalAhead} unpushed ${commitWord} across ${reposWithAhead} ${repoWord}.`;
+    ? plural(totalAhead, vscode.l10n.t('1 unpushed commit ready to push.'), vscode.l10n.t('{0} unpushed commits ready to push.', totalAhead))
+    : plural(totalAhead, vscode.l10n.t('1 unpushed commit across {0} repositories.', reposWithAhead), vscode.l10n.t('{0} unpushed commits across {1} repositories.', totalAhead, reposWithAhead));
 
-  const picked = await vscode.window.showInformationMessage(message, 'Go to Push', 'Dismiss');
+  const goToPush = vscode.l10n.t('Go to Push');
+  const picked = await vscode.window.showInformationMessage(message, goToPush, vscode.l10n.t('Dismiss'));
 
-  if (picked === 'Go to Push') {
+  if (picked === goToPush) {
     await vscode.commands.executeCommand('gitcharm.commitPanel.focus');
     commitPanel.switchToTab('push');
   }
@@ -148,15 +151,13 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
 
   const reposWithBehind = branches.filter(b => (b.aheadBehind?.behind ?? 0) > 0).length;
 
-  const commitWord = totalBehind === 1 ? 'commit' : 'commits';
-  const repoWord = reposWithBehind === 1 ? 'repository' : 'repositories';
   const message = reposWithBehind === 1
-    ? `${totalBehind} incoming ${commitWord} available to pull.`
-    : `${totalBehind} incoming ${commitWord} across ${reposWithBehind} ${repoWord}.`;
+    ? plural(totalBehind, vscode.l10n.t('1 incoming commit available to pull.'), vscode.l10n.t('{0} incoming commits available to pull.', totalBehind))
+    : plural(totalBehind, vscode.l10n.t('1 incoming commit across {0} repositories.', reposWithBehind), vscode.l10n.t('{0} incoming commits across {1} repositories.', totalBehind, reposWithBehind));
 
-  const pull = 'Pull';
-  const dismiss = 'Dismiss';
-  const doNotShow = "Don't show again";
+  const pull = vscode.l10n.t('Pull');
+  const dismiss = vscode.l10n.t('Dismiss');
+  const doNotShow = vscode.l10n.t("Don't show again");
 
   const picked = await vscode.window.showInformationMessage(message, pull, dismiss, doNotShow);
 
@@ -165,27 +166,21 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
   } else if (picked === pull) {
     const metaById = new Map(metas.map(m => [m.id, m]));
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Pulling…', cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling…'), cancellable: false },
       async () => {
         const results = await manager.pullAll(false);
         const failed = results.filter(r => !r.ok);
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
-          const successMessage = `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`;
-          logInfo('pull:incoming', successMessage);
-          vscode.window.showInformationMessage(successMessage);
+          logInfo('pull:incoming', `${ok.length} ${ok.length === 1 ? 'repository' : 'repositories'} updated.`);
+          vscode.window.showInformationMessage(plural(ok.length, vscode.l10n.t('1 repository updated.'), vscode.l10n.t('{0} repositories updated.', ok.length)));
         } else {
           const failedDesc = failed.map(r => {
             const name = metaById.get(r.repoId)?.name ?? r.repoId;
             return `${name}: ${r.message}`;
           }).join('; ');
           logWarn('pull:incoming', `${ok.length} updated, ${failed.length} failed`, failedDesc);
-          void vscode.window.showWarningMessage(
-            `${ok.length} updated, ${failed.length} failed: ${failedDesc}`,
-            'Show Log'
-          ).then(choice => {
-            if (choice === 'Show Log') showLogChannel();
-          });
+          notifyWithLogAction('warning', vscode.l10n.t('{0} updated, {1} failed: {2}', ok.length, failed.length, failedDesc));
         }
       }
     );
@@ -194,7 +189,7 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
 
 function notifyOrphanBranches(manager: WorkspaceGitManager, logPanel: GitLogPanelProvider, newlyOrphaned: Array<{ repoId: string; branchName: string }>): void {
   if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnOrphanBranches', true)) return;
-  presentOrphanBranches(manager, logPanel, newlyOrphaned, 'lost its remote (likely deleted after a merge)');
+  presentOrphanBranches(manager, logPanel, newlyOrphaned, 'lostAfterMerge');
 }
 
 export function activate(context: vscode.ExtensionContext): void {

@@ -5,6 +5,7 @@ import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import { showGitError } from '../utils/gitErrorUtils';
 import { logWarn } from '../utils/Logger';
+import { plural } from '../utils/plural';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -20,14 +21,14 @@ export async function openFileHistoryPanel(
     ?? metas.find(m => fileUri.fsPath.startsWith(m.rootPath));
   if (!meta) {
     logWarn('fileHistory', 'No git repository found for this file.');
-    vscode.window.showErrorMessage('No git repository found for this file.');
+    vscode.window.showErrorMessage(vscode.l10n.t('No git repository found for this file.'));
     return;
   }
 
   const repo = manager.getRepo(meta.id);
   if (!repo) {
     logWarn('fileHistory', 'Repository not found.');
-    vscode.window.showErrorMessage('Repository not found.');
+    vscode.window.showErrorMessage(vscode.l10n.t('Repository not found.'));
     return;
   }
 
@@ -46,7 +47,7 @@ export async function openFileHistoryPanel(
 
   const panel = vscode.window.createWebviewPanel(
     'gitcharmFileHistory',
-    `History: ${fileName}`,
+    vscode.l10n.t('History: {0}', fileName),
     vscode.ViewColumn.One,
     {
       enableScripts: true,
@@ -106,12 +107,12 @@ export async function openFileHistoryPanel(
         if (status === 'A') {
           leftUri  = gitUri(EMPTY_TREE, msg.currentPath);
           rightUri = gitUri(msg.hash, msg.currentPath);
-          title    = `${displayName} (added in ${shortHash})`;
+          title    = vscode.l10n.t('{0} (added in {1})', displayName, shortHash);
         } else if (status === 'D') {
           const prevPath = msg.oldPath ?? msg.currentPath;
           leftUri  = gitUri(`${msg.hash}~1`, prevPath);
           rightUri = gitUri(EMPTY_TREE, prevPath);
-          title    = `${displayName} (deleted in ${shortHash})`;
+          title    = vscode.l10n.t('{0} (deleted in {1})', displayName, shortHash);
         } else if ((status === 'R' || status === 'C') && msg.oldPath) {
           leftUri  = gitUri(`${msg.hash}~1`, msg.oldPath);
           rightUri = gitUri(msg.hash, msg.currentPath);
@@ -139,7 +140,7 @@ export async function openFileHistoryPanel(
 // ── HTML helpers ──────────────────────────────────────────────────────────────
 
 function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function escJson(v: unknown): string {
   return JSON.stringify(v).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -159,8 +160,22 @@ interface PanelData {
 }
 
 function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData): string {
+  const n = data.commits.length;
+  const commitCount = n === 0 ? '' : plural(n, vscode.l10n.t('1 commit'), vscode.l10n.t('{0} commits', n));
+  const daysAgo: Record<number, string> = {};
+  for (let d = 2; d < 7; d++) daysAgo[d] = plural(d, vscode.l10n.t('1 day ago'), vscode.l10n.t('{0} days ago', d));
+  const strings = {
+    statusLabels: {
+      A: vscode.l10n.t('Added'), M: vscode.l10n.t('Modified'), D: vscode.l10n.t('Deleted'),
+      R: vscode.l10n.t('Renamed'), C: vscode.l10n.t('Copied'), T: vscode.l10n.t('Type changed'),
+    },
+    today: vscode.l10n.t('Today'),
+    yesterday: vscode.l10n.t('Yesterday'),
+    daysAgo,
+    showInLog: vscode.l10n.t('Show in Git Log'),
+  };
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escHtml(vscode.env.language)}">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -262,14 +277,14 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     <span class="codicon codicon-history toolbar-icon"></span>
     <span class="toolbar-path" title="${escHtml(data.relPath)}">${escHtml(data.relPath)}</span>
     <span class="toolbar-repo">${escHtml(data.repoName)}</span>
-    <span class="toolbar-count" id="commitCount"></span>
+    <span class="toolbar-count" id="commitCount">${escHtml(commitCount)}</span>
   </div>
 
   <div class="commit-list" id="commitList">
     ${data.commits.length === 0 ? `
       <div class="empty">
         <span class="codicon codicon-git-commit"></span>
-        <span>No history found for this file</span>
+        <span>${escHtml(vscode.l10n.t('No history found for this file'))}</span>
       </div>
     ` : ''}
   </div>
@@ -280,14 +295,9 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     const vscode = acquireVsCodeApi();
     const __d    = JSON.parse(document.getElementById('__data').textContent);
     const COMMITS = __d.commits;
+    const STRINGS = ${escJson(strings)};
 
-    document.getElementById('commitCount').textContent =
-      COMMITS.length === 0 ? '' :
-      COMMITS.length === 1 ? '1 commit' : COMMITS.length + ' commits';
-
-    const STATUS_LABEL = {
-      A:'Added', M:'Modified', D:'Deleted', R:'Renamed', C:'Copied', T:'Type changed',
-    };
+    const STATUS_LABEL = STRINGS.statusLabels;
 
     function escText(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -304,9 +314,9 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         const now = new Date();
         const diff = now - d;
         const days = Math.floor(diff / 86400000);
-        if (days === 0) return 'Today';
-        if (days === 1) return 'Yesterday';
-        if (days < 7)  return days + ' days ago';
+        if (days === 0) return STRINGS.today;
+        if (days === 1) return STRINGS.yesterday;
+        if (days < 7 && days > 1) return STRINGS.daysAgo[days];
         return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       } catch { return iso; }
     }
@@ -338,7 +348,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
           '</div>' +
           renameHtml +
           '</div>' +
-          '<button class="log-btn" data-action="openinlog" data-hash="' + escAttr(c.hash) + '" title="Show in Git Log"><span class="codicon codicon-git-commit"></span></button>' +
+          '<button class="log-btn" data-action="openinlog" data-hash="' + escAttr(c.hash) + '" title="' + escAttr(STRINGS.showInLog) + '"><span class="codicon codicon-git-commit"></span></button>' +
           '</div>'
         );
       }

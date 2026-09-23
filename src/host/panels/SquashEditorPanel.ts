@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { generateNonce } from '../utils/webviewHtml';
+import { plural } from '../utils/plural';
 
 export interface SquashEditorResult {
   confirmed: boolean;
@@ -12,6 +13,10 @@ export interface SquashCommitInfo {
   message: string;
 }
 
+function squashTitle(commitCount: number): string {
+  return plural(commitCount, vscode.l10n.t('Squash 1 commit'), vscode.l10n.t('Squash {0} commits', commitCount));
+}
+
 export async function openSquashEditor(
   extensionUri: vscode.Uri,
   commitCount: number,
@@ -22,7 +27,7 @@ export async function openSquashEditor(
     const nonce = generateNonce();
     const panel = vscode.window.createWebviewPanel(
       'gitcharmSquash',
-      `Squash ${commitCount} commits`,
+      squashTitle(commitCount),
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: false }
     );
@@ -58,7 +63,7 @@ export async function openSquashEditor(
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function getHtml(nonce: string, csp: string, codiconUri: string, commitCount: number, initialMessage: string, commits: SquashCommitInfo[]): string {
@@ -71,7 +76,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, commitCount: nu
   ).join('');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(vscode.env.language)}">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -185,28 +190,28 @@ function getHtml(nonce: string, csp: string, codiconUri: string, commitCount: nu
   <div class="header">
     <span class="codicon codicon-fold header-icon"></span>
     <div>
-      <div class="header-title">Squash ${commitCount} commits</div>
-      <div class="header-sub">Edit the combined commit message below, then confirm.</div>
+      <div class="header-title">${escapeHtml(squashTitle(commitCount))}</div>
+      <div class="header-sub">${escapeHtml(vscode.l10n.t('Edit the combined commit message below, then confirm.'))}</div>
     </div>
   </div>
   <div class="body">
     ${commitRows ? `<div>
-      <div class="label" style="margin-bottom:6px">Commits being squashed</div>
+      <div class="label" style="margin-bottom:6px">${escapeHtml(vscode.l10n.t('Commits being squashed'))}</div>
       <div class="commit-list">${commitRows}</div>
     </div>` : ''}
     <div>
-      <div class="label" style="margin-bottom:6px">Commit message</div>
+      <div class="label" style="margin-bottom:6px">${escapeHtml(vscode.l10n.t('Commit message'))}</div>
       <textarea id="msg" autofocus spellcheck="false">${escaped}</textarea>
     </div>
   </div>
   <div class="footer">
     <button class="btn-cancel" id="cancelBtn">
       <span class="codicon codicon-close" style="font-size:13px"></span>
-      Cancel
+      ${escapeHtml(vscode.l10n.t('Cancel'))}
     </button>
     <button class="btn-confirm" id="confirmBtn">
       <span class="codicon codicon-check" style="font-size:13px"></span>
-      Confirm Squash
+      ${escapeHtml(vscode.l10n.t('Confirm Squash'))}
     </button>
   </div>
   <script nonce="${nonce}">

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkspaceStatus } from '../types/git';
+import { plural } from '../utils/plural';
 
 /**
  * Controls the numeric badge on the GitCharm activity-bar icon.
@@ -32,7 +33,7 @@ export class BadgeController implements vscode.Disposable {
   startLoading(): void {
     if (this.progressResolve) return;
     vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: 'GitCharm: loading…' },
+      { location: vscode.ProgressLocation.Window, title: vscode.l10n.t('GitCharm: loading…') },
       () => new Promise<void>(resolve => { this.progressResolve = resolve; })
     );
   }
@@ -54,7 +55,7 @@ export class BadgeController implements vscode.Disposable {
       .filter(r => !this.hiddenRepoIds.includes(r.repoId))
       .reduce((sum, r) => sum + r.stagedFiles.length + r.unstagedFiles.length, 0);
     this.treeView.badge = total > 0
-      ? { value: total, tooltip: `${total} changed file${total === 1 ? '' : 's'}` }
+      ? { value: total, tooltip: plural(total, vscode.l10n.t('1 changed file'), vscode.l10n.t('{0} changed files', total)) }
       : undefined;
   }
 

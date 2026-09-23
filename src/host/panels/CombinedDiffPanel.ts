@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { showGitError } from '../utils/gitErrorUtils';
 import { logWarn } from '../utils/Logger';
+import { plural } from '../utils/plural';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -21,7 +22,7 @@ export async function openRangeFileDiff(
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
   if (!repo) {
-    vscode.window.showErrorMessage('Repository not found.');
+    vscode.window.showErrorMessage(vscode.l10n.t('Repository not found.'));
     return;
   }
 
@@ -49,12 +50,12 @@ export async function openCombinedDiffPanel(
   const repo = manager.getRepo(repoId);
   if (!repo) {
     logWarn('combinedDiff', 'Repository not found.');
-    vscode.window.showErrorMessage('Repository not found.');
+    vscode.window.showErrorMessage(vscode.l10n.t('Repository not found.'));
     return;
   }
   if (hashes.length < 2) {
     logWarn('combinedDiff', 'Select at least 2 commits to view combined diff.');
-    vscode.window.showErrorMessage('Select at least 2 commits to view combined diff.');
+    vscode.window.showErrorMessage(vscode.l10n.t('Select at least 2 commits to view combined diff.'));
     return;
   }
 
@@ -81,7 +82,7 @@ export async function openCombinedDiffPanel(
 
   if (files.length === 0) {
     logWarn('combinedDiff', `No files found for the selected commits (hashes: ${hashes.map(h => h.slice(0, 7)).join(', ')}).`);
-    vscode.window.showWarningMessage(`No files found for the selected commits (hashes: ${hashes.map(h => h.slice(0, 7)).join(', ')}). The commits may not be in the same repository branch.`);
+    vscode.window.showWarningMessage(vscode.l10n.t('No files found for the selected commits (hashes: {0}). The commits may not be in the same repository branch.', hashes.map(h => h.slice(0, 7)).join(', ')));
     return;
   }
 
@@ -98,7 +99,8 @@ export async function openCombinedDiffPanel(
       return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
     });
 
-  const title = `${oldest.shortHash}…${newest.shortHash} (${hashes.length} commits)`;
+  const range = `${oldest.shortHash}…${newest.shortHash}`;
+  const title = plural(hashes.length, vscode.l10n.t('{0} (1 commit)', range), vscode.l10n.t('{0} ({1} commits)', range, hashes.length));
   await vscode.commands.executeCommand('vscode.changes', title, resources);
 }
 

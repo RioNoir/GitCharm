@@ -18,10 +18,10 @@ export async function offerRenameBranchRemoteSync(
 ): Promise<void> {
   if (!oldUpstream) return;
 
-  const renameRemote = 'Rename Remote Too';
-  const leaveRemote = 'Leave Remote As-Is';
+  const renameRemote = vscode.l10n.t('Rename Remote Too');
+  const leaveRemote = vscode.l10n.t('Leave Remote As-Is');
   const picked = await vscode.window.showInformationMessage(
-    `[${repoLabel}]: rename the remote branch "${oldUpstream.remote}/${oldUpstream.branchName}" to match?`,
+    vscode.l10n.t('[{0}]: rename the remote branch "{1}" to match?', repoLabel, `${oldUpstream.remote}/${oldUpstream.branchName}`),
     renameRemote,
     leaveRemote
   );
@@ -30,9 +30,10 @@ export async function offerRenameBranchRemoteSync(
   try {
     await repo.pushBranch(newName, oldUpstream.remote, newName, true);
     await repo.deleteRemoteBranch(oldUpstream.remote, oldUpstream.branchName);
-    const msg = `[${repoLabel}]: renamed remote branch "${oldUpstream.remote}/${oldUpstream.branchName}" → "${oldUpstream.remote}/${newName}".`;
-    vscode.window.showInformationMessage(msg);
-    logInfo(`rename-branch-remote:${repoLabel}`, msg);
+    const oldRef = `${oldUpstream.remote}/${oldUpstream.branchName}`;
+    const newRef = `${oldUpstream.remote}/${newName}`;
+    vscode.window.showInformationMessage(vscode.l10n.t('[{0}]: renamed remote branch "{1}" → "{2}".', repoLabel, oldRef, newRef));
+    logInfo(`rename-branch-remote:${repoLabel}`, `[${repoLabel}]: renamed remote branch "${oldRef}" → "${newRef}".`);
   } catch (e: unknown) {
     showGitError(`rename-branch-remote:${repoLabel}`, e);
   }

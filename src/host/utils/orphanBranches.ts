@@ -2,28 +2,40 @@ import * as vscode from 'vscode';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
 import { formatGitError } from './gitErrorUtils';
-import { showLogChannel } from './Logger';
+import { notifyWithLogAction } from './Logger';
+import { plural } from './plural';
+
+/** Why the branches are orphaned; each maps to complete, translatable sentences below. */
+export type OrphanReason = 'noValidRemote' | 'lostAfterMerge';
+
+function orphanMessage(count: number, branchName: string, reason: OrphanReason): string {
+  if (reason === 'noValidRemote') {
+    return count === 1
+      ? vscode.l10n.t('Branch "{0}" has no valid remote.', branchName)
+      : vscode.l10n.t('{0} local branches have no valid remote.', count);
+  }
+  return count === 1
+    ? vscode.l10n.t('Branch "{0}" lost its remote (likely deleted after a merge).', branchName)
+    : vscode.l10n.t('{0} local branches lost their remote (likely deleted after a merge).', count);
+}
 
 /** Shows the found orphaned branches (or "none found") with View in Log / Delete actions. Shared by the automatic post-fetch notification and the manual "Check for Orphaned Branches" command. */
 export function presentOrphanBranches(
   manager: WorkspaceGitManager,
   logPanel: GitLogPanelProvider,
   orphaned: Array<{ repoId: string; branchName: string }>,
-  reasonSuffix: string
+  reason: OrphanReason
 ): void {
   const count = orphaned.length;
   if (count === 0) {
-    vscode.window.showInformationMessage('No orphaned branches found — every local branch still has a valid remote.');
+    vscode.window.showInformationMessage(vscode.l10n.t('No orphaned branches found — every local branch still has a valid remote.'));
     return;
   }
-  const branchWord = count === 1 ? 'branch has' : 'branches have';
-  const message = count === 1
-    ? `Branch "${orphaned[0].branchName}" ${reasonSuffix}.`
-    : `${count} local ${branchWord} ${reasonSuffix}.`;
+  const message = orphanMessage(count, orphaned[0].branchName, reason);
 
-  const viewInLog = 'View in Log';
-  const deleteAction = count === 1 ? 'Delete Branch' : 'Delete Branches';
-  const dismiss = 'Dismiss';
+  const viewInLog = vscode.l10n.t('View in Log');
+  const deleteAction = plural(count, vscode.l10n.t('Delete Branch'), vscode.l10n.t('Delete Branches'));
+  const dismiss = vscode.l10n.t('Dismiss');
 
   void vscode.window.showInformationMessage(message, viewInLog, deleteAction, dismiss).then(async picked => {
     if (picked === viewInLog) {
@@ -34,11 +46,12 @@ export function presentOrphanBranches(
 
     const metaById = new Map(manager.getRepoMetas().map(m => [m.id, m]));
     const list = orphaned.map(o => `"${o.branchName}"${metaById.get(o.repoId) ? ` (${metaById.get(o.repoId)!.name})` : ''}`).join(', ');
+    const del = vscode.l10n.t('Delete');
     const confirm = await vscode.window.showWarningMessage(
-      `Delete ${count === 1 ? 'branch' : 'branches'} ${list}?`,
-      { modal: true }, 'Delete'
+      plural(count, vscode.l10n.t('Delete branch {0}?', list), vscode.l10n.t('Delete branches {0}?', list)),
+      { modal: true }, del
     );
-    if (confirm !== 'Delete') return;
+    if (confirm !== del) return;
 
     const errors: string[] = [];
     for (const { repoId, branchName } of orphaned) {
@@ -51,11 +64,11 @@ export function presentOrphanBranches(
       }
     }
     if (errors.length > 0) {
-      void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log').then(choice => {
-        if (choice === 'Show Log') showLogChannel();
-      });
+      notifyWithLogAction('warning', plural(errors.length,
+        vscode.l10n.t('1 error: {0}', errors.join('; ')),
+        vscode.l10n.t('{0} errors: {1}', errors.length, errors.join('; '))));
     } else {
-      vscode.window.showInformationMessage(`Deleted ${count} orphaned ${count === 1 ? 'branch' : 'branches'}.`);
+      vscode.window.showInformationMessage(plural(count, vscode.l10n.t('Deleted 1 orphaned branch.'), vscode.l10n.t('Deleted {0} orphaned branches.', count)));
     }
   });
 }

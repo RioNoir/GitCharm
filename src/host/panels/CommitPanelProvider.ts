@@ -5,7 +5,7 @@ import { getWebviewHtml } from '../utils/webviewHtml';
 import { generateWithAI } from '../ai/aiGenerate';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
-import { ChangelistService } from '../git/ChangelistService';
+import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
 import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter } from '../types/messages';
 import type { WorkspaceStatus } from '../types/git';
@@ -21,7 +21,8 @@ import { pickRefQuickPick } from '../utils/refPicker';
 import type { GitProfileService } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from '../utils/gitErrorUtils';
-import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger';
+import { plural } from '../utils/plural';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
 import type { ViewAndSortSettings } from '../types/settings';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
@@ -43,18 +44,18 @@ const COMMIT_SEEDED_WORKSPACE_KEY = 'gitcharm.commitPanel.seededMessage';
  */
 async function promptDivergedStrategy(repoNames: string[], rewritten: boolean): Promise<DivergedStrategy | undefined> {
   const merge = {
-    label: '$(git-merge) Pull, then Push',
-    description: 'Merge the incoming commits into your branch',
+    label: `$(git-merge) ${vscode.l10n.t('Pull, then Push')}`,
+    description: vscode.l10n.t('Merge the incoming commits into your branch'),
     strategy: 'merge' as const,
   };
   const rebase = {
-    label: '$(repo-forked) Pull (Rebase), then Push',
-    description: 'Replay your commits on top of the incoming ones',
+    label: `$(repo-forked) ${vscode.l10n.t('Pull (Rebase), then Push')}`,
+    description: vscode.l10n.t('Replay your commits on top of the incoming ones'),
     strategy: 'rebase' as const,
   };
   const force = {
-    label: '$(repo-force-push) Force Push',
-    description: 'Overwrite the remote branch with your local history (--force-with-lease)',
+    label: `$(repo-force-push) ${vscode.l10n.t('Force Push')}`,
+    description: vscode.l10n.t('Overwrite the remote branch with your local history (--force-with-lease)'),
     strategy: 'force' as const,
   };
   const names = repoNames.join(', ');
@@ -62,9 +63,9 @@ async function promptDivergedStrategy(repoNames: string[], rewritten: boolean): 
     rewritten ? [force, rebase, merge] : [merge, rebase, force],
     {
       title: rewritten
-        ? `${names}: local history was rewritten and no longer matches the remote`
-        : `${names}: your branch and the remote have both moved on`,
-      placeHolder: 'Choose how to reconcile before syncing',
+        ? vscode.l10n.t('{0}: local history was rewritten and no longer matches the remote', names)
+        : vscode.l10n.t('{0}: your branch and the remote have both moved on', names),
+      placeHolder: vscode.l10n.t('Choose how to reconcile before syncing'),
     }
   );
   return pick?.strategy;
@@ -252,7 +253,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const result = await this.profileService.getEffectiveProfile(resolvedPath);
     if (!result) {
       logWarn('commit-credentials', 'No Git identity configured');
-      vscode.window.showWarningMessage('No Git identity configured. Set a profile before committing.');
+      vscode.window.showWarningMessage(vscode.l10n.t('No Git identity configured. Set a profile before committing.'));
       return undefined;
     }
     if (result.source === 'local' || result.source === 'global') return undefined;
@@ -428,7 +429,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const connection = await this.pullRequestManager.getConnectionStatus(repoId);
     if (connection.detectionFailed) {
       logWarn('pullrequest-connect-pat', `Cannot connect a token for repo ${repoId} — provider detection failed`);
-      vscode.window.showWarningMessage('Select a Git forge for this host before connecting a token.');
+      vscode.window.showWarningMessage(vscode.l10n.t('Select a Git forge for this host before connecting a token.'));
       return;
     }
 
@@ -437,40 +438,40 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       // Bitbucket Cloud retired App Passwords in favor of API Tokens, which authenticate
       // via Basic auth using the Atlassian account email — so two prompts are needed here.
       const email = await vscode.window.showInputBox({
-        prompt: 'Enter your Atlassian account email',
+        prompt: vscode.l10n.t('Enter your Atlassian account email'),
         placeHolder: 'you@example.com',
-        title: 'Connect to Bitbucket — Account Email',
+        title: vscode.l10n.t('Connect to Bitbucket — Account Email'),
       });
       if (!email?.trim()) return;
       const apiToken = await vscode.window.showInputBox({
-        prompt: 'Enter a Bitbucket API Token (id.atlassian.com → API tokens)',
-        placeHolder: 'Token is stored securely and never leaves this machine',
+        prompt: vscode.l10n.t('Enter a Bitbucket API Token (id.atlassian.com → API tokens)'),
+        placeHolder: vscode.l10n.t('Token is stored securely and never leaves this machine'),
         password: true,
-        title: 'Connect to Bitbucket — API Token',
+        title: vscode.l10n.t('Connect to Bitbucket — API Token'),
       });
       if (!apiToken?.trim()) return;
       result = await this.pullRequestManager.connectBitbucket(repoId, email.trim(), { email: email.trim(), apiToken: apiToken.trim() });
     } else {
       const token = await vscode.window.showInputBox({
-        prompt: `Enter a Personal Access Token for ${connection.host}`,
-        placeHolder: 'Token is stored securely and never leaves this machine',
+        prompt: vscode.l10n.t('Enter a Personal Access Token for {0}', connection.host),
+        placeHolder: vscode.l10n.t('Token is stored securely and never leaves this machine'),
         password: true,
-        title: `Connect to ${forgeProviderLabel(connection.provider)} — ${connection.host}`,
+        title: vscode.l10n.t('Connect to {0} — {1}', forgeProviderLabel(connection.provider), connection.host),
       });
       if (!token?.trim()) return;
       const label = await vscode.window.showInputBox({
-        prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
+        prompt: vscode.l10n.t('Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later'),
         placeHolder: connection.host,
-        title: `Connect to ${forgeProviderLabel(connection.provider)} — Account Label`,
+        title: vscode.l10n.t('Connect to {0} — Account Label', forgeProviderLabel(connection.provider)),
       });
       result = await this.pullRequestManager.connectWithPat(repoId, token.trim(), label?.trim() || connection.host);
     }
 
     if (!result.ok) {
-      vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
+      vscode.window.showErrorMessage(result.error ?? vscode.l10n.t('Failed to validate token'));
       return;
     }
-    vscode.window.showInformationMessage(`Connected to ${connection.host}`);
+    vscode.window.showInformationMessage(vscode.l10n.t('Connected to {0}', connection.host));
     logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
     const repos = await this.pullRequestManager.getAllPullRequests(true);
     this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
@@ -485,7 +486,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     if (!this.pullRequestManager) return;
     const connection = await this.pullRequestManager.getConnectionStatus(repoId);
     if (connection.detectionFailed) {
-      vscode.window.showWarningMessage('Select a Git forge for this host before connecting an account.');
+      vscode.window.showWarningMessage(vscode.l10n.t('Select a Git forge for this host before connecting an account.'));
       return;
     }
 
@@ -502,14 +503,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             const iconPath = avatars[i];
             return {
               label: iconPath ? a.label : `${isBound ? '$(check) ' : ''}${a.label}`,
-              description: isBound ? 'currently assigned' : undefined,
+              description: isBound ? vscode.l10n.t('currently assigned') : undefined,
               iconPath,
               accountId: a.id as string | typeof CONNECT_NEW,
             };
           }),
-          { label: '$(add) Connect new account…', accountId: CONNECT_NEW },
+          { label: `$(add) ${vscode.l10n.t('Connect new account…')}`, accountId: CONNECT_NEW },
         ],
-        { title: 'GitHub Account', placeHolder: `Select a GitHub account for ${connection.host}` }
+        { title: vscode.l10n.t('GitHub Account'), placeHolder: vscode.l10n.t('Select a GitHub account for {0}', connection.host) }
       );
       if (!picked) return;
 
@@ -541,14 +542,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const iconPath = avatars[i];
           return {
             label: iconPath ? a.label : `${isBound ? '$(check) ' : ''}${a.label}`,
-            description: isBound ? 'currently assigned' : undefined,
+            description: isBound ? vscode.l10n.t('currently assigned') : undefined,
             iconPath,
             accountId: a.id as string | typeof CONNECT_NEW,
           };
         }),
-        { label: '$(add) Connect new account…', accountId: CONNECT_NEW },
+        { label: `$(add) ${vscode.l10n.t('Connect new account…')}`, accountId: CONNECT_NEW },
       ],
-      { title: `${forgeProviderLabel(connection.provider)} Account`, placeHolder: `Select an account for ${connection.host}` }
+      { title: vscode.l10n.t('{0} Account', forgeProviderLabel(connection.provider)), placeHolder: vscode.l10n.t('Select an account for {0}', connection.host) }
     );
     if (!picked) return;
 
@@ -649,7 +650,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   async manageHiddenRepos(): Promise<void> {
     const hidden = this.getHiddenRepoIds();
     if (hidden.length === 0) {
-      vscode.window.showInformationMessage('No hidden repositories.');
+      vscode.window.showInformationMessage(vscode.l10n.t('No hidden repositories.'));
       return;
     }
     const allMetas = this.manager.getRepoMetas();
@@ -658,9 +659,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       return { label: `$(eye) ${meta?.name ?? id}`, repoId: id };
     });
     const picked = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Select repositories to show again',
+      placeHolder: vscode.l10n.t('Select repositories to show again'),
       canPickMany: true,
-      title: 'Hidden Repositories',
+      title: vscode.l10n.t('Hidden Repositories'),
     });
     if (!picked || picked.length === 0) return;
     const toUnhide = picked.map(p => p.repoId);
@@ -684,7 +685,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     if (status) svc.reconcile(status.repos);
     this.broadcastCommit({
       type: 'CHANGELISTS_UPDATE',
-      changelists: svc.getAll(),
+      changelists: svc.getAll().map(cl => ({ ...cl, name: changelistDisplayName(cl) })),
       viewMode: this.getChangesViewMode(),
     });
   }
@@ -775,7 +776,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('diff', 'Repo not found');
-          this.post({ type: 'COMMIT_DIFF_RESULT', requestId: msg.requestId, diff: null, error: 'Repo not found' });
+          this.post({ type: 'COMMIT_DIFF_RESULT', requestId: msg.requestId, diff: null, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -792,7 +793,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_STAGE_FILES': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('stage', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('stage', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           await repo.stageFiles(msg.paths);
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -808,7 +809,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_UNSTAGE_FILES': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('unstage', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('unstage', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           await repo.unstageFiles(msg.paths);
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -824,7 +825,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_STAGE_ALL': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('stage-all', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('stage-all', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           await repo.stageAll();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -840,7 +841,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_UNSTAGE_ALL': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('unstage-all', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('unstage-all', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           await repo.unstageAll();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -857,7 +858,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_DO_COMMIT': {
         this.profileService?.trace(`COMMIT_DO_COMMIT received repoId=${msg.repoId}`);
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('commit', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('commit', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const creds = await this.getCommitCredentials(repo.rootPath);
           const output = await repo.commit(msg.message, msg.amend, creds, s => this.profileService?.trace(s));
@@ -877,9 +878,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_DO_COMMIT_PUSH': {
         this.profileService?.trace(`COMMIT_DO_COMMIT_PUSH received repoId=${msg.repoId}`);
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('commit-push', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('commit-push', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Commit & Push', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Commit & Push'), cancellable: false },
           async () => {
             try {
               const creds = await this.getCommitCredentials(repo.rootPath);
@@ -912,21 +913,21 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }
           if (noRemoteRepoIds.length > 0) {
             logWarn('commit-multi', 'No remote configured');
-            this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'No remote configured' });
+            this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('No remote configured') });
             if (noRemoteRepoIds.length === 1) {
               const meta = this.manager.getRepoMetas().find(m => m.id === noRemoteRepoIds[0]);
               if (meta && this.branchStatusBar) await this.branchStatusBar.showRepoRemotesMenu(meta);
             } else {
               const names = noRemoteRepoIds.map(id => id.split('/').pop() ?? id);
               vscode.window.showInformationMessage(
-                `Cannot push — no remote configured for: ${names.join(', ')}. Add a remote first (git remote add <name> <url>).`
+                vscode.l10n.t('Cannot push — no remote configured for: {0}. Add a remote first (git remote add <name> <url>).', names.join(', '))
               );
             }
             return;
           }
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Committing ${msg.repos.length} ${msg.repos.length === 1 ? 'repository' : 'repositories'}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: plural(msg.repos.length, vscode.l10n.t('Committing 1 repository'), vscode.l10n.t('Committing {0} repositories', msg.repos.length)), cancellable: false },
           async () => {
             const errors: string[] = [];
             const succeededRepoIds: string[] = [];
@@ -942,7 +943,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             });
             for (const r of ordered) {
               const repo = this.manager.getRepo(r.repoId);
-              if (!repo) { errors.push(`${r.repoId}: not found`); continue; }
+              if (!repo) { errors.push(vscode.l10n.t('{0}: not found', r.repoId)); continue; }
               try {
                 // Stage/unstage according to user selection before committing
                 if (r.filesToUnstage.length > 0) await repo.unstageFiles(r.filesToUnstage);
@@ -973,7 +974,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_REBASE_ACTION': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('rebase-action', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('rebase-action', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           if (msg.action === 'continue') await repo.rebaseContinue();
           else await repo.abortRebase();
@@ -997,7 +998,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_PULL_ALL': {
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Pulling all repositories', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling all repositories'), cancellable: false },
           async (_progress) => {
             const results = await this.manager.pullAll();
             const failed = results.filter(r => !r.ok);
@@ -1005,9 +1006,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               for (const r of failed) {
                 logError('pull-all', `${r.repoId}: pull failed`);
               }
-              void vscode.window.showWarningMessage(`${failed.length} pull(s) failed`, 'Show Log').then(choice => {
-                if (choice === 'Show Log') showLogChannel();
-              });
+              notifyWithLogAction('warning', plural(failed.length, vscode.l10n.t('1 pull failed'), vscode.l10n.t('{0} pulls failed', failed.length)));
             } else {
               logInfo('pull-all', `Pulled ${results.length} ${results.length === 1 ? 'repository' : 'repositories'}`);
             }
@@ -1018,7 +1017,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_PULL_REPO': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('pull', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('pull', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const output = await repo.pull();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
@@ -1034,7 +1033,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_GET_REMOTES': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('remotes', 'Repo not found'); this.post({ type: 'COMMIT_REMOTES_RESULT', requestId: msg.requestId, remotes: [], error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('remotes', 'Repo not found'); this.post({ type: 'COMMIT_REMOTES_RESULT', requestId: msg.requestId, remotes: [], error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const remotes = await repo.getRemotes();
           this.post({ type: 'COMMIT_REMOTES_RESULT', requestId: msg.requestId, remotes });
@@ -1047,7 +1046,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_GET_LAST_COMMIT_MESSAGE': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('last-commit-msg', 'Repo not found'); this.post({ type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT', requestId: msg.requestId, message: '', error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('last-commit-msg', 'Repo not found'); this.post({ type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT', requestId: msg.requestId, message: '', error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const message = await repo.getLastCommitMessage();
           this.post({ type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT', requestId: msg.requestId, message });
@@ -1060,11 +1059,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_PUSH_REPO': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('push', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('push', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const remotes = await repo.getRemotes().catch(() => [] as string[]);
         if (remotes.length === 0) {
           logWarn('push', 'No remote configured');
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'No remote configured' });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('No remote configured') });
           const meta = this.manager.getRepoMetas().find(m => m.id === msg.repoId);
           if (meta && this.branchStatusBar) {
             await this.branchStatusBar.showRepoRemotesMenu(meta);
@@ -1072,7 +1071,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           break;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Pushing', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing'), cancellable: false },
           async () => {
             try {
               await repo.push(msg.force ?? false, msg.remote);
@@ -1092,15 +1091,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_SYNC_AND_PUSH_REPO': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('sync-push', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('sync-push', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Syncing', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Syncing'), cancellable: false },
           async () => {
             try {
               await (msg.rebase ? repo.pullRebase() : repo.pull());
             } catch (e: unknown) {
               logError('sync-push:pull', formatGitError(e), getRawErrorDetail(e));
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Pull failed: ${formatGitError(e)}` });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Pull failed: {0}', formatGitError(e)) });
               const status = await this.manager.getAllStatusesFresh();
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
               return;
@@ -1114,7 +1113,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
               this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             } catch (e: unknown) {
               logError('sync-push:push', formatGitError(e), getRawErrorDetail(e));
-              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: `Push failed: ${formatGitError(e)}` });
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Push failed: {0}', formatGitError(e)) });
             }
           }
         );
@@ -1129,7 +1128,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           .filter((t): t is { repoId: string; repo: NonNullable<typeof t.repo> } => !!t.repo);
         if (targets.length === 0) {
           logWarn('sync', 'Repo not found');
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' });
+          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') });
           break;
         }
 
@@ -1152,7 +1151,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
         const errors: string[] = [];
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: targets.length === 1 ? 'Syncing' : 'Syncing repositories', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: targets.length === 1 ? vscode.l10n.t('Syncing') : vscode.l10n.t('Syncing repositories'), cancellable: false },
           async () => {
             for (const { repoId, repo, state } of states) {
               const label = nameOf(repoId);
@@ -1177,7 +1176,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                     if (!isPushRejected(e)) throw e;
                     logWarn('sync', `${label}: push rejected — asking how to reconcile`);
                     const fallback = await promptDivergedStrategy([label], false);
-                    if (!fallback) { errors.push(`${label}: Cancelled`); continue; }
+                    if (!fallback) { errors.push(vscode.l10n.t('{0}: Cancelled', label)); continue; }
                     if (fallback === 'force') {
                       await repo.push(true);
                     } else {
@@ -1197,9 +1196,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
         if (errors.length > 0) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('\n') });
-          void vscode.window.showWarningMessage(`Sync failed — ${errors.join('; ')}`, 'Show Log').then(choice => {
-            if (choice === 'Show Log') showLogChannel();
-          });
+          notifyWithLogAction('warning', vscode.l10n.t('Sync failed — {0}', errors.join('; ')));
         } else {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
         }
@@ -1211,12 +1208,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_DISCARD_FILE': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('discard', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('discard', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const discard = vscode.l10n.t('Discard');
         const confirm = await vscode.window.showWarningMessage(
-          `Discard changes to ${msg.path}? This cannot be undone.`,
-          { modal: true }, 'Discard'
+          vscode.l10n.t('Discard changes to {0}? This cannot be undone.', msg.path),
+          { modal: true }, discard
         );
-        if (confirm !== 'Discard') { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        if (confirm !== discard) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
           await repo.discardFile(msg.path);
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -1231,18 +1229,19 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_DISCARD_FILES': {
         const n = msg.files.length;
+        const discard = vscode.l10n.t('Discard');
         const confirm = await vscode.window.showWarningMessage(
-          `Discard changes to ${n} file${n === 1 ? '' : 's'}? This cannot be undone.`,
-          { modal: true }, 'Discard'
+          plural(n, vscode.l10n.t('Discard changes to 1 file? This cannot be undone.'), vscode.l10n.t('Discard changes to {0} files? This cannot be undone.', n)),
+          { modal: true }, discard
         );
-        if (confirm !== 'Discard') {
+        if (confirm !== discard) {
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           break;
         }
         const errors: string[] = [];
         for (const f of msg.files) {
           const repo = this.manager.getRepo(f.repoId);
-          if (!repo) { errors.push(`${f.path}: repo not found`); continue; }
+          if (!repo) { errors.push(vscode.l10n.t('{0}: repo not found', f.path)); continue; }
           try { await repo.discardFile(f.path); }
           catch (e: unknown) { errors.push(`${f.path}: ${formatGitError(e)}`); logError(`discard-files:${f.repoId}`, formatGitError(e), getRawErrorDetail(e)); }
         }
@@ -1272,8 +1271,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             query: JSON.stringify({ path: absUri.fsPath, ref }),
           });
           const title = msg.staged
-            ? `${msg.filePath} (Index ↔ HEAD)`
-            : `${msg.filePath} (Working Tree)`;
+            ? vscode.l10n.t('{0} (Index ↔ HEAD)', msg.filePath)
+            : vscode.l10n.t('{0} (Working Tree)', msg.filePath);
           await vscode.commands.executeCommand('vscode.diff', gitUri, absUri, title);
         }
         break;
@@ -1289,7 +1288,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           () => vscode.commands.executeCommand('vscode.diff',
             absPath.with({ scheme: 'git', query: JSON.stringify({ path: absPath.fsPath, ref: 'HEAD' }) }),
             absPath,
-            `${msg.filePath} (Working Tree)`
+            vscode.l10n.t('{0} (Working Tree)', msg.filePath)
           )
         );
         break;
@@ -1315,8 +1314,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         const pickedRef = await pickRefQuickPick(repo, {
-          placeHolder: `Compare ${msg.filePath} with…`,
-          title: 'GitCharm - Compare With',
+          placeHolder: vscode.l10n.t('Compare {0} with…', msg.filePath),
+          title: vscode.l10n.t('GitCharm - Compare With'),
         });
         if (!pickedRef) return;
         let refHash: string;
@@ -1324,7 +1323,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           refHash = await repo.resolveRef(pickedRef);
         } catch {
           logError('compare-file-with', `Cannot resolve ref "${pickedRef}"`);
-          vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Cannot resolve ref "{0}"', pickedRef));
           return;
         }
         await compareFileWithRef(repo, msg.filePath, refHash);
@@ -1335,8 +1334,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         const pickedRef = await pickRefQuickPick(repo, {
-          placeHolder: `Compare ${msg.folderPath || '.'} with…`,
-          title: 'GitCharm - Compare With',
+          placeHolder: vscode.l10n.t('Compare {0} with…', msg.folderPath || '.'),
+          title: vscode.l10n.t('GitCharm - Compare With'),
         });
         if (!pickedRef) return;
         let refHash: string;
@@ -1344,7 +1343,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           refHash = await repo.resolveRef(pickedRef);
         } catch {
           logError('compare-folder-with', `Cannot resolve ref "${pickedRef}"`);
-          vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Cannot resolve ref "{0}"', pickedRef));
           return;
         }
         await compareFolderWithRef(repo, msg.folderPath, refHash);
@@ -1353,12 +1352,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_DELETE_FILE': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('delete-file', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('delete-file', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const del = vscode.l10n.t('Delete');
         const confirm = await vscode.window.showWarningMessage(
-          `Delete ${msg.filePath}? This cannot be undone.`,
-          { modal: true }, 'Delete'
+          vscode.l10n.t('Delete {0}? This cannot be undone.', msg.filePath),
+          { modal: true }, del
         );
-        if (confirm !== 'Delete') { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        if (confirm !== del) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
           const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
           await vscode.workspace.fs.delete(absPath, { useTrash: true });
@@ -1372,12 +1372,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_DELETE_FOLDER': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('delete-folder', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('delete-folder', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const del = vscode.l10n.t('Delete');
         const confirm = await vscode.window.showWarningMessage(
-          `Delete folder "${msg.folderPath}" and all its contents? This cannot be undone.`,
-          { modal: true }, 'Delete'
+          vscode.l10n.t('Delete folder "{0}" and all its contents? This cannot be undone.', msg.folderPath),
+          { modal: true }, del
         );
-        if (confirm !== 'Delete') { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        if (confirm !== del) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
 
           const absPath = vscode.Uri.file(path.join(repo.rootPath, msg.folderPath));
@@ -1426,8 +1427,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             fsPath: f.fsPath,
           }));
           const picked = await vscode.window.showQuickPick(picks, {
-            title: 'Add to .gitignore',
-            placeHolder: 'Select which .gitignore to update',
+            title: vscode.l10n.t('Add to .gitignore'),
+            placeHolder: vscode.l10n.t('Select which .gitignore to update'),
           });
           if (!picked) return;
           targetPath = picked.fsPath;
@@ -1444,14 +1445,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         try { existing = fs.readFileSync(targetPath, 'utf8'); } catch { /* new file */ }
         const lines = existing.split('\n').map(l => l.trim());
         if (lines.includes(entry) || lines.includes('/' + entry)) {
-          vscode.window.showInformationMessage(`"${entry}" is already in ${path.relative(repo.rootPath, targetPath)}`);
+          vscode.window.showInformationMessage(vscode.l10n.t('"{0}" is already in {1}', entry, path.relative(repo.rootPath, targetPath)));
           return;
         }
         const newContent = existing.endsWith('\n') || existing === ''
           ? existing + entry + '\n'
           : existing + '\n' + entry + '\n';
         fs.writeFileSync(targetPath, newContent, 'utf8');
-        vscode.window.showInformationMessage(`Added "${entry}" to ${path.relative(repo.rootPath, targetPath)}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('Added "{0}" to {1}', entry, path.relative(repo.rootPath, targetPath)));
         logInfo('gitignore', `Added "${entry}" to ${path.relative(repo.rootPath, targetPath)}`);
 
         // Refresh status so the newly-ignored file disappears
@@ -1540,7 +1541,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'SHELVE_LIST': {
         const svc = this.getShelveService(msg.repoId);
-        if (!svc) { logWarn('shelve-list', 'Repo not found'); this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves: [], error: 'Repo not found' }); return; }
+        if (!svc) { logWarn('shelve-list', 'Repo not found'); this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves: [], error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const shelves = await svc.list();
           this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves });
@@ -1553,7 +1554,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'SHELVE_PUSH': {
         const svc = this.getShelveService(msg.repoId);
-        if (!svc) { logWarn('shelve-push', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: 'Repo not found' }); return; }
+        if (!svc) { logWarn('shelve-push', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           // Capture changelist assignments for the shelved files, if in changelists mode
           const clSvc = this.getOrCreateChangelistService();
@@ -1573,7 +1574,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'SHELVE_APPLY': {
         const svc = this.getShelveService(msg.repoId);
         const repo = this.manager.getRepo(msg.repoId);
-        if (!svc || !repo) { logWarn('shelve-apply', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: 'Repo not found' }); return; }
+        if (!svc || !repo) { logWarn('shelve-apply', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const clAssignments = await svc.apply(msg.shelveId, msg.paths);
           const status = await this.manager.getAllStatusesFresh();
@@ -1618,12 +1619,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'SHELVE_DROP': {
         const svc = this.getShelveService(msg.repoId);
-        if (!svc) { logWarn('shelve-drop', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Repo not found' }); return; }
+        if (!svc) { logWarn('shelve-drop', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const del = vscode.l10n.t('Delete');
         const confirmDrop = await vscode.window.showWarningMessage(
-          'Delete this shelved changelist? This cannot be undone.',
-          { modal: true }, 'Delete'
+          vscode.l10n.t('Delete this shelved changelist? This cannot be undone.'),
+          { modal: true }, del
         );
-        if (confirmDrop !== 'Delete') { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' }); return; }
+        if (confirmDrop !== del) { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' }); return; }
         try {
           svc.drop(msg.shelveId);
           this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: true });
@@ -1636,10 +1638,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'SHELVE_RENAME': {
         const svc = this.getShelveService(msg.repoId);
-        if (!svc) { logWarn('shelve-rename', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Repo not found' }); return; }
+        if (!svc) { logWarn('shelve-rename', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const newName = await vscode.window.showInputBox({
-          title: 'Rename Shelf',
-          prompt: 'Enter a new name for the shelf',
+          title: vscode.l10n.t('Rename Shelf'),
+          prompt: vscode.l10n.t('Enter a new name for the shelf'),
           value: msg.currentName,
         });
         if (!newName || newName === msg.currentName) { this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' }); return; }
@@ -1655,7 +1657,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'SHELVE_GET_FILE_DIFF': {
         const svc = this.getShelveService(msg.repoId);
-        if (!svc) { logWarn('shelve-diff', 'Repo not found'); this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff: '', error: 'Repo not found' }); return; }
+        if (!svc) { logWarn('shelve-diff', 'Repo not found'); this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff: '', error: vscode.l10n.t('Repo not found') }); return; }
         try {
           const diff = svc.getFileDiff(msg.shelveId, msg.filePath);
           this.post({ type: 'SHELVE_DIFF_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelveId: msg.shelveId, filePath: msg.filePath, diff });
@@ -1702,7 +1704,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             'vscode.diff',
             leftUri,    // left = current file (or empty if deleted)
             afterUri,   // right = after applying shelf
-            `${fileName} (Working Tree ↔ After Unshelve)`
+            vscode.l10n.t('{0} (Working Tree ↔ After Unshelve)', fileName)
           );
         } catch { /* silently ignore if file cannot be diffed */ }
         break;
@@ -1733,7 +1735,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             'vscode.diff',
             currentUri,
             stashUri,
-            `${fileName} (Working Tree ↔ ${msg.stashRef})`
+            vscode.l10n.t('{0} (Working Tree ↔ {1})', fileName, msg.stashRef)
           );
         } catch (e) {
           showGitError('stash-diff', e);
@@ -1745,7 +1747,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('stash-list', 'Repo not found');
-          this.post({ type: 'STASH_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, stashes: [], error: 'Repo not found' });
+          this.post({ type: 'STASH_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, stashes: [], error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -1762,7 +1764,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('stash-show', 'Repo not found');
-          this.post({ type: 'STASH_SHOW_RESULT', requestId: msg.requestId, diff: '', error: 'Repo not found' });
+          this.post({ type: 'STASH_SHOW_RESULT', requestId: msg.requestId, diff: '', error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -1779,7 +1781,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('stash-apply', 'Repo not found');
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: 'Repo not found' });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'apply', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -1799,7 +1801,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('stash-pop', 'Repo not found');
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'pop', ok: false, error: 'Repo not found' });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'pop', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -1819,14 +1821,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('stash-drop', 'Repo not found');
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Repo not found' });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
+        const drop = vscode.l10n.t('Drop');
         const confirmDrop = await vscode.window.showWarningMessage(
-          'Drop this stash? This cannot be undone.',
-          { modal: true }, 'Drop'
+          vscode.l10n.t('Drop this stash? This cannot be undone.'),
+          { modal: true }, drop
         );
-        if (confirmDrop !== 'Drop') {
+        if (confirmDrop !== drop) {
           this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' });
           return;
         }
@@ -1842,10 +1845,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'STASH_RENAME': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('stash-rename', 'Repo not found'); this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('stash-rename', 'Repo not found'); this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const newMessage = await vscode.window.showInputBox({
-          title: 'Rename Stash',
-          prompt: 'Enter a new description for the stash',
+          title: vscode.l10n.t('Rename Stash'),
+          prompt: vscode.l10n.t('Enter a new description for the stash'),
           value: msg.currentMessage,
         });
         if (!newMessage || newMessage === msg.currentMessage) { this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: 'Cancelled' }); return; }
@@ -1863,7 +1866,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('unpushed', 'Repo not found');
-          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits: [], error: 'Repo not found' });
+          this.post({ type: 'PUSH_UNPUSHED_RESULT', requestId: msg.requestId, repoId: msg.repoId, commits: [], error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -1880,7 +1883,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) {
           logWarn('stash-push', 'Repo not found');
-          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: 'Repo not found' });
+          this.post({ type: 'STASH_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'push', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -1898,7 +1901,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_SQUASH_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('squash', 'Repo not found'); this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('squash', 'Repo not found'); this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const fullMessages = await Promise.all(msg.hashes.map(h => repo.getFullCommitMessage(h).then(m => m.trim())));
         const fullCombined = fullMessages.join('\n\n');
         const fullCommits = msg.commits.map((c, i) => ({ ...c, message: fullMessages[i] ?? c.message }));
@@ -1923,12 +1926,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_DROP_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('drop-commits', 'Repo not found'); this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('drop-commits', 'Repo not found'); this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const drop = vscode.l10n.t('Drop');
         const confirm = await vscode.window.showWarningMessage(
-          `Drop ${msg.hashes.length} commits? This rewrites history and cannot be undone.`,
-          { modal: true }, 'Drop'
+          plural(msg.hashes.length, vscode.l10n.t('Drop 1 commit? This rewrites history and cannot be undone.'), vscode.l10n.t('Drop {0} commits? This rewrites history and cannot be undone.', msg.hashes.length)),
+          { modal: true }, drop
         );
-        if (confirm !== 'Drop') { this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        if (confirm !== drop) { this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
           await repo.dropCommits(msg.oldestHash);
           this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: true });
@@ -1945,12 +1949,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_REVERT_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('revert', 'Repo not found'); this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('revert', 'Repo not found'); this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const revert = vscode.l10n.t('Revert');
         const confirm = await vscode.window.showWarningMessage(
-          `Revert ${msg.hashes.length} commits? This creates new commits that undo the changes.`,
-          { modal: true }, 'Revert'
+          plural(msg.hashes.length, vscode.l10n.t('Revert 1 commit? This creates a new commit that undoes the changes.'), vscode.l10n.t('Revert {0} commits? This creates new commits that undo the changes.', msg.hashes.length)),
+          { modal: true }, revert
         );
-        if (confirm !== 'Revert') { this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        if (confirm !== revert) { this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
           await repo.revertCommits(msg.hashes);
           this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: true });
@@ -1965,11 +1970,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not revert')) {
             logError('revert', errMsg, getRawErrorDetail(e));
+            const cont = vscode.l10n.t('Continue');
             const choice = await vscode.window.showWarningMessage(
-              'Revert has conflicts. Resolve them, then choose an action.',
-              'Continue', 'Abort'
+              vscode.l10n.t('Revert has conflicts. Resolve them, then choose an action.'),
+              cont, vscode.l10n.t('Abort')
             );
-            if (choice === 'Continue') await repo.revertContinue();
+            if (choice === cont) await repo.revertContinue();
             else await repo.revertAbort();
           } else {
             showGitError('revert', e);
@@ -1980,7 +1986,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_EDIT_COMMIT_MSG': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('edit-commit-msg', 'Repo not found'); this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('edit-commit-msg', 'Repo not found'); this.post({ type: 'PUSH_EDIT_MSG_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const fullMessage = (await repo.getFullCommitMessage(msg.hash)).trim();
         const result = await openEditMessageEditor(this.extensionUri, msg.hash.slice(0, 8), fullMessage);
         if (!result.confirmed) {
@@ -2026,7 +2032,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
             return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
           });
-        await vscode.commands.executeCommand('vscode.changes', `Changes in ${msg.hash.slice(0, 8)}`, resources);
+        await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('Changes in {0}', msg.hash.slice(0, 8)), resources);
         break;
       }
 
@@ -2049,12 +2055,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'COMMIT_UNDO_COMMIT': {
         const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { logWarn('undo-commit', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        if (!repo) { logWarn('undo-commit', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const undo = vscode.l10n.t('Undo Commit');
         const confirm = await vscode.window.showWarningMessage(
-          'Undo last commit? Changes will be kept as unstaged (git reset --soft HEAD~1).',
-          { modal: true }, 'Undo Commit'
+          vscode.l10n.t('Undo last commit? Changes will be kept as unstaged (git reset --soft HEAD~1).'),
+          { modal: true }, undo
         );
-        if (confirm !== 'Undo Commit') { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+        if (confirm !== undo) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
           await repo.undoCommit();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -2079,10 +2086,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'CHANGELISTS_CREATE_PROMPT': {
         const name = await vscode.window.showInputBox({
-          title: 'New Changelist',
-          prompt: 'Enter a name for the new changelist',
-          placeHolder: 'Changelist name…',
-          validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
+          title: vscode.l10n.t('New Changelist'),
+          prompt: vscode.l10n.t('Enter a name for the new changelist'),
+          placeHolder: vscode.l10n.t('Changelist name…'),
+          validateInput: v => v.trim() ? undefined : vscode.l10n.t('Name cannot be empty'),
         });
         if (!name) break;
         const svcCreate = this.getOrCreateChangelistService();
@@ -2104,10 +2111,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'CHANGELISTS_RENAME_PROMPT': {
         const newName = await vscode.window.showInputBox({
-          title: 'Rename Changelist',
-          prompt: `Rename "${msg.currentName}"`,
+          title: vscode.l10n.t('Rename Changelist'),
+          prompt: vscode.l10n.t('Rename "{0}"', msg.currentName),
           value: msg.currentName,
-          validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
+          validateInput: v => v.trim() ? undefined : vscode.l10n.t('Name cannot be empty'),
         });
         if (!newName) break;
         const svcRename = this.getOrCreateChangelistService();
@@ -2122,12 +2129,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const svcDel = this.getOrCreateChangelistService();
         if (!svcDel) break;
         const clToDelete = svcDel.getAll().find(c => c.id === msg.id);
-        const clName = clToDelete?.name ?? 'this changelist';
+        const del = vscode.l10n.t('Delete');
         const confirmed = await vscode.window.showWarningMessage(
-          `Delete "${clName}"? Its files will be moved to Changes.`,
-          { modal: true }, 'Delete'
+          clToDelete
+            ? vscode.l10n.t('Delete "{0}"? Its files will be moved to Changes.', clToDelete.name)
+            : vscode.l10n.t('Delete this changelist? Its files will be moved to Changes.'),
+          { modal: true }, del
         );
-        if (confirmed !== 'Delete') break;
+        if (confirmed !== del) break;
         svcDel.delete(msg.id);
         this.postChangelistsUpdate();
         break;
@@ -2147,10 +2156,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const svcMove = this.getOrCreateChangelistService();
         if (!svcMove) break;
         const allCls = svcMove.getAll().filter(cl => cl.id !== CHANGELIST_UNVERSIONED_ID);
-        const picks = allCls.map(cl => ({ label: cl.name, description: cl.id }));
+        const picks = allCls.map(cl => ({ label: changelistDisplayName(cl), description: cl.id }));
         const picked = await vscode.window.showQuickPick(picks, {
-          title: 'Move to Changelist',
-          placeHolder: 'Select a changelist…',
+          title: vscode.l10n.t('Move to Changelist'),
+          placeHolder: vscode.l10n.t('Select a changelist…'),
         });
         if (!picked) break;
         const assignments = msg.files.map(f => ({ ...f, changelistId: picked.description! }));
@@ -2170,12 +2179,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         for (const [repoId, paths] of Object.entries(clForShelve.fileAssignments)) {
           if (paths.length > 0) filesByRepo.set(repoId, paths);
         }
-        if (filesByRepo.size === 0) { vscode.window.showInformationMessage('No files in this changelist to shelve.'); break; }
+        if (filesByRepo.size === 0) { vscode.window.showInformationMessage(vscode.l10n.t('No files in this changelist to shelve.')); break; }
         const shelveName = await vscode.window.showInputBox({
-          title: `Shelve "${clForShelve.name}"`,
+          title: vscode.l10n.t('Shelve "{0}"', clForShelve.name),
           value: clForShelve.name,
-          placeHolder: 'Shelve name…',
-          validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
+          placeHolder: vscode.l10n.t('Shelve name…'),
+          validateInput: v => v.trim() ? undefined : vscode.l10n.t('Name cannot be empty'),
         });
         if (!shelveName) break;
         for (const [repoId, paths] of filesByRepo) {
@@ -2201,10 +2210,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const clForStash = clSvcStash.getAll().find(c => c.id === msg.changelistId);
         if (!clForStash) break;
         const stashName = await vscode.window.showInputBox({
-          title: `Stash "${clForStash.name}"`,
+          title: vscode.l10n.t('Stash "{0}"', clForStash.name),
           value: clForStash.name,
-          placeHolder: 'Stash message…',
-          validateInput: v => v.trim() ? undefined : 'Message cannot be empty',
+          placeHolder: vscode.l10n.t('Stash message…'),
+          validateInput: v => v.trim() ? undefined : vscode.l10n.t('Message cannot be empty'),
         });
         if (!stashName) break;
         for (const [repoId, paths] of Object.entries(clForStash.fileAssignments)) {
@@ -2244,8 +2253,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const hasStaged   = status.stagedFiles.length > 0;
 
           const options: vscode.QuickPickItem[] = [];
-          if (hasUnstaged) options.push({ label: '$(diff) Changes',        description: 'git.viewChanges' });
-          if (hasStaged)   options.push({ label: '$(diff-added) Staged Changes', description: 'git.viewStagedChanges' });
+          if (hasUnstaged) options.push({ label: `$(diff) ${vscode.l10n.t('Changes')}`,        description: 'git.viewChanges' });
+          if (hasStaged)   options.push({ label: `$(diff-added) ${vscode.l10n.t('Staged Changes')}`, description: 'git.viewStagedChanges' });
 
           if (options.length === 0) return;
 
@@ -2254,7 +2263,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             return;
           }
 
-          const picked = await vscode.window.showQuickPick(options, { placeHolder: 'Open changes…' });
+          const picked = await vscode.window.showQuickPick(options, { placeHolder: vscode.l10n.t('Open changes…') });
           if (picked) {
             await vscode.commands.executeCommand(picked.description!, repoUri);
           }
@@ -2333,11 +2342,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const subRepoPush = this.manager.getRepo(msg.repoId);
         if (!subRepoPush) {
           logWarn('submodule-push', 'Repo not found');
-          this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: 'Repo not found' });
+          this.post({ type: 'SUBMODULE_PUSH_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Pushing submodule ${subRepoPush.rootPath.split('/').pop()}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing submodule {0}', subRepoPush.rootPath.split('/').pop() ?? ''), cancellable: false },
           async () => {
             try {
               await subRepoPush.pushSubmodule();
@@ -2357,7 +2366,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const subRepoPull = this.manager.getRepo(msg.repoId);
         if (!subRepoPull) {
           logWarn('submodule-pull', 'Repo not found');
-          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: 'Repo not found' });
+          this.post({ type: 'SUBMODULE_PULL_RESULT', requestId: msg.requestId, repoId: msg.repoId, ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2377,7 +2386,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const parentRepo = this.manager.getRepo(msg.parentRepoId);
         if (!parentRepo) {
           logWarn('submodule-init', 'Repo not found');
-          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: false, error: 'Repo not found' });
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'init', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2397,14 +2406,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const parentRepoD = this.manager.getRepo(msg.parentRepoId);
         if (!parentRepoD) {
           logWarn('submodule-deinit', 'Repo not found');
-          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: 'Repo not found' });
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
+        const deinit = vscode.l10n.t('Deinit');
         const confirmDeinit = await vscode.window.showWarningMessage(
-          `Deinit submodule "${msg.submodulePath}"? The working directory will be cleared.`,
-          { modal: true }, 'Deinit'
+          vscode.l10n.t('Deinit submodule "{0}"? The working directory will be cleared.', msg.submodulePath),
+          { modal: true }, deinit
         );
-        if (confirmDeinit !== 'Deinit') {
+        if (confirmDeinit !== deinit) {
           this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'deinit', ok: false, error: 'Cancelled' });
           return;
         }
@@ -2423,11 +2433,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const parentRepoU = this.manager.getRepo(msg.parentRepoId);
         if (!parentRepoU) {
           logWarn('submodule-update', 'Repo not found');
-          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: false, error: 'Repo not found' });
+          this.post({ type: 'SUBMODULE_OP_RESULT', requestId: msg.requestId, parentRepoId: msg.parentRepoId, submodulePath: msg.submodulePath, op: 'update', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Updating submodule ${msg.submodulePath}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Updating submodule {0}', msg.submodulePath), cancellable: false },
           async () => {
             try {
               await parentRepoU.updateSubmodule(msg.submodulePath, true, msg.recursive);
@@ -2465,16 +2475,16 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const branches = await repoCP.getBranches();
         const NEW_BRANCH_ID = '__new__';
         const branchItems: Array<{ label: string; description?: string; branchName: string; isNew?: boolean }> = [
-          { label: '$(add) Create new branch…', branchName: NEW_BRANCH_ID, isNew: true },
+          { label: `$(add) ${vscode.l10n.t('Create new branch…')}`, branchName: NEW_BRANCH_ID, isNew: true },
           ...branches.map(b => ({
             label: b.isRemote ? `$(cloud) ${b.name}` : `$(git-branch) ${b.name}`,
-            description: b.isHead ? '(current)' : undefined,
+            description: b.isHead ? vscode.l10n.t('(current)') : undefined,
             branchName: b.name,
           })),
         ];
         const picked = await vscode.window.showQuickPick(branchItems, {
-          placeHolder: 'Select branch for new worktree',
-          title: 'New Worktree — Branch',
+          placeHolder: vscode.l10n.t('Select branch for new worktree'),
+          title: vscode.l10n.t('New Worktree — Branch'),
           matchOnDescription: true,
         });
         if (!picked) return;
@@ -2484,9 +2494,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         let baseBranchName = picked.branchName;
         if (picked.isNew) {
           const input = await vscode.window.showInputBox({
-            prompt: 'New branch name',
-            placeHolder: 'e.g. feature/my-feature',
-            title: 'New Worktree — New Branch Name',
+            prompt: vscode.l10n.t('New branch name'),
+            placeHolder: vscode.l10n.t('e.g. feature/my-feature'),
+            title: vscode.l10n.t('New Worktree — New Branch Name'),
           });
           if (!input?.trim()) return;
           newBranchName = input.trim();
@@ -2498,15 +2508,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repoFolderName = path.basename(repoCP.rootPath);
         const defaultPath = path.join(repoParent, `${repoFolderName}--${baseBranchName.replace(/\//g, '-')}`);
         const worktreePath = await vscode.window.showInputBox({
-          prompt: 'Path for the new worktree directory',
+          prompt: vscode.l10n.t('Path for the new worktree directory'),
           value: defaultPath,
-          title: 'New Worktree — Directory Path',
+          title: vscode.l10n.t('New Worktree — Directory Path'),
         });
         if (!worktreePath?.trim()) return;
 
         try {
           await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Creating worktree…', cancellable: false },
+            { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Creating worktree…'), cancellable: false },
             async () => {
               await repoCP.createWorktree(worktreePath.trim(), {
                 branch: picked.isNew ? undefined : picked.branchName,
@@ -2516,7 +2526,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           );
           const repos = await this.manager.getAllWorktrees();
           this.post({ type: 'WORKTREE_LIST_RESULT', repos });
-          vscode.window.showInformationMessage(`Worktree created at ${worktreePath.trim()}`);
+          vscode.window.showInformationMessage(vscode.l10n.t('Worktree created at {0}', worktreePath.trim()));
           logInfo('worktree-create', `Worktree created at ${worktreePath.trim()}`);
         } catch (e: unknown) {
           showGitError('worktree-create', e);
@@ -2528,7 +2538,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repoWC = this.manager.getRepo(msg.repoId);
         if (!repoWC) {
           logWarn('worktree-create', 'Repo not found');
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: false, error: 'Repo not found' });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'create', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2548,7 +2558,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repoWD = this.manager.getRepo(msg.repoId);
         if (!repoWD) {
           logWarn('worktree-delete', 'Repo not found');
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: false, error: 'Repo not found' });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'delete', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2568,7 +2578,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repoWP = this.manager.getRepo(msg.repoId);
         if (!repoWP) {
           logWarn('worktree-prune', 'Repo not found');
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: false, error: 'Repo not found' });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'prune', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2588,7 +2598,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repoWL = this.manager.getRepo(msg.repoId);
         if (!repoWL) {
           logWarn('worktree-lock', 'Repo not found');
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: false, error: 'Repo not found' });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'lock', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2607,7 +2617,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repoWU = this.manager.getRepo(msg.repoId);
         if (!repoWU) {
           logWarn('worktree-unlock', 'Repo not found');
-          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: false, error: 'Repo not found' });
+          this.post({ type: 'WORKTREE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'unlock', ok: false, error: vscode.l10n.t('Repo not found') });
           return;
         }
         try {
@@ -2670,7 +2680,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!this.pullRequestManager) break;
         const current = this.pullRequestManager.getFiltersForRepo(msg.repoId);
         const capabilities = await this.pullRequestManager.getCapabilities(msg.repoId);
-        const STATE_LABELS: Record<PullRequestStateFilter, string> = { open: 'Open', draft: 'Draft', closed: 'Closed', merged: 'Merged' };
+        const STATE_LABELS: Record<PullRequestStateFilter, string> = { open: vscode.l10n.t('Open'), draft: vscode.l10n.t('Draft'), closed: vscode.l10n.t('Closed'), merged: vscode.l10n.t('Merged') };
         const STATE_ORDER: PullRequestStateFilter[] = ['open', 'draft', 'closed', 'merged'];
         interface FilterQuickPickItem extends vscode.QuickPickItem {
           stateValue?: PullRequestStateFilter;
@@ -2681,19 +2691,19 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           isEverythingAction?: boolean;
         }
         const items: FilterQuickPickItem[] = [
-          { label: 'State', kind: vscode.QuickPickItemKind.Separator },
+          { label: vscode.l10n.t('State'), kind: vscode.QuickPickItemKind.Separator },
           ...STATE_ORDER.map(s => ({ label: STATE_LABELS[s], picked: current.states.includes(s), stateValue: s })),
           { label: '', kind: vscode.QuickPickItemKind.Separator },
-          { label: 'Created by me', picked: current.author === 'mine', isAuthorToggle: true },
-          ...(capabilities?.canFilterAssignee ? [{ label: 'Assigned to me', picked: current.assignedToMe, isAssignedToggle: true }] : []),
-          ...(capabilities?.canFilterReviewRequested ? [{ label: 'Review requested', picked: current.reviewRequestedToMe, isReviewToggle: true }] : []),
-          ...(capabilities?.canFilterMentions ? [{ label: 'Mentioning you', picked: current.mentioningMe, isMentionsToggle: true }] : []),
+          { label: vscode.l10n.t('Created by me'), picked: current.author === 'mine', isAuthorToggle: true },
+          ...(capabilities?.canFilterAssignee ? [{ label: vscode.l10n.t('Assigned to me'), picked: current.assignedToMe, isAssignedToggle: true }] : []),
+          ...(capabilities?.canFilterReviewRequested ? [{ label: vscode.l10n.t('Review requested'), picked: current.reviewRequestedToMe, isReviewToggle: true }] : []),
+          ...(capabilities?.canFilterMentions ? [{ label: vscode.l10n.t('Mentioning you'), picked: current.mentioningMe, isMentionsToggle: true }] : []),
           { label: '', kind: vscode.QuickPickItemKind.Separator },
-          { label: 'Everything assigned, requested, or mentioning you', isEverythingAction: true },
+          { label: vscode.l10n.t('Everything assigned, requested, or mentioning you'), isEverythingAction: true },
         ];
         const picked = await vscode.window.showQuickPick(items, {
           canPickMany: true,
-          title: 'Filter Pull Requests',
+          title: vscode.l10n.t('Filter Pull Requests'),
         });
         if (picked === undefined) break; // cancelled — leave filters unchanged
 
@@ -2724,9 +2734,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!this.pullRequestManager) break;
         const current = this.pullRequestManager.getFiltersForRepo(msg.repoId);
         const input = await vscode.window.showInputBox({
-          title: 'Search Pull Requests',
-          prompt: 'Title text, or a PR number like 1234 or #1234',
-          placeHolder: 'Search…',
+          title: vscode.l10n.t('Search Pull Requests'),
+          prompt: vscode.l10n.t('Title text, or a PR number like 1234 or #1234'),
+          placeHolder: vscode.l10n.t('Search…'),
           value: current.search,
         });
         if (input === undefined) break; // cancelled — leave the search unchanged
@@ -2783,9 +2793,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'NOTIFY_ERROR': {
         logError('notify', `${msg.message}`);
-        void vscode.window.showErrorMessage(`${msg.message}`, 'Show Log').then(choice => {
-          if (choice === 'Show Log') showLogChannel();
-        });
+        notifyWithLogAction('error', `${msg.message}`);
         break;
       }
 

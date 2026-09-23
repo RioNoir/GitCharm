@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { SimpleGit } from 'simple-git';
 import { createGit } from './gitClient';
 import * as fs from 'fs';
@@ -1063,8 +1064,7 @@ export class GitService {
       if (notStageable.length > 0) {
         const names = notStageable.map(p => path.basename(p)).join(', ');
         throw new Error(
-          `Cannot stage ${names}: the submodule has uncommitted changes but no new commit. ` +
-          `Commit inside the submodule first, then stage the pointer here.`
+          vscode.l10n.t('Cannot stage {0}: the submodule has uncommitted changes but no new commit. Commit inside the submodule first, then stage the pointer here.', names)
         );
       }
       await this.git.raw(['add', '--', ...gitlinkPaths]);
@@ -1098,8 +1098,7 @@ export class GitService {
       if (notStageable.length > 0) {
         const names = notStageable.map(p => path.basename(p)).join(', ');
         throw new Error(
-          `Cannot stage ${names}: the submodule has uncommitted changes but no new commit. ` +
-          `Commit inside the submodule first, then stage the pointer here.`
+          vscode.l10n.t('Cannot stage {0}: the submodule has uncommitted changes but no new commit. Commit inside the submodule first, then stage the pointer here.', names)
         );
       }
     }
@@ -1442,29 +1441,29 @@ export class GitService {
   async pull(): Promise<string> {
     const vsRepo = this.vsRepo();
     if (vsRepo && vsRepo.state.remotes.length > 0) {
-      if (!vsRepo.state.HEAD?.upstream) return 'No remote tracking branch — skipped';
+      if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       await vsRepo.pull();
-      return 'pulled';
+      return vscode.l10n.t('pulled');
     }
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
-    if (!tracking.trim()) return 'No remote tracking branch — skipped';
+    if (!tracking.trim()) return vscode.l10n.t('No remote tracking branch — skipped');
     const result = await this.git.pull();
-    return `${result.summary.changes} changes, ${result.summary.insertions} insertions, ${result.summary.deletions} deletions`;
+    return vscode.l10n.t('{0} changes, {1} insertions, {2} deletions', result.summary.changes, result.summary.insertions, result.summary.deletions);
   }
 
   async pullRebase(): Promise<string> {
     const vsRepo = this.vsRepo();
     if (vsRepo && vsRepo.state.remotes.length > 0) {
-      if (!vsRepo.state.HEAD?.upstream) return 'No remote tracking branch — skipped';
+      if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       const upstream = vsRepo.state.HEAD.upstream;
       await vsRepo.fetch();
       await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
-      return 'pulled (rebase)';
+      return vscode.l10n.t('pulled (rebase)');
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
-    if (!tracking) return 'No remote tracking branch — skipped';
+    if (!tracking) return vscode.l10n.t('No remote tracking branch — skipped');
     await this.git.raw(['pull', '--rebase']);
-    return 'pulled (rebase)';
+    return vscode.l10n.t('pulled (rebase)');
   }
 
   async fetchAll(): Promise<void> {
@@ -1704,7 +1703,7 @@ export class GitService {
     const paths = [...new Set([oldPath, filePath].filter((p): p is string => Boolean(p)))];
     const patch = await this.git.raw(['diff', '--binary', '--find-renames', base, hash, '--', ...paths]);
     if (!patch.trim()) {
-      throw new Error(`No changes found for ${filePath} in ${hash.slice(0, 8)}`);
+      throw new Error(vscode.l10n.t('No changes found for {0} in {1}', filePath, hash.slice(0, 8)));
     }
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitcharm-cherry-pick-file-'));
@@ -1722,7 +1721,7 @@ export class GitService {
         try {
           await this.git.raw(['apply', '--binary', '--whitespace=fix', patchPath]);
         } catch (fallbackErr) {
-          throw new Error(`Failed to cherry-pick selected changes: ${fallbackErr}`);
+          throw new Error(vscode.l10n.t('Failed to cherry-pick selected changes: {0}', String(fallbackErr)));
         }
       }
     } finally {
@@ -2129,7 +2128,7 @@ export class GitService {
   async pushSubmodule(): Promise<void> {
     const status = await this.git.status();
     if (status.detached) {
-      throw new Error('Submodule is in detached HEAD — checkout a branch before pushing.');
+      throw new Error(vscode.l10n.t('Submodule is in detached HEAD — checkout a branch before pushing.'));
     }
     await this.push();
   }
@@ -2139,7 +2138,7 @@ export class GitService {
     if (status.detached) {
       // In detached HEAD: fetch then checkout the latest commit on the tracked ref.
       await this.git.fetch();
-      return 'fetched (detached HEAD — use Update Submodule to advance to a new commit)';
+      return vscode.l10n.t('fetched (detached HEAD — use Update Submodule to advance to a new commit)');
     }
     return rebase ? this.pullRebase() : this.pull();
   }

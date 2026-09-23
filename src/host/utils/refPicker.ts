@@ -13,21 +13,21 @@ export async function pickRefQuickPick(
   ]);
   type RefItem = vscode.QuickPickItem & { ref: string };
   const items: RefItem[] = [
-    { label: 'LOCAL BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+    { label: vscode.l10n.t('LOCAL BRANCHES'), kind: vscode.QuickPickItemKind.Separator, ref: '' },
     ...branches.filter(b => !b.isRemote).map(b => ({
       label: `$(git-branch) ${b.name}`,
-      description: b.isHead ? '(current)' : undefined,
+      description: b.isHead ? vscode.l10n.t('(current)') : undefined,
       ref: b.name,
     })),
     ...(includeRemote ? [
-      { label: 'REMOTE BRANCHES', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+      { label: vscode.l10n.t('REMOTE BRANCHES'), kind: vscode.QuickPickItemKind.Separator, ref: '' },
       ...branches.filter(b => b.isRemote).map(b => ({
         label: `$(cloud) ${b.name}`,
         ref: b.name,
       })),
     ] : []),
     ...(tags.length ? [
-      { label: 'TAGS', kind: vscode.QuickPickItemKind.Separator, ref: '' },
+      { label: vscode.l10n.t('TAGS'), kind: vscode.QuickPickItemKind.Separator, ref: '' },
       ...tags.map(t => ({ label: `$(tag) ${t.name}`, ref: t.name })),
     ] : []),
   ];

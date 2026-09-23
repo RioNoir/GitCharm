@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
@@ -702,11 +703,11 @@ export class GitLabProvider implements PullRequestProvider {
   }
 
   async hideComment(): Promise<UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'GitLab has no concept of hiding a comment.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('GitLab has no concept of hiding a comment.') };
   }
 
   async unhideComment(): Promise<UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'GitLab has no concept of hiding a comment.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('GitLab has no concept of hiding a comment.') };
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -821,12 +822,12 @@ export class GitLabProvider implements PullRequestProvider {
 
   async submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult> {
     if (input.event === 'comment') {
-      if (!input.body?.trim()) return { ok: false, error: 'A comment body is required for this review type' };
+      if (!input.body?.trim()) return { ok: false, error: vscode.l10n.t('A comment body is required for this review type') };
       const result = await this.postComment(owner, repo, number, input.body);
       return result.ok ? { ok: true } : { ok: false, error: result.error };
     }
     if (input.event !== 'approve') {
-      return { ok: false, unsupported: true, error: 'GitLab does not support requesting changes on a merge request' };
+      return { ok: false, unsupported: true, error: vscode.l10n.t('GitLab does not support requesting changes on a merge request') };
     }
     const headers = await this.headers();
     const projectId = this.projectId(owner, repo);
