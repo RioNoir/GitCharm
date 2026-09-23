@@ -20,6 +20,44 @@ import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
 import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
+import { avatarsEnabled } from './utils/avatarCache';
+
+/**
+ * Avatars are off by default, so existing users are asked once whether to turn them back on.
+ * Either answer is remembered; the setting itself is the way to change it afterwards.
+ */
+async function maybeAskAboutAvatars(globalState: vscode.Memento): Promise<void> {
+  const ASKED_KEY = 'hasAskedAboutAvatars';
+  if (globalState.get<boolean>(ASKED_KEY)) return;
+  // Someone who already turned them on (or whose admin did) doesn't need the question.
+  if (avatarsEnabled()) { await globalState.update(ASKED_KEY, true); return; }
+
+  const ENABLE = 'Enable avatars';
+  const KEEP = 'Keep disabled';
+  const picked = await vscode.window.showInformationMessage(
+    "GitCharm can show author avatars from Gravatar. This sends a hash of each commit author's email to gravatar.com, which can reveal those addresses. Change this later in Settings under \"gitcharm.avatars.enabled\".",
+    ENABLE,
+    KEEP,
+  );
+  if (picked === undefined) return; // dismissed without answering — ask again next time
+  await globalState.update(ASKED_KEY, true);
+  if (picked === ENABLE) {
+    suppressAvatarReloadPrompt = true;
+    await vscode.workspace.getConfiguration('gitcharm').update('avatars.enabled', true, vscode.ConfigurationTarget.Global);
+  }
+}
+
+/** Webviews read the avatar flag from their HTML, so a later toggle only takes effect on reload. */
+let suppressAvatarReloadPrompt = false;
+function watchAvatarSetting(): vscode.Disposable {
+  return vscode.workspace.onDidChangeConfiguration(async e => {
+    if (!e.affectsConfiguration('gitcharm.avatars.enabled')) return;
+    if (suppressAvatarReloadPrompt) { suppressAvatarReloadPrompt = false; return; }
+    const RELOAD = 'Reload Window';
+    const picked = await vscode.window.showInformationMessage('Reload the window to apply the GitCharm avatar setting.', RELOAD);
+    if (picked === RELOAD) await vscode.commands.executeCommand('workbench.action.reloadWindow');
+  });
+}
 
 async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void> {
   const SHOWN_KEY = 'hasShownViewModeQuickpick';
@@ -213,6 +251,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // DEV ONLY: uncomment to reset the incoming commits notification flag
   //context.globalState.update('doNotShowIncomingCommitsNotification', false);
   showViewModeQuickpick(context.globalState);
+  void maybeAskAboutAvatars(context.globalState);
+  context.subscriptions.push(watchAvatarSetting());
   setTimeout(() => maybeShowSupportNotification(context.globalState), 5 * 60 * 1000); // DEV: use 5 * 60 * 1000 for production
 
   const shelveDocProvider = new ShelveDocumentProvider();

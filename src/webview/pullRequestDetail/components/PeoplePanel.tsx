@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PullRequestUser } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
+import { avatarsEnabled } from '../../shared/avatars';
 
 interface PeopleFieldProps {
   people: PullRequestUser[];
@@ -15,7 +16,7 @@ function initials(name: string): string {
 function PersonChip({ person }: { person: PullRequestUser }) {
   return (
     <span style={css.chip} title={person.username}>
-      {person.avatarUrl
+      {avatarsEnabled && person.avatarUrl
         ? <img src={person.avatarUrl} alt={person.username} style={css.chipAvatarImg} />
         : <span style={css.chipAvatarFallback}>{initials(person.username)}</span>
       }

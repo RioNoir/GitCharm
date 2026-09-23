@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
+import { avatarsEnabled } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 
 function useSkeletonStyle() {
@@ -59,7 +60,7 @@ function initials(name: string): string {
 
 function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   const [failed, setFailed] = React.useState(false);
-  if (avatarUrl && !failed) {
+  if (avatarsEnabled && avatarUrl && !failed) {
     return <img src={avatarUrl} alt={name} title={name} style={row.avatarImg} onError={() => setFailed(true)} />;
   }
   return <span style={row.avatarFallback} title={name}>{initials(name)}</span>;

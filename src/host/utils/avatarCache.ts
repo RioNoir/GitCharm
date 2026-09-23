@@ -11,6 +11,14 @@ import * as crypto from 'crypto';
  * fetches and persists to disk with Node's `fetch`/`crypto` instead of the DOM APIs.
  */
 
+/**
+ * Author avatars are opt-in (`gitcharm.avatars.enabled`, default off): resolving one sends a hash
+ * of the author's email to gravatar.com, and those hashes can be reversed back to the address.
+ */
+export function avatarsEnabled(): boolean {
+  return vscode.workspace.getConfiguration('gitcharm').get<boolean>('avatars.enabled', false) === true;
+}
+
 const CACHE_SUBDIR = 'avatars';
 /** Same size class used elsewhere for small inline avatars; QuickPick icons render around 16px. */
 const SIZE = 20;
@@ -92,6 +100,7 @@ async function resolveCached(cacheKey: string, candidates: string[], cacheDir: s
  * (blank/404, no network, etc.) — callers should fall back to a codicon in that case.
  */
 export async function resolveAvatarIconPath(email: string, cacheDir: string): Promise<vscode.Uri | undefined> {
+  if (!avatarsEnabled()) return undefined;
   const normalized = email.trim().toLowerCase();
   if (!normalized) return undefined;
   const candidates = [githubNoreplyAvatarUrl(normalized), gravatarUrl(normalized)].filter((u): u is string => !!u);
@@ -100,6 +109,7 @@ export async function resolveAvatarIconPath(email: string, cacheDir: string): Pr
 
 /** Returns a file Uri to a cached avatar for a GitHub username, via GitHub's public `<user>.png` endpoint. */
 export async function resolveGitHubUsernameAvatarIconPath(username: string, cacheDir: string): Promise<vscode.Uri | undefined> {
+  if (!avatarsEnabled()) return undefined;
   const normalized = username.trim();
   if (!normalized) return undefined;
   const url = `https://github.com/${encodeURIComponent(normalized)}.png?size=${SIZE * 2}`;
