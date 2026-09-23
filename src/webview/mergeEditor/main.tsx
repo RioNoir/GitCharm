@@ -1,3 +1,4 @@
+import '../shared/l10n';
 import React, { useEffect, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useMergeStore } from './store/mergeStore';

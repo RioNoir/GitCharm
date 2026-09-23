@@ -11,6 +11,7 @@
 
 // ── Must be the very first import — patches window.addEventListener ───────────
 import './setupDispatch';
+import '../shared/l10n';
 
 import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';

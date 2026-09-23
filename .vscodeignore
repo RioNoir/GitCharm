@@ -18,3 +18,4 @@ MEMORY.md
 .claude/
 .github/
 .ai/
+scripts/**

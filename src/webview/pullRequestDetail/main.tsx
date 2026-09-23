@@ -1,3 +1,4 @@
+import '../shared/l10n';
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PullRequestHeader } from './components/PullRequestHeader';

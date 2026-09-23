@@ -1,3 +1,4 @@
+import '../shared/l10n';
 import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useLogStore } from './store/logStore';
