@@ -36,3 +36,20 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # The English bundle is generated from the l10n.t() calls in src/ — fail if a PR
+      # changed UI strings without committing the regenerated l10n/bundle.l10n.json.
+      - name: Check l10n bundle is up to date
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run l10n:export
+          if [ -n "$(git status --porcelain -- l10n)" ]; then
+            git status --short -- l10n
+            git diff -- l10n
+            echo "::error::l10n/bundle.l10n.json is out of date — run 'npm run l10n:export' and commit the result."
+            exit 1
+          fi
+
+      - name: Check translations
+        run: npm run l10n:check

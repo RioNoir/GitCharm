@@ -101,6 +101,10 @@ jobs:
         if: steps.gh_release.outputs.exists == 'false'
         run: npm run typecheck:webview
 
+      - name: Check translations
+        if: steps.gh_release.outputs.exists == 'false'
+        run: npm run l10n:check
+
       - name: Read package version
         id: package
         shell: bash
