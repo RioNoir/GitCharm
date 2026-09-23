@@ -45,6 +45,9 @@
   "activationEvents": [
     "workspaceContains:**/.git",
     "onStartupFinished",
+    "onView:gitcharm.commitPanel",
+    "onView:gitcharm.gitLog",
+    "onCommand:gitcharm.openLog",
     "onWebviewPanel:gitcharm.undocked",
     "onWebviewPanel:gitcharm.commitFullDetail",
     "onWebviewPanel:gitcharm.pullRequestDetail"
