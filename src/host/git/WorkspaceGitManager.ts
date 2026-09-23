@@ -7,6 +7,7 @@ import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
 import { PROJECT_COLORS } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
+import { mergeCommitLists } from '../utils/mergeCommitLists';
 
 const MAX_SUBMODULE_DEPTH = 5;
 /**
@@ -996,11 +997,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const results = await Promise.allSettled(
       targets.map(r => r.getLog(fetchLimit, fetchSkip, { ...opts, worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
     );
-    const allCommits = results
+    const allCommits = mergeCommitLists(results
       .filter((r): r is PromiseFulfilledResult<CommitNode[]> => r.status === 'fulfilled')
-      .flatMap(r => r.value);
+      .map(r => r.value));
 
-    allCommits.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
     const pageStart = isInterleaved ? skip : 0;
     return allCommits.slice(pageStart, pageStart + limit);
   }

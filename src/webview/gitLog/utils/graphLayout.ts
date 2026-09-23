@@ -209,7 +209,11 @@ export function assignLanes(commits: CommitNode[], _isFiltered = false): GraphLa
   for (let i = 0; i < n; i++) {
     for (const ph of commits[i].parents) {
       const pidx = hashIndex.get(ph) ?? -1;
-      if (pidx >= 0) { vertices[i].addParent(vertices[pidx]); }
+      // The path walk below only searches rows after a commit for its parent. A parent listed
+      // above its child (input not in topological order) would never be reached, and the
+      // outer loop would call determinePath on the same row forever — freezing the webview.
+      // Treat it like a parent outside the loaded window instead.
+      if (pidx > i) { vertices[i].addParent(vertices[pidx]); }
       else vertices[i].addParent(nullVertex);
     }
   }

@@ -6,6 +6,7 @@ import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
 import { CommitFiltersBar, RepoTabs } from './components/CommitFiltersBar';
 import { assignLanes } from './utils/graphLayout';
+import { mergeCommitLists } from '../../host/utils/mergeCommitLists';
 import type { GraphLayout } from './utils/graphLayout';
 import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
@@ -297,9 +298,10 @@ function App() {
       ? store.stashes.filter(s => s.stashBranch === branchFilter)
       : store.stashes;
     if (visibleStashes.length === 0) return store.commits;
-    const merged = [...store.commits, ...visibleStashes];
-    merged.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
-    return merged;
+    // Stashes are unrelated to one another, so sorting them alone is safe; the commits keep
+    // git's topological order, which the graph layout depends on.
+    const stashesNewestFirst = [...visibleStashes].sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
+    return mergeCommitLists([store.commits, stashesNewestFirst]);
   }, [store.commits, store.stashes, store.commitFilters.branch]);
 
   // assignLanes is expensive — run it off the render path via useEffect + rAF
