@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BlameService, type BlameLine } from '../git/BlameService';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
-import { plural } from '../utils/plural';
+import { displayWidth } from '../utils/displayWidth';
 
 const GHOST_MAX_SUMMARY_LEN = 72;
 const CONTEXT_KEY = 'gitcharm.annotationsVisible';
@@ -26,16 +26,18 @@ function formatRelativeDate(date: Date): string {
   const diffMonths = Math.floor(diffDays / 30.44);
   const diffYears = Math.floor(diffDays / 365.25);
 
-  if (diffYears >= 1) return plural(diffYears, vscode.l10n.t('1 year ago'), vscode.l10n.t('{0} years ago', diffYears));
-  if (diffMonths >= 1) return plural(diffMonths, vscode.l10n.t('1 month ago'), vscode.l10n.t('{0} months ago', diffMonths));
-  if (diffDays >= 1) return plural(diffDays, vscode.l10n.t('1 day ago'), vscode.l10n.t('{0} days ago', diffDays));
-  if (diffHours >= 1) return plural(diffHours, vscode.l10n.t('1 hour ago'), vscode.l10n.t('{0} hours ago', diffHours));
-  if (diffMins >= 1) return plural(diffMins, vscode.l10n.t('1 minute ago'), vscode.l10n.t('{0} minutes ago', diffMins));
+  // Intl phrases the relative time natively for every display language (e.g. "3天前").
+  const rtf = new Intl.RelativeTimeFormat(vscode.env.language, { numeric: 'auto' });
+  if (diffYears >= 1) return rtf.format(-diffYears, 'year');
+  if (diffMonths >= 1) return rtf.format(-diffMonths, 'month');
+  if (diffDays >= 1) return rtf.format(-diffDays, 'day');
+  if (diffHours >= 1) return rtf.format(-diffHours, 'hour');
+  if (diffMins >= 1) return rtf.format(-diffMins, 'minute');
   return vscode.l10n.t('just now');
 }
 
 function formatDateFull(date: Date): string {
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString(vscode.env.language, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatDateDMY(date: Date): string {
@@ -507,7 +509,7 @@ export class FileAnnotationController implements vscode.Disposable {
     const notCommitted = vscode.l10n.t('Not committed');
     const maxLabelLen = blameLines
       .filter(l => !l.isUncommitted)
-      .reduce((max, l) => Math.max(max, blameLabel(l).length), notCommitted.length);
+      .reduce((max, l) => Math.max(max, displayWidth(blameLabel(l))), displayWidth(notCommitted));
     const annotationWidthCh = maxLabelLen + 1; // +1 visual gap before border
 
     // Uncommitted lines — neutral type, no background

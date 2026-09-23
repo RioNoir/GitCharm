@@ -23,6 +23,9 @@ export function createGit(baseDir?: string, options: Partial<SimpleGitOptions> =
   const git = simpleGit({
     ...options,
     ...(baseDir !== undefined ? { baseDir } : {}),
+    // By default git prints non-ASCII paths quoted and octal-escaped ("\350\257\264.txt"),
+    // which breaks every path we parse from status/diff/log output for CJK or accented names.
+    config: ['core.quotePath=false', ...(options.config ?? [])],
     unsafe: { ...INHERITED_ENV_ALLOWANCES, ...options.unsafe },
   });
   return git.env(GIT_ENV);

@@ -159,18 +159,25 @@ interface PanelData {
   }>;
 }
 
+// Intl returns "today"/"yesterday" lowercase in most languages; the list shows them as labels.
+function capitalize(s: string): string {
+  return s.charAt(0).toLocaleUpperCase(vscode.env.language) + s.slice(1);
+}
+
 function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData): string {
   const n = data.commits.length;
   const commitCount = n === 0 ? '' : plural(n, vscode.l10n.t('1 commit'), vscode.l10n.t('{0} commits', n));
+  // Intl phrases today/yesterday/"N days ago" natively for every display language.
+  const rtf = new Intl.RelativeTimeFormat(vscode.env.language, { numeric: 'auto' });
   const daysAgo: Record<number, string> = {};
-  for (let d = 2; d < 7; d++) daysAgo[d] = plural(d, vscode.l10n.t('1 day ago'), vscode.l10n.t('{0} days ago', d));
+  for (let d = 2; d < 7; d++) daysAgo[d] = rtf.format(-d, 'day');
   const strings = {
     statusLabels: {
       A: vscode.l10n.t('Added'), M: vscode.l10n.t('Modified'), D: vscode.l10n.t('Deleted'),
       R: vscode.l10n.t('Renamed'), C: vscode.l10n.t('Copied'), T: vscode.l10n.t('Type changed'),
     },
-    today: vscode.l10n.t('Today'),
-    yesterday: vscode.l10n.t('Yesterday'),
+    today: capitalize(rtf.format(0, 'day')),
+    yesterday: capitalize(rtf.format(-1, 'day')),
     daysAgo,
     showInLog: vscode.l10n.t('Show in Git Log'),
   };
@@ -317,7 +324,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         if (days === 0) return STRINGS.today;
         if (days === 1) return STRINGS.yesterday;
         if (days < 7 && days > 1) return STRINGS.daysAgo[days];
-        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        return d.toLocaleDateString(document.documentElement.lang || undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       } catch { return iso; }
     }
 
