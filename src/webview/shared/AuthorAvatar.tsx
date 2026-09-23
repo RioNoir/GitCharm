@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Codicon } from './Codicon';
+import { avatarsEnabled } from './avatars';
 
 interface Props {
   authorName: string;
@@ -85,10 +86,12 @@ async function resolveAvatarUrl(email: string, size: number): Promise<string | n
 }
 
 export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false }: Props) {
-  const [url, setUrl] = useState<string | null | 'loading'>('loading');
+  const [url, setUrl] = useState<string | null | 'loading'>(avatarsEnabled ? 'loading' : null);
   const prevEmailRef = useRef(authorEmail);
 
   useEffect(() => {
+    // Avatars are opt-in: with the setting off, stay on initials and make no request.
+    if (!avatarsEnabled) return;
     prevEmailRef.current = authorEmail;
     setUrl('loading');
 

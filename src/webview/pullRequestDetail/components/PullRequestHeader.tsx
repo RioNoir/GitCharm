@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { MergeStrategy, PullRequestDetail, PullRequestSummary } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
+import { avatarsEnabled } from '../../shared/avatars';
 
 interface Props {
   summary: PullRequestSummary;
@@ -287,7 +288,7 @@ export function PullRequestHeader({
           {badge.label}
         </span>
 
-        {summary.authorAvatarUrl
+        {avatarsEnabled && summary.authorAvatarUrl
           ? <img src={summary.authorAvatarUrl} alt={summary.authorName} style={css.avatarImg} />
           : <span style={css.avatarFallback}>{initials(summary.authorName)}</span>
         }

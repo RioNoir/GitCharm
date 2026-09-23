@@ -932,6 +932,13 @@
             "default": true,
             "description": "Enable inline Git ghost text in the editor."
           },
+          "gitcharm.avatars.enabled": {
+            "order": 105,
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "Show author avatars. **Privacy:** when enabled, a hash of each commit author's email is sent to gravatar.com (or GitHub for noreply addresses). These hashes can be reversed to recover the email addresses. Leave disabled for private or company repositories."
+          },
           "gitcharm.gitLogDefaultLocation": {
             "order": 12,
             "type": "string",

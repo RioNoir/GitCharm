@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
+import { avatarsEnabled } from '../../shared/avatars';
 import { renderMarkdown } from '../../shared/renderMarkdown';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
 import { formatRelativeTime } from '../../shared/formatRelativeTime';
@@ -164,7 +165,7 @@ function CommentRow({ comment, onUpdate, onDelete, onHide, onUnhide }: {
   return (
     <div style={css.comment}>
       <div style={css.commentHeader}>
-        {comment.authorAvatarUrl
+        {avatarsEnabled && comment.authorAvatarUrl
           ? <img src={comment.authorAvatarUrl} alt={comment.authorName} style={css.avatarImg} />
           : <span style={css.avatarFallback}>{initials(comment.authorName)}</span>
         }
