@@ -24,6 +24,7 @@ import { CommitList } from '../gitLog/components/CommitList';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
 import { CommitFiltersBar, RepoTabs } from '../gitLog/components/CommitFiltersBar';
 import { assignLanes } from '../gitLog/utils/graphLayout';
+import { mergeCommitLists } from '../../host/utils/mergeCommitLists';
 import type { GraphLayout } from '../gitLog/utils/graphLayout';
 
 // ── Commit sub-app — mounts the full commit panel ────────────────────────────
@@ -229,9 +230,10 @@ function LogApp() {
     const branchFilter = store.commitFilters.branch;
     const visibleStashes = branchFilter ? store.stashes.filter(s => s.stashBranch === branchFilter) : store.stashes;
     if (visibleStashes.length === 0) return store.commits;
-    const merged = [...store.commits, ...visibleStashes];
-    merged.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
-    return merged;
+    // Stashes are unrelated to one another, so sorting them alone is safe; the commits keep
+    // git's topological order, which the graph layout depends on.
+    const stashesNewestFirst = [...visibleStashes].sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
+    return mergeCommitLists([store.commits, stashesNewestFirst]);
   }, [store.commits, store.stashes, store.commitFilters.branch]);
 
   const [graphLayout, setGraphLayout] = useState<GraphLayout>(() => assignLanes(commitsWithStashes, isFiltered));
