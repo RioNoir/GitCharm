@@ -1,4 +1,5 @@
-import simpleGit, { SimpleGit } from 'simple-git';
+import { SimpleGit } from 'simple-git';
+import { createGit } from './gitClient';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -58,7 +59,7 @@ export class GitService {
   private _pendingDetachedTag: string | undefined;
 
   constructor(public readonly repoId: string, public readonly rootPath: string) {
-    this.git = simpleGit(rootPath);
+    this.git = createGit(rootPath);
   }
 
   setPendingDetachedTag(tagName: string | undefined): void {
@@ -1269,7 +1270,7 @@ export class GitService {
     // `rebase --continue` opens an editor for the commit being replayed. core.editor=true
     // is the no-op shell builtin, so the stored message is accepted unchanged and the
     // command never blocks — simple-git needs allowUnsafeEditor to let the override past.
-    await simpleGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+    await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
       .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
   }
 

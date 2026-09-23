@@ -1240,6 +1240,7 @@
     "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json"
   },
   "dependencies": {
+    "@simple-git/argv-parser": "^1.1.1",
     "@tiptap/extension-link": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
