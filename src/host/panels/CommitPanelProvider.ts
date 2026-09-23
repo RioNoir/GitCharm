@@ -34,6 +34,7 @@ import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
 const COMMIT_MESSAGE_WORKSPACE_KEY = 'gitcharm.commitPanel.draftMessage';
+const COMMIT_SEEDED_WORKSPACE_KEY = 'gitcharm.commitPanel.seededMessage';
 
 /**
  * Asks — in the command bar — how to reconcile branches that have diverged from their
@@ -125,9 +126,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Seeds the commit box with the message git prepared for an in-progress merge or
-   * squash (or the configured commit.template), matching VS Code's Source Control
-   * input. Only fills an empty box, so a message the user typed is never clobbered.
+   * Seeds the commit box with the message git prepared for an in-progress merge,
+   * rebase, or squash (or the configured commit.template), matching VS Code's Source
+   * Control input. Only fills an empty box, so a message the user typed is never
+   * clobbered. When that prepared file disappears (merge finished in the terminal),
+   * clears the box if it still holds exactly what we seeded.
    *
    * Checks every repo for an actual merge/squash message before falling back to any
    * repo's commit.template — otherwise a plain template configured on one repo could
@@ -141,10 +144,22 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     for (const repo of repos) {
       const message = await repo.getMergeSquashMessage().catch(() => '');
       if (message) {
+        await this.workspaceState?.update(COMMIT_SEEDED_WORKSPACE_KEY, message);
         this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
         return;
       }
     }
+
+    const lastSeeded = this.workspaceState?.get<string>(COMMIT_SEEDED_WORKSPACE_KEY, '') ?? '';
+    if (lastSeeded) {
+      this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message: '', ifEquals: lastSeeded });
+      const draft = this.workspaceState?.get<string>(COMMIT_MESSAGE_WORKSPACE_KEY, '') ?? '';
+      if (draft.trim() === lastSeeded.trim()) {
+        await this.workspaceState?.update(COMMIT_MESSAGE_WORKSPACE_KEY, undefined);
+      }
+      await this.workspaceState?.update(COMMIT_SEEDED_WORKSPACE_KEY, undefined);
+    }
+
     for (const repo of repos) {
       const message = await repo.getInputTemplate().catch(() => '');
       if (message) {
