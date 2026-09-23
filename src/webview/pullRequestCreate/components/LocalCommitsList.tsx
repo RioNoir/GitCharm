@@ -2,16 +2,11 @@ import React from 'react';
 import type { CommitNode } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
+import { avatarColor, initials } from '../../shared/avatars';
 
 interface Props {
   commits: CommitNode[];
   loading: boolean;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 export function LocalCommitsList({ commits, loading }: Props) {
@@ -22,7 +17,7 @@ export function LocalCommitsList({ commits, loading }: Props) {
     <div style={css.root}>
       {commits.map((c, i) => (
         <div key={c.hash} style={css.commitRow(i === commits.length - 1)}>
-          <span style={css.avatarFallback}>{initials(c.authorName)}</span>
+          <span style={{ ...css.avatarFallback, background: avatarColor(c.authorName) }}>{initials(c.authorName)}</span>
           <div style={css.commitMain}>
             <span style={css.commitMessage}>{c.message.split('\n')[0]}</span>
             <span style={css.commitMeta}>
@@ -50,7 +45,7 @@ const css = {
   avatarFallback: {
     width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '10px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    fontSize: '10px', fontWeight: 'bold' as const, color: '#fff',
   } as React.CSSProperties,
   commitMain: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0, gap: '3px' } as React.CSSProperties,
   commitMessage: { fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const } as React.CSSProperties,

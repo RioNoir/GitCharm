@@ -1,16 +1,10 @@
 import React from 'react';
 import type { PullRequestUser } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
 
 interface PeopleFieldProps {
   people: PullRequestUser[];
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function PersonChip({ person }: { person: PullRequestUser }) {
@@ -18,7 +12,7 @@ function PersonChip({ person }: { person: PullRequestUser }) {
     <span style={css.chip} title={person.username}>
       {avatarsEnabled && person.avatarUrl
         ? <img src={person.avatarUrl} alt={person.username} style={css.chipAvatarImg} />
-        : <span style={css.chipAvatarFallback}>{initials(person.username)}</span>
+        : <span style={{ ...css.chipAvatarFallback, background: avatarColor(person.username) }}>{initials(person.username)}</span>
       }
       {person.username}
     </span>
@@ -59,6 +53,6 @@ const css = {
   chipAvatarFallback: {
     width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '10px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    fontSize: '10px', fontWeight: 'bold' as const, color: '#fff',
   } as React.CSSProperties,
 };

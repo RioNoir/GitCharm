@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Codicon } from './Codicon';
 import { AuthorAvatar } from './AuthorAvatar';
+import { avatarsEnabled } from './avatars';
 import { formatRelativeTime } from './formatRelativeTime';
 import { renderMarkdown } from './renderMarkdown';
 
@@ -51,7 +52,7 @@ export function CommitRow({ commit, expanded, isLast, onToggle, renderFiles }: P
         onClick={onToggle}
       >
         <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
-        {commit.authorAvatarUrl
+        {avatarsEnabled && commit.authorAvatarUrl
           ? <img src={commit.authorAvatarUrl} alt={commit.authorName} style={css.avatarImg} />
           : <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail ?? ''} size={24} />
         }

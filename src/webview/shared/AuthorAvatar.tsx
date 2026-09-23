@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Codicon } from './Codicon';
-import { avatarsEnabled } from './avatars';
+import { avatarsEnabled, avatarColor, initials } from './avatars';
 
 interface Props {
   authorName: string;
@@ -21,21 +21,6 @@ function githubAvatarUrl(email: string, size: number): string | null {
   const local = email.split('@')[0] ?? '';
   const username = local.includes('+') ? local.split('+')[1] : local;
   return username ? `https://avatars.githubusercontent.com/${username}?size=${size * 2}` : null;
-}
-
-function avatarColor(email: string): string {
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(p => /^[a-zA-ZÀ-ÿ]/.test(p));
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) { const w = parts[0] ?? ''; return (w.length > 1 ? w[0] + w[1] : w[0] ?? '?').toUpperCase(); }
-  return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
 }
 
 // Fetches the image as a blob, draws it on an offscreen canvas, and checks
@@ -149,7 +134,7 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false
   if (url === null) {
     return (
       <div
-        style={{ ...containerStyle, background: avatarColor(authorEmail), color: '#fff' }}
+        style={{ ...containerStyle, background: avatarColor(authorName), color: '#fff' }}
         title={`${authorName} <${authorEmail}>`}
       >
         {initials(authorName)}
@@ -161,7 +146,7 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false
     // Show initials as placeholder while fetching
     return (
       <div
-        style={{ ...containerStyle, background: avatarColor(authorEmail), color: '#fff', opacity: 0.4 }}
+        style={{ ...containerStyle, background: avatarColor(authorName), color: '#fff', opacity: 0.4 }}
         title={`${authorName} <${authorEmail}>`}
       >
         {initials(authorName)}

@@ -8,6 +8,7 @@ import type { ChangedFile, FileDiffContent, HostToPrDetailMsg, PrDetailToHostMsg
 import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 import { getAiModelLabel } from '../utils/aiModelLabel';
+import { avatarsEnabled } from '../utils/avatarCache';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -17,7 +18,8 @@ function truncateTitle(title: string): string {
 
 /** QuickPickItem.iconPath accepts a remote https URI directly (same as the GitHub Pull Requests extension does for reviewer/assignee avatars in its own pickers) — no local caching needed. */
 function avatarIconPath(avatarUrl: string | undefined): vscode.Uri | undefined {
-  if (!avatarUrl) return undefined;
+  // VS Code fetches a remote iconPath itself, so it must honour the opt-in like every other avatar.
+  if (!avatarUrl || !avatarsEnabled()) return undefined;
   try {
     return vscode.Uri.parse(avatarUrl, true);
   } catch {

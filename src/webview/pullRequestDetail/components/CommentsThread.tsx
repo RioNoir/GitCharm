@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
 import { renderMarkdown } from '../../shared/renderMarkdown';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
 import { formatRelativeTime } from '../../shared/formatRelativeTime';
@@ -32,12 +32,6 @@ type TimelineItem =
   | { kind: 'comment'; date: string; comment: PullRequestComment }
   | { kind: 'commit'; date: string; commit: PullRequestCommit }
   | { kind: 'event'; date: string; event: PullRequestEvent };
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 /** Rendered via a portal into document.body, positioned in fixed viewport coordinates from the trigger
  * button's own rect — necessary because CommentRow's rounded-corner container clips overflow, which would
@@ -167,7 +161,7 @@ function CommentRow({ comment, onUpdate, onDelete, onHide, onUnhide }: {
       <div style={css.commentHeader}>
         {avatarsEnabled && comment.authorAvatarUrl
           ? <img src={comment.authorAvatarUrl} alt={comment.authorName} style={css.avatarImg} />
-          : <span style={css.avatarFallback}>{initials(comment.authorName)}</span>
+          : <span style={{ ...css.avatarFallback, background: avatarColor(comment.authorName) }}>{initials(comment.authorName)}</span>
         }
         <span>
           <strong style={css.commentAuthor}>{comment.authorName}</strong>
@@ -226,9 +220,9 @@ function CommitRow({ commit, onOpen }: { commit: PullRequestCommit; onOpen: () =
       <span style={{ ...css.eventIconDot, color: 'var(--vscode-descriptionForeground)', borderColor: 'var(--vscode-descriptionForeground)' }}>
         <Codicon name="git-commit" style={{ fontSize: '14px' }} />
       </span>
-      {commit.authorAvatarUrl
+      {avatarsEnabled && commit.authorAvatarUrl
         ? <img src={commit.authorAvatarUrl} alt={commit.authorName} title={commit.authorName} style={css.commitAvatarImg} />
-        : <span style={css.commitAvatarFallback} title={commit.authorName}>{initials(commit.authorName)}</span>
+        : <span style={{ ...css.commitAvatarFallback, background: avatarColor(commit.authorName) }} title={commit.authorName}>{initials(commit.authorName)}</span>
       }
       <span style={css.commitAuthor}>{commit.authorName}</span>
       <span style={css.commitLink}>{commit.message.split('\n')[0]}</span>
@@ -302,9 +296,9 @@ function EventRow({ event }: { event: PullRequestEvent }) {
       <span style={{ ...css.eventIconDot, color, borderColor: color }}>
         <Codicon name={eventIcon(event.kind)} style={{ fontSize: '14px' }} />
       </span>
-      {event.actorAvatarUrl
+      {avatarsEnabled && event.actorAvatarUrl
         ? <img src={event.actorAvatarUrl} alt={event.actorName} title={event.actorName} style={css.commitAvatarImg} />
-        : <span style={css.commitAvatarFallback} title={event.actorName}>{initials(event.actorName)}</span>
+        : <span style={{ ...css.commitAvatarFallback, background: avatarColor(event.actorName) }} title={event.actorName}>{initials(event.actorName)}</span>
       }
       <span style={css.eventText}>
         <strong>{event.actorName}</strong> {eventText(event)}
@@ -420,7 +414,7 @@ const css = {
   avatarImg: { width: '20px', height: '20px', borderRadius: '50%' } as React.CSSProperties,
   avatarFallback: {
     width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '9px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    fontSize: '9px', fontWeight: 'bold' as const, color: '#fff',
   } as React.CSSProperties,
   commentAuthor: { fontWeight: 600 },
   commentDate: { opacity: 0.5, marginLeft: 'auto', flexShrink: 0 },
@@ -464,7 +458,7 @@ const css = {
   commitAvatarFallback: {
     width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '8px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    fontSize: '8px', fontWeight: 'bold' as const, color: '#fff',
   } as React.CSSProperties,
   commitAuthor: {
     fontWeight: 600, flexShrink: 0, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,

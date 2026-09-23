@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { MergeStrategy, PullRequestDetail, PullRequestSummary } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
 
 interface Props {
   summary: PullRequestSummary;
@@ -45,12 +45,6 @@ const STRATEGY_DESCRIPTION: Record<MergeStrategy, string> = {
   rebase: 'The commits from this branch will be rebased and added to the base branch.',
   fastForward: 'The base branch will be moved forward to this branch, without a merge commit.',
 };
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 function stateBadge(state: PullRequestSummary['state']): { icon: string; bg: string; fg: string; label: string } {
   switch (state) {
@@ -290,7 +284,7 @@ export function PullRequestHeader({
 
         {avatarsEnabled && summary.authorAvatarUrl
           ? <img src={summary.authorAvatarUrl} alt={summary.authorName} style={css.avatarImg} />
-          : <span style={css.avatarFallback}>{initials(summary.authorName)}</span>
+          : <span style={{ ...css.avatarFallback, background: avatarColor(summary.authorName) }}>{initials(summary.authorName)}</span>
         }
 
         <span style={css.summaryText}>
@@ -375,7 +369,7 @@ const css = {
   avatarFallback: {
     width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '9px', fontWeight: 'bold' as const, background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    fontSize: '9px', fontWeight: 'bold' as const, color: '#fff',
   } as React.CSSProperties,
   summaryText: {
     opacity: 0.85, minWidth: 0, lineHeight: 1.8, flex: 1,

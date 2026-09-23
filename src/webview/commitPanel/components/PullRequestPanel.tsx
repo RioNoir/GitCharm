@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 
 function useSkeletonStyle() {
@@ -52,18 +52,12 @@ function stateIcon(state: PullRequestSummary['state']): { icon: string; color: s
   }
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
 function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   const [failed, setFailed] = React.useState(false);
   if (avatarsEnabled && avatarUrl && !failed) {
     return <img src={avatarUrl} alt={name} title={name} style={row.avatarImg} onError={() => setFailed(true)} />;
   }
-  return <span style={row.avatarFallback} title={name}>{initials(name)}</span>;
+  return <span style={{ ...row.avatarFallback, background: avatarColor(name) }} title={name}>{initials(name)}</span>;
 }
 
 function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, onOpenDetail }: {
@@ -389,7 +383,7 @@ const row = {
     width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: '8px', fontWeight: 'bold' as const,
-    background: 'var(--vscode-badge-background)', color: 'var(--vscode-badge-foreground)',
+    color: '#fff',
     border: '1px solid rgba(128,128,128,0.35)', boxSizing: 'border-box' as const,
   } as React.CSSProperties,
 };
