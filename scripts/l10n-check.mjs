@@ -51,6 +51,24 @@ if (existsSync(bundleFile)) {
   }
 }
 
+// l10n-dev extracts l10n.t() calls only when `l10n` is imported from '@vscode/l10n' (or used as
+// vscode.l10n). Calls through any other import compile and run but are silently never extracted.
+function* sourceFiles(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) yield* sourceFiles(p);
+    else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.d.ts')) yield p;
+  }
+}
+for (const file of sourceFiles('src')) {
+  const text = readFileSync(file, 'utf8');
+  const code = text.split('\n').filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n');
+  if (!/(?<![.\w])l10n\.t\(/.test(code)) continue;
+  if (!/import \* as l10n from '@vscode\/l10n'/.test(text)) {
+    errors.push(`${file}: calls l10n.t() without \`import * as l10n from '@vscode/l10n'\` — l10n:export would skip these strings`);
+  }
+}
+
 for (const w of warnings) console.log(`warning: ${w}`);
 for (const e of errors) console.log(`error: ${e}`);
 const failed = errors.length > 0 || (strict && warnings.length > 0);
