@@ -1448,7 +1448,7 @@ export class GitService {
     const tracking = await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '');
     if (!tracking.trim()) return vscode.l10n.t('No remote tracking branch — skipped');
     const result = await this.git.pull();
-    return vscode.l10n.t('{0} changes, {1} insertions, {2} deletions', result.summary.changes, result.summary.insertions, result.summary.deletions);
+    return vscode.l10n.t('{0} files changed, {1} insertions, {2} deletions', result.summary.changes, result.summary.insertions, result.summary.deletions);
   }
 
   async pullRebase(): Promise<string> {

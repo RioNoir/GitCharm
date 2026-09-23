@@ -138,7 +138,7 @@ export async function generateWithAI(
         const all = await vscode.lm.selectChatModels();
         model = all[0];
       }
-      if (!model) throw new Error(vscode.l10n.t('No VS Code LM model available. Install GitHub Copilot or use the "GitCharm: Select AI Provider" command to switch provider.'));
+      if (!model) throw new Error(vscode.l10n.t('No VS Code LM model available. Install GitHub Copilot or use the "GitCharm: Select AI Model" command to switch provider.'));
       const response = await model.sendRequest(
         [vscode.LanguageModelChatMessage.User(prompt)],
         {},

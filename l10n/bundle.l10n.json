@@ -1410,7 +1410,7 @@
   "Cannot stage {0}: the submodule has uncommitted changes but no new commit. Commit inside the submodule first, then stage the pointer here.": "Cannot stage {0}: the submodule has uncommitted changes but no new commit. Commit inside the submodule first, then stage the pointer here.",
   "No remote tracking branch — skipped": "No remote tracking branch — skipped",
   "pulled": "pulled",
-  "{0} changes, {1} insertions, {2} deletions": "{0} changes, {1} insertions, {2} deletions",
+  "{0} files changed, {1} insertions, {2} deletions": "{0} files changed, {1} insertions, {2} deletions",
   "pulled (rebase)": "pulled (rebase)",
   "No changes found for {0} in {1}": "No changes found for {0} in {1}",
   "Failed to cherry-pick selected changes: {0}": "Failed to cherry-pick selected changes: {0}",
@@ -1514,5 +1514,5 @@
   "{0} API key not set. Configure {1} in settings.": "{0} API key not set. Configure {1} in settings.",
   "{0} error {1}: {2}": "{0} error {1}: {2}",
   "{0} returned an empty response": "{0} returned an empty response",
-  "No VS Code LM model available. Install GitHub Copilot or use the \"GitCharm: Select AI Provider\" command to switch provider.": "No VS Code LM model available. Install GitHub Copilot or use the \"GitCharm: Select AI Provider\" command to switch provider."
+  "No VS Code LM model available. Install GitHub Copilot or use the \"GitCharm: Select AI Model\" command to switch provider.": "No VS Code LM model available. Install GitHub Copilot or use the \"GitCharm: Select AI Model\" command to switch provider."
 }
