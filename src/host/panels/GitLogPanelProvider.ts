@@ -121,6 +121,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private pendingScrollHash: string | null = null;
   private pendingScrollRepoId: string | null = null;
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  private lastLogLoadErrorNotice = 0;
   // Scroll/filter intents queued while a freshly opened undocked panel boots up.
   private pendingUndocked: {
     scroll?: { hash: string; repoId: string };
@@ -216,7 +217,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   handleUndockedMessage(msg: LogToHostMsg, _provider: UndockedPanelProvider): void {
     if (msg.type === 'LOG_UNDOCK') return; // undock from undocked panel is a no-op
-    void this.handleMessage(msg, 'undocked').catch(e => logError('logMessage', String(e)));
+    void this.handleMessage(msg, 'undocked').catch(e => this.handleMessageFailure(msg, 'undocked', e));
   }
 
   /** Re-query repos and branches and push them to the webview. */
@@ -285,15 +286,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       ],
     };
 
-    webviewView.webview.html = getWebviewHtml(
-      webviewView.webview,
-      this.extensionUri,
-      'gitLog',
-      'Git Log'
-    );
+    try {
+      webviewView.webview.html = getWebviewHtml(
+        webviewView.webview,
+        this.extensionUri,
+        'gitLog',
+        'Git Log'
+      );
+    } catch (e: unknown) {
+      logError('gitLogHtml', String(e), e instanceof Error ? e.stack : undefined);
+      webviewView.webview.html = this.getLoadFailureHtml(vscode.l10n.t('Git Log failed to load.'), vscode.l10n.t('Run the build task and reload the window, then check the GitCharm output log if it still fails.'));
+      notifyWithLogAction('error', vscode.l10n.t('Git Log failed to load. See the GitCharm output log for details.'));
+    }
 
     webviewView.webview.onDidReceiveMessage(
-      (msg: LogToHostMsg) => this.handleMessage(msg),
+      (msg: LogToHostMsg) => {
+        void this.handleMessage(msg).catch(e => this.handleMessageFailure(msg, 'sidebar', e));
+      },
       null,
       this.disposables
     );
@@ -441,6 +450,61 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.enrichLogMsg(msg);
     this.view?.webview.postMessage(msg);
     this.undockedPanel?.postToLog(msg);
+  }
+
+  private handleMessageFailure(msg: LogToHostMsg, origin: ReplyTarget, error: unknown): void {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    logError('logMessage', `Failed to handle ${msg.type}: ${error instanceof Error ? error.message : String(error)}`, detail);
+
+    if (msg.type === 'LOG_REQUEST_COMMITS') {
+      this.postTo(origin, { type: 'LOG_INIT_DATA', repos: [], branches: [] });
+      this.postTo(origin, {
+        type: 'LOG_COMMITS_BATCH',
+        commits: [],
+        isLast: true,
+        batchIndex: 0,
+        requestId: msg.requestId,
+      });
+
+      const now = Date.now();
+      if (now - this.lastLogLoadErrorNotice > 10_000) {
+        this.lastLogLoadErrorNotice = now;
+        notifyWithLogAction('error', vscode.l10n.t('Git Log failed to load. See the GitCharm output log for details.'));
+      }
+    }
+  }
+
+  private getLoadFailureHtml(title: string, detail: string): string {
+    const esc = (s: string) => s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!));
+    return `<!DOCTYPE html>
+<html lang="${esc(vscode.env.language)}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: var(--vscode-foreground);
+      background: var(--vscode-editor-background);
+      font-family: var(--vscode-font-family);
+    }
+    main { max-width: 360px; text-align: center; line-height: 1.45; }
+    h1 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+    p { margin: 0; font-size: 12px; opacity: 0.72; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${esc(title)}</h1>
+    <p>${esc(detail)}</p>
+  </main>
+</body>
+</html>`;
   }
 
   async refreshTagsForRepo(repoId: string): Promise<void> {
