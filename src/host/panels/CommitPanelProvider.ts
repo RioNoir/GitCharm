@@ -11,7 +11,6 @@ import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequ
 import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
-import type { MergeEditorProvider } from './MergeEditorProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import { openSquashEditor } from './SquashEditorPanel';
@@ -84,10 +83,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   private createPullRequestPanel?: CreatePullRequestPanel;
   private pullRequestDetailPanel?: PullRequestDetailPanel;
-
-  setMergeEditorProvider(provider: MergeEditorProvider): void {
-    this.mergeEditorProvider = provider;
-  }
 
   setLogProvider(provider: GitLogPanelProvider): void {
     this.logProvider = provider;
@@ -184,7 +179,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     private readonly manager: WorkspaceGitManager,
     private readonly globalStoragePath: string,
     private readonly shelveDocProvider: ShelveDocumentProvider,
-    private mergeEditorProvider?: MergeEditorProvider,
     private readonly profileService?: GitProfileService,
     private readonly globalState?: vscode.Memento,
     private readonly workspaceState?: vscode.Memento,

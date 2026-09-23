@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { WorkspaceGitManager } from './git/WorkspaceGitManager';
 import { CommitPanelProvider } from './panels/CommitPanelProvider';
 import { GitLogPanelProvider } from './panels/GitLogPanelProvider';
-import { MergeEditorProvider } from './panels/MergeEditorProvider';
 import { UndockedPanelProvider } from './panels/UndockedPanelProvider';
 import { syncGitLogLocationContext, watchGitLogLocationContext } from './settings/GitLogLocationSettings';
 import { BranchStatusBar } from './ui/BranchStatusBar';
@@ -234,7 +233,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const patCredentialStore = new PatCredentialStore(context.secrets, context.globalState);
   const pullRequestManager = new PullRequestManager(manager, patCredentialStore, context.workspaceState);
 
-  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, undefined, profileService, context.globalState, context.workspaceState, pullRequestManager);
+  const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, profileService, context.globalState, context.workspaceState, pullRequestManager);
 
   let startupNotificationsDone = false;
   const badgeDisposable = manager.onStatusChange(status => { badge.update(status); });
@@ -251,7 +250,6 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     manager.onOrphanBranches(newlyOrphaned => notifyOrphanBranches(manager, logPanel, newlyOrphaned))
   );
-  const mergeEditor = new MergeEditorProvider(context.extensionUri, manager);
   const undockedPanel = new UndockedPanelProvider(context.extensionUri, commitPanel, logPanel);
   const createPullRequestPanel = new CreatePullRequestPanel(context.extensionUri, manager, pullRequestManager, () => {
     commitPanel.requestPullRequestRefresh();
@@ -259,7 +257,6 @@ export function activate(context: vscode.ExtensionContext): void {
   const pullRequestDetailPanel = new PullRequestDetailPanel(context.extensionUri, manager, pullRequestManager, prDocProvider, () => {
     commitPanel.requestPullRequestRefresh();
   });
-  commitPanel.setMergeEditorProvider(mergeEditor);
   commitPanel.setLogProvider(logPanel);
   commitPanel.setBadgeController(badge);
   commitPanel.setUndockedPanel(undockedPanel);
@@ -314,7 +311,6 @@ export function activate(context: vscode.ExtensionContext): void {
     manager,
     badge,
     logPanel,
-    mergeEditor,
     undockedPanel,
     branchStatusBar,
     profileStatusBar,
@@ -322,7 +318,7 @@ export function activate(context: vscode.ExtensionContext): void {
     annotationController,
   );
 
-  registerCommands(context, commitPanel, logPanel, mergeEditor, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, pullRequestManager);
+  registerCommands(context, commitPanel, logPanel, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, pullRequestManager);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gitcharm.undock', () => {

@@ -10,7 +10,6 @@ const isProd = !isWatch;
 const apps = [
   { name: 'commitPanel',       entry: 'src/webview/commitPanel/main.tsx' },
   { name: 'gitLog',            entry: 'src/webview/gitLog/main.tsx' },
-  { name: 'mergeEditor',       entry: 'src/webview/mergeEditor/main.tsx' },
   { name: 'undockedPanel',     entry: 'src/webview/undockedPanel/main.tsx' },
   { name: 'pullRequestCreate', entry: 'src/webview/pullRequestCreate/main.tsx' },
   { name: 'pullRequestDetail', entry: 'src/webview/pullRequestDetail/main.tsx' },
@@ -46,9 +45,6 @@ function makeOptions(app) {
       '.woff2': 'dataurl',
       '.png': 'dataurl',
     },
-    // Monaco editor is large — use CDN loading via @monaco-editor/react default behaviour
-    // External monaco-editor so it loads from CDN (configured in main.tsx files)
-    // NOTE: In Phase 4, replace with bundled Monaco for offline support
   };
 }
 
