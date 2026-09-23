@@ -1,4 +1,5 @@
-import '../shared/l10n';
+import { plural } from '../shared/l10n';
+import * as l10n from '@vscode/l10n';
 import React, { useEffect, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useMergeStore } from './store/mergeStore';
@@ -38,7 +39,7 @@ function App() {
           if (msg.ok) {
             store.setSavedOk(true);
           } else {
-            store.setError(msg.error ?? 'Save failed');
+            store.setError(msg.error ?? l10n.t('Save failed'));
           }
           break;
       }
@@ -69,7 +70,7 @@ function App() {
   if (!store.file) {
     return (
       <div style={loadingStyle}>
-        <div style={loadingText}>Loading conflict file...</div>
+        <div style={loadingText}>{l10n.t('Loading conflict file...')}</div>
       </div>
     );
   }
@@ -84,27 +85,29 @@ function App() {
         <div style={headerLeft}>
           <span style={fileName}>{store.file.relativePath}</span>
           <span style={conflictCount(unresolved > 0)}>
-            {unresolved > 0 ? `${unresolved} conflicts remaining` : '✓ All conflicts resolved'}
+            {unresolved > 0
+              ? plural(unresolved, l10n.t('1 conflict remaining'), l10n.t('{0} conflicts remaining', unresolved))
+              : `✓ ${l10n.t('All conflicts resolved')}`}
           </span>
         </div>
         <div style={headerActions}>
           <button style={navBtn} onClick={handlePrevConflict} disabled={currentConflictIndex === 0}>
-            ↑ Prev
+            ↑ {l10n.t({ message: 'Prev', comment: ['Merge editor: go to the previous conflict'] })}
           </button>
           <span style={conflictNav}>
             {currentConflictIndex + 1} / {totalConflicts}
           </span>
           <button style={navBtn} onClick={handleNextConflict} disabled={currentConflictIndex >= totalConflicts - 1}>
-            ↓ Next
+            ↓ {l10n.t({ message: 'Next', comment: ['Merge editor: go to the next conflict'] })}
           </button>
           <div style={divider} />
           <button
             style={saveBtn(unresolved === 0 && !store.saving)}
             onClick={handleSave}
             disabled={store.saving}
-            title={unresolved > 0 ? 'There are still unresolved conflicts' : 'Save and mark as resolved'}
+            title={unresolved > 0 ? l10n.t('There are still unresolved conflicts') : l10n.t('Save and mark as resolved')}
           >
-            {store.saving ? 'Saving...' : store.savedOk ? '✓ Saved' : 'Apply & Mark Resolved'}
+            {store.saving ? l10n.t('Saving...') : store.savedOk ? `✓ ${l10n.t('Saved')}` : l10n.t('Apply & Mark Resolved')}
           </button>
         </div>
       </div>

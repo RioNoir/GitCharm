@@ -4,6 +4,7 @@ import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import { useCommitStore } from '../store/commitStore';
+import * as l10n from '@vscode/l10n';
 
 const SECTION_COLLAPSE_THRESHOLD = 5;
 
@@ -33,20 +34,20 @@ interface Props {
 
 function ctxItems(entry: WorktreeEntry): ContextMenuEntry[] {
   const items: ContextMenuEntry[] = [
-    ...(entry.isInWorkspace ? [{ id: 'explorer', label: 'Reveal in Explorer', icon: 'folder-opened' } as ContextMenuEntry] : []),
-    { id: 'newwindow',  label: 'Open in New Window',        icon: 'link-external' },
-    { id: 'os',         label: 'Open in File Manager',      icon: 'folder' },
-    ...(!entry.isInWorkspace ? [{ id: 'add-to-workspace', label: 'Add Folder to Workspace', icon: 'add' } as ContextMenuEntry] : []),
+    ...(entry.isInWorkspace ? [{ id: 'explorer', label: l10n.t('Reveal in Explorer'), icon: 'folder-opened' } as ContextMenuEntry] : []),
+    { id: 'newwindow',  label: l10n.t('Open in New Window'), icon: 'link-external' },
+    { id: 'os',         label: l10n.t('Open in File Manager'), icon: 'folder' },
+    ...(!entry.isInWorkspace ? [{ id: 'add-to-workspace', label: l10n.t('Add Folder to Workspace'), icon: 'add' } as ContextMenuEntry] : []),
   ];
   if (!entry.isMain) {
     items.push(
       { separator: true },
       entry.isLocked
-        ? { id: 'unlock', label: 'Unlock',        icon: 'unlock' }
-        : { id: 'lock',   label: 'Lock',          icon: 'lock' },
+        ? { id: 'unlock', label: l10n.t('Unlock'), icon: 'unlock' }
+        : { id: 'lock',   label: l10n.t('Lock'),   icon: 'lock' },
       { separator: true },
-      { id: 'delete',       label: 'Remove Worktree', icon: 'trash', danger: true },
-      { id: 'force-delete', label: 'Force Remove',    icon: 'trash', danger: true },
+      { id: 'delete',       label: l10n.t('Remove Worktree'), icon: 'trash', danger: true },
+      { id: 'force-delete', label: l10n.t('Force Remove'),    icon: 'trash', danger: true },
     );
   }
   return items;
@@ -73,7 +74,7 @@ function WorktreeRow({ entry, repoId, suppressBorder = false, onDelete, onLock, 
   const dirName = entry.path.split(/[\\/]/).pop() ?? entry.path;
 
   const branchLabel = entry.isDetached
-    ? entry.head ? entry.head.slice(0, 8) : 'detached HEAD'
+    ? entry.head ? entry.head.slice(0, 8) : l10n.t('detached HEAD')
     : entry.branchShort || entry.branch;
 
   return (
@@ -92,7 +93,7 @@ function WorktreeRow({ entry, repoId, suppressBorder = false, onDelete, onLock, 
         <div style={row.info}>
           <span style={row.name}>
             {!entry.isMain && entry.isInWorkspace && (
-              <Codicon name="folder" style={{ fontSize: '11px', color: 'var(--vscode-gitDecoration-addedResourceForeground)', flexShrink: 0 }} title="In workspace" />
+              <Codicon name="folder" style={{ fontSize: '11px', color: 'var(--vscode-gitDecoration-addedResourceForeground)', flexShrink: 0 }} title={l10n.t('In workspace')} />
             )}
             <span style={row.nameText}>{dirName}</span>
             {entry.isLocked && (
@@ -105,25 +106,25 @@ function WorktreeRow({ entry, repoId, suppressBorder = false, onDelete, onLock, 
               {branchLabel}
             </span>
             {entry.isPrunable && (
-              <Codicon name="warning" style={{ fontSize: '11px', color: 'var(--vscode-inputValidation-warningForeground, #cca700)', flexShrink: 0 }} title="Prunable" />
+              <Codicon name="warning" style={{ fontSize: '11px', color: 'var(--vscode-inputValidation-warningForeground, #cca700)', flexShrink: 0 }} title={l10n.t('Prunable')} />
             )}
           </span>
         </div>
         {!entry.isMain && hovered && (
           <div style={row.actions}>
             {!entry.isInWorkspace && (
-              <InlineIconBtn icon="add" title="Add Folder to Workspace" visible onClick={e => { e.stopPropagation(); onAddToWorkspace(entry.path); }} />
+              <InlineIconBtn icon="add" title={l10n.t('Add Folder to Workspace')} visible onClick={e => { e.stopPropagation(); onAddToWorkspace(entry.path); }} />
             )}
             {entry.isInWorkspace && (
-              <InlineIconBtn icon="folder-opened" title="Reveal in Explorer" visible onClick={e => { e.stopPropagation(); onOpenInExplorer(repoId, entry.path); }} />
+              <InlineIconBtn icon="folder-opened" title={l10n.t('Reveal in Explorer')} visible onClick={e => { e.stopPropagation(); onOpenInExplorer(repoId, entry.path); }} />
             )}
-            <InlineIconBtn icon="link-external" title="Open in New Window" visible onClick={e => { e.stopPropagation(); onOpenInNewWindow(entry.path); }} />
+            <InlineIconBtn icon="link-external" title={l10n.t('Open in New Window')} visible onClick={e => { e.stopPropagation(); onOpenInNewWindow(entry.path); }} />
             {entry.isLocked ? (
-              <InlineIconBtn icon="unlock" title="Unlock worktree" visible onClick={e => { e.stopPropagation(); onUnlock(repoId, entry.path); }} />
+              <InlineIconBtn icon="unlock" title={l10n.t('Unlock worktree')} visible onClick={e => { e.stopPropagation(); onUnlock(repoId, entry.path); }} />
             ) : (
-              <InlineIconBtn icon="lock" title="Lock worktree" visible onClick={e => { e.stopPropagation(); onLock(repoId, entry.path); }} />
+              <InlineIconBtn icon="lock" title={l10n.t('Lock worktree')} visible onClick={e => { e.stopPropagation(); onLock(repoId, entry.path); }} />
             )}
-            <InlineIconBtn icon="trash" title="Remove worktree" visible danger onClick={e => { e.stopPropagation(); onDelete(repoId, entry.path, false); }} />
+            <InlineIconBtn icon="trash" title={l10n.t('Remove worktree')} visible danger onClick={e => { e.stopPropagation(); onDelete(repoId, entry.path, false); }} />
           </div>
         )}
       </div>
@@ -191,17 +192,17 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, on
           <span style={css.repoName}>{repo.repoName}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }} onClick={e => e.stopPropagation()}>
             {hasPrunable && (
-              <InlineIconBtn icon="git-compare" title="Prune stale worktrees" onClick={() => onPrune(repo.repoId)} />
+              <InlineIconBtn icon="git-compare" title={l10n.t('Prune stale worktrees')} onClick={() => onPrune(repo.repoId)} />
             )}
             {!repo.isLinkedWorktree && (
-              <InlineIconBtn icon="add" title="Add worktree" onClick={() => onRequestCreate(repo.repoId)} />
+              <InlineIconBtn icon="add" title={l10n.t('Add worktree')} onClick={() => onRequestCreate(repo.repoId)} />
             )}
           </div>
         </div>
       )}
       {!sectionCollapsed && (
         repo.worktrees.length === 0 ? (
-          <div style={css.empty}>No worktrees</div>
+          <div style={css.empty}>{l10n.t('No worktrees')}</div>
         ) : (
           repo.worktrees.map((w, idx) => (
             <WorktreeRow
@@ -225,13 +226,13 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, on
           {hasPrunable && (
             <button style={css.actionBtn} onClick={() => onPrune(repo.repoId)}>
               <Codicon name="git-compare" style={{ marginRight: '4px', fontSize: '12px' }} />
-              Prune stale
+              {l10n.t('Prune stale')}
             </button>
           )}
           {!repo.isLinkedWorktree && (
             <button style={css.actionBtn} onClick={() => onRequestCreate(repo.repoId)}>
               <Codicon name="add" style={{ marginRight: '4px', fontSize: '12px' }} />
-              New Worktree
+              {l10n.t('New Worktree')}
             </button>
           )}
         </div>
@@ -247,7 +248,7 @@ export function WorktreePanel({
   onDelete, onLock, onUnlock, onPrune,
   onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate,
 }: Props) {
-  if (loading) return <div style={css.empty}>Loading…</div>;
+  if (loading) return <div style={css.empty}>{l10n.t('Loading…')}</div>;
   if (error) return (
     <div style={css.errorRow}>
       <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
@@ -260,7 +261,7 @@ export function WorktreePanel({
   return (
     <div style={css.root}>
       {allEmpty ? (
-        <div style={css.empty}>No worktrees</div>
+        <div style={css.empty}>{l10n.t('No worktrees')}</div>
       ) : (
         repos.map((repo, idx) => (
           <RepoSection

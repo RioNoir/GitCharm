@@ -2,6 +2,8 @@ import React from 'react';
 import type { CommitNode } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
+import * as l10n from '@vscode/l10n';
+import { locale } from '../../shared/l10n';
 
 interface Props {
   commits: CommitNode[];
@@ -16,7 +18,7 @@ function initials(name: string): string {
 
 export function LocalCommitsList({ commits, loading }: Props) {
   if (loading) return <SkeletonList rows={5} />;
-  if (commits.length === 0) return <div style={css.empty}>No commits.</div>;
+  if (commits.length === 0) return <div style={css.empty}>{l10n.t('No commits.')}</div>;
 
   return (
     <div style={css.root}>
@@ -27,7 +29,7 @@ export function LocalCommitsList({ commits, loading }: Props) {
             <span style={css.commitMessage}>{c.message.split('\n')[0]}</span>
             <span style={css.commitMeta}>
               <strong style={css.commitAuthor}>{c.authorName}</strong>
-              <span title={new Date(c.authorDate).toLocaleString()}>{new Date(c.authorDate).toLocaleDateString()}</span>
+              <span title={new Date(c.authorDate).toLocaleString(locale)}>{new Date(c.authorDate).toLocaleDateString(locale)}</span>
             </span>
           </div>
           <span style={css.commitShaBadge}>

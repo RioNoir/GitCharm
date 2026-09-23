@@ -3,6 +3,7 @@ import type { ChangedFile, IconThemeData, PullRequestCommit } from '../../../hos
 import { FileTreeView } from '../../shared/FileTreeView';
 import { CommitRow } from '../../shared/CommitRow';
 import { SkeletonList } from '../../shared/Skeleton';
+import * as l10n from '@vscode/l10n';
 
 interface Props {
   commits: PullRequestCommit[];
@@ -18,7 +19,7 @@ export function CommitsList({ commits, loading, iconTheme, commitFiles, commitFi
   const [expandedSha, setExpandedSha] = useState<string | null>(null);
 
   if (loading) return <SkeletonList rows={5} />;
-  if (commits.length === 0) return <div style={css.empty}>No commits.</div>;
+  if (commits.length === 0) return <div style={css.empty}>{l10n.t('No commits.')}</div>;
 
   const handleToggle = (sha: string) => {
     if (expandedSha === sha) {

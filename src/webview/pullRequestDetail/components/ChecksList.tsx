@@ -3,6 +3,8 @@ import type { CiCheck } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
 import { formatRelativeTime } from '../../shared/formatRelativeTime';
+import * as l10n from '@vscode/l10n';
+import { locale } from '../../shared/l10n';
 
 interface Props {
   checks: CiCheck[];
@@ -23,12 +25,12 @@ function formatDuration(startedAt?: string, completedAt?: string): string | unde
   const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
   if (!Number.isFinite(ms) || ms < 0) return undefined;
   const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  if (totalSeconds < 60) return l10n.t({ message: '{0}s', args: [totalSeconds], comment: ['Duration: seconds'] });
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  if (minutes < 60) return l10n.t({ message: '{0}m {1}s', args: [minutes, seconds], comment: ['Duration: minutes and seconds'] });
   const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+  return l10n.t({ message: '{0}h {1}m', args: [hours, minutes % 60], comment: ['Duration: hours and minutes'] });
 }
 
 function CheckRow({ check, isLast }: { check: CiCheck; isLast: boolean }) {
@@ -41,11 +43,11 @@ function CheckRow({ check, isLast }: { check: CiCheck; isLast: boolean }) {
       <span style={css.meta}>
         {duration && <span>{duration}</span>}
         {check.completedAt && (
-          <span title={new Date(check.completedAt).toLocaleString()}>{formatRelativeTime(check.completedAt)}</span>
+          <span title={new Date(check.completedAt).toLocaleString(locale)}>{formatRelativeTime(check.completedAt)}</span>
         )}
       </span>
       {check.url && (
-        <a href={check.url} style={css.link} title="View details">
+        <a href={check.url} style={css.link} title={l10n.t('View details')}>
           <Codicon name="link-external" style={{ fontSize: '13px' }} />
         </a>
       )}
@@ -55,7 +57,7 @@ function CheckRow({ check, isLast }: { check: CiCheck; isLast: boolean }) {
 
 export function ChecksList({ checks, loading }: Props) {
   if (loading) return <SkeletonList rows={5} withAvatar={false} />;
-  if (checks.length === 0) return <div style={css.empty}>No checks reported for this pull request.</div>;
+  if (checks.length === 0) return <div style={css.empty}>{l10n.t('No checks reported for this pull request.')}</div>;
 
   return (
     <div style={css.root}>

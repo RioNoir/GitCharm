@@ -3,6 +3,9 @@ import type { RepoMeta, RepoStatus } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { computeSyncState, hasWorkingChanges, type SyncAction } from '../syncState';
+import * as l10n from '@vscode/l10n';
+import { plural } from '../../shared/l10n';
+import { isImeComposing } from '../../shared/ime';
 
 interface Props {
   message: string;
@@ -137,7 +140,7 @@ function DropdownButton({ enabled, icon, label, title, disabledTitle, variant, f
           <button
             style={{ ...childStyle, padding: '5px 7px', backgroundColor: hoverChevron && enabled ? bgHover : bg }}
             disabled={!enabled}
-            title="More Actions..."
+            title={l10n.t('More Actions...')}
             onClick={() => { if (enabled) setOpen(o => !o); }}
             onMouseEnter={() => setHoverChevron(true)}
             onMouseLeave={() => setHoverChevron(false)}
@@ -183,11 +186,11 @@ function DropItem({ icon, label, itemStyle, onSelect }: { icon: string; label: s
 }
 
 function syncTitle(action: SyncAction, ahead: number, behind: number): string {
-  if (action === 'publish') return 'Push this branch to the remote and start tracking it';
-  const parts: string[] = [];
-  if (behind > 0) parts.push(`pull ${behind} commit${behind === 1 ? '' : 's'}`);
-  if (ahead > 0) parts.push(`push ${ahead} commit${ahead === 1 ? '' : 's'}`);
-  return `Sync Changes — ${parts.join(' and ')}`;
+  if (action === 'publish') return l10n.t('Push this branch to the remote and start tracking it');
+  if (behind > 0 && ahead > 0) return l10n.t('Sync Changes — {0} commits to pull, {1} to push', behind, ahead);
+  if (behind > 0) return plural(behind, l10n.t('Sync Changes — pull 1 commit'), l10n.t('Sync Changes — pull {0} commits', behind));
+  if (ahead > 0) return plural(ahead, l10n.t('Sync Changes — push 1 commit'), l10n.t('Sync Changes — push {0} commits', ahead));
+  return l10n.t('Sync Changes');
 }
 
 function syncDropdownItems(
@@ -199,9 +202,9 @@ function syncDropdownItems(
 ): DropdownButtonItem[] {
   // Publishing has no alternative worth offering — the branch is not on the remote yet.
   if (action === 'publish' || action === 'none') return [];
-  const pull: DropdownButtonItem = { icon: 'arrow-down', label: 'Pull', onSelect: () => onPullRepos(repoIds) };
-  const push: DropdownButtonItem = { icon: 'arrow-up', label: 'Push', onSelect: () => onPushRepos(repoIds) };
-  const forcePush: DropdownButtonItem = { icon: 'repo-force-push', label: 'Force Push', onSelect: () => onForcePushRepos(repoIds) };
+  const pull: DropdownButtonItem = { icon: 'arrow-down', label: l10n.t('Pull'), onSelect: () => onPullRepos(repoIds) };
+  const push: DropdownButtonItem = { icon: 'arrow-up', label: l10n.t('Push'), onSelect: () => onPushRepos(repoIds) };
+  const forcePush: DropdownButtonItem = { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => onForcePushRepos(repoIds) };
   if (action === 'pull') return [pull, push, forcePush];
   return [push, pull, forcePush];
 }
@@ -376,20 +379,20 @@ export function UnifiedCommitForm({
   // Commit button's own dropdown instead, above the Commit/Commit & Push entries, so they stay reachable.
   const stashDropdownItems: DropdownButtonItem[] = stashButtonCollapsed
     ? [
-        { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
-        { icon: 'git-stash', label: 'Stash Changes', onSelect: onStash, separatorAfter: true },
+        { icon: 'archive', label: l10n.t('Shelve Changes'), onSelect: onShelve },
+        { icon: 'git-stash', label: l10n.t('Stash Changes'), onSelect: onStash, separatorAfter: true },
       ]
     : [];
   const commitDropdownItems: DropdownButtonItem[] = defaultCommitAction === 'commitAndPush'
     ? [
         ...stashDropdownItems,
-        { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
-        { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
+        { icon: 'cloud-upload', label: l10n.t('Commit & Push'), onSelect: onCommitAndPush },
+        { icon: 'check',        label: l10n.t('Commit'),        onSelect: onCommit        },
       ]
     : [
         ...stashDropdownItems,
-        { icon: 'check',        label: 'Commit',        onSelect: onCommit        },
-        { icon: 'cloud-upload', label: 'Commit & Push', onSelect: onCommitAndPush },
+        { icon: 'check',        label: l10n.t('Commit'),        onSelect: onCommit        },
+        { icon: 'cloud-upload', label: l10n.t('Commit & Push'), onSelect: onCommitAndPush },
       ];
 
   return (
@@ -398,7 +401,7 @@ export function UnifiedCommitForm({
       {multiRepo && (
         <div style={styles.targets}>
           {commitTargets.length === 0 ? (
-            <span style={styles.noTargets}>{changesViewMode === 'vscode' ? 'No files staged' : 'No files selected'}</span>
+            <span style={styles.noTargets}>{changesViewMode === 'vscode' ? l10n.t('No files staged') : l10n.t('No files selected')}</span>
           ) : (
             commitTargets.map(r => {
               const meta = metaMap.get(r.repoId);
@@ -415,7 +418,7 @@ export function UnifiedCommitForm({
                 <span key={r.repoId} style={styles.targetPill(color)}>
                   <button
                     style={styles.pillRemove(color)}
-                    title={`Remove ${displayName} from commit`}
+                    title={l10n.t('Remove {0} from commit', displayName)}
                     onClick={() => onDeselectRepo(r.repoId)}
                   >
                     <Codicon name="close" style={{ fontSize: '10px' }} />
@@ -431,14 +434,14 @@ export function UnifiedCommitForm({
 
       {/* Amend toggle — shown above textarea when a single repo is selected */}
       {showAmend && (
-        <label style={styles.amendLabel} title="Modify the last commit instead of creating a new one. Rewrites history — avoid on shared branches.">
+        <label style={styles.amendLabel} title={l10n.t('Modify the last commit instead of creating a new one. Rewrites history — avoid on shared branches.')}>
           <input
             type="checkbox"
             checked={amend}
             onChange={() => onAmendToggle(amendRepoId!)}
             style={{ margin: '0 4px 0 0' }}
           />
-          Amend last commit
+          {l10n.t('Amend last commit')}
         </label>
       )}
 
@@ -447,7 +450,7 @@ export function UnifiedCommitForm({
         <div style={styles.profileBar}>
           <button
             style={styles.profileIcon}
-            title="Manage Git profiles"
+            title={l10n.t('Manage Git profiles')}
             onClick={onOpenProfiles}
           >
             <AuthorAvatar authorName={activeProfile.gitName} authorEmail={activeProfile.gitEmail} size={16} />
@@ -468,11 +471,12 @@ export function UnifiedCommitForm({
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => setTextareaFocused(true)}
           onBlur={() => setTextareaFocused(false)}
-          placeholder={generatingMessage ? 'Generating commit message…' : 'Commit message (Cmd+Enter to commit)'}
+          placeholder={generatingMessage ? l10n.t('Generating commit message…') : l10n.t('Commit message (Cmd+Enter to commit)')}
           readOnly={generatingMessage}
           rows={2}
           onContextMenu={handleCtxMenu}
           onKeyDown={(e) => {
+            if (isImeComposing(e)) return;
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canCommit) {
               e.preventDefault();
               if (defaultCommitAction === 'commitAndPush') onCommitAndPush(); else onCommit();
@@ -486,7 +490,7 @@ export function UnifiedCommitForm({
             onClick={onAutopilot}
             onContextMenu={onAutopilotContextMenu}
             disabled={generatingMessage}
-            title="Generate commit message with AI (right-click for options)"
+            title={l10n.t('Generate commit message with AI (right-click for options)')}
           >
             <Codicon name={generatingMessage ? 'loading~spin' : 'sparkle'} style={{ fontSize: '16px' }} />
           </button>
@@ -496,13 +500,13 @@ export function UnifiedCommitForm({
       {ctxMenu && (
         <div ref={ctxMenuRef} style={{ ...styles.ctxMenu, top: ctxMenu.y, left: ctxMenu.x, transform: 'translateY(-100%)' }}>
           <div className="gs-ctx-item" style={styles.ctxItem} onMouseDown={e => { e.preventDefault(); ctxCut(); }}>
-            <Codicon name="screen-cut" style={styles.ctxItemIcon} />Cut
+            <Codicon name="screen-cut" style={styles.ctxItemIcon} />{l10n.t('Cut')}
           </div>
           <div className="gs-ctx-item" style={styles.ctxItem} onMouseDown={e => { e.preventDefault(); ctxCopy(); }}>
-            <Codicon name="copy" style={styles.ctxItemIcon} />Copy
+            <Codicon name="copy" style={styles.ctxItemIcon} />{l10n.t('Copy')}
           </div>
           <div className="gs-ctx-item" style={styles.ctxItem} onMouseDown={e => { e.preventDefault(); ctxPaste(); }}>
-            <Codicon name="clippy" style={styles.ctxItemIcon} />Paste
+            <Codicon name="clippy" style={styles.ctxItemIcon} />{l10n.t('Paste')}
           </div>
         </div>
       )}
@@ -514,12 +518,12 @@ export function UnifiedCommitForm({
       <div ref={actionsRowProbeRefCb} aria-hidden="true" style={styles.actionsRowProbe}>
         <div style={styles.stashBtnProbe}>
           <Codicon name="git-stash" style={{ fontSize: '14px' }} />
-          <span>Stash</span>
+          <span>{l10n.t('Stash')}</span>
           <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
         </div>
         <div style={styles.stashBtnProbe}>
           <Codicon name="cloud-upload" style={{ fontSize: '14px' }} />
-          <span>Commit &amp; Push</span>
+          <span>{l10n.t('Commit & Push')}</span>
           <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
         </div>
       </div>
@@ -532,12 +536,12 @@ export function UnifiedCommitForm({
             variant="secondary"
             enabled={!!message.trim() && commitTargets.length > 0 && !amend}
             icon={defaultSaveAction === 'stash' ? 'git-stash' : 'archive'}
-            label={defaultSaveAction === 'stash' ? 'Stash' : 'Shelve'}
-            title="Shelve or stash changes"
-            disabledTitle={amend ? 'Not available while amending' : 'Enter a commit message first'}
+            label={defaultSaveAction === 'stash' ? l10n.t('Stash') : l10n.t('Shelve')}
+            title={l10n.t('Shelve or stash changes')}
+            disabledTitle={amend ? l10n.t('Not available while amending') : l10n.t('Enter a commit message first')}
             items={[
-              { icon: 'archive', label: 'Shelve Changes', onSelect: onShelve },
-              { icon: 'git-stash',    label: 'Stash Changes',  onSelect: onStash  },
+              { icon: 'archive', label: l10n.t('Shelve Changes'), onSelect: onShelve },
+              { icon: 'git-stash',    label: l10n.t('Stash Changes'),  onSelect: onStash  },
             ]}
             onMainClick={defaultSaveAction === 'stash' ? onStash : onShelve}
           />
@@ -552,11 +556,11 @@ export function UnifiedCommitForm({
               dropdownAlign="right"
               enabled={!loading}
               icon="debug-continue"
-              label="Continue Rebase"
-              title={`Continue the rebase in ${metaMap.get(rebasing.repoId)?.name ?? rebasing.repoId}`}
+              label={l10n.t('Continue Rebase')}
+              title={l10n.t('Continue the rebase in {0}', metaMap.get(rebasing.repoId)?.name ?? rebasing.repoId)}
               items={[
-                { icon: 'debug-continue', label: 'Continue Rebase', onSelect: () => onRebaseAction(rebasing.repoId, 'continue') },
-                { icon: 'error',          label: 'Abort Rebase',    onSelect: () => onRebaseAction(rebasing.repoId, 'abort')    },
+                { icon: 'debug-continue', label: l10n.t('Continue Rebase'), onSelect: () => onRebaseAction(rebasing.repoId, 'continue') },
+                { icon: 'error',          label: l10n.t('Abort Rebase'),    onSelect: () => onRebaseAction(rebasing.repoId, 'abort')    },
               ]}
               onMainClick={() => onRebaseAction(rebasing.repoId, 'continue')}
             />
@@ -593,9 +597,9 @@ export function UnifiedCommitForm({
             dropdownAlign="right"
             enabled={canCommit}
             icon={defaultCommitAction === 'commitAndPush' ? 'cloud-upload' : 'check'}
-            label={defaultCommitAction === 'commitAndPush' ? 'Commit & Push' : 'Commit'}
-            title={defaultCommitAction === 'commitAndPush' ? 'Commit & Push (Cmd+Enter)' : 'Commit (Cmd+Enter)'}
-            disabledTitle="Stage files and write a message first"
+            label={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push') : l10n.t('Commit')}
+            title={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push (Cmd+Enter)') : l10n.t('Commit (Cmd+Enter)')}
+            disabledTitle={l10n.t('Stage files and write a message first')}
             items={commitDropdownItems}
             onMainClick={defaultCommitAction === 'commitAndPush' ? onCommitAndPush : onCommit}
           />

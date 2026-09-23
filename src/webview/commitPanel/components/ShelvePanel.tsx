@@ -7,6 +7,8 @@ import type { ViewMode } from '../store/commitStore';
 import { useCommitStore } from '../store/commitStore';
 import { GenericFileTree } from '../../shared/GenericFileTree';
 import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
+import * as l10n from '@vscode/l10n';
+import { plural, locale } from '../../shared/l10n';
 
 interface Props {
   repoId: string;
@@ -30,12 +32,14 @@ interface Props {
   isLast?: boolean;
 }
 
-const SHELVE_CTX_ITEMS: ContextMenuEntry[] = [
-  { id: 'unshelve', label: 'Unshelve', icon: 'desktop-download' },
-  { id: 'rename', label: 'Rename', icon: 'edit' },
-  { separator: true },
-  { id: 'drop', label: 'Delete', icon: 'trash', danger: true },
-];
+function shelveCtxItems(): ContextMenuEntry[] {
+  return [
+    { id: 'unshelve', label: l10n.t('Unshelve'), icon: 'desktop-download' },
+    { id: 'rename', label: l10n.t('Rename'), icon: 'edit' },
+    { separator: true },
+    { id: 'drop', label: l10n.t('Delete'), icon: 'trash', danger: true },
+  ];
+}
 
 const STATUS_COLORS: Record<string, string> = {
   modified:  'var(--vscode-gitDecoration-modifiedResourceForeground)',
@@ -55,18 +59,20 @@ function statusLetter(status: string): string {
   return STATUS_LETTERS[status] ?? 'M';
 }
 
+const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
+
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
     const diffMs = Date.now() - d.getTime();
     const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return l10n.t('just now');
+    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h ago`;
+    if (diffH < 24) return rtf.format(-diffH, 'hour');
     const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return `${diffD}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
+    if (diffD < 7) return rtf.format(-diffD, 'day');
+    return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
   } catch { return iso; }
 }
 
@@ -101,7 +107,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
         onMouseLeave={() => setHovered(false)}
         onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
         onDoubleClick={() => onUnshelve(repoId, entry.id)}
-        title={`${entry.name} — double-click to unshelve`}
+        title={l10n.t('{0} — double-click to unshelve', entry.name)}
       >
         <button style={rowStyle.chevronBtn} onClick={e => { e.stopPropagation(); toggleShelveCollapsed(entry.id); }}>
           <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65 }} />
@@ -111,7 +117,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
           <span style={rowStyle.name}>{entry.name.split('\n')[0]}</span>
           <span style={rowStyle.meta}>
             {formatDate(entry.date)}
-            {' · '}{entry.files.length} {entry.files.length === 1 ? 'file' : 'files'}
+            {' · '}{plural(entry.files.length, l10n.t('1 file'), l10n.t('{0} files', entry.files.length))}
             {(() => {
               const a = entry.totalAdded  ?? entry.files.reduce((s, f) => s + (f.added   ?? 0), 0);
               const r = entry.totalRemoved ?? entry.files.reduce((s, f) => s + (f.removed ?? 0), 0);
@@ -121,8 +127,8 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
         </div>
         {hovered && (
           <div style={rowStyle.actions}>
-            <InlineIconBtn icon="desktop-download" title="Unshelve (apply and keep)" visible onClick={e => { e.stopPropagation(); onUnshelve(repoId, entry.id); }} />
-            <InlineIconBtn icon="trash" title="Delete shelve" visible danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.id); }} />
+            <InlineIconBtn icon="desktop-download" title={l10n.t('Unshelve (apply and keep)')} visible onClick={e => { e.stopPropagation(); onUnshelve(repoId, entry.id); }} />
+            <InlineIconBtn icon="trash" title={l10n.t('Delete shelve')} visible danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.id); }} />
           </div>
         )}
       </div>
@@ -140,7 +146,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
             toggleDir={dirPath => toggleShelveCollapsed(`${entry.id}:${dirPath}`)}
             onOpenFile={f => onOpenFileDiff(repoId, entry.id, f.path)}
             renderFileActions={(f, hovered) => (
-              <InlineIconBtn icon="desktop-download" title="Unshelve this file only" visible={hovered} onClick={e => { e.stopPropagation(); onUnshelveFile(repoId, entry.id, f.path); }} />
+              <InlineIconBtn icon="desktop-download" title={l10n.t('Unshelve this file only')} visible={hovered} onClick={e => { e.stopPropagation(); onUnshelveFile(repoId, entry.id, f.path); }} />
             )}
           />
         </div>
@@ -149,7 +155,7 @@ function ShelveRow({ entry, repoId, viewMode, onUnshelve, onUnshelveFile, onDrop
       {ctxMenu && (
         <ContextMenu
           x={ctxMenu.x} y={ctxMenu.y}
-          items={SHELVE_CTX_ITEMS}
+          items={shelveCtxItems()}
           onSelect={id => {
             setCtxMenu(null);
             if (id === 'unshelve') onUnshelve(repoId, entry.id);
@@ -239,9 +245,9 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
 
       {!sectionCollapsed && (
         loading ? (
-          <div style={css.empty}>Loading…</div>
+          <div style={css.empty}>{l10n.t('Loading…')}</div>
         ) : shelves.length === 0 ? (
-          <div style={css.empty}>No shelved changes</div>
+          <div style={css.empty}>{l10n.t('No shelved changes')}</div>
         ) : (
           shelves.map((entry, i) => (
             <ShelveRow

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getVsCodeMonacoTheme } from '../../shared/Codicon';
+import * as l10n from '@vscode/l10n';
 
 interface Props {
   value: string;
@@ -45,7 +46,7 @@ export function MonacoPane({ value, onChange, readOnly = false, language = 'plai
             }}
           />
         ) : (
-          <div style={styles.loading}>Loading editor...</div>
+          <div style={styles.loading}>{l10n.t('Loading editor...')}</div>
         )}
       </div>
     </div>

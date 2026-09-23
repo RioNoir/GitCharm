@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Codicon } from './Codicon';
+import * as l10n from '@vscode/l10n';
 
 /** Floating action button, fixed bottom-right, shared by the Commit Full Detail and Pull Request Detail
  * panels — clicking it asks the host to generate (or regenerate) an AI explanation, which the host then
@@ -25,7 +26,7 @@ export function AiExplainFab({ modelLabel, onClick }: { modelLabel: string; onCl
     <button
       className="ai-explain-fab"
       style={{ ...styles.fab, ...(expanded ? styles.fabExpanded : undefined) }}
-      title={expanded ? undefined : 'Generate an AI explanation'}
+      title={expanded ? undefined : l10n.t('Generate an AI explanation')}
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -35,7 +36,7 @@ export function AiExplainFab({ modelLabel, onClick }: { modelLabel: string; onCl
       <Codicon name="sparkle" className={pulsing ? 'codicon-modifier-spin' : undefined} style={{ fontSize: '16px', flexShrink: 0 }} />
       {expanded && (
         <span style={styles.labelBlock}>
-          <span style={styles.labelTitle}>AI Explanation</span>
+          <span style={styles.labelTitle}>{l10n.t('AI Explanation')}</span>
           {modelLabel && <span style={styles.labelModel}>{modelLabel}</span>}
         </span>
       )}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { MergeStrategy, PullRequestDetail, PullRequestSummary } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
+import * as l10n from '@vscode/l10n';
+import { interpolateNodes } from './interpolateNodes';
 
 interface Props {
   summary: PullRequestSummary;
@@ -31,19 +33,23 @@ interface Props {
   defaultCheckoutAction: 'pr' | 'branch';
 }
 
-const STRATEGY_LABEL: Record<MergeStrategy, string> = {
-  merge: 'Create a merge commit',
-  squash: 'Squash and merge',
-  rebase: 'Rebase and merge',
-  fastForward: 'Fast-forward merge',
-};
+function strategyLabel(strategy: MergeStrategy): string {
+  switch (strategy) {
+    case 'merge': return l10n.t('Create a merge commit');
+    case 'squash': return l10n.t('Squash and merge');
+    case 'rebase': return l10n.t('Rebase and merge');
+    case 'fastForward': return l10n.t('Fast-forward merge');
+  }
+}
 
-const STRATEGY_DESCRIPTION: Record<MergeStrategy, string> = {
-  merge: 'All commits from this branch will be added to the base branch via a merge commit.',
-  squash: 'All commits from this branch will be combined into one commit and added to the base branch.',
-  rebase: 'The commits from this branch will be rebased and added to the base branch.',
-  fastForward: 'The base branch will be moved forward to this branch, without a merge commit.',
-};
+function strategyDescription(strategy: MergeStrategy): string {
+  switch (strategy) {
+    case 'merge': return l10n.t('All commits from this branch will be added to the base branch via a merge commit.');
+    case 'squash': return l10n.t('All commits from this branch will be combined into one commit and added to the base branch.');
+    case 'rebase': return l10n.t('The commits from this branch will be rebased and added to the base branch.');
+    case 'fastForward': return l10n.t('The base branch will be moved forward to this branch, without a merge commit.');
+  }
+}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -53,19 +59,19 @@ function initials(name: string): string {
 
 function stateBadge(state: PullRequestSummary['state']): { icon: string; bg: string; fg: string; label: string } {
   switch (state) {
-    case 'draft':  return { icon: 'git-pull-request-draft', bg: 'var(--vscode-descriptionForeground)', fg: 'var(--vscode-editor-background)', label: 'Draft' };
-    case 'merged': return { icon: 'git-merge',               bg: '#8957e5', fg: '#fff', label: 'Merged' };
-    case 'closed': return { icon: 'git-pull-request-closed', bg: '#cf222e', fg: '#fff', label: 'Closed' };
-    default:       return { icon: 'git-pull-request',        bg: '#1a7f37', fg: '#fff', label: 'Open' };
+    case 'draft':  return { icon: 'git-pull-request-draft', bg: 'var(--vscode-descriptionForeground)', fg: 'var(--vscode-editor-background)', label: l10n.t({ message: 'Draft', comment: ['Pull request state'] }) };
+    case 'merged': return { icon: 'git-merge',               bg: '#8957e5', fg: '#fff', label: l10n.t({ message: 'Merged', comment: ['Pull request state'] }) };
+    case 'closed': return { icon: 'git-pull-request-closed', bg: '#cf222e', fg: '#fff', label: l10n.t({ message: 'Closed', comment: ['Pull request state'] }) };
+    default:       return { icon: 'git-pull-request',        bg: '#1a7f37', fg: '#fff', label: l10n.t({ message: 'Open', comment: ['Pull request state'] }) };
   }
 }
 
 function ciInfo(state: 'pending' | 'success' | 'failure' | 'unknown'): { icon: string; color: string; label: string } {
   switch (state) {
-    case 'success': return { icon: 'pass-filled', color: '#3fb950', label: 'All checks have passed' };
-    case 'failure': return { icon: 'error',       color: 'var(--vscode-errorForeground)', label: 'Some checks were not successful' };
-    case 'pending': return { icon: 'sync',        color: 'var(--vscode-descriptionForeground)', label: 'Checks are running…' };
-    default:        return { icon: 'question',    color: 'var(--vscode-descriptionForeground)', label: 'Check status unknown' };
+    case 'success': return { icon: 'pass-filled', color: '#3fb950', label: l10n.t('All checks have passed') };
+    case 'failure': return { icon: 'error',       color: 'var(--vscode-errorForeground)', label: l10n.t('Some checks were not successful') };
+    case 'pending': return { icon: 'sync',        color: 'var(--vscode-descriptionForeground)', label: l10n.t('Checks are running…') };
+    default:        return { icon: 'question',    color: 'var(--vscode-descriptionForeground)', label: l10n.t('Check status unknown') };
   }
 }
 
@@ -91,10 +97,10 @@ function CheckoutButton({ enabled, checkingOut, items, defaultAction }: {
       <div style={css.checkoutSplit}>
         <button style={css.checkoutMainBtn} onClick={main.onSelect} disabled={!enabled || checkingOut}>
           <Codicon name="desktop-download" style={{ fontSize: '13px' }} />
-          {checkingOut ? 'Checking out…' : 'Checkout'}
+          {checkingOut ? l10n.t('Checking out…') : l10n.t('Checkout')}
         </button>
         <div style={css.checkoutDivider} />
-        <button style={css.checkoutChevronBtn} onClick={() => setOpen(o => !o)} disabled={!enabled || checkingOut} title="More checkout options">
+        <button style={css.checkoutChevronBtn} onClick={() => setOpen(o => !o)} disabled={!enabled || checkingOut} title={l10n.t('More checkout options')}>
           <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
         </button>
       </div>
@@ -102,7 +108,7 @@ function CheckoutButton({ enabled, checkingOut, items, defaultAction }: {
         <div style={css.checkoutMenu}>
           {items.map(item => (
             <div
-              key={item.label}
+              key={item.key}
               className="menu-item"
               style={css.checkoutMenuItem}
               onClick={() => { item.onSelect(); setOpen(false); }}
@@ -149,12 +155,12 @@ function MergeButton({ strategies, merging, disabled, disabledTitle, onMerge, de
           title={disabled ? disabledTitle : undefined}
         >
           <Codicon name="git-merge" style={{ fontSize: '13px' }} />
-          {merging ? 'Merging…' : 'Merge pull request'}
+          {merging ? l10n.t('Merging…') : l10n.t('Merge pull request')}
         </button>
         {strategies.length > 1 && (
           <>
             <div style={css.mergeDivider} />
-            <button style={css.mergeChevronBtn} onClick={() => setOpen(o => !o)} disabled={disabled || merging} title="Select merge method">
+            <button style={css.mergeChevronBtn} onClick={() => setOpen(o => !o)} disabled={disabled || merging} title={l10n.t('Select merge method')}>
               <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
             </button>
           </>
@@ -166,8 +172,8 @@ function MergeButton({ strategies, merging, disabled, disabledTitle, onMerge, de
             <div key={s} className="menu-item" style={css.mergeMenuItem} onClick={() => { setStrategy(s); setOpen(false); }}>
               <Codicon name={s === strategy ? 'check' : 'blank'} style={{ fontSize: '13px', marginTop: '2px', flexShrink: 0 }} />
               <div>
-                <div style={css.mergeMenuItemLabel}>{STRATEGY_LABEL[s]}</div>
-                <div style={css.mergeMenuItemDesc}>{STRATEGY_DESCRIPTION[s]}</div>
+                <div style={css.mergeMenuItemLabel}>{strategyLabel(s)}</div>
+                <div style={css.mergeMenuItemDesc}>{strategyDescription(s)}</div>
               </div>
             </div>
           ))}
@@ -182,7 +188,7 @@ function EditableTitle({ title, canEdit, updating, onPick }: { title: string; ca
     <span style={css.titleRowInner}>
       <span style={css.title}>{title}</span>
       {canEdit && (
-        <button className="icon-btn" style={css.editIconBtn} onClick={onPick} disabled={updating} title="Edit title">
+        <button className="icon-btn" style={css.editIconBtn} onClick={onPick} disabled={updating} title={l10n.t('Edit title')}>
           <Codicon name="edit" style={{ fontSize: '13px' }} />
         </button>
       )}
@@ -197,7 +203,7 @@ function EditableTargetBranch({ branchLabel, canEdit, updating, onPick }: {
     <span style={css.branchPill}>
       {branchLabel}
       {canEdit && (
-        <button className="icon-btn" style={css.editIconBtnInline} onClick={onPick} disabled={updating} title="Change target branch">
+        <button className="icon-btn" style={css.editIconBtnInline} onClick={onPick} disabled={updating} title={l10n.t('Change target branch')}>
           <Codicon name="edit" style={{ fontSize: '12px' }} />
         </button>
       )}
@@ -228,8 +234,8 @@ export function PullRequestHeader({
   // the one actually created (e.g. "Riccardo Morandi" -> "riccardo-morandi").
   const safeAuthor = summary.authorName.trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
   const checkoutItems: CheckoutMenuItem[] = [
-    { key: 'pr', icon: 'git-branch', label: 'Checkout Pull Request', description: `Creates a local branch pr/${safeAuthor}/${summary.number}`, onSelect: onCheckoutPr },
-    { key: 'branch', icon: 'repo-pull', label: 'Checkout Branch', description: `Downloads or updates the local "${summary.sourceBranch}" branch`, onSelect: onCheckoutBranch },
+    { key: 'pr', icon: 'git-branch', label: l10n.t('Checkout Pull Request'), description: l10n.t('Creates a local branch {0}', `pr/${safeAuthor}/${summary.number}`), onSelect: onCheckoutPr },
+    { key: 'branch', icon: 'repo-pull', label: l10n.t('Checkout Branch'), description: l10n.t('Downloads or updates the local "{0}" branch', summary.sourceBranch), onSelect: onCheckoutBranch },
   ];
 
   return (
@@ -242,7 +248,7 @@ export function PullRequestHeader({
           {canApprove && (
             <button style={css.approveBtn} onClick={onApprove} disabled={approving}>
               <Codicon name="check" style={{ fontSize: '13px' }} />
-              {approving ? 'Approving…' : 'Approve'}
+              {approving ? l10n.t('Approving…') : l10n.t('Approve')}
             </button>
           )}
           {canShowMerge && (
@@ -250,7 +256,7 @@ export function PullRequestHeader({
               strategies={detail.capabilities.mergeStrategies}
               merging={merging}
               disabled={isConflicting}
-              disabledTitle={isConflicting ? 'Resolve conflicts before merging' : undefined}
+              disabledTitle={isConflicting ? l10n.t('Resolve conflicts before merging') : undefined}
               onMerge={onMerge}
               defaultStrategy={defaultMergeStrategy}
             />
@@ -258,7 +264,7 @@ export function PullRequestHeader({
           {canShowReopen && (
             <button style={css.reopenBtn} disabled={reopening} onClick={onReopen}>
               <Codicon name="git-pull-request" style={{ fontSize: '13px' }} />
-              {reopening ? 'Reopening…' : 'Reopen pull request'}
+              {reopening ? l10n.t('Reopening…') : l10n.t('Reopen pull request')}
             </button>
           )}
           <CheckoutButton enabled={true} checkingOut={checkingOut} items={checkoutItems} defaultAction={defaultCheckoutAction} />
@@ -266,15 +272,15 @@ export function PullRequestHeader({
           <div style={css.spacer} />
 
           <div style={css.iconBtnGroup}>
-            <button className="icon-btn" style={css.iconBtnGrouped} onClick={onViewAllChanges} title="View all changes">
+            <button className="icon-btn" style={css.iconBtnGrouped} onClick={onViewAllChanges} title={l10n.t('View all changes')}>
               <Codicon name="diff-multiple" style={{ fontSize: '14px' }} />
             </button>
             <div style={css.iconBtnGroupDivider} />
-            <button className="icon-btn" style={css.iconBtnGrouped} onClick={onRefresh} title="Refresh">
+            <button className="icon-btn" style={css.iconBtnGrouped} onClick={onRefresh} title={l10n.t('Refresh')}>
               <Codicon name="refresh" style={{ fontSize: '14px' }} />
             </button>
             <div style={css.iconBtnGroupDivider} />
-            <button className="icon-btn" style={css.iconBtnGrouped} onClick={onOpenInBrowser} title="Open in browser">
+            <button className="icon-btn" style={css.iconBtnGrouped} onClick={onOpenInBrowser} title={l10n.t('Open in browser')}>
               <Codicon name="link-external" style={{ fontSize: '14px' }} />
             </button>
           </div>
@@ -293,9 +299,12 @@ export function PullRequestHeader({
         }
 
         <span style={css.summaryText}>
-          <strong>{summary.authorName}</strong> wants to merge changes into{' '}
-          <EditableTargetBranch branchLabel={targetLabel} canEdit={canEdit} updating={updating} onPick={onPickTargetBranch} />
-          {' '}from <span style={css.branchPill}>{sourceLabel}</span>
+          {interpolateNodes(
+            l10n.t('{0} wants to merge changes into {1} from {2}'),
+            <strong>{summary.authorName}</strong>,
+            <EditableTargetBranch branchLabel={targetLabel} canEdit={canEdit} updating={updating} onPick={onPickTargetBranch} />,
+            <span style={css.branchPill}>{sourceLabel}</span>,
+          )}
         </span>
       </div>
 
@@ -304,7 +313,7 @@ export function PullRequestHeader({
           <Codicon name={ciInfo(ci.state).icon} style={{ fontSize: '14px' }} />
           <span>{ciInfo(ci.state).label}</span>
           {ci.url && (
-            <a href={ci.url} style={css.ciLink}>View checks</a>
+            <a href={ci.url} style={css.ciLink}>{l10n.t('View checks')}</a>
           )}
         </div>
       )}
@@ -312,7 +321,7 @@ export function PullRequestHeader({
       {showMergeableAlert && (
         <div style={isConflicting ? css.conflictAlert : css.cleanAlert}>
           <Codicon name={isConflicting ? 'warning' : 'check'} style={{ fontSize: '15px', flexShrink: 0 }} />
-          <span>{isConflicting ? 'This branch has conflicts that must be resolved before merging.' : 'This branch has no conflicts with the base branch.'}</span>
+          <span>{isConflicting ? l10n.t('This branch has conflicts that must be resolved before merging.') : l10n.t('This branch has no conflicts with the base branch.')}</span>
         </div>
       )}
       {mergeError && (

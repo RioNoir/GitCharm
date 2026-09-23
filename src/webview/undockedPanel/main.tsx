@@ -12,6 +12,7 @@
 // ── Must be the very first import — patches window.addEventListener ───────────
 import './setupDispatch';
 import '../shared/l10n';
+import * as l10n from '@vscode/l10n';
 
 import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -319,7 +320,7 @@ function LogApp() {
       <div style={logMainLayout}>
         {sidebarCollapsed && (
           <div style={collapsedSidebarStrip}>
-            <button style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title="Expand sidebar">
+            <button style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title={l10n.t('Expand sidebar')}>
               <Codicon name="layout-sidebar-left-off" style={{ fontSize: '14px' }} />
             </button>
           </div>

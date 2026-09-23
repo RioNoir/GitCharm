@@ -1,4 +1,5 @@
 import '../shared/l10n';
+import * as l10n from '@vscode/l10n';
 import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useLogStore } from './store/logStore';
@@ -399,20 +400,20 @@ function App() {
       {!store.hasWorkspaceFolder ? (
         <>
           <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
-            You have not yet opened a folder.
+            {l10n.t('You have not yet opened a folder.')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '200px' }}>
-            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_OPEN_FOLDER' })}>Open Folder</button>
-            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_CLONE_REPO' })}>Clone Repository</button>
+            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_OPEN_FOLDER' })}>{l10n.t('Open Folder')}</button>
+            <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_CLONE_REPO' })}>{l10n.t('Clone Repository')}</button>
           </div>
         </>
       ) : (
         <>
           <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
-            The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.
+            {l10n.t("The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.")}
           </div>
           <button style={initRepoBtnStyle} onClick={() => send({ type: 'LOG_INIT_REPO' })}>
-            Initialize Repository
+            {l10n.t('Initialize Repository')}
           </button>
         </>
       )}
@@ -445,7 +446,7 @@ function App() {
         {/* Branch sidebar */}
         {sidebarCollapsed && (
           <div style={collapsedSidebarStrip}>
-            <button data-top-action-btn="" style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title="Expand sidebar">
+            <button data-top-action-btn="" style={expandSidebarBtn} onClick={() => setSidebarCollapsed(false)} title={l10n.t('Expand sidebar')}>
               <Codicon name="layout-sidebar-left-off" style={{ fontSize: '14px' }} />
             </button>
           </div>

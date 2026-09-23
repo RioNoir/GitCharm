@@ -7,6 +7,8 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { Codicon } from './Codicon';
 import { focusableFieldStyle } from './inputStyles';
+import * as l10n from '@vscode/l10n';
+import { isImeComposing } from './ime';
 
 interface Props {
   value: string;
@@ -118,7 +120,7 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
     setLinkPromptOpen(false);
   }, [editor, linkUrl]);
 
-  if (!editor) return <div style={{ ...css.editorLoading, minHeight }}>Loading editor…</div>;
+  if (!editor) return <div style={{ ...css.editorLoading, minHeight }}>{l10n.t('Loading editor…')}</div>;
 
   return (
     <div style={{
@@ -128,20 +130,20 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
     }}>
       <div style={css.toolbar}>
         <div style={css.toolbarGroup}>
-          <ToolbarButton icon="bold" title="Bold (Ctrl+B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
-          <ToolbarButton icon="italic" title="Italic (Ctrl+I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
-          <ToolbarButton icon="code" title="Inline code" active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} />
+          <ToolbarButton icon="bold" title={l10n.t('Bold (Ctrl+B)')} active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
+          <ToolbarButton icon="italic" title={l10n.t('Italic (Ctrl+I)')} active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
+          <ToolbarButton icon="code" title={l10n.t('Inline code')} active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} />
         </div>
         <div style={css.toolbarDivider} />
         <div style={css.toolbarGroup}>
-          <ToolbarButton icon="list-unordered" title="Bulleted list" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-          <ToolbarButton icon="list-ordered" title="Numbered list" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-          <ToolbarButton icon="quote" title="Quote" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
-          <ToolbarButton icon="file-code" title="Code block" active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
+          <ToolbarButton icon="list-unordered" title={l10n.t('Bulleted list')} active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+          <ToolbarButton icon="list-ordered" title={l10n.t('Numbered list')} active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+          <ToolbarButton icon="quote" title={l10n.t({ message: 'Quote', comment: ['Markdown toolbar: block quote'] })} active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+          <ToolbarButton icon="file-code" title={l10n.t('Code block')} active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
         </div>
         <div style={css.toolbarDivider} />
         <div style={css.toolbarGroup}>
-          <ToolbarButton icon="link" title="Link" active={editor.isActive('link') || linkPromptOpen} onClick={openLinkPrompt} />
+          <ToolbarButton icon="link" title={l10n.t({ message: 'Link', comment: ['Markdown toolbar: insert/edit hyperlink'] })} active={editor.isActive('link') || linkPromptOpen} onClick={openLinkPrompt} />
         </div>
       </div>
 
@@ -155,12 +157,13 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
             placeholder="https://…"
             onChange={e => setLinkUrl(e.target.value)}
             onKeyDown={e => {
+              if (isImeComposing(e)) return;
               if (e.key === 'Enter') applyLink();
               if (e.key === 'Escape') setLinkPromptOpen(false);
             }}
           />
-          <button type="button" style={css.linkApplyBtn} onClick={applyLink}>Apply</button>
-          <button type="button" style={css.linkCancelBtn} onClick={() => setLinkPromptOpen(false)}>Cancel</button>
+          <button type="button" style={css.linkApplyBtn} onClick={applyLink}>{l10n.t('Apply')}</button>
+          <button type="button" style={css.linkCancelBtn} onClick={() => setLinkPromptOpen(false)}>{l10n.t('Cancel')}</button>
         </div>
       )}
 

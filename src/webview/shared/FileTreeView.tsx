@@ -3,6 +3,8 @@ import type { ChangedFile, IconThemeData } from '../../host/types/messages';
 import { Codicon } from './Codicon';
 import { GenericFileTree, type GenericTreeFile } from './GenericFileTree';
 import { handleTreeNavKeyDown } from './keyboardNav';
+import * as l10n from '@vscode/l10n';
+import { plural } from './l10n';
 
 interface Props {
   files: ChangedFile[];
@@ -63,29 +65,29 @@ export function FileTreeView({ files, iconTheme, onOpenFile }: Props) {
     setDirOverrides(new Set());
   };
 
-  if (files.length === 0) return <div style={css.empty}>No changed files.</div>;
+  if (files.length === 0) return <div style={css.empty}>{l10n.t('No changed files.')}</div>;
 
   const treeFiles = files.map(toTreeFile);
 
   return (
     <div style={css.wrapper}>
       <div style={css.toolbar}>
-        <span style={css.fileCountLabel}>{files.length} file{files.length === 1 ? '' : 's'} changed</span>
+        <span style={css.fileCountLabel}>{plural(files.length, l10n.t('1 file changed'), l10n.t('{0} files changed', files.length))}</span>
         <div style={{ flex: 1 }} />
         {viewMode === 'tree' && (
           <>
-            <button className="icon-btn" style={css.toolbarBtn(false)} onClick={() => applyAllExpanded(true)} title="Expand all">
+            <button className="icon-btn" style={css.toolbarBtn(false)} onClick={() => applyAllExpanded(true)} title={l10n.t('Expand all')}>
               <Codicon name="expand-all" style={{ fontSize: '14px' }} />
             </button>
-            <button className="icon-btn" style={css.toolbarBtn(false)} onClick={() => applyAllExpanded(false)} title="Collapse all">
+            <button className="icon-btn" style={css.toolbarBtn(false)} onClick={() => applyAllExpanded(false)} title={l10n.t('Collapse all')}>
               <Codicon name="collapse-all" style={{ fontSize: '14px' }} />
             </button>
           </>
         )}
-        <button className="icon-btn" style={css.toolbarBtn(viewMode === 'tree')} onClick={() => { setViewMode('tree'); applyAllExpanded(null); }} title="Tree view">
+        <button className="icon-btn" style={css.toolbarBtn(viewMode === 'tree')} onClick={() => { setViewMode('tree'); applyAllExpanded(null); }} title={l10n.t('Tree view')}>
           <Codicon name="list-tree" style={{ fontSize: '14px' }} />
         </button>
-        <button className="icon-btn" style={css.toolbarBtn(viewMode === 'flat')} onClick={() => { setViewMode('flat'); applyAllExpanded(null); }} title="Flat view">
+        <button className="icon-btn" style={css.toolbarBtn(viewMode === 'flat')} onClick={() => { setViewMode('flat'); applyAllExpanded(null); }} title={l10n.t('Flat view')}>
           <Codicon name="list-flat" style={{ fontSize: '14px' }} />
         </button>
       </div>

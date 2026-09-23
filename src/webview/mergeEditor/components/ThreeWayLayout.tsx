@@ -1,6 +1,7 @@
 import React from 'react';
 import type { MergeConflictFile } from '../../shared/types';
 import { MonacoPane } from './MonacoPane';
+import * as l10n from '@vscode/l10n';
 import type { Resolution } from '../store/mergeStore';
 
 interface Props {
@@ -24,32 +25,32 @@ export function ThreeWayLayout({ file, resultContent, resolutions, onResultChang
       {currentBlock && (
         <div style={styles.conflictBar}>
           <span style={styles.conflictLabel}>
-            Conflict {currentConflictIndex + 1} of {file.conflicts.length}
+            {l10n.t('Conflict {0} of {1}', currentConflictIndex + 1, file.conflicts.length)}
           </span>
           <span style={styles.resolutionStatus(resolutions[currentConflictIndex])}>
-            {resolutions[currentConflictIndex] === 'unresolved' ? '⚠ Unresolved' : '✓ Resolved'}
+            {resolutions[currentConflictIndex] === 'unresolved' ? `⚠ ${l10n.t('Unresolved')}` : `✓ ${l10n.t('Resolved')}`}
           </span>
           <div style={styles.actions}>
             <button
               style={styles.acceptBtn('ours')}
               onClick={() => applyResolution(file, currentConflictIndex, 'ours', resultContent, onResultChange, onResolveBlock)}
-              title="Accept OURS (left side)"
+              title={l10n.t('Accept OURS (left side)')}
             >
-              Accept Ours
+              {l10n.t('Accept Ours')}
             </button>
             <button
               style={styles.acceptBtn('both')}
               onClick={() => applyResolution(file, currentConflictIndex, 'both', resultContent, onResultChange, onResolveBlock)}
-              title="Accept both sides"
+              title={l10n.t('Accept both sides')}
             >
-              Accept Both
+              {l10n.t('Accept Both')}
             </button>
             <button
               style={styles.acceptBtn('theirs')}
               onClick={() => applyResolution(file, currentConflictIndex, 'theirs', resultContent, onResultChange, onResolveBlock)}
-              title="Accept THEIRS (right side)"
+              title={l10n.t('Accept THEIRS (right side)')}
             >
-              Accept Theirs
+              {l10n.t('Accept Theirs')}
             </button>
           </div>
         </div>
@@ -61,7 +62,7 @@ export function ThreeWayLayout({ file, resultContent, resolutions, onResultChang
           value={oursContent}
           readOnly={true}
           language="plaintext"
-          label={`OURS  (${file.oursLabel})`}
+          label={l10n.t({ message: 'OURS  ({0})', args: [file.oursLabel], comment: ['Merge editor pane header: current side of the conflict; {0} is its branch/ref label'] })}
           labelColor="var(--vscode-gitDecoration-addedResourceForeground)"
         />
 
@@ -72,7 +73,7 @@ export function ThreeWayLayout({ file, resultContent, resolutions, onResultChang
           onChange={onResultChange}
           readOnly={false}
           language="plaintext"
-          label="RESULT  (editable)"
+          label={l10n.t({ message: 'RESULT  (editable)', comment: ['Merge editor pane header: the editable merged result'] })}
           labelColor="var(--vscode-foreground)"
         />
 
@@ -82,7 +83,7 @@ export function ThreeWayLayout({ file, resultContent, resolutions, onResultChang
           value={theirsContent}
           readOnly={true}
           language="plaintext"
-          label={`THEIRS  (${file.theirsLabel})`}
+          label={l10n.t({ message: 'THEIRS  ({0})', args: [file.theirsLabel], comment: ['Merge editor pane header: incoming side of the conflict; {0} is its branch/ref label'] })}
           labelColor="var(--vscode-charts-red, #f44747)"
         />
       </div>

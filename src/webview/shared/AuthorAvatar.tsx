@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Codicon } from './Codicon';
+import * as l10n from '@vscode/l10n';
 
 interface Props {
   authorName: string;
@@ -117,7 +118,7 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false
           border: '1px solid rgba(128,128,128,0.35)',
           boxSizing: 'border-box' as const,
         }}
-        title="You"
+        title={l10n.t({ message: 'You', comment: ['Tooltip on the avatar of the current user'] })}
       >
         <Codicon name="person" style={{ fontSize: size * 0.6, lineHeight: 1 }} />
       </div>

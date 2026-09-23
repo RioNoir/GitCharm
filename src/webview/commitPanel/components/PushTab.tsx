@@ -7,6 +7,8 @@ import { branchColor, tagColor } from '../../shared/branchColors';
 import { ScrollArea } from '../../shared/ScrollArea';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { useCommitStore } from '../store/commitStore';
+import * as l10n from '@vscode/l10n';
+import { plural, locale } from '../../shared/l10n';
 
 interface Props {
   repos: RepoStatus[];
@@ -90,7 +92,7 @@ function PushDropdownButton({ enabled, mainLabel, mainIcon, onMainClick, items }
         <button
           style={{ ...base, padding: '6px 8px', backgroundColor: hoverChevron && enabled ? bgHover : bg }}
           disabled={!enabled}
-          title="More Actions..."
+          title={l10n.t('More Actions...')}
           onClick={() => { if (enabled) setOpen(o => !o); }}
           onMouseEnter={() => setHoverChevron(true)}
           onMouseLeave={() => setHoverChevron(false)}
@@ -136,18 +138,20 @@ function PushDropItem({ icon, label, onSelect }: { icon: string; label: string; 
   );
 }
 
+const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
+
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
     const diffMs = Date.now() - d.getTime();
     const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return l10n.t('just now');
+    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h ago`;
+    if (diffH < 24) return rtf.format(-diffH, 'hour');
     const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return `${diffD}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
+    if (diffD < 7) return rtf.format(-diffD, 'day');
+    return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
   } catch { return iso; }
 }
 
@@ -233,30 +237,30 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
     <div ref={ref} style={{ ...ctxStyles.menu, left: pos.x, top: pos.y, ...(pos.maxHeight ? { maxHeight: pos.maxHeight, overflowY: 'auto' } : {}) }} onContextMenu={e => e.preventDefault()}>
       {n === 1 && (
         <>
-          <MenuItem icon="go-to-file" label="View in Git Log" onClick={wrap(onViewInLog)} />
-          <MenuItem icon="open-preview" label="Open Full Detail" onClick={wrap(onOpenDetail)} />
-          <MenuItem icon="diff-multiple" label="Open Changes" onClick={wrap(onOpenChanges)} />
-          {aiEnabled && <MenuItem icon="sparkle" label="Explain with AI" onClick={wrap(onExplain)} />}
+          <MenuItem icon="go-to-file" label={l10n.t('View in Git Log')} onClick={wrap(onViewInLog)} />
+          <MenuItem icon="open-preview" label={l10n.t('Open Full Detail')} onClick={wrap(onOpenDetail)} />
+          <MenuItem icon="diff-multiple" label={l10n.t('Open Changes')} onClick={wrap(onOpenChanges)} />
+          {aiEnabled && <MenuItem icon="sparkle" label={l10n.t('Explain with AI')} onClick={wrap(onExplain)} />}
           <div style={ctxStyles.separator} />
-          {state.isHead && <MenuItem icon="edit" label="Edit Commit Message…" onClick={wrap(onEditMsg)} />}
-          <MenuItem icon="discard" label="Revert Commit" onClick={wrap(onRevertSingle)} />
+          {state.isHead && <MenuItem icon="edit" label={l10n.t('Edit Commit Message…')} onClick={wrap(onEditMsg)} />}
+          <MenuItem icon="discard" label={l10n.t('Revert Commit')} onClick={wrap(onRevertSingle)} />
           {state.isHead && (
             <>
               <div style={ctxStyles.separator} />
-              <MenuItem icon="arrow-left" label="Undo Commit" onClick={wrap(onUndo)} />
-              <MenuItem icon="trash" label="Drop Commit" danger onClick={wrap(onDropSingle)} />
+              <MenuItem icon="arrow-left" label={l10n.t('Undo Commit')} onClick={wrap(onUndo)} />
+              <MenuItem icon="trash" label={l10n.t('Drop Commit')} danger onClick={wrap(onDropSingle)} />
             </>
           )}
         </>
       )}
       {n >= 2 && (
         <>
-          <MenuItem icon="diff-multiple" label={`View Combined Diff`} onClick={wrap(onViewCombinedDiff)} />
+          <MenuItem icon="diff-multiple" label={l10n.t('View Combined Diff')} onClick={wrap(onViewCombinedDiff)} />
           <div style={ctxStyles.separator} />
-          <MenuItem icon="discard" label={`Revert ${n} commits`} onClick={wrap(onRevertCommits)} />
+          <MenuItem icon="discard" label={l10n.t('Revert {0} commits', n)} onClick={wrap(onRevertCommits)} />
           <div style={ctxStyles.separator} />
-          <MenuItem icon="trash" label={`Drop ${n} commits`} danger onClick={wrap(onDropCommits)} />
-          <MenuItem icon="fold" label={`Squash ${n} commits…`} onClick={wrap(onSquash)} />
+          <MenuItem icon="trash" label={l10n.t('Drop {0} commits', n)} danger onClick={wrap(onDropCommits)} />
+          <MenuItem icon="fold" label={l10n.t('Squash {0} commits…', n)} onClick={wrap(onSquash)} />
         </>
       )}
     </div>
@@ -329,7 +333,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
             {commit.author} · {formatDate(commit.date)}
             {commit.filesChanged != null && (
               <span style={styles.commitStats}>
-                &nbsp;·&nbsp;{commit.filesChanged} file{commit.filesChanged !== 1 ? 's' : ''}
+                &nbsp;·&nbsp;{plural(commit.filesChanged, l10n.t('1 file'), l10n.t('{0} files', commit.filesChanged))}
                 {commit.additions != null && commit.additions > 0 && <span style={styles.statAdd}>&nbsp;+{commit.additions}</span>}
                 {commit.deletions != null && commit.deletions > 0 && <span style={styles.statDel}>&nbsp;-{commit.deletions}</span>}
               </span>
@@ -340,10 +344,10 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
       {(hovered || isSelected) && (
         <div style={styles.commitActions}>
           {isHead && (
-            <InlineIconBtn icon="arrow-left" title="Undo this commit (keeps changes as unstaged)" visible onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }} />
+            <InlineIconBtn icon="arrow-left" title={l10n.t('Undo this commit (keeps changes as unstaged)')} visible onClick={e => { e.stopPropagation(); onUndoCommit(repoId); }} />
           )}
-          <InlineIconBtn icon="diff-multiple" title="Open Changes" visible onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }} />
-          <InlineIconBtn icon="go-to-file" title="Open in Log" visible onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }} />
+          <InlineIconBtn icon="diff-multiple" title={l10n.t('Open Changes')} visible onClick={e => { e.stopPropagation(); onOpenChanges(repoId, commit.hash); }} />
+          <InlineIconBtn icon="go-to-file" title={l10n.t('Open in Log')} visible onClick={e => { e.stopPropagation(); onOpenInLog(commit.hash, repoId); }} />
         </div>
       )}
     </div>
@@ -527,7 +531,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             onChange={() => onToggle(repoStatus.repoId)}
             onClick={e => e.stopPropagation()}
             style={{ ...styles.checkbox, opacity: canCheck ? 1 : 0.35, cursor: canCheck ? 'pointer' : 'default' }}
-            title={!canCheck ? 'Nothing to push' : checked ? 'Exclude from push' : 'Include in push'}
+            title={!canCheck ? l10n.t('Nothing to push') : checked ? l10n.t('Exclude from push') : l10n.t('Include in push')}
           />
         )}
         <div style={styles.headerMain} onClick={singleRepo ? undefined : () => toggleCollapsed(collapseKey)}>
@@ -539,7 +543,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           <span style={styles.repoName}>{repoName}</span>
           <span
             style={{ ...styles.branchBadge(branchClr, branchHovered), cursor: 'pointer' }}
-            title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : branchLabel}
+            title={repoStatus.branch.detachedTag ? l10n.t('Tag: {0} (detached HEAD)', repoStatus.branch.detachedTag) : repoStatus.branch.detachedHash ? l10n.t('Detached HEAD at {0}', repoStatus.branch.detachedHash) : branchLabel}
             onClick={e => { e.stopPropagation(); onBranchClick(repoStatus.repoId); }}
             onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
             onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
@@ -552,7 +556,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
               <InlineIconBtn
                 visible={headerHovered}
                 icon="diff-multiple"
-                title="View Combined Diff"
+                title={l10n.t('View Combined Diff')}
                 onClick={e => { e.stopPropagation(); onViewCombinedDiff(repoStatus.repoId, commits.map(c => c.hash)); }}
               />
             )}
@@ -571,7 +575,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             {!hasUpstream && commitCount === 0 && (
               <span style={styles.publishBadge}>
                 <Codicon name="cloud-upload" style={{ fontSize: '10px', marginRight: '3px' }} />
-                Unpublished
+                {l10n.t('Unpublished')}
               </span>
             )}
           </span>
@@ -584,17 +588,17 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           {hasUpstream && ahead === 0 && behind === 0 ? (
             <div style={styles.upToDate}>
               <Codicon name="check" style={{ marginRight: '6px', opacity: 0.6 }} />
-              Up to date
+              {l10n.t('Up to date')}
             </div>
           ) : hasUpstream && ahead === 0 && behind > 0 ? (
             <div style={styles.behindRow}>
               <Codicon name="arrow-down" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
               <span>
-                {behind} commit{behind !== 1 ? 's' : ''} to pull from <em>{repoStatus.branch.upstream}</em>
+                {plural(behind, l10n.t('1 commit to pull from {0}', repoStatus.branch.upstream ?? ''), l10n.t('{0} commits to pull from {1}', behind, repoStatus.branch.upstream ?? ''))}
               </span>
             </div>
           ) : unpushed?.loading ? (
-            <div style={styles.emptyRow}>Loading commits…</div>
+            <div style={styles.emptyRow}>{l10n.t('Loading commits…')}</div>
           ) : unpushed?.error ? (
             <div style={styles.errorRow}>
               <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
@@ -622,10 +626,10 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
           ) : !hasUpstream ? (
             <div style={styles.unpublishedRow}>
               <Codicon name="cloud-upload" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
-              <span>Local branch — not published to any remote yet</span>
+              <span>{l10n.t('Local branch — not published to any remote yet')}</span>
             </div>
           ) : (
-            <div style={styles.emptyRow}>No commits found</div>
+            <div style={styles.emptyRow}>{l10n.t('No commits found')}</div>
           )}
         </div>
       )}
@@ -684,9 +688,9 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
     const hasPublish = targets.some(r => !r.branch.upstream);
     const hasPush = targets.some(r => !!r.branch.upstream);
     const publishCount = targets.filter(r => !r.branch.upstream).length;
-    if (hasPublish && hasPush) return publishCount === 1 ? 'Push & Publish Branch' : 'Push & Publish Branches';
-    if (hasPublish) return targets.length === 1 ? 'Publish Branch' : 'Publish Branches';
-    return 'Push';
+    if (hasPublish && hasPush) return publishCount === 1 ? l10n.t('Push & Publish Branch') : l10n.t('Push & Publish Branches');
+    if (hasPublish) return targets.length === 1 ? l10n.t('Publish Branch') : l10n.t('Publish Branches');
+    return l10n.t('Push');
   };
 
   // Single repo: push directly, no checkbox needed
@@ -694,17 +698,17 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
     const solo = repos[0];
     const canPush = canPushRepo(solo);
     const needsSync = canPush && isBehindRepo(solo);
-    const mainLabel = needsSync ? 'Sync & Push' : pushButtonLabel([solo]);
+    const mainLabel = needsSync ? l10n.t('Sync & Push') : pushButtonLabel([solo]);
     const mainIcon = needsSync ? 'sync' : 'cloud-upload';
     const mainAction = needsSync ? () => onSyncAndPush(solo.repoId) : () => onPush(solo.repoId);
     const dropItems: SplitItem[] = needsSync
       ? [
           { icon: 'repo-push', label: pushButtonLabel([solo]), onSelect: () => onPush(solo.repoId) },
-          { icon: 'repo-force-push', label: 'Force Push', onSelect: () => onForcePush(solo.repoId) },
+          { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => onForcePush(solo.repoId) },
         ]
       : [
-          { icon: 'sync', label: 'Sync & Push', onSelect: () => onSyncAndPush(solo.repoId) },
-          { icon: 'repo-force-push', label: 'Force Push', onSelect: () => onForcePush(solo.repoId) },
+          { icon: 'sync', label: l10n.t('Sync & Push'), onSelect: () => onSyncAndPush(solo.repoId) },
+          { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => onForcePush(solo.repoId) },
         ];
     return (
       <div style={css.root}>
@@ -806,7 +810,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
               const ahead = r.branch.aheadBehind?.ahead ?? 0;
               return (
                 <span key={r.repoId} style={css.pill(color)}>
-                  <button style={css.pillRemove(color)} title={`Remove ${displayName}`} onClick={() => toggleRepo(r.repoId)}>
+                  <button style={css.pillRemove(color)} title={l10n.t('Remove {0}', displayName)} onClick={() => toggleRepo(r.repoId)}>
                     <Codicon name="close" style={{ fontSize: '10px' }} />
                   </button>
                   {displayName}
@@ -823,7 +827,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
         )}
         {(() => {
           const anyBehind = pushableChecked.some(isBehindRepo);
-          const mainLabel = anyBehind ? 'Sync & Push' : pushButtonLabel(pushableChecked);
+          const mainLabel = anyBehind ? l10n.t('Sync & Push') : pushButtonLabel(pushableChecked);
           const mainIcon = anyBehind ? 'sync' : 'cloud-upload';
           const mainAction = anyBehind
             ? () => pushableChecked.forEach(r => onSyncAndPush(r.repoId))
@@ -831,11 +835,11 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
           const dropItems: SplitItem[] = anyBehind
             ? [
                 { icon: 'repo-push', label: pushButtonLabel(pushableChecked), onSelect: handlePush },
-                { icon: 'repo-force-push', label: 'Force Push', onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
+                { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
               ]
             : [
-                { icon: 'sync', label: 'Sync & Push', onSelect: () => pushableChecked.forEach(r => onSyncAndPush(r.repoId)) },
-                { icon: 'repo-force-push', label: 'Force Push', onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
+                { icon: 'sync', label: l10n.t('Sync & Push'), onSelect: () => pushableChecked.forEach(r => onSyncAndPush(r.repoId)) },
+                { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
               ];
           return (
             <PushDropdownButton

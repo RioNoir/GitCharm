@@ -3,6 +3,8 @@ import { Codicon } from './Codicon';
 import { AuthorAvatar } from './AuthorAvatar';
 import { formatRelativeTime } from './formatRelativeTime';
 import { renderMarkdown } from './renderMarkdown';
+import * as l10n from '@vscode/l10n';
+import { locale, plural } from './l10n';
 
 export interface CommitRowData {
   hash: string;
@@ -63,7 +65,7 @@ export function CommitRow({ commit, expanded, isLast, onToggle, renderFiles }: P
                 className="icon-btn"
                 style={css.viewMoreBtn}
                 onClick={e => { e.stopPropagation(); setMessageExpanded(o => !o); }}
-                title={messageExpanded ? 'Hide full message' : 'Show full message'}
+                title={messageExpanded ? l10n.t('Hide full message') : l10n.t('Show full message')}
               >
                 <Codicon name="ellipsis" style={{ fontSize: '15px' }} />
               </button>
@@ -71,13 +73,13 @@ export function CommitRow({ commit, expanded, isLast, onToggle, renderFiles }: P
           </span>
           <span style={css.commitMeta}>
             <strong style={css.commitAuthor}>{commit.authorName}</strong>
-            <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString()}>
-              committed {formatRelativeTime(commit.authoredAt)}
+            <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString(locale)}>
+              {l10n.t({ message: 'committed {0}', args: [formatRelativeTime(commit.authoredAt)], comment: ['{0} is a relative time, e.g. "3 days ago" or "just now"'] })}
             </span>
             {hasStats && (
               <>
                 {commit.filesChanged != null && (
-                  <span>{commit.filesChanged} file{commit.filesChanged !== 1 ? 's' : ''}</span>
+                  <span>{plural(commit.filesChanged, l10n.t('1 file'), l10n.t('{0} files', commit.filesChanged))}</span>
                 )}
                 {(commit.additions != null || commit.deletions != null) && (
                   <span style={css.lineStats}>

@@ -7,6 +7,7 @@ import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { SingleRepoHeader } from './ProjectGroup';
 import { branchColor, tagColor } from '../../shared/branchColors';
 import { GenericFileTree } from '../../shared/GenericFileTree';
+import * as l10n from '@vscode/l10n';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -165,7 +166,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               checked={isEmpty ? false : (repoSelected ?? true)}
               onChange={e => { if (!isEmpty) { e.stopPropagation(); onToggleRepoSelection?.(); } }}
               onClick={e => e.stopPropagation()}
-              title={isEmpty ? undefined : "Include this repository in the commit"}
+              title={isEmpty ? undefined : l10n.t('Include this repository in the commit')}
               disabled={isEmpty}
               style={{ margin: '0 0 0 8px', flexShrink: 0, accentColor: 'var(--vscode-button-background)', cursor: isEmpty ? 'default' : 'pointer', ...(isEmpty ? { opacity: 0.3, pointerEvents: 'none' } : {}) }}
             />
@@ -177,14 +178,14 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
             </span>
             {isSubmodule && (
-              <span style={submoduleBadgeStyle} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
+              <span style={submoduleBadgeStyle} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>{l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}</span>
             )}
             <span
               style={branchBadgeStyle(branchClr, branchHovered)}
               onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
               onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
               onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
-              title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
+              title={repoStatus.branch.detachedTag ? l10n.t('Tag: {0} (detached HEAD)', repoStatus.branch.detachedTag) : repoStatus.branch.detachedHash ? l10n.t('Detached HEAD at {0}', repoStatus.branch.detachedHash) : repoStatus.branch.name}
             >
               <Codicon name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
               <span style={branchNameStyle}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
@@ -195,19 +196,19 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               {viewMode === 'tree' && !collapsed && dirKeys.length > 0 && (
                 <InlineIconBtn
                   icon={expanded ? 'collapse-all' : 'expand-all'}
-                  title={expanded ? 'Collapse' : 'Expand'}
+                  title={expanded ? l10n.t('Collapse') : l10n.t('Expand')}
                   visible={hovered}
                   onClick={e => { e.stopPropagation(); setDirsCollapsed(dirKeys, expanded); }}
                 />
               )}
-              <InlineIconBtn icon="diff-multiple" title={staged ? 'Open Staged Changes' : 'Open Changes'} visible={hovered} onClick={e => { e.stopPropagation(); onOpenChanges(); }} />
+              <InlineIconBtn icon="diff-multiple" title={staged ? l10n.t('Open Staged Changes') : l10n.t('Open Changes')} visible={hovered} onClick={e => { e.stopPropagation(); onOpenChanges(); }} />
               {!staged && (
-                <InlineIconBtn icon="discard" title="Rollback All" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(files); }} />
+                <InlineIconBtn icon="discard" title={l10n.t('Rollback All')} visible={hovered} onClick={e => { e.stopPropagation(); onRollback(files); }} />
               )}
               {staged ? (
-                <InlineIconBtn icon="remove" title="Unstage All" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFiles(files.map(f => f.path)); }} />
+                <InlineIconBtn icon="remove" title={l10n.t('Unstage All')} visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFiles(files.map(f => f.path)); }} />
               ) : (
-                <InlineIconBtn icon="add" title="Stage All" visible={hovered} onClick={e => { e.stopPropagation(); onStageFiles(files.map(f => f.path)); }} />
+                <InlineIconBtn icon="add" title={l10n.t('Stage All')} visible={hovered} onClick={e => { e.stopPropagation(); onStageFiles(files.map(f => f.path)); }} />
               )}
               <span style={repoCountStyle}>{files.length}</span>
             </div>
@@ -217,7 +218,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
       {!collapsed && (
         <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
           {isEmpty ? (
-            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>{l10n.t('No changes')}</div>
           ) : (
             <GenericFileTree<FileStatus>
               files={files}
@@ -236,28 +237,28 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               renderFileActions={(file, hovered) => file.status === 'submodule' ? null : (
                 <>
                   {file.status === 'conflicted' && (
-                    <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
+                    <InlineIconBtn icon="git-merge" title={l10n.t('Resolve Conflicts')} visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
                   )}
-                  <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
+                  <InlineIconBtn icon="go-to-file" title={l10n.t('Open file')} visible={hovered} onClick={e => { e.stopPropagation(); onOpenFile(file); }} />
                   {!staged && (
-                    <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
+                    <InlineIconBtn icon="discard" title={l10n.t('Rollback')} visible={hovered} onClick={e => { e.stopPropagation(); onRollback([file]); }} />
                   )}
                   {staged ? (
-                    <InlineIconBtn icon="remove" title="Unstage" visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
+                    <InlineIconBtn icon="remove" title={l10n.t('Unstage')} visible={hovered} onClick={e => { e.stopPropagation(); onUnstage(file); }} />
                   ) : (
-                    <InlineIconBtn icon="add" title="Stage" visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
+                    <InlineIconBtn icon="add" title={l10n.t('Stage')} visible={hovered} onClick={e => { e.stopPropagation(); onStage(file); }} />
                   )}
                 </>
               )}
               renderDirActions={(dirFiles, hovered) => (
                 <>
                   {!staged && (
-                    <InlineIconBtn icon="discard" title="Rollback folder" visible={hovered} onClick={e => { e.stopPropagation(); onRollback(dirFiles); }} />
+                    <InlineIconBtn icon="discard" title={l10n.t('Rollback folder')} visible={hovered} onClick={e => { e.stopPropagation(); onRollback(dirFiles); }} />
                   )}
                   {staged ? (
-                    <InlineIconBtn icon="remove" title="Unstage folder" visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(dirFiles); }} />
+                    <InlineIconBtn icon="remove" title={l10n.t('Unstage folder')} visible={hovered} onClick={e => { e.stopPropagation(); onUnstageFolder(dirFiles); }} />
                   ) : (
-                    <InlineIconBtn icon="add" title="Stage folder" visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(dirFiles); }} />
+                    <InlineIconBtn icon="add" title={l10n.t('Stage folder')} visible={hovered} onClick={e => { e.stopPropagation(); onStageFolder(dirFiles); }} />
                   )}
                 </>
               )}
@@ -380,17 +381,17 @@ export function VscodeView({
 
       {/* ── Staged Changes ── */}
       <SectionHeader
-        title="Staged Changes"
+        title={l10n.t('Staged Changes')}
         icon="git-commit"
         count={totalStaged}
         collapsed={stagedCollapsed}
         onToggle={() => toggleCollapsed(STAGED_COLLAPSE_KEY)}
         onContextMenu={_e => {/* no-op for now */}}
         actionIcon={totalStaged > 0 ? "remove" : undefined}
-        actionTitle={totalStaged > 0 ? "Unstage All" : undefined}
+        actionTitle={totalStaged > 0 ? l10n.t('Unstage All') : undefined}
         onAction={totalStaged > 0 ? () => repos.forEach(r => onUnstageAll(r.repoId)) : undefined}
         openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
-        openChangesTitle={isSingleRepo ? 'Open Staged Changes' : undefined}
+        openChangesTitle={isSingleRepo ? l10n.t('Open Staged Changes') : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenStagedChanges(singleRepoStatus.repoId) : undefined}
       />
       {!stagedCollapsed && (() => {
@@ -442,20 +443,20 @@ export function VscodeView({
 
       {/* ── Changes ── */}
       <SectionHeader
-        title="Changes"
+        title={l10n.t('Changes')}
         icon="circle-large-outline"
         count={totalUnstaged}
         collapsed={unstagedCollapsed}
         onToggle={() => toggleCollapsed(UNSTAGED_COLLAPSE_KEY)}
         onContextMenu={_e => {/* no-op */}}
         actionIcon={totalUnstaged > 0 ? "add" : undefined}
-        actionTitle={totalUnstaged > 0 ? "Stage All" : undefined}
+        actionTitle={totalUnstaged > 0 ? l10n.t('Stage All') : undefined}
         onAction={totalUnstaged > 0 ? () => repos.forEach(r => onStageAll(r.repoId)) : undefined}
         secondActionIcon={totalUnstaged > 0 ? "discard" : undefined}
-        secondActionTitle={totalUnstaged > 0 ? "Rollback All" : undefined}
+        secondActionTitle={totalUnstaged > 0 ? l10n.t('Rollback All') : undefined}
         onSecondAction={totalUnstaged > 0 ? () => onRollback(repos.flatMap(r => r.unstagedFiles)) : undefined}
         openChangesIcon={isSingleRepo ? 'diff-multiple' : undefined}
-        openChangesTitle={isSingleRepo ? 'Open Changes' : undefined}
+        openChangesTitle={isSingleRepo ? l10n.t('Open Changes') : undefined}
         onOpenChanges={isSingleRepo && singleRepoStatus ? () => onOpenUnstagedChanges(singleRepoStatus.repoId) : undefined}
         topBorder={!stagedCollapsed && totalStaged > 0 && lastStagedRepoExpanded}
       />

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { FileDiff } from '../../shared/types';
+import * as l10n from '@vscode/l10n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function registerDarkModernTheme(monaco: any) {
@@ -226,7 +227,7 @@ export function DiffViewer({ diff, loading }: Props) {
   if (loading) {
     return (
       <div style={styles.placeholder}>
-        <span style={styles.loadingText}>Loading diff...</span>
+        <span style={styles.loadingText}>{l10n.t('Loading diff...')}</span>
       </div>
     );
   }
@@ -234,7 +235,7 @@ export function DiffViewer({ diff, loading }: Props) {
   if (!diff) {
     return (
       <div style={styles.placeholder}>
-        <span style={styles.hintText}>Select a file to view the diff</span>
+        <span style={styles.hintText}>{l10n.t('Select a file to view the diff')}</span>
       </div>
     );
   }
@@ -242,7 +243,7 @@ export function DiffViewer({ diff, loading }: Props) {
   if (diff.isBinary) {
     return (
       <div style={styles.placeholder}>
-        <span style={styles.hintText}>Binary file — no diff available</span>
+        <span style={styles.hintText}>{l10n.t('Binary file — no diff available')}</span>
       </div>
     );
   }
@@ -250,7 +251,7 @@ export function DiffViewer({ diff, loading }: Props) {
   if (!MonacoLoaded || !DiffEditorComponent) {
     return (
       <div style={styles.placeholder}>
-        <span style={styles.loadingText}>Loading editor...</span>
+        <span style={styles.loadingText}>{l10n.t('Loading editor...')}</span>
       </div>
     );
   }
@@ -261,8 +262,8 @@ export function DiffViewer({ diff, loading }: Props) {
     <div style={styles.container} ref={containerRef}>
       <div style={styles.pathBar}>
         <span style={styles.pathText}>{diff.newPath || diff.oldPath}</span>
-        {diff.isNew && <span style={styles.badge(true, false, false)}>NEW</span>}
-        {diff.isDeleted && <span style={styles.badge(false, true, false)}>DELETED</span>}
+        {diff.isNew && <span style={styles.badge(true, false, false)}>{l10n.t({ message: 'NEW', comment: ['Badge for a newly added file'] })}</span>}
+        {diff.isDeleted && <span style={styles.badge(false, true, false)}>{l10n.t({ message: 'DELETED', comment: ['Badge for a deleted file'] })}</span>}
       </div>
       <DC
         original={diff.originalContent ?? ''}

@@ -1,4 +1,5 @@
 import type React from 'react';
+import { isImeComposing } from './ime';
 
 /**
  * Shared keyboard-navigation primitives for tree/list views (branch sidebar, file trees):
@@ -47,6 +48,8 @@ export function focusOnHover(el: HTMLElement): void {
 /** Attach to a scrollable container's onKeyDown. Moves focus between its `[data-nav-row]`
  * descendants in document order on Arrow/Page/Home/End, scrolling the target into view. */
 export function handleTreeNavKeyDown(e: React.KeyboardEvent<HTMLElement>, root: HTMLElement | null): void {
+  // Rows can contain inline rename inputs; arrows there may be picking an IME candidate.
+  if (isImeComposing(e)) return;
   if (!['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(e.key)) return;
   if (!root) return;
   const rows = Array.from(root.querySelectorAll<HTMLElement>('[data-nav-row]'));

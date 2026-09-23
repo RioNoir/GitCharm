@@ -1,7 +1,8 @@
 import type { RepoMeta, RepoStatus } from '../shared/types';
 import type { RepoSortMode } from '../../host/types/settings';
+import { locale } from '../shared/l10n';
 
-const collator = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+const collator = (a: string, b: string) => a.localeCompare(b, locale, { sensitivity: 'base', numeric: true });
 
 export function sortRepos<T extends RepoStatus>(repos: T[], mode: RepoSortMode, repoMetas: RepoMeta[]): T[] {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));

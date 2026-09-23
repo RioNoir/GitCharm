@@ -236,6 +236,8 @@ function getHtml(nonce: string, csp: string, codiconUri: string, commitCount: nu
     });
 
     document.addEventListener('keydown', e => {
+      // Enter/Escape that end an IME composition (CJK input) must not cancel or submit the panel.
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === 'Escape') vscode.postMessage({ type: 'cancel' });
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         const msg = ta.value.trim();

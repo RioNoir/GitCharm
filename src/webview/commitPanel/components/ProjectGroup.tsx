@@ -7,6 +7,7 @@ import { Codicon } from '../../shared/Codicon';
 import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
+import * as l10n from '@vscode/l10n';
 
 interface Props {
   repoStatus: RepoStatus;
@@ -106,7 +107,7 @@ export function ProjectGroup({
           onClick={(e) => e.stopPropagation()}
           disabled={totalFiles === 0}
           style={{ ...styles.repoCheckbox, ...(totalFiles === 0 ? { opacity: 0.3, cursor: 'default', pointerEvents: 'none' } : {}) }}
-          title={totalFiles > 0 ? "Select all files in this repo" : undefined}
+          title={totalFiles > 0 ? l10n.t('Select all files in this repo') : undefined}
         />
 
         <div style={styles.headerMain} onClick={() => toggleCollapsed(repoId)}>
@@ -119,8 +120,8 @@ export function ProjectGroup({
             {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
           </span>
           {isSubmodule && (
-            <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>
-              SUB
+            <span style={styles.submoduleBadge} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>
+              {l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}
             </span>
           )}
           <span
@@ -128,7 +129,7 @@ export function ProjectGroup({
             onClick={(e) => { e.stopPropagation(); onBranchClick(repoId); }}
             onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
             onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
-            title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
+            title={repoStatus.branch.detachedTag ? l10n.t('Tag: {0} (detached HEAD)', repoStatus.branch.detachedTag) : repoStatus.branch.detachedHash ? l10n.t('Detached HEAD at {0}', repoStatus.branch.detachedHash) : repoStatus.branch.name}
           >
             <Codicon name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
             <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>
@@ -138,7 +139,7 @@ export function ProjectGroup({
               {viewMode === 'tree' && !collapsed && dirKeys.length > 0 && (
                 <InlineIconBtn
                   icon={expanded ? 'collapse-all' : 'expand-all'}
-                  title={expanded ? 'Collapse' : 'Expand'}
+                  title={expanded ? l10n.t('Collapse') : l10n.t('Expand')}
                   visible={hovered}
                   onClick={e => { e.stopPropagation(); setDirsCollapsed(dirKeys, expanded); }}
                 />
@@ -178,7 +179,7 @@ export function ProjectGroup({
               multiSelectedFiles={multiSelectedFiles}
             />
           ) : (
-            <div style={styles.noChanges}>No changes</div>
+            <div style={styles.noChanges}>{l10n.t('No changes')}</div>
           )}
         </div>
       )}
@@ -220,14 +221,14 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
           {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
         </span>
         {isSubmodule && (
-          <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>
-            SUB
+          <span style={styles.submoduleBadge} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>
+            {l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}
           </span>
         )}
         <span
           style={styles.branchBadge(branchClr)}
           onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
-          title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
+          title={repoStatus.branch.detachedTag ? l10n.t('Tag: {0} (detached HEAD)', repoStatus.branch.detachedTag) : repoStatus.branch.detachedHash ? l10n.t('Detached HEAD at {0}', repoStatus.branch.detachedHash) : repoStatus.branch.name}
         >
           <Codicon name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'} style={{ fontSize: '10px', flexShrink: 0, opacity: 0.8 }} />
           <span style={styles.branchName}>{repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name}</span>

@@ -1,4 +1,5 @@
 import '../shared/l10n';
+import * as l10n from '@vscode/l10n';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CreatePullRequestForm } from './components/CreatePullRequestForm';
@@ -117,7 +118,7 @@ function App() {
           break;
         case 'PRCREATE_SUBMIT_RESULT':
           setSubmitting(false);
-          if (!msg.ok) setSubmitError(msg.error ?? 'Failed to create pull request');
+          if (!msg.ok) setSubmitError(msg.error ?? l10n.t('Failed to create pull request'));
           break;
       }
     };

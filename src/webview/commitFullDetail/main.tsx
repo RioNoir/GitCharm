@@ -1,4 +1,5 @@
 import '../shared/l10n';
+import * as l10n from '@vscode/l10n';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
@@ -56,7 +57,7 @@ function App() {
   }, [handleExplain]);
 
   if (!commit || !repoMeta) {
-    return <div style={{ padding: '16px', fontSize: '12px', opacity: 0.5 }}>Loading…</div>;
+    return <div style={{ padding: '16px', fontSize: '12px', opacity: 0.5 }}>{l10n.t('Loading…')}</div>;
   }
 
   return (

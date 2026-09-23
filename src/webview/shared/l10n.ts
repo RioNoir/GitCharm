@@ -21,6 +21,7 @@ export function plural(n: number, one: string, other: string): string {
   return n === 1 ? one : other;
 }
 
-// Re-exported as a namespace on purpose: `npm run l10n:export` only extracts calls spelled
-// `l10n.t(...)` (or `vscode.l10n.t(...)`) — a bare `t(...)` alias would be silently skipped.
-export { l10n };
+// Deliberately NOT re-exporting l10n: `npm run l10n:export` only extracts `l10n.t(...)` calls
+// whose `l10n` is imported straight from '@vscode/l10n' (it follows the import, not the name).
+// Components must `import * as l10n from '@vscode/l10n'`; this module only has to be imported
+// once, first, by each webview entry point so the bundle is configured before rendering.
