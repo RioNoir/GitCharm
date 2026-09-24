@@ -24,3 +24,12 @@ export function getVsCodeApi(): VsCodeApi {
   }
   return _api;
 }
+
+/**
+ * Tells the host this webview's 'message' listener is attached, so it can send the messages
+ * it held back until now — see webviewReadyGate() in host/utils/webviewReadyGate.ts.
+ * Call it from the effect that attaches the listener, right after addEventListener.
+ */
+export function notifyHostReady(): void {
+  getVsCodeApi().postMessage({ type: 'WEBVIEW_READY' });
+}

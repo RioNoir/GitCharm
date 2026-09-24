@@ -11,7 +11,7 @@ import { ChecksList } from './components/ChecksList';
 import { PeopleField, EditFieldButton } from './components/PeoplePanel';
 import { LabelsPanel } from './components/LabelsPanel';
 import { AiExplainFab } from '../shared/AiExplainFab';
-import { getVsCodeApi } from '../shared/vscodeApi';
+import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips } from '../shared/Skeleton';
 import type {
@@ -242,6 +242,7 @@ function App() {
       }
     };
     window.addEventListener('message', handler);
+    notifyHostReady();
     return () => window.removeEventListener('message', handler);
   }, [send]);
 

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import type { HostToAiExplainMsg } from '../types/messages';
 import { panelIcon } from '../utils/panelIcon';
+import { webviewReadyGate } from '../utils/webviewReadyGate';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -47,7 +48,9 @@ export function openAiExplainDetail(
     panels.set(subject.key, panel);
   }
 
-  const post = (m: HostToAiExplainMsg) => panel!.webview.postMessage(m);
+  // Same gate for a reused panel — its client is already READY, so messages go straight through.
+  const gate = webviewReadyGate<HostToAiExplainMsg>(panel);
+  const post = (m: HostToAiExplainMsg) => gate.post(m);
   post({ type: 'AIEXPLAIN_INIT', subjectKind: subject.kind, subjectTitle: subject.title, subjectSubtitle: subject.subtitle, modelLabel });
 
   generate().then(

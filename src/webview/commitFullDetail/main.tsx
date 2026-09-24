@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
 import { Codicon } from '../shared/Codicon';
-import { getVsCodeApi } from '../shared/vscodeApi';
+import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import { AiExplainFab } from '../shared/AiExplainFab';
 import type { CommitNode, HostToCommitFullDetailMsg, HostToLogMsg, IconThemeData } from '../../host/types/messages';
 import type { RepoMeta } from '../shared/types';
@@ -53,6 +53,7 @@ function App() {
       }
     };
     window.addEventListener('message', handler);
+    notifyHostReady();
     return () => window.removeEventListener('message', handler);
   }, [handleExplain]);
 

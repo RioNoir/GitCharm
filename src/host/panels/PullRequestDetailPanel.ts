@@ -10,6 +10,7 @@ import { logInfo, logWarn, logError } from '../utils/Logger';
 import { getAiModelLabel } from '../utils/aiModelLabel';
 import { avatarsEnabled } from '../utils/avatarCache';
 import { panelIcon } from '../utils/panelIcon';
+import { webviewReadyGate } from '../utils/webviewReadyGate';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -101,7 +102,7 @@ export class PullRequestDetailPanel {
     const result = await this.pullRequestManager.getPullRequestDetail(repoId, number);
     if ('error' in result) {
       logWarn('pullrequest-detail-restore', `Failed to restore PR detail panel: ${result.error}`);
-      panel.webview.postMessage({ type: 'PRDETAIL_LOAD_ERROR', error: result.error } satisfies HostToPrDetailMsg);
+      webviewReadyGate<HostToPrDetailMsg>(panel).post({ type: 'PRDETAIL_LOAD_ERROR', error: result.error });
       return;
     }
     await this.sendInit(panel, repoId, result);
@@ -127,6 +128,8 @@ export class PullRequestDetailPanel {
       'pullRequestDetail',
       panelTitle
     );
+    // Start listening for the client's READY now — sendInit only posts after network awaits.
+    webviewReadyGate<HostToPrDetailMsg>(panel);
 
     const currentPr = { value: null as PullRequestSummary | null };
     panel.webview.onDidReceiveMessage((msg: PrDetailToHostMsg) => {
@@ -173,7 +176,8 @@ export class PullRequestDetailPanel {
 
     const currentUsername = await this.pullRequestManager.getCurrentUsername(repoId).catch(() => undefined);
     const cfg = vscode.workspace.getConfiguration('gitcharm');
-    panel.webview.postMessage({
+    const gate = webviewReadyGate<HostToPrDetailMsg>(panel);
+    gate.post({
       type: 'PRDETAIL_INIT', repoId, repoName: meta.name, number: pr.number, summary: pr, currentUsername,
       aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg),
       defaultMergeStrategy: cfg.get('pullRequests.defaultMergeStrategy', 'merge'),
@@ -181,7 +185,7 @@ export class PullRequestDetailPanel {
     } satisfies HostToPrDetailMsg);
 
     const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
-    panel.webview.postMessage({ type: 'PRDETAIL_ICON_THEME', iconTheme } satisfies HostToPrDetailMsg);
+    gate.post({ type: 'PRDETAIL_ICON_THEME', iconTheme });
   }
 
   private async handleMessage(msg: PrDetailToHostMsg, repoId: string, pr: PullRequestSummary, panel: vscode.WebviewPanel): Promise<void> {

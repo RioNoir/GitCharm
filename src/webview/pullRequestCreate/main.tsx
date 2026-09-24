@@ -3,7 +3,7 @@ import * as l10n from '@vscode/l10n';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CreatePullRequestForm } from './components/CreatePullRequestForm';
-import { getVsCodeApi } from '../shared/vscodeApi';
+import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import type {
   ChangedFile, CommitNode, HostToPrCreateMsg, PrCreateToHostMsg, CreatePullRequestInput, ForgeProvider, IconThemeData,
 } from '../../host/types/messages';
@@ -123,6 +123,7 @@ function App() {
       }
     };
     window.addEventListener('message', handler);
+    notifyHostReady();
     return () => window.removeEventListener('message', handler);
   }, [send]);
 

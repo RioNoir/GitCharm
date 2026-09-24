@@ -10,6 +10,7 @@ import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErr
 import { logInfo, logWarn, logError } from '../utils/Logger';
 import type { CommitFullDetailToHostMsg, HostToCommitFullDetailMsg, HostToLogMsg, LogToHostMsg } from '../types/messages';
 import { panelIcon } from '../utils/panelIcon';
+import { webviewReadyGate } from '../utils/webviewReadyGate';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -162,6 +163,7 @@ async function setupPanel(
   };
 
   panel.webview.html = getWebviewHtml(panel.webview, extensionUri, 'commitFullDetail', panel.title);
+  const gate = webviewReadyGate<HostToCommitFullDetailMsg>(panel);
 
   panel.webview.onDidReceiveMessage((msg: CommitFullDetailToHostMsg | LogToHostMsg) => handleMessage(msg, repoId, hash, repo, panel, extensionUri));
 
@@ -186,7 +188,7 @@ async function setupPanel(
     }
   }
 
-  panel.webview.postMessage({
+  gate.post({
     type: 'COMMITFULLDETAIL_INIT',
     repoId,
     repoName,

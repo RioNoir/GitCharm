@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Codicon } from '../shared/Codicon';
 import { renderMarkdown } from '../shared/renderMarkdown';
+import { notifyHostReady } from '../shared/vscodeApi';
 import type { HostToAiExplainMsg } from '../../host/types/messages';
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
       }
     };
     window.addEventListener('message', handler);
+    notifyHostReady();
     return () => window.removeEventListener('message', handler);
   }, []);
 

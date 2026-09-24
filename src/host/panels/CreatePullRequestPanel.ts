@@ -9,6 +9,7 @@ import { logInfo, logError } from '../utils/Logger';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { loadIconTheme } from '../utils/IconThemeService';
 import { panelIcon } from '../utils/panelIcon';
+import { webviewReadyGate } from '../utils/webviewReadyGate';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -73,6 +74,7 @@ export class CreatePullRequestPanel {
       'pullRequestCreate',
       panelTitle
     );
+    const gate = webviewReadyGate<HostToPrCreateMsg>(panel);
 
     const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
       if (!e.affectsConfiguration('workbench.iconTheme')) return;
@@ -84,12 +86,12 @@ export class CreatePullRequestPanel {
     panel.onDidDispose(() => { this.panels.delete(repoId); this.latestCompareRequestId.delete(repoId); iconThemeWatcher.dispose(); });
     this.panels.set(repoId, panel);
 
-    panel.webview.postMessage({
+    gate.post({
       type: 'PRCREATE_INIT', repoId, repoName: meta.name, provider: connection.provider,
     } satisfies HostToPrCreateMsg);
 
     const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
-    panel.webview.postMessage({ type: 'PRCREATE_ICON_THEME', iconTheme } satisfies HostToPrCreateMsg);
+    gate.post({ type: 'PRCREATE_ICON_THEME', iconTheme });
   }
 
   private async handleMessage(msg: PrCreateToHostMsg, repoId: string, panel: vscode.WebviewPanel): Promise<void> {
