@@ -265,7 +265,8 @@ export function UnifiedCommitForm({
   // actually needs, so publishing or syncing no longer means switching to the Push tab.
   const syncRepos = syncRepoStatuses ?? repoStatuses;
   const sync = computeSyncState(syncRepos);
-  const showSync = !hasWorkingChanges(syncRepos) && sync.action !== 'none' && !loading;
+  const hasChanges = hasWorkingChanges(syncRepos);
+  const showSync = !hasChanges && sync.action !== 'none' && !loading;
 
   // A plain commit does not finish a rebase — git still needs `rebase --continue`, so
   // the primary action becomes Continue until the rebase is done. A merge needs no
@@ -377,7 +378,8 @@ export function UnifiedCommitForm({
 
   // When the Stash/Shelve button is hidden for lack of space, its two actions move into the
   // Commit button's own dropdown instead, above the Commit/Commit & Push entries, so they stay reachable.
-  const stashDropdownItems: DropdownButtonItem[] = stashButtonCollapsed
+  // With no staged or unstaged changes there is nothing to stash or shelve, so neither shows.
+  const stashDropdownItems: DropdownButtonItem[] = hasChanges && stashButtonCollapsed
     ? [
         { icon: 'archive', label: l10n.t('Shelve Changes'), onSelect: onShelve },
         { icon: 'git-stash', label: l10n.t('Stash Changes'), onSelect: onStash, separatorAfter: true },
@@ -530,7 +532,7 @@ export function UnifiedCommitForm({
 
       {/* Amend + actions row */}
       <div ref={actionsRowRefCb} style={styles.actionsRow}>
-        {!stashButtonCollapsed && (
+        {hasChanges && !stashButtonCollapsed && (
         <div style={styles.leftActions}>
           <DropdownButton
             variant="secondary"

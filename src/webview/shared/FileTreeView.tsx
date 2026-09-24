@@ -95,6 +95,7 @@ export function FileTreeView({ files, iconTheme, onOpenFile }: Props) {
         <GenericFileTree<TreeFile>
           files={treeFiles}
           viewMode={viewMode}
+          compact
           iconTheme={iconTheme}
           statusColor={statusColor}
           statusLetter={statusLetter}

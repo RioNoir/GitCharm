@@ -267,6 +267,8 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
   // A stash entry has 2-3 parents (base + index + untracked commits) but is never a
   // real merge — never show the Merged Commits section for one.
   const isMerge = !range && !commit?.isStash && (commit?.parents.length ?? 0) >= 2;
+  // Shown only once the list has loaded — a "(0)" while loading would read as "no commits".
+  const mergeCountSuffix = !loadingMerge && mergeCommits.length > 0 ? ` (${mergeCommits.length})` : '';
 
   // Only refs that point AT this commit — never branches that merely contain it.
   // Order: HEAD, tags, primary locals, other locals, primary remotes, other remotes.
@@ -803,23 +805,27 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         {isMerge && (
           <div style={twoColumnLayout ? undefined : styles.mergeSection}>
             {twoColumnLayout ? (
-              <div style={styles.detailsLabel}>{l10n.t('Merged Commits')}</div>
+              <div style={styles.detailsLabel}>{l10n.t('Merged Commits')}{mergeCountSuffix}</div>
             ) : (
               <div style={styles.mergeSectionTitle}>
                 <Codicon name="git-merge" style={{ fontSize: '11px', opacity: 0.7 }} />
-                <span>{l10n.t('Merged commits')}</span>
+                <span>{l10n.t('Merged commits')}{mergeCountSuffix}</span>
               </div>
             )}
             {loadingMerge && <div style={styles.mergeLoading}>{l10n.t('Loading...')}</div>}
             {!loadingMerge && mergeCommits.length === 0 && (
               <div style={styles.mergeLoading}>{l10n.t('No commits found')}</div>
             )}
-            {!loadingMerge && !twoColumnLayout && mergeCommits.map(c => (
-              <div key={c.hash} style={styles.mergeCommitRowMinimal} title={c.hash}>
-                <span style={styles.mergeHash}>{c.shortHash}</span>
-                <span style={styles.mergeMessage}>{c.message}</span>
+            {!loadingMerge && !twoColumnLayout && mergeCommits.length > 0 && (
+              <div style={styles.mergeCommitsListMinimal}>
+                {mergeCommits.map(c => (
+                  <div key={c.hash} style={styles.mergeCommitRowMinimal} title={c.hash}>
+                    <span style={styles.mergeHash}>{c.shortHash}</span>
+                    <span style={styles.mergeMessage}>{c.message}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
             {!loadingMerge && twoColumnLayout && mergeCommits.length > 0 && (
               // Same bordered-list container as the Pull Request detail's commit list.
               <div style={styles.mergeCommitsList}>
@@ -947,6 +953,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           <GenericFileTree<FileEntry>
             files={activeFiles}
             viewMode={viewMode}
+            compact
             iconTheme={iconTheme}
             statusColor={statusColor}
             statusLetter={f => f}
@@ -963,6 +970,11 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     </div>
   );
 }
+
+// Fixed row height so the minimal merged-commits list can cap at exactly N rows before scrolling.
+const MERGE_MINIMAL_ROW_HEIGHT = 18;
+const MERGE_MINIMAL_ROW_GAP = 2;
+const MERGE_MINIMAL_VISIBLE_ROWS = 4;
 
 const styles = {
   container: {
@@ -1208,8 +1220,6 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '2px',
-    maxHeight: '180px',
-    overflowY: 'auto' as const,
     flexShrink: 0,
   },
   // Same bordered-list container the Pull Request detail's commit list uses.
@@ -1239,11 +1249,21 @@ const styles = {
   } as React.CSSProperties,
   // Log Panel: hash + message only, not clickable — a quick-reference list, not a
   // secondary navigation surface (that stays the job of the main commit list).
+  // Only the rows scroll (the section title stays put), capped at MERGE_MINIMAL_VISIBLE_ROWS rows.
+  mergeCommitsListMinimal: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: `${MERGE_MINIMAL_ROW_GAP}px`,
+    maxHeight: `${MERGE_MINIMAL_VISIBLE_ROWS * MERGE_MINIMAL_ROW_HEIGHT + (MERGE_MINIMAL_VISIBLE_ROWS - 1) * MERGE_MINIMAL_ROW_GAP}px`,
+    overflowY: 'auto' as const,
+  } as React.CSSProperties,
   mergeCommitRowMinimal: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '2px 4px',
+    height: `${MERGE_MINIMAL_ROW_HEIGHT}px`,
+    flexShrink: 0,
+    padding: '0 4px',
     fontSize: '11px',
     color: 'var(--vscode-foreground)',
   } as React.CSSProperties,

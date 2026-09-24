@@ -530,6 +530,7 @@
   "Merged": "Merged",
   "Closed": "Closed",
   "Open": "Open",
+  "Checks: {0} passed, {1} failed, {2} pending": "Checks: {0} passed, {1} failed, {2} pending",
   "Could not detect a supported Git forge for this repo's remote.": "Could not detect a supported Git forge for this repo's remote.",
   "Use this": "Use this",
   "Not connected to {0}": "Not connected to {0}",

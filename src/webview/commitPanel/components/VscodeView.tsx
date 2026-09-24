@@ -223,6 +223,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
             <GenericFileTree<FileStatus>
               files={files}
               viewMode={viewMode}
+              flatNoSpacer
               iconTheme={iconTheme}
               statusColor={statusColor}
               statusLetter={statusLetter}

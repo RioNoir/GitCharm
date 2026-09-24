@@ -94,6 +94,41 @@ function toListOptions(filters: PullRequestFilters, page: number): ListPullReque
   };
 }
 
+/** Attaches each PR's checks summary — best-effort, a failed lookup just leaves the list without checks rather than failing it. */
+async function withChecks(provider: PullRequestProvider, owner: string, repo: string, items: PullRequestSummary[]): Promise<PullRequestSummary[]> {
+  try {
+    const summaries = await provider.getChecksSummaries(owner, repo, items);
+    return items.map(pr => {
+      const checks = summaries.get(pr.number);
+      return checks ? { ...pr, checks } : pr;
+    });
+  } catch (err) {
+    logWarn('pullrequest-checks', `Failed to load checks for ${owner}/${repo}`, err instanceof Error ? err.message : String(err));
+    return items;
+  }
+}
+
+/**
+ * Forges record a label/assignee event even when it changes nothing — e.g. Dependabot applies the same labels twice
+ * a second apart, and GitHub's API returns all four "labeled" events while its web UI shows two. Replays the
+ * timeline and drops the no-ops the same way. A label/assignee whose state isn't known yet (it may predate the
+ * first event) is never treated as a no-op, so a real first add/remove is always kept.
+ */
+function dropRedundantEvents(events: PullRequestEvent[]): PullRequestEvent[] {
+  const present = new Map<string, boolean>();
+  const sorted = [...events].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return sorted.filter(event => {
+    const key = event.kind === 'labeled' || event.kind === 'unlabeled' ? event.label && `label:${event.label.name}`
+      : event.kind === 'assigned' || event.kind === 'unassigned' ? event.user && `user:${event.user.id}`
+      : undefined;
+    if (!key) return true;
+    const adds = event.kind === 'labeled' || event.kind === 'assigned';
+    if (present.get(key) === adds) return false;
+    present.set(key, adds);
+    return true;
+  });
+}
+
 const REPO_ACCOUNT_BINDING_KEY = 'gitcharm.pullRequests.repoAccountBindings';
 const REPO_PR_FILTERS_KEY = 'gitcharm.pullRequests.repoFilters';
 
@@ -242,7 +277,8 @@ export class PullRequestManager {
       } else {
         try {
           const { items, hasMore, totalCount } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, 1));
-          result = { repoId, repoName, repoColor, connection, pullRequests: items, page: 1, hasMore, totalCount };
+          const pullRequests = await withChecks(provider, resolved.owner, resolved.repo, items);
+          result = { repoId, repoName, repoColor, connection, pullRequests, page: 1, hasMore, totalCount };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logError('pullrequest-list', `Failed to list pull requests for ${repoName}`, message);
@@ -268,9 +304,10 @@ export class PullRequestManager {
     const nextPage = cached.data.page + 1;
     try {
       const { items, hasMore } = await provider.listPullRequests(resolved.owner, resolved.repo, toListOptions(filters, nextPage));
+      const pullRequests = await withChecks(provider, resolved.owner, resolved.repo, items);
       const result: RepoPullRequests = {
         ...cached.data,
-        pullRequests: [...cached.data.pullRequests, ...items],
+        pullRequests: [...cached.data.pullRequests, ...pullRequests],
         page: nextPage,
         hasMore,
       };
@@ -624,7 +661,7 @@ export class PullRequestManager {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
     try {
-      return { items: await target.provider.listEvents(target.owner, target.repo, number) };
+      return { items: dropRedundantEvents(await target.provider.listEvents(target.owner, target.repo, number)) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('pullrequest-list-events', `Failed to load events for PR #${number}`, message);

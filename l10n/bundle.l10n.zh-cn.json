@@ -80,6 +80,7 @@
   "View all changes": "查看所有更改",
   "Refresh": "刷新",
   "Open in browser": "在浏览器中打开",
+  "Checks: {0} passed, {1} failed, {2} pending": "检查：{0} 个通过，{1} 个失败，{2} 个进行中",
   "{0} wants to merge changes into {1} from {2}": "{0} 希望将 {2} 中的更改合并到 {1}",
   "View checks": "查看检查",
   "This branch has conflicts that must be resolved before merging.": "此分支存在冲突，必须在合并前解决。",

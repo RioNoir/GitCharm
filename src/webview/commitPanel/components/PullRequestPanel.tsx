@@ -69,6 +69,21 @@ function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string })
   return <span style={{ ...row.avatarFallback, background: avatarColor(name) }} title={name}>{initials(name)}</span>;
 }
 
+/** GitHub-style "✓ 3/3" — the icon reflects the worst state (any failure wins over pending), the count is passed/total. */
+function ChecksBadge({ checks }: { checks: NonNullable<PullRequestSummary['checks']> }) {
+  const { icon, color } = checks.failed > 0
+    ? { icon: 'close', color: 'var(--vscode-errorForeground)' }
+    : checks.pending > 0
+      ? { icon: 'circle-filled', color: 'var(--vscode-editorWarning-foreground, #d29922)' }
+      : { icon: 'check', color: '#3fb950' };
+  return (
+    <span style={row.checks} title={l10n.t('Checks: {0} passed, {1} failed, {2} pending', checks.passed, checks.failed, checks.pending)}>
+      <Codicon name={icon} style={{ fontSize: icon === 'circle-filled' ? '8px' : '12px', color }} />
+      {checks.passed}/{checks.total}
+    </span>
+  );
+}
+
 function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, onOpenDetail }: {
   pr: PullRequestSummary;
   repoId: string;
@@ -96,11 +111,14 @@ function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, o
         <span style={row.meta}>
           <AuthorAvatar name={pr.authorName} avatarUrl={pr.authorAvatarUrl} />
           {(pr.sourceBranch || pr.targetBranch) && (
-            <span style={row.branch}>
-              <Codicon name="git-branch" style={{ fontSize: '10px', marginRight: '3px', opacity: 0.6 }} />
-              {pr.sourceBranch} → {pr.targetBranch}
+            <span style={row.branch} title={`${pr.sourceBranch} → ${pr.targetBranch}`}>
+              <Codicon name="git-branch" style={{ fontSize: '10px', marginRight: '3px', opacity: 0.6, flexShrink: 0 }} />
+              <span style={row.sourceBranch}>{pr.sourceBranch}</span>
+              <span style={row.branchArrow}>→</span>
+              <span style={row.targetBranch}>{pr.targetBranch}</span>
             </span>
           )}
+          {pr.checks && <ChecksBadge checks={pr.checks} />}
         </span>
       </div>
       {hovered && (
@@ -379,10 +397,25 @@ const row = {
   nameText: {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0, flexShrink: 1,
   } as React.CSSProperties,
-  meta: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' } as React.CSSProperties,
+  meta: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', minWidth: 0 } as React.CSSProperties,
   branch: {
     fontSize: '10px', opacity: 0.55, display: 'flex', alignItems: 'center',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+    overflow: 'hidden', whiteSpace: 'nowrap' as const, minWidth: 0,
+  } as React.CSSProperties,
+  // Source and target truncate independently so the arrow between them always stays visible.
+  // The target is what matters most, so the source's huge shrink factor makes it absorb nearly
+  // all the overflow first; only once it's down to its min width does the target start to shrink.
+  sourceBranch: {
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: '3ch', flexShrink: 10000,
+  } as React.CSSProperties,
+  targetBranch: {
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0, flexShrink: 1,
+  } as React.CSSProperties,
+  branchArrow: { flexShrink: 0, margin: '0 3px' } as React.CSSProperties,
+  // Never shrinks — the branch block before it is what gives way when the row gets narrow.
+  checks: {
+    fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+    color: 'var(--vscode-descriptionForeground)',
   } as React.CSSProperties,
   avatarImg: {
     width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0,

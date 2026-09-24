@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
-  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
+  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities, PullRequestChecksSummary,
   PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
@@ -159,6 +160,7 @@ function mapPr(pr: RawGiteaPr): PullRequestSummary {
     assignees: (pr.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
     reviewers: (pr.requested_reviewers ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
     labels: (pr.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color.replace(/^#/, '') })),
+    headSha: pr.head.sha,
   };
 }
 
@@ -392,6 +394,10 @@ export class GiteaProvider implements PullRequestProvider {
       startedAt: s.created_at,
       completedAt: s.updated_at,
     }));
+  }
+
+  async getChecksSummaries(owner: string, repo: string, prs: PullRequestSummary[]): Promise<Map<number, PullRequestChecksSummary>> {
+    return summarizeChecksPerPr(prs, headSha => this.listChecks(owner, repo, headSha));
   }
 
   async getPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetail> {

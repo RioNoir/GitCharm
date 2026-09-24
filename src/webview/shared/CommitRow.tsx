@@ -141,7 +141,7 @@ const css = {
     padding: '3px 8px', borderRadius: '999px',
   } as React.CSSProperties,
   commitDetail: {
-    padding: '4px 12px 14px 46px', display: 'flex', flexDirection: 'column' as const, gap: '10px',
+    padding: '4px 12px 14px 12px', display: 'flex', flexDirection: 'column' as const, gap: '10px',
     background: 'color-mix(in srgb, var(--vscode-foreground) 3%, transparent)',
   } as React.CSSProperties,
 };

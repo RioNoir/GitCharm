@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
-  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
+  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities, PullRequestChecksSummary,
   PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import type { BitbucketCredentials } from '../PatCredentialStore';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
@@ -45,7 +46,7 @@ interface RawBitbucketPr {
   links: { html: { href: string } };
   state: 'OPEN' | 'MERGED' | 'DECLINED' | 'SUPERSEDED';
   draft?: boolean;
-  source: { branch: { name: string }; repository?: { full_name: string } };
+  source: { branch: { name: string }; commit?: { hash: string }; repository?: { full_name: string } };
   destination: { branch: { name: string }; repository?: { full_name: string } };
   author: { display_name: string; nickname?: string; uuid?: string; links: { avatar: { href: string } } } | null;
   created_on: string;
@@ -177,6 +178,7 @@ function mapPr(pr: RawBitbucketPr): PullRequestSummary {
     updatedAt: pr.updated_on,
     commentCount: pr.comment_count,
     reviewers: (pr.reviewers ?? []).map(u => ({ id: u.uuid, username: u.display_name ?? u.nickname ?? u.uuid, avatarUrl: u.links?.avatar?.href })),
+    headSha: pr.source.commit?.hash,
   };
 }
 
@@ -433,6 +435,10 @@ export class BitbucketProvider implements PullRequestProvider {
       startedAt: s.created_on,
       completedAt: s.updated_on,
     }));
+  }
+
+  async getChecksSummaries(owner: string, repo: string, prs: PullRequestSummary[]): Promise<Map<number, PullRequestChecksSummary>> {
+    return summarizeChecksPerPr(prs, headSha => this.listChecks(owner, repo, headSha));
   }
 
   async getPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetail> {

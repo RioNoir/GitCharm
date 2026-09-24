@@ -340,7 +340,9 @@ function RepoSubGroup({
               onRollback={onRollback}
               onResolveMerge={onResolveMerge}
               viewMode={viewMode}
-              basePad={multiRepo && !singleRepo ? 36 : 24}
+              // Tree view steps 18px past the header's own checkbox (6px, or 18px under a repo header) to show nesting;
+              // flat rows step 14px, the same as the Simplified view (repo checkbox at 6px, files at FileTree's default 20px).
+              basePad={viewMode === 'flat' ? (multiRepo && !singleRepo ? 32 : 20) : (multiRepo && !singleRepo ? 36 : 24)}
               activeFolderPath={activeFolderPath}
               ctxFile={ctxFile}
               onMultiSelect={onMultiSelect}

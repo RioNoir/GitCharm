@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
-  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
+  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities, PullRequestChecksSummary,
   PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
@@ -51,6 +52,7 @@ interface RawGitLabMr {
   created_at: string;
   updated_at: string;
   user_notes_count?: number;
+  sha?: string;
   /** Present even on the list endpoint (names only — colors need a separate lookup, see getCachedProjectLabels). */
   labels?: string[];
 }
@@ -182,6 +184,7 @@ function mapMr(mr: RawGitLabMr, sourceProjectPath?: string, labels?: PullRequest
     updatedAt: mr.updated_at,
     commentCount: mr.user_notes_count,
     labels,
+    headSha: mr.sha,
   };
 }
 
@@ -496,6 +499,10 @@ export class GitLabProvider implements PullRequestProvider {
       startedAt: j.started_at ?? undefined,
       completedAt: j.finished_at ?? undefined,
     }));
+  }
+
+  async getChecksSummaries(owner: string, repo: string, prs: PullRequestSummary[]): Promise<Map<number, PullRequestChecksSummary>> {
+    return summarizeChecksPerPr(prs, headSha => this.listChecks(owner, repo, headSha));
   }
 
   async updatePullRequest(owner: string, repo: string, number: number, input: UpdatePullRequestInput): Promise<ActionResult> {

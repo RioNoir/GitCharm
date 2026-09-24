@@ -260,7 +260,8 @@ function App() {
   // ── Tab ───────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('changes');
   const [tabBarCollapsed, setTabBarCollapsed] = useState(false);
-  const [tabMenu, setTabMenu] = useState<{ x: number; y: number } | null>(null);
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; width: number } | null>(null);
+  const tabDropdownBtnRef = useRef<HTMLButtonElement>(null);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
   const tabBarContentRef = useRef<HTMLDivElement | null>(null);
 
@@ -1428,12 +1429,14 @@ function App() {
             {/* Collapsed fallback — single dropdown button showing the active tab. */}
             {tabBarCollapsed && (
               <button
+                ref={tabDropdownBtnRef}
                 data-tab-dropdown-btn
                 style={css.tabDropdownBtn}
                 title={activeMeta.label}
                 onClick={e => {
+                  if (tabMenu) { setTabMenu(null); return; }
                   const rect = e.currentTarget.getBoundingClientRect();
-                  setTabMenu({ x: rect.left, y: rect.bottom });
+                  setTabMenu({ x: rect.left, y: rect.bottom, width: rect.width });
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
@@ -1449,9 +1452,13 @@ function App() {
               <ContextMenu
                 x={tabMenu.x}
                 y={tabMenu.y}
-                items={allTabs.map(tab => {
+                width={tabMenu.width}
+                anchor={tabDropdownBtnRef.current}
+                menuStyle={css.tabDropdownMenu}
+                // The active tab is already shown on the button itself, so the menu only lists the others.
+                items={allTabs.filter(tab => tab !== activeTab).map(tab => {
                   const { label, iconName, badge } = tabMeta(tab);
-                  return { id: tab, label: badge > 0 ? `${label} (${formatBadgeCount(badge)})` : label, icon: iconName };
+                  return { id: tab, label, icon: iconName, badge: badge > 0 ? formatBadgeCount(badge) : undefined };
                 })}
                 onSelect={id => selectTab(id as TabId)}
                 onClose={() => setTabMenu(null)}
@@ -2271,6 +2278,15 @@ const css = {
     borderBottom: '2px solid transparent',
     fontFamily: 'var(--vscode-font-family)', fontWeight: '600',
     color: 'var(--vscode-foreground)', transition: 'background 0.1s',
+  } as React.CSSProperties,
+  // Reads as a continuation of the dropdown button above it: the tab bar's own background, only a bottom edge.
+  tabDropdownMenu: {
+    background: 'var(--vscode-sideBar-background)',
+    border: 'none',
+    borderBottom: '1px solid var(--vscode-panel-border)',
+    borderRadius: 0,
+    // Bottom edge only: the −6px spread cancels the 6px blur on the sides and top, and the 6px offset pushes it all below.
+    boxShadow: '0 6px 6px -6px rgba(0,0,0,0.3)',
   } as React.CSSProperties,
   pushBadge: {
     background: 'var(--vscode-badge-background)',

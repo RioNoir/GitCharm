@@ -23,6 +23,18 @@ export interface PullRequestSummary {
   assignees?: PullRequestUser[];
   reviewers?: PullRequestUser[];
   labels?: PullRequestLabel[];
+  /** Head commit of the source branch, when the list response carries it (GitHub's issue-shaped search results don't) — used to look up checks for the list. */
+  headSha?: string;
+  /** Undefined when the PR has no checks at all, or the lookup failed / isn't done for this PR (see `PullRequestProvider.getChecksSummaries`). */
+  checks?: PullRequestChecksSummary;
+}
+
+/** Aggregate of a PR's head-commit checks, shown in the list GitHub-style as "✓ 3/3" — `passed` counts successful, neutral and skipped checks. */
+export interface PullRequestChecksSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  pending: number;
 }
 
 export type PullRequestStateFilter = 'open' | 'draft' | 'closed' | 'merged';
@@ -309,4 +321,6 @@ export interface PullRequestProvider {
   submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult>;
   /** Every individual check/job for the PR's head commit — the detail behind the `ciStatus` aggregate badge. */
   listChecks(owner: string, repo: string, headSha: string): Promise<CiCheck[]>;
+  /** Checks summary for each PR of a list page, keyed by PR number — best-effort, a PR missing from the map just shows no checks. */
+  getChecksSummaries(owner: string, repo: string, prs: PullRequestSummary[]): Promise<Map<number, PullRequestChecksSummary>>;
 }

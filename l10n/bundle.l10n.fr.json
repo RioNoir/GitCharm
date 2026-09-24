@@ -80,6 +80,7 @@
   "View all changes": "Voir toutes les modifications",
   "Refresh": "Actualiser",
   "Open in browser": "Ouvrir dans le navigateur",
+  "Checks: {0} passed, {1} failed, {2} pending": "Vérifications : {0} réussies, {1} échouées, {2} en attente",
   "{0} wants to merge changes into {1} from {2}": "{0} souhaite fusionner des modifications de {2} dans {1}",
   "View checks": "Voir les vérifications",
   "This branch has conflicts that must be resolved before merging.": "Cette branche contient des conflits qui doivent être résolus avant la fusion.",

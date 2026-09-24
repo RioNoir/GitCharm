@@ -83,6 +83,7 @@ function collectFiles<F extends GenericTreeFile>(node: TreeDir<F>): F[] {
 // inside a folder sits further right only because its depth is one greater (an extra LEVEL_PAD),
 // same as in the Commit Panel's own Changes tree (FileTree.tsx), not because of any per-file offset.
 const DEFAULT_BASE_PAD = 14;
+const COMPACT_BASE_PAD = 8;
 const LEVEL_PAD = 8;
 const ICON_SIZE = 16;
 const CHEVRON_WIDTH = 12;
@@ -103,8 +104,13 @@ const FILE_ICON_SPACER_WIDTH = DIR_INNER_PAD + CHEVRON_WIDTH + INNER_GAP - ROW_G
 export interface GenericFileTreeProps<F extends GenericTreeFile> {
   files: F[];
   viewMode: 'tree' | 'flat';
-  /** Left padding at depth 0, in px. Defaults to 20. */
+  /** Left padding at depth 0, in px. Defaults to 14 (8 when `compact`). */
   basePad?: number;
+  /** Pulls the list as far left as it goes — smaller base padding, and no chevron spacer on flat-view rows, since
+   * there are no directory icons for them to line up with. Used by commit-detail file lists. */
+  compact?: boolean;
+  /** Just the flat-view half of `compact`: drops the chevron spacer on flat rows (nothing to line up with there) but keeps the base padding. */
+  flatNoSpacer?: boolean;
   iconTheme?: IconThemeData | null;
   statusColor: (status: string) => string;
   statusLetter: (status: string) => string;
@@ -135,7 +141,7 @@ function LineStats({ added, removed }: { added?: number; removed?: number }) {
   );
 }
 
-function FileRow<F extends GenericTreeFile>({ file, depth, basePad, ...shared }: { file: F; depth: number; basePad: number } & Pick<GenericFileTreeProps<F>,
+function FileRow<F extends GenericTreeFile>({ file, depth, basePad, noSpacer = false, ...shared }: { file: F; depth: number; basePad: number; noSpacer?: boolean } & Pick<GenericFileTreeProps<F>,
   'iconTheme' | 'statusColor' | 'statusLetter' | 'onOpenFile' | 'isFileSelected' | 'isFileContextActive' | 'onContextMenuFile' | 'renderFileActions'
 >) {
   const { iconTheme, statusColor, statusLetter, onOpenFile, isFileSelected, isFileContextActive, onContextMenuFile, renderFileActions } = shared;
@@ -166,7 +172,7 @@ function FileRow<F extends GenericTreeFile>({ file, depth, basePad, ...shared }:
     >
       <TreeGuideLines depth={depth} offset={basePad + GUIDE_OFFSET} step={LEVEL_PAD} />
       {/* Spacer standing in for the sibling dir row's chevron, so this file's icon lines up under a directory's icon rather than under its chevron. */}
-      <div style={{ width: FILE_ICON_SPACER_WIDTH, flexShrink: 0 }} />
+      {!noSpacer && <div style={{ width: FILE_ICON_SPACER_WIDTH, flexShrink: 0 }} />}
       <FileIcon name={fname} theme={iconTheme} size={ICON_SIZE} />
       <div style={styles.fileNameGroup}>
         <span style={styles.fileName(color)}>{fname}</span>
@@ -226,7 +232,7 @@ function TreeDirNode<F extends GenericTreeFile>({ node, depth, basePad, ...share
   );
 }
 
-export function GenericFileTree<F extends GenericTreeFile>({ files, viewMode, basePad = DEFAULT_BASE_PAD, ...shared }: GenericFileTreeProps<F>) {
+export function GenericFileTree<F extends GenericTreeFile>({ files, viewMode, compact = false, flatNoSpacer = compact, basePad = compact ? COMPACT_BASE_PAD : DEFAULT_BASE_PAD, ...shared }: GenericFileTreeProps<F>) {
   useTreeGuideHoverStyle();
   if (files.length === 0) return null;
 
@@ -246,7 +252,7 @@ export function GenericFileTree<F extends GenericTreeFile>({ files, viewMode, ba
   return (
     <div style={styles.container} data-filetree-container>
       {files.map((file, i) => (
-        <FileRow key={i} file={file} depth={0} basePad={basePad} {...shared} />
+        <FileRow key={i} file={file} depth={0} basePad={basePad} noSpacer={flatNoSpacer} {...shared} />
       ))}
     </div>
   );

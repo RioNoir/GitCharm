@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
-  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
+  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities, PullRequestChecksSummary,
   PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
@@ -9,6 +9,10 @@ import { httpJson, HttpJsonError } from '../httpJson';
 import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
+
+/** `CheckRunState` and `StatusState` values from GraphQL's statusCheckRollup counts — anything else (FAILURE, ERROR, TIMED_OUT, CANCELLED, ACTION_REQUIRED, STARTUP_FAILURE, STALE) counts as failed. */
+const GITHUB_PASSED_CHECK_STATES = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED', 'COMPLETED']);
+const GITHUB_PENDING_CHECK_STATES = new Set(['PENDING', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED', 'EXPECTED']);
 
 const CAPABILITIES: PullRequestCapabilities = {
   canMerge: true,
@@ -157,6 +161,7 @@ function mapPr(pr: RawGitHubPr): PullRequestSummary {
     assignees: (pr.assignees ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
     reviewers: (pr.requested_reviewers ?? []).map(u => ({ id: u.login, username: u.login, avatarUrl: u.avatar_url })),
     labels: (pr.labels ?? []).map(l => ({ id: l.name, name: l.name, color: l.color })),
+    headSha: pr.head.sha,
   };
 }
 
@@ -490,6 +495,44 @@ export class GitHubProvider implements PullRequestProvider {
       completedAt: s.updated_at,
     }));
     return [...fromCheckRuns, ...fromLegacyStatuses];
+  }
+
+  /** One GraphQL query for the whole page: each PR is aliased (`pr0: pullRequest(number: ...)`) and its head commit's
+   * `statusCheckRollup` returns ready-made per-state counts for both check runs and legacy statuses — the same numbers
+   * GitHub's own PR list shows, already deduplicated to the latest run per check. Works for search results too, which
+   * carry no head sha. */
+  async getChecksSummaries(owner: string, repo: string, prs: PullRequestSummary[]): Promise<Map<number, PullRequestChecksSummary>> {
+    const result = new Map<number, PullRequestChecksSummary>();
+    if (prs.length === 0) return result;
+    const headers = await this.headers();
+    const fields = prs.map((pr, i) => `pr${i}: pullRequest(number: ${pr.number}) { commits(last: 1) { nodes { commit { statusCheckRollup {
+      contexts(first: 0) { checkRunCountsByState { state count } statusContextCountsByState { state count } }
+    } } } } }`).join(' ');
+    const query = `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { ${fields} } }`;
+    type Counts = { state: string; count: number }[];
+    type RawRollupPr = { commits: { nodes: { commit: { statusCheckRollup: { contexts: { checkRunCountsByState?: Counts; statusContextCountsByState?: Counts } } | null } }[] } } | null;
+    try {
+      const { data } = await httpJson<{ data?: { repository?: Record<string, RawRollupPr> } }>(this.graphqlUrl(), {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { owner, repo } }),
+      });
+      prs.forEach((pr, i) => {
+        const contexts = data.data?.repository?.[`pr${i}`]?.commits.nodes[0]?.commit.statusCheckRollup?.contexts;
+        if (!contexts) return;
+        const summary: PullRequestChecksSummary = { total: 0, passed: 0, failed: 0, pending: 0 };
+        for (const { state, count } of [...(contexts.checkRunCountsByState ?? []), ...(contexts.statusContextCountsByState ?? [])]) {
+          summary.total += count;
+          if (GITHUB_PASSED_CHECK_STATES.has(state)) summary.passed += count;
+          else if (GITHUB_PENDING_CHECK_STATES.has(state)) summary.pending += count;
+          else summary.failed += count;
+        }
+        if (summary.total > 0) result.set(pr.number, summary);
+      });
+    } catch {
+      // Best-effort — e.g. an older GitHub Enterprise without these rollup fields just shows no checks.
+    }
+    return result;
   }
 
   async updatePullRequest(owner: string, repo: string, number: number, input: UpdatePullRequestInput): Promise<ActionResult> {
