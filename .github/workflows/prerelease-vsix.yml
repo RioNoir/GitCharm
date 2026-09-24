@@ -1,4 +1,4 @@
-name: Beta VSIX (GitHub only)
+name: Pre-release VSIX
 
 on:
   workflow_dispatch:
@@ -8,14 +8,14 @@ permissions:
 
 jobs:
   release:
-    name: Build VSIX and publish beta GitHub Release
+    name: Build VSIX and publish pre-release
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout beta
+      - name: Checkout prerelease
         uses: actions/checkout@v7
         with:
-          ref: beta
+          ref: prerelease
           fetch-depth: 0
 
       - name: Setup Node
@@ -39,7 +39,38 @@ jobs:
           VERSION: ${{ steps.package.outputs.version }}
         run: |
           set -euo pipefail
-          echo "tag=v${VERSION}-beta" >> "$GITHUB_OUTPUT"
+
+          # The marketplaces never accept the same version twice, so pre-releases and releases can't
+          # share one. As Microsoft recommends, pre-releases use an odd minor (0.5.x) and releases an
+          # even one (0.6.x) — see release-vsix.yml.
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.([0-9]+)\.[0-9]+$ ]]; then
+            echo "::error::Version ${VERSION} must be major.minor.patch — the marketplaces reject pre-release suffixes."
+            exit 1
+          fi
+          if (( BASH_REMATCH[1] % 2 == 0 )); then
+            echo "::error::Version ${VERSION} has an even minor, which is reserved for releases — pre-releases use an odd minor (e.g. 0.5.x)."
+            exit 1
+          fi
+
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to overwrite a final release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The tag has no suffix, so it may already belong to the final release of this version —
+          # only a pre-release of it may be moved forward and replaced.
+          if gh release view "${RELEASE_TAG}" > /dev/null 2>&1; then
+            IS_PRERELEASE="$(gh release view "${RELEASE_TAG}" --json isPrerelease --jq .isPrerelease)"
+            if [ "${IS_PRERELEASE}" != "true" ]; then
+              echo "::error::${RELEASE_TAG} is already a final release — bump the version in package.json first."
+              exit 1
+            fi
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -56,7 +87,7 @@ jobs:
       - name: Package VSIX
         run: |
           mkdir -p dist
-          npm run package -- --out "dist/gitcharm-${{ steps.release_tag.outputs.tag }}.vsix"
+          npm run package -- --pre-release --out "dist/gitcharm-${{ steps.package.outputs.version }}-pre-release.vsix"
 
       - name: Create and push tag
         env:
@@ -68,19 +99,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Beta iterates fast without always bumping package.json — re-running for the same
-          # version moves the existing tag forward instead of failing the run.
+          # Re-running for the same version moves the existing tag forward instead of failing the run.
           if git rev-parse "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
             git push origin ":refs/tags/${RELEASE_TAG}" || true
           fi
 
-          git tag -f -a "${RELEASE_TAG}" -m "Beta release ${RELEASE_TAG}"
+          git tag -f -a "${RELEASE_TAG}" -m "Pre-release ${RELEASE_TAG}"
           git push origin "refs/tags/${RELEASE_TAG}"
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
-          name: gitcharm-beta-vsix
+          name: gitcharm-prerelease-vsix
           path: dist/*.vsix
           if-no-files-found: error
 
@@ -92,10 +122,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Find the previous beta tag (exclude the current one). grep exits 1 when nothing
-          # matches (e.g. this is the only beta tag so far) — `|| true` keeps that from
-          # tripping `set -e` under pipefail.
-          PREV_TAG="$(git tag --sort=-creatordate --list '*-beta' | { grep -v "^${RELEASE_TAG}$" || true; } | head -1)"
+          # Previous version tag, skipping beta tags and the current one. grep exits 1 when nothing
+          # matches — `|| true` keeps that from tripping `set -e` under pipefail.
+          PREV_TAG="$(git tag --sort=-version:refname --list 'v*' | { grep -Ev -- '-beta$' || true; } | { grep -v "^${RELEASE_TAG}$" || true; } | head -1)"
 
           if [ -z "${PREV_TAG}" ]; then
             RANGE="HEAD"
@@ -106,15 +135,14 @@ jobs:
           COMMITS="$(git log "${RANGE}" --no-merges --pretty=format:"%s" \
             | grep -v '^chore: bump version' || true)"
 
+          NOTES_FILE="/tmp/release-notes.md"
+
           if [ -z "${COMMITS}" ]; then
-            echo "notes=No changes." >> "$GITHUB_OUTPUT"
-            NOTES_FILE="/tmp/release-notes.md"
             echo "_No changes._" > "${NOTES_FILE}"
             echo "notes_file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          NOTES_FILE="/tmp/release-notes.md"
           > "${NOTES_FILE}"
 
           append_section() {
@@ -146,7 +174,7 @@ jobs:
 
           echo "notes_file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
 
-      - name: Publish beta GitHub Release
+      - name: Publish GitHub pre-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
@@ -155,7 +183,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Re-running for the same version replaces the existing beta release/asset instead of failing.
+          # Re-running for the same version replaces the existing pre-release/asset instead of failing.
           # The tag itself was already created/pushed by the previous step — don't clean it up here.
           if gh release view "${RELEASE_TAG}" > /dev/null 2>&1; then
             gh release delete "${RELEASE_TAG}" --yes
@@ -165,3 +193,15 @@ jobs:
             --title "GitCharm ${RELEASE_TAG}" \
             --notes-file "${NOTES_FILE}" \
             --prerelease
+
+      # The marketplaces never accept the same version twice: a re-run for an already
+      # published version skips these steps instead of failing, keeping the first upload.
+      - name: Publish pre-release to Open VSX Registry
+        run: npx ovsx publish dist/*.vsix --pre-release --skip-duplicate
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Publish pre-release to VS Code Marketplace
+        run: npx vsce publish --packagePath dist/*.vsix --pre-release --skip-duplicate
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
