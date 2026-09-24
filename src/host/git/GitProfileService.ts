@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import simpleGit from 'simple-git';
+import { createGit } from './gitClient';
 
 export interface GitProfile {
   id: string;
@@ -95,16 +95,16 @@ export class GitProfileService implements vscode.Disposable {
   // ── Built-in Local / Global ───────────────────────────────────────────────────
 
   private makeLocalPlaceholder(): GitProfile {
-    return { id: LOCAL_PROFILE_ID, name: 'Local', gitName: '', gitEmail: '', builtIn: 'local' };
+    return { id: LOCAL_PROFILE_ID, name: vscode.l10n.t('Local'), gitName: '', gitEmail: '', builtIn: 'local' };
   }
 
   private makeGlobalPlaceholder(): GitProfile {
-    return { id: GLOBAL_PROFILE_ID, name: 'Global', gitName: '', gitEmail: '', builtIn: 'global' };
+    return { id: GLOBAL_PROFILE_ID, name: vscode.l10n.t('Global'), gitName: '', gitEmail: '', builtIn: 'global' };
   }
 
   async readLocalCreds(repoPath: string): Promise<{ gitName: string; gitEmail: string } | undefined> {
     try {
-      const git = simpleGit(repoPath);
+      const git = createGit(repoPath);
       const [name, email] = await Promise.all([
         git.raw(['config', '--local', 'user.name']).catch(() => ''),
         git.raw(['config', '--local', 'user.email']).catch(() => ''),
@@ -118,7 +118,7 @@ export class GitProfileService implements vscode.Disposable {
 
   async readGlobalCreds(): Promise<{ gitName: string; gitEmail: string } | undefined> {
     try {
-      const git = simpleGit();
+      const git = createGit();
       const [name, email] = await Promise.all([
         git.raw(['config', '--global', 'user.name']).catch(() => ''),
         git.raw(['config', '--global', 'user.email']).catch(() => ''),

@@ -13,6 +13,8 @@ import { FileTreeView } from '../../shared/FileTreeView';
 import { GenericFileTree } from '../../shared/GenericFileTree';
 import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import type { ChangedFile } from '../../../host/types/messages';
+import * as l10n from '@vscode/l10n';
+import { plural } from '../../shared/l10n';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -107,19 +109,19 @@ function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, o
 
   return (
     <div ref={menuRef} style={menuStyle} onContextMenu={e => e.preventDefault()}>
-      <Item icon="diff" label="Show Diff" onClick={onShowDiff} />
-      <Item icon="diff-multiple" label="Show Combined Diff" onClick={onShowCombinedDiff} />
-      <Item icon="git-compare" label="Compare with…" onClick={onCompareWith} />
-      <Item icon="history" label="Show File History" onClick={onFileHistory} />
-      <Item icon="go-to-file" label="Edit Source" onClick={onEditSource} />
+      <Item icon="diff" label={l10n.t('Show Diff')} onClick={onShowDiff} />
+      <Item icon="diff-multiple" label={l10n.t('Show Combined Diff')} onClick={onShowCombinedDiff} />
+      <Item icon="git-compare" label={l10n.t('Compare with…')} onClick={onCompareWith} />
+      <Item icon="history" label={l10n.t('Show File History')} onClick={onFileHistory} />
+      <Item icon="go-to-file" label={l10n.t('Edit Source')} onClick={onEditSource} />
       {canApplyCommitChanges && (
         <>
-          <Item icon="git-commit" label="Cherry-Pick Selected Changes" onClick={onCherryPickFile} />
-          <Item icon="discard" label="Revert Selected Changes" onClick={onRevertFile} />
+          <Item icon="git-commit" label={l10n.t('Cherry-Pick Selected Changes')} onClick={onCherryPickFile} />
+          <Item icon="discard" label={l10n.t('Revert Selected Changes')} onClick={onRevertFile} />
         </>
       )}
-      <Item icon="list-tree" label="Reveal in Explorer" onClick={onRevealExplorer} />
-      <Item icon="folder-opened" label="Reveal in File Manager" onClick={onRevealOS} />
+      <Item icon="list-tree" label={l10n.t('Reveal in Explorer')} onClick={onRevealExplorer} />
+      <Item icon="folder-opened" label={l10n.t('Reveal in File Manager')} onClick={onRevealOS} />
     </div>
   );
 }
@@ -184,11 +186,11 @@ function remoteLabel(group: RefGroup): string {
 }
 
 function badgeTitle(group: RefGroup): string {
-  if (group.isRemoteHead) return `Remote HEAD (${group.remoteName}/HEAD)`;
-  if (group.isDetached && group.isHead) return 'HEAD (detached)';
-  if (group.isTag) return `Tag: ${group.label}`;
-  if (group.isRemote) return `Remote: ${remoteLabel(group)}`;
-  return `Local: ${group.label}`;
+  if (group.isRemoteHead) return l10n.t('Remote HEAD ({0})', `${group.remoteName}/HEAD`);
+  if (group.isDetached && group.isHead) return l10n.t('HEAD (detached)');
+  if (group.isTag) return l10n.t('Tag: {0}', group.label);
+  if (group.isRemote) return l10n.t('Remote: {0}', remoteLabel(group));
+  return l10n.t('Local: {0}', group.label);
 }
 
 function RefBadgeIcon({ group }: { group: RefGroup }) {
@@ -489,7 +491,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
   if (!commit) {
     return (
       <div style={styles.empty}>
-        <span style={styles.emptyText}>Select a commit to view details</span>
+        <span style={styles.emptyText}>{l10n.t('Select a commit to view details')}</span>
       </div>
     );
   }
@@ -511,7 +513,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             <button
               data-top-action-btn=""
               style={styles.topActionBtn}
-              title="Open Changes"
+              title={l10n.t('Open Changes')}
               onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
             >
               <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
@@ -520,7 +522,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
               <button
                 data-top-action-btn=""
                 style={styles.topActionBtn}
-                title="Open extended commit detail"
+                title={l10n.t('Open extended commit detail')}
                 onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
               >
                 <Codicon name="open-preview" style={{ fontSize: '16px' }} />
@@ -529,7 +531,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           </>
         )}
         {onClose && (
-          <button data-top-action-btn="" style={styles.topActionBtn} title="Close commit detail" onClick={onClose}>
+          <button data-top-action-btn="" style={styles.topActionBtn} title={l10n.t('Close commit detail')} onClick={onClose}>
             <Codicon name="layout-sidebar-right" style={{ fontSize: '16px' }} />
           </button>
         )}
@@ -550,14 +552,14 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             )}
             <div style={styles.rangeTitle}>
               <Codicon name="diff-multiple" style={{ fontSize: '14px', opacity: 0.8 }} />
-              <span>Compare commits</span>
+              <span>{l10n.t('Compare commits')}</span>
             </div>
             <div style={styles.hashRow}>
               <span style={styles.hash}>{range.older.shortHash}</span>
               <Codicon name="arrow-right" style={{ fontSize: '11px', opacity: 0.6 }} />
               <span style={styles.hash}>{range.newer.shortHash}</span>
             </div>
-            <div style={styles.rangeHint}>Changes between the selected snapshots</div>
+            <div style={styles.rangeHint}>{l10n.t('Changes between the selected snapshots')}</div>
           </>
         ) : (
           <>
@@ -577,17 +579,17 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         )}
         {commit.isStash ? (
           <div>
-            {twoColumnLayout && <div style={styles.detailsLabel}>Author</div>}
+            {twoColumnLayout && <div style={styles.detailsLabel}>{l10n.t('Author')}</div>}
             <div style={twoColumnLayout ? styles.authorRowTwoColumn : styles.authorRow}>
-              <AuthorAvatar authorName={activeProfile?.gitName ?? 'You'} authorEmail={activeProfile?.gitEmail ?? ''} size={32} isYou={!activeProfile} />
+              <AuthorAvatar authorName={activeProfile?.gitName ?? l10n.t('You')} authorEmail={activeProfile?.gitEmail ?? ''} size={32} isYou={!activeProfile} />
               {twoColumnLayout ? (
                 <div style={styles.authorMeta}>
-                  <span style={styles.authorName}>{activeProfile?.gitName ?? 'You'}</span>
+                  <span style={styles.authorName}>{activeProfile?.gitName ?? l10n.t('You')}</span>
                   {activeProfile?.gitEmail && <span style={styles.authorEmail}>{activeProfile.gitEmail}</span>}
                 </div>
               ) : (
                 <div style={styles.meta}>
-                  <span>{activeProfile?.gitName ?? 'You'}</span>
+                  <span>{activeProfile?.gitName ?? l10n.t('You')}</span>
                   {activeProfile?.gitEmail && (
                     <>
                       <span style={styles.dot}>·</span>
@@ -610,7 +612,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           </div>
         ) : (
           <div>
-            {twoColumnLayout && <div style={styles.detailsLabel}>Author</div>}
+            {twoColumnLayout && <div style={styles.detailsLabel}>{l10n.t('Author')}</div>}
             <div style={twoColumnLayout ? styles.authorRowTwoColumn : styles.authorRow}>
               <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
               {twoColumnLayout ? (
@@ -632,17 +634,17 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         )}
         {twoColumnLayout && (
           <div>
-            <div style={styles.detailsLabel}>Details</div>
+            <div style={styles.detailsLabel}>{l10n.t('Details')}</div>
             <div style={styles.detailsGrid}>
-              <span style={styles.detailsKey}>Hash</span>
+              <span style={styles.detailsKey}>{l10n.t('Hash')}</span>
               <span style={styles.detailsVal}>{commit.hash}</span>
-              <span style={styles.detailsKey}>Author date</span>
+              <span style={styles.detailsKey}>{l10n.t('Author date')}</span>
               <span style={styles.detailsValNormal}>{formatDateTime(commit.authorDate)}</span>
-              <span style={styles.detailsKey}>Commit date</span>
+              <span style={styles.detailsKey}>{l10n.t('Commit date')}</span>
               <span style={styles.detailsValNormal}>{formatDateTime(commit.committerDate)}</span>
               {repoName && (
                 <>
-                  <span style={styles.detailsKey}>Repository</span>
+                  <span style={styles.detailsKey}>{l10n.t('Repository')}</span>
                   <span style={styles.detailsValNormal}>{repoName}</span>
                 </>
               )}
@@ -667,9 +669,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                   <span
                     style={styles.refsShowMore}
                     onClick={() => setRefsExpanded(true)}
-                    title={`Show ${hiddenCount} more`}
+                    title={l10n.t('Show {0} more', hiddenCount)}
                   >
-                    +{hiddenCount} more
+                    {l10n.t('+{0} more', hiddenCount)}
                   </span>
                 )}
                 {refsExpanded && branchBadges.length > LIMIT && (
@@ -677,7 +679,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                     style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
                     onClick={() => setRefsExpanded(false)}
                   >
-                    Show less
+                    {l10n.t('Show less')}
                   </span>
                 )}
               </div>
@@ -689,7 +691,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           if (commit.isStash) {
             return (
               <div>
-                <div style={styles.detailsLabel}>Branches</div>
+                <div style={styles.detailsLabel}>{l10n.t('Branches')}</div>
                 <div style={styles.refsRow}>
                   <span style={styles.refBadge(branchColor(commit.stashBranch!, false))}>
                     <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
@@ -704,7 +706,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           const hiddenCount = branchBadges.length - LIMIT;
           return (
             <div>
-              <div style={styles.detailsLabel}>Branches</div>
+              <div style={styles.detailsLabel}>{l10n.t('Branches')}</div>
               <div style={refsExpanded ? styles.refsRowExpanded : styles.refsRow}>
                 {nonDetachedBranchHead && (
                   <span style={styles.refBadge(headColor(), true)} title={`HEAD → ${nonDetachedBranchHead.label}`}>
@@ -717,9 +719,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                   <span
                     style={styles.refsShowMore}
                     onClick={() => setRefsExpanded(true)}
-                    title={`Show ${hiddenCount} more`}
+                    title={l10n.t('Show {0} more', hiddenCount)}
                   >
-                    +{hiddenCount} more
+                    {l10n.t('+{0} more', hiddenCount)}
                   </span>
                 )}
                 {refsExpanded && branchBadges.length > LIMIT && (
@@ -727,7 +729,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                     style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
                     onClick={() => setRefsExpanded(false)}
                   >
-                    Show less
+                    {l10n.t('Show less')}
                   </span>
                 )}
               </div>
@@ -749,15 +751,15 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           const hiddenDescCount = allDescBadges.length - DLIMIT;
           return (
             <div>
-              <div style={styles.detailsLabel}>Descendant Branches</div>
-              {loadingDescendants && <div style={styles.mergeLoading}>Loading...</div>}
+              <div style={styles.detailsLabel}>{l10n.t('Descendant Branches')}</div>
+              {loadingDescendants && <div style={styles.mergeLoading}>{l10n.t('Loading...')}</div>}
               {!loadingDescendants && (
                 <div style={styles.refsRow}>
                   {visibleDesc.map(b => (
                     <span
                       key={`${b.kind}:${b.name}`}
                       style={styles.refBadge(b.kind === 'tag' ? tagColor() : branchColor(b.name, false), false)}
-                      title={`${b.name} contains this commit`}
+                      title={l10n.t('{0} contains this commit', b.name)}
                     >
                       <Codicon
                         name={b.kind === 'tag' ? 'tag' : b.kind === 'remote' ? 'cloud' : 'git-branch'}
@@ -770,9 +772,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                     <span
                       style={styles.refsShowMore}
                       onClick={() => setDescendantsExpanded(true)}
-                      title={`Show ${hiddenDescCount} more`}
+                      title={l10n.t('Show {0} more', hiddenDescCount)}
                     >
-                      +{hiddenDescCount} more
+                      {l10n.t('+{0} more', hiddenDescCount)}
                     </span>
                   )}
                   {descendantsExpanded && allDescBadges.length > DLIMIT && (
@@ -780,7 +782,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                       style={{ ...styles.refsShowMore, width: '100%', marginTop: '2px' }}
                       onClick={() => setDescendantsExpanded(false)}
                     >
-                      Show less
+                      {l10n.t('Show less')}
                     </span>
                   )}
                 </div>
@@ -791,7 +793,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
 
         {twoColumnLayout && (
           <div>
-            <div style={styles.detailsLabel}>Commit message</div>
+            <div style={styles.detailsLabel}>{l10n.t('Commit message')}</div>
             <pre style={styles.commitMessageBlock}>{fullMessage || commit.message}</pre>
           </div>
         )}
@@ -801,16 +803,16 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         {isMerge && (
           <div style={twoColumnLayout ? undefined : styles.mergeSection}>
             {twoColumnLayout ? (
-              <div style={styles.detailsLabel}>Merged Commits</div>
+              <div style={styles.detailsLabel}>{l10n.t('Merged Commits')}</div>
             ) : (
               <div style={styles.mergeSectionTitle}>
                 <Codicon name="git-merge" style={{ fontSize: '11px', opacity: 0.7 }} />
-                <span>Merged commits</span>
+                <span>{l10n.t('Merged commits')}</span>
               </div>
             )}
-            {loadingMerge && <div style={styles.mergeLoading}>Loading...</div>}
+            {loadingMerge && <div style={styles.mergeLoading}>{l10n.t('Loading...')}</div>}
             {!loadingMerge && mergeCommits.length === 0 && (
-              <div style={styles.mergeLoading}>No commits found</div>
+              <div style={styles.mergeLoading}>{l10n.t('No commits found')}</div>
             )}
             {!loadingMerge && !twoColumnLayout && mergeCommits.map(c => (
               <div key={c.hash} style={styles.mergeCommitRowMinimal} title={c.hash}>
@@ -835,7 +837,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                     renderFiles={() => {
                       const rawFiles = mergeCommitFiles[c.hash] ?? [];
                       return mergeCommitFilesLoading[c.hash] ? (
-                        <div style={styles.mergeLoading}>Loading files...</div>
+                        <div style={styles.mergeLoading}>{l10n.t('Loading files...')}</div>
                       ) : (
                         <FileTreeView
                           files={rawFiles.map(toChangedFile)}
@@ -867,20 +869,20 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           <button
             data-top-action-btn=""
             style={styles.toggleBtn(false, twoColumnLayout)}
-            title="Open Changes"
+            title={l10n.t('Open Changes')}
             onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
           >
             <Codicon name="diff-multiple" style={{ fontSize: twoColumnLayout ? '16px' : '14px' }} />
           </button>
         )}
-        <span style={styles.fileCount}>{activeFiles.length} file{activeFiles.length !== 1 ? 's' : ''}</span>
+        <span style={styles.fileCount}>{plural(activeFiles.length, l10n.t('1 file'), l10n.t('{0} files', activeFiles.length))}</span>
         {viewMode === 'tree' && (
           <div style={styles.expandBtns}>
             <button
               data-top-action-btn=""
               style={styles.toggleBtn(false, twoColumnLayout)}
               onClick={() => applyAllExpanded(true)}
-              title="Expand all"
+              title={l10n.t('Expand all')}
             >
               <Codicon name="expand-all" style={{ fontSize: twoColumnLayout ? '16px' : '14px' }} />
             </button>
@@ -888,7 +890,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
               data-top-action-btn=""
               style={styles.toggleBtn(false, twoColumnLayout)}
               onClick={() => applyAllExpanded(false)}
-              title="Collapse all"
+              title={l10n.t('Collapse all')}
             >
               <Codicon name="collapse-all" style={{ fontSize: twoColumnLayout ? '16px' : '14px' }} />
             </button>
@@ -899,7 +901,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             data-top-action-btn=""
             style={styles.toggleBtn(viewMode === 'tree', twoColumnLayout)}
             onClick={() => { setViewMode('tree'); applyAllExpanded(null); }}
-            title="Tree view"
+            title={l10n.t('Tree view')}
           >
             <Codicon name="list-tree" style={{ fontSize: twoColumnLayout ? '16px' : '14px' }} />
           </button>
@@ -907,7 +909,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             data-top-action-btn=""
             style={styles.toggleBtn(viewMode === 'flat', twoColumnLayout)}
             onClick={() => { setViewMode('flat'); applyAllExpanded(null); }}
-            title="Flat view"
+            title={l10n.t('Flat view')}
           >
             <Codicon name="list-flat" style={{ fontSize: twoColumnLayout ? '16px' : '14px' }} />
           </button>
@@ -936,9 +938,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
 
       {/* File list */}
       <div style={styles.fileList} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
-        {activeLoading && <div style={styles.loading}>Loading files...</div>}
+        {activeLoading && <div style={styles.loading}>{l10n.t('Loading files...')}</div>}
         {!activeLoading && activeFiles.length === 0 && (
-          <div style={styles.loading}>No changed files</div>
+          <div style={styles.loading}>{l10n.t('No changed files')}</div>
         )}
 
         {!activeLoading && activeFiles.length > 0 && (

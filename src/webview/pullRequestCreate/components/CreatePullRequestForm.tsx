@@ -6,6 +6,7 @@ import { ChangedFilesList } from '../../pullRequestDetail/components/ChangedFile
 import { BranchPickerField } from './BranchPickerField';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
 import { LocalCommitsList } from './LocalCommitsList';
+import * as l10n from '@vscode/l10n';
 
 const NARROW_BREAKPOINT_STYLE_ID = 'gitcharm-pr-create-narrow-style';
 const NARROW_BREAKPOINT_CSS = `
@@ -78,13 +79,13 @@ export function CreatePullRequestForm({
       <div style={css.header}>
         <Codicon name="git-pull-request" style={css.headerIcon} />
         <div>
-          <div style={css.headerTitle}>New Pull Request</div>
+          <div style={css.headerTitle}>{l10n.t('New Pull Request')}</div>
           <div style={css.headerSub}>{repoName}</div>
         </div>
       </div>
 
       {branchesLoading ? (
-        <div style={css.loading}>Loading branches…</div>
+        <div style={css.loading}>{l10n.t('Loading branches…')}</div>
       ) : branchesError ? (
         <div style={{ ...css.alertError, margin: '20px 24px' }}>
           <Codicon name="error" style={{ fontSize: '14px', flexShrink: 0 }} />
@@ -95,9 +96,9 @@ export function CreatePullRequestForm({
           <div style={css.formColumn} className="gitcharm-pr-create-form-column">
             <div style={css.branchRow}>
               <BranchPickerField
-                label="From"
+                label={l10n.t({ message: 'From', comment: ['Source branch of the pull request'] })}
                 value={sourceBranch}
-                placeholder="Select branch…"
+                placeholder={l10n.t('Select branch…')}
                 onPick={() => onPickBranch('source')}
                 disabled={pickingBranch !== null}
               />
@@ -108,9 +109,9 @@ export function CreatePullRequestForm({
                 </div>
               </div>
               <BranchPickerField
-                label="Into"
+                label={l10n.t({ message: 'Into', comment: ['Target branch of the pull request'] })}
                 value={targetBranch}
-                placeholder="Select branch…"
+                placeholder={l10n.t('Select branch…')}
                 onPick={() => onPickBranch('target')}
                 disabled={pickingBranch !== null}
               />
@@ -119,19 +120,19 @@ export function CreatePullRequestForm({
             {sameBranch && (
               <div style={css.alertWarning}>
                 <Codicon name="warning" style={{ fontSize: '14px', flexShrink: 0 }} />
-                <span>Source and target branch must differ.</span>
+                <span>{l10n.t('Source and target branch must differ.')}</span>
               </div>
             )}
 
             <label style={css.fieldLabel}>
-              Title
+              {l10n.t('Title')}
               <input
                 style={{ ...focusableFieldStyle(titleFocused), ...css.input }}
                 value={title}
                 onChange={e => onTitleChange(e.target.value)}
                 onFocus={() => setTitleFocused(true)}
                 onBlur={() => setTitleFocused(false)}
-                placeholder="Pull request title"
+                placeholder={l10n.t('Pull request title')}
                 autoFocus
               />
             </label>
@@ -141,14 +142,14 @@ export function CreatePullRequestForm({
                   form-associated descendant — the MarkdownEditor's toolbar buttons — so a plain click
                   anywhere in the editor's text area (itself inside the <label>) would fire that button's
                   click handler (toggleBold) as if it had been pressed. A plain <div> avoids that entirely. */}
-              Description
-              <MarkdownEditor value={description} onChange={onDescriptionChange} placeholder="Describe your changes…" />
+              {l10n.t('Description')}
+              <MarkdownEditor value={description} onChange={onDescriptionChange} placeholder={l10n.t('Describe your changes…')} />
             </div>
 
             {supportsDraft && (
               <label style={css.checkboxLabel}>
                 <input type="checkbox" checked={draft} onChange={e => onDraftChange(e.target.checked)} />
-                Create as draft
+                {l10n.t('Create as draft')}
               </label>
             )}
 
@@ -162,14 +163,14 @@ export function CreatePullRequestForm({
 
           {hasChangesToShow && (
             compareCollapsed ? (
-              <button type="button" style={css.comparePanelCollapsed} onClick={() => setCompareCollapsed(false)} title="Show changes">
+              <button type="button" style={css.comparePanelCollapsed} onClick={() => setCompareCollapsed(false)} title={l10n.t('Show changes')}>
                 <Codicon name="layout-sidebar-right-off" style={{ fontSize: '14px', opacity: 0.75 }} />
-                <span style={css.comparePanelCollapsedLabel}>Changes</span>
+                <span style={css.comparePanelCollapsedLabel}>{l10n.t('Changes')}</span>
               </button>
             ) : (
               <div style={css.comparePanel}>
                 <div style={css.compareToolbar}>
-                  <button type="button" style={css.collapseBtn} onClick={() => setCompareCollapsed(true)} title="Hide changes">
+                  <button type="button" style={css.collapseBtn} onClick={() => setCompareCollapsed(true)} title={l10n.t('Hide changes')}>
                     <Codicon name="layout-sidebar-right" style={{ fontSize: '14px' }} />
                   </button>
                   <span style={css.compareTitle}>{sourceBranch} → {targetBranch}</span>
@@ -180,7 +181,7 @@ export function CreatePullRequestForm({
                     onClick={onOpenNativeCompare}
                   >
                     <Codicon name="diff-multiple" style={{ fontSize: '13px' }} />
-                    Compare in Editor
+                    {l10n.t('Compare in Editor')}
                   </button>
                 </div>
 
@@ -192,12 +193,12 @@ export function CreatePullRequestForm({
                 )}
 
                 <div style={css.compareSection}>
-                  <div style={css.compareSectionTitle}>Commits</div>
+                  <div style={css.compareSectionTitle}>{l10n.t('Commits')}</div>
                   <LocalCommitsList commits={compareCommits} loading={compareLoading} />
                 </div>
                 <div style={css.compareSectionDivider} />
                 <div style={css.compareSection}>
-                  <div style={css.compareSectionTitle}>Files changed</div>
+                  <div style={css.compareSectionTitle}>{l10n.t('Files changed')}</div>
                   <ChangedFilesList files={compareFiles} loading={compareLoading} iconTheme={iconTheme} onOpenFile={onOpenFile} />
                 </div>
               </div>
@@ -209,7 +210,7 @@ export function CreatePullRequestForm({
       <div style={css.footer}>
         <button style={css.cancelBtn} onClick={onCancel} disabled={submitting}>
           <Codicon name="close" style={{ fontSize: '13px' }} />
-          Cancel
+          {l10n.t('Cancel')}
         </button>
         <button
           style={{ ...css.submitBtn, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'default' }}
@@ -219,7 +220,7 @@ export function CreatePullRequestForm({
           })}
         >
           <Codicon name="check" style={{ fontSize: '13px' }} />
-          {submitting ? 'Creating…' : 'Create Pull Request'}
+          {submitting ? l10n.t('Creating…') : l10n.t('Create Pull Request')}
         </button>
       </div>
     </div>
@@ -258,7 +259,8 @@ const css = {
     cursor: 'pointer', color: 'inherit',
   } as React.CSSProperties,
   comparePanelCollapsedLabel: {
-    writingMode: 'vertical-rl' as const, transform: 'rotate(180deg)', fontSize: '11px', opacity: 0.6, letterSpacing: '0.03em',
+    // sideways: CJK glyphs are upright in vertical text, so rotate(180deg) would flip them upside down.
+    writingMode: 'vertical-rl' as const, textOrientation: 'sideways' as const, transform: 'rotate(180deg)', fontSize: '11px', opacity: 0.6, letterSpacing: '0.03em',
   } as React.CSSProperties,
   collapseBtn: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', flexShrink: 0,

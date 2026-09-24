@@ -1,5 +1,6 @@
 import React from 'react';
 import type { PullRequestLabel } from '../../../host/types/messages';
+import * as l10n from '@vscode/l10n';
 
 /** Picks readable text color (black/white) for a given hex background, same heuristic forges themselves use for label text. */
 function contrastColor(hexColor: string): string {
@@ -44,7 +45,7 @@ export function LabelsPanel({ labels, hasLabels }: Props) {
   return (
     <div style={css.chipsRow}>
       {labels.length === 0
-        ? <span style={css.emptyText}>None yet</span>
+        ? <span style={css.emptyText}>{l10n.t('None yet')}</span>
         : labels.map(l => <LabelChip key={l.id} label={l} />)
       }
     </div>

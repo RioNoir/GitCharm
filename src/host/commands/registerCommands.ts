@@ -8,7 +8,8 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
 import { hasConflictMarkers } from '../git/ConflictParser';
-import { logInfo, logWarn, showLogChannel } from '../utils/Logger';
+import { logInfo, logWarn, notifyWithLogAction, showLogChannel } from '../utils/Logger';
+import { plural } from '../utils/plural';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
 import { resolveAvatarIconPath } from '../utils/avatarCache';
@@ -103,13 +104,13 @@ export function registerCommands(
       const target = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!target) {
         logWarn('mergeEditor:open', 'No active file');
-        vscode.window.showWarningMessage('No active file');
+        vscode.window.showWarningMessage(vscode.l10n.t('No active file'));
         return;
       }
       const doc = await vscode.workspace.openTextDocument(target);
       if (!hasConflictMarkers(doc.getText())) {
         logWarn('mergeEditor:open', 'No conflict markers found in the current file');
-        vscode.window.showWarningMessage('No conflict markers found in the current file');
+        vscode.window.showWarningMessage(vscode.l10n.t('No conflict markers found in the current file'));
         return;
       }
       await vscode.commands.executeCommand('git.openMergeEditor', target)
@@ -129,7 +130,7 @@ export function registerCommands(
       const metas = manager.getRepoMetas();
       const metaById = new Map(metas.map(m => [m.id, m]));
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Pushing all repositories…', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing all repositories…'), cancellable: false },
         async () => {
           const results = await manager.pushAll();
           const failed = results.filter(r => !r.ok);
@@ -139,18 +140,17 @@ export function registerCommands(
             const msg = pushed.length === 0
               ? 'Nothing to push — all repositories up to date.'
               : `${pushed.length} ${pushed.length === 1 ? 'repository' : 'repositories'} pushed.`;
-            vscode.window.showInformationMessage(msg);
+            vscode.window.showInformationMessage(pushed.length === 0
+              ? vscode.l10n.t('Nothing to push — all repositories up to date.')
+              : plural(pushed.length, vscode.l10n.t('1 repository pushed.'), vscode.l10n.t('{0} repositories pushed.', pushed.length)));
             logInfo('push', msg);
           } else {
             const failedDesc = failed.map(r => {
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            const msg = `${pushed.length} pushed, ${failed.length} failed: ${failedDesc}`;
-            logWarn('push', msg);
-            void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
-              if (choice === 'Show Log') showLogChannel();
-            });
+            logWarn('push', `${pushed.length} pushed, ${failed.length} failed: ${failedDesc}`);
+            notifyWithLogAction('warning', vscode.l10n.t('{0} pushed, {1} failed: {2}', pushed.length, failed.length, failedDesc));
           }
         }
       );
@@ -166,7 +166,7 @@ export function registerCommands(
     vscode.commands.registerCommand('gitcharm.checkOrphanBranches', async () => {
       if (!manager) return;
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Checking for orphaned branches…', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Checking for orphaned branches…'), cancellable: false },
         async () => {
           await manager.fetchAll();
           const metas = manager.getRepoMetas().filter(m => !m.isWorktree);
@@ -176,7 +176,7 @@ export function registerCommands(
           const orphaned = results
             .filter((r): r is PromiseFulfilledResult<{ repoId: string; branches: BranchInfo[] }> => r.status === 'fulfilled')
             .flatMap(r => r.value.branches.filter(b => !b.isRemote && b.upstreamGone).map(b => ({ repoId: r.value.repoId, branchName: b.name })));
-          presentOrphanBranches(manager, logPanel, orphaned, 'has no valid remote');
+          presentOrphanBranches(manager, logPanel, orphaned, 'noValidRemote');
         }
       );
     }),
@@ -188,15 +188,15 @@ export function registerCommands(
 
       const pick = await vscode.window.showQuickPick(
         [
-          { label: '$(git-merge) Merge incoming changes into the current branch', rebase: false },
-          { label: '$(repo-forked) Rebase the current branch on top of incoming changes', rebase: true },
+          { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes into the current branch')}`, rebase: false },
+          { label: `$(repo-forked) ${vscode.l10n.t('Rebase the current branch on top of incoming changes')}`, rebase: true },
         ],
-        { title: 'Sync — Pull Strategy' }
+        { title: vscode.l10n.t('Sync — Pull Strategy') }
       ) as { label: string; rebase: boolean } | undefined;
       if (!pick) return;
 
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Syncing all repositories…', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Syncing all repositories…'), cancellable: false },
         async () => {
           // Pull first
           const pullResults = await manager.pullAll(pick.rebase);
@@ -207,11 +207,8 @@ export function registerCommands(
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            const msg = `Sync: Pull failed — stopping before push. ${failedDesc}`;
-            logWarn('sync', msg);
-            void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
-              if (choice === 'Show Log') showLogChannel();
-            });
+            logWarn('sync', `Sync: Pull failed — stopping before push. ${failedDesc}`);
+            notifyWithLogAction('warning', vscode.l10n.t('Sync: Pull failed — stopping before push. {0}', failedDesc));
             commitPanel.refresh();
             return;
           }
@@ -222,19 +219,15 @@ export function registerCommands(
           const pushOk = pushResults.filter(r => r.ok);
 
           if (pushFailed.length === 0) {
-            const msg = `Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`;
-            vscode.window.showInformationMessage(msg);
-            logInfo('sync', msg);
+            vscode.window.showInformationMessage(plural(pushOk.length, vscode.l10n.t('Sync: 1 repository synced.'), vscode.l10n.t('Sync: {0} repositories synced.', pushOk.length)));
+            logInfo('sync', `Sync: ${pushOk.length} ${pushOk.length === 1 ? 'repository' : 'repositories'} synced.`);
           } else {
             const failedDesc = pushFailed.map(r => {
               const name = metaById.get(r.repoId)?.name ?? r.repoId;
               return `${name}: ${r.message}`;
             }).join('; ');
-            const msg = `Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`;
-            logWarn('sync', msg);
-            void vscode.window.showWarningMessage(msg, 'Show Log').then(choice => {
-              if (choice === 'Show Log') showLogChannel();
-            });
+            logWarn('sync', `Sync: ${pushOk.length} synced, ${pushFailed.length} push failed: ${failedDesc}`);
+            notifyWithLogAction('warning', vscode.l10n.t('Sync: {0} synced, {1} push failed: {2}', pushOk.length, pushFailed.length, failedDesc));
           }
           commitPanel.refresh();
         }
@@ -337,7 +330,7 @@ export function registerCommands(
       if (!target) {
         const picked = await vscode.window.showQuickPick(
           metas.map(m => ({ label: m.name, description: m.submodulePath, id: m.id })),
-          { title: 'Open Submodule in New Window', placeHolder: 'Select a submodule…' }
+          { title: vscode.l10n.t('Open Submodule in New Window'), placeHolder: vscode.l10n.t('Select a submodule…') }
         );
         if (!picked) return;
         target = metas.find(m => m.id === picked.id);
@@ -356,24 +349,24 @@ export function registerCommands(
       type ProviderItem = vscode.QuickPickItem & { providerId: string };
       const OPEN_SETTINGS_ID = '__open_settings__';
       const providerItems: ProviderItem[] = [
-        { label: '$(copilot) VS Code LM', description: 'GitHub Copilot or any registered LM extension', providerId: 'vscode-lm' },
-        { label: '$(cloud) Claude API', description: 'Anthropic API  (requires API key)', providerId: 'claude-api' },
-        { label: '$(cloud) OpenAI API', description: 'OpenAI API  (requires API key)', providerId: 'openai-api' },
-        { label: '$(cloud) Gemini API', description: 'Google Gemini API  (requires API key)', providerId: 'gemini-api' },
+        { label: '$(copilot) VS Code LM', description: vscode.l10n.t('GitHub Copilot or any registered LM extension'), providerId: 'vscode-lm' },
+        { label: '$(cloud) Claude API', description: vscode.l10n.t('{0}  (requires API key)', 'Anthropic API'), providerId: 'claude-api' },
+        { label: '$(cloud) OpenAI API', description: vscode.l10n.t('{0}  (requires API key)', 'OpenAI API'), providerId: 'openai-api' },
+        { label: '$(cloud) Gemini API', description: vscode.l10n.t('{0}  (requires API key)', 'Google Gemini API'), providerId: 'gemini-api' },
         { label: '$(terminal) Claude CLI', description: 'claude --print  (Claude Code / Anthropic)', providerId: 'claude-cli' },
         { label: '$(terminal) Codex CLI', description: 'codex exec  (OpenAI Codex)', providerId: 'codex-cli' },
         { label: '$(terminal) Gemini CLI', description: 'gemini -p  (Google Gemini CLI)', providerId: 'gemini-cli' },
-        { label: '$(server) Ollama', description: 'Local model via Ollama HTTP API', providerId: 'ollama' },
-        { label: '$(server) LM Studio', description: 'Local model via LM Studio HTTP API', providerId: 'lmstudio' },
+        { label: '$(server) Ollama', description: vscode.l10n.t('Local model via {0} HTTP API', 'Ollama'), providerId: 'ollama' },
+        { label: '$(server) LM Studio', description: vscode.l10n.t('Local model via {0} HTTP API', 'LM Studio'), providerId: 'lmstudio' },
       ].map(item => ({
         ...item,
         description: `${item.description}${item.providerId === currentProvider ? '  $(check)' : ''}`,
       }));
-      providerItems.push({ label: '$(settings-gear) Open AI Settings', description: 'Configure paths, model, diff limits…', providerId: OPEN_SETTINGS_ID, kind: vscode.QuickPickItemKind.Default });
+      providerItems.push({ label: `$(settings-gear) ${vscode.l10n.t('Open AI Settings')}`, description: vscode.l10n.t('Configure paths, model, diff limits…'), providerId: OPEN_SETTINGS_ID, kind: vscode.QuickPickItemKind.Default });
 
       const pickedProvider = await vscode.window.showQuickPick(providerItems, {
-        title: 'Select AI Provider',
-        placeHolder: 'Choose a provider…',
+        title: vscode.l10n.t('Select AI Provider'),
+        placeHolder: vscode.l10n.t('Choose a provider…'),
       });
       if (!pickedProvider) return;
 
@@ -390,28 +383,28 @@ export function registerCommands(
         try { models = await vscode.lm.selectChatModels(); } catch { /* none */ }
 
         if (models.length === 0) {
-          vscode.window.showInformationMessage('Provider set to VS Code LM. No models found — install GitHub Copilot or another LM extension.');
+          vscode.window.showInformationMessage(vscode.l10n.t('Provider set to VS Code LM. No models found — install GitHub Copilot or another LM extension.'));
           return;
         }
 
         const currentModelId: string = config.get('ai.modelId', '');
         type ModelItem = vscode.QuickPickItem & { modelId: string };
         const modelItems: ModelItem[] = [
-          { label: 'Auto (first available)', description: !currentModelId ? '$(check) current' : '', modelId: '' },
+          { label: vscode.l10n.t('Auto (first available)'), description: !currentModelId ? `$(check) ${vscode.l10n.t({ message: 'current', comment: ['Marks the currently selected AI model in a quick pick'] })}` : '', modelId: '' },
           ...models.map(m => ({
             label: `${m.vendor} — ${m.family}`,
-            description: `${m.vendor}:${m.family}` === currentModelId ? '$(check) current' : '',
+            description: `${m.vendor}:${m.family}` === currentModelId ? `$(check) ${vscode.l10n.t({ message: 'current', comment: ['Marks the currently selected AI model in a quick pick'] })}` : '',
             modelId: `${m.vendor}:${m.family}`,
           })),
         ];
 
         const pickedModel = await vscode.window.showQuickPick(modelItems, {
-          title: 'Select VS Code LM Model',
-          placeHolder: 'Pick a model…',
+          title: vscode.l10n.t('Select VS Code LM Model'),
+          placeHolder: vscode.l10n.t('Pick a model…'),
         });
         if (!pickedModel) return;
         await config.update('ai.modelId', pickedModel.modelId, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: VS Code LM — ${pickedModel.modelId || 'Auto'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'VS Code LM', pickedModel.modelId || vscode.l10n.t('Auto')));
 
       } else if (pickedProvider.providerId === 'ollama') {
         const ollamaUrl: string = config.get('ai.ollamaUrl', 'http://localhost:11434');
@@ -437,8 +430,8 @@ export function registerCommands(
             modelName: m.name,
           }));
           const picked = await vscode.window.showQuickPick(modelItems, {
-            title: 'Select Ollama Model',
-            placeHolder: 'Pick a local model…',
+            title: vscode.l10n.t('Select Ollama Model'),
+            placeHolder: vscode.l10n.t('Pick a local model…'),
           });
           if (!picked) return;
           chosenModel = picked.modelName;
@@ -448,21 +441,21 @@ export function registerCommands(
             ? 'Could not reach Ollama. Enter the model name manually.'
             : undefined;
           if (msg) {
-            vscode.window.showWarningMessage(msg);
+            vscode.window.showWarningMessage(vscode.l10n.t('Could not reach Ollama. Enter the model name manually.'));
             logWarn('selectAiModel:ollama', msg);
           }
           const input = await vscode.window.showInputBox({
-            title: 'Ollama Model',
-            prompt: 'Enter the Ollama model name',
+            title: vscode.l10n.t('Ollama Model'),
+            prompt: vscode.l10n.t('Enter the Ollama model name'),
             value: currentModel,
-            placeHolder: 'e.g. llama3, mistral, qwen3.5:9b',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'llama3, mistral, qwen3.5:9b'),
           });
           if (input === undefined) return;
           chosenModel = input.trim() || 'llama3';
         }
 
         await config.update('ai.ollamaModel', chosenModel, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: Ollama — ${chosenModel}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'Ollama', chosenModel));
 
       } else if (pickedProvider.providerId === 'lmstudio') {
         const lmstudioUrl: string = config.get('ai.lmstudioUrl', 'http://localhost:1234');
@@ -487,145 +480,145 @@ export function registerCommands(
             modelId: m.id,
           }));
           const picked = await vscode.window.showQuickPick(modelItems, {
-            title: 'Select LM Studio Model',
-            placeHolder: 'Pick a loaded model…',
+            title: vscode.l10n.t('Select LM Studio Model'),
+            placeHolder: vscode.l10n.t('Pick a loaded model…'),
           });
           if (!picked) return;
           chosenModel = picked.modelId;
         } else {
-          vscode.window.showWarningMessage('Could not reach LM Studio. Make sure it is running and the server is started.');
+          vscode.window.showWarningMessage(vscode.l10n.t('Could not reach LM Studio. Make sure it is running and the server is started.'));
           logWarn('selectAiModel:lmstudio', 'Could not reach LM Studio. Make sure it is running and the server is started.');
           const input = await vscode.window.showInputBox({
-            title: 'LM Studio Model',
-            prompt: 'Enter the model identifier (as shown in LM Studio)',
+            title: vscode.l10n.t('LM Studio Model'),
+            prompt: vscode.l10n.t('Enter the model identifier (as shown in LM Studio)'),
             value: currentModel,
-            placeHolder: 'e.g. lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF'),
           });
           if (input === undefined) return;
           chosenModel = input.trim();
         }
 
         await config.update('ai.lmstudioModel', chosenModel, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: LM Studio — ${chosenModel || 'default'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'LM Studio', chosenModel || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
 
       } else if (pickedProvider.providerId === 'claude-api') {
         const currentModel: string = config.get('ai.claudeModel', '');
         const CUSTOM_ID = '__custom__';
         type ClaudeApiItem = vscode.QuickPickItem & { modelId: string };
         const claudeApiModels: ClaudeApiItem[] = [
-          { label: 'claude-sonnet-4-6',        description: 'Balanced'      + (currentModel === 'claude-sonnet-4-6'        ? '  $(check)' : ''), modelId: 'claude-sonnet-4-6' },
-          { label: 'claude-opus-4-8',           description: 'Most capable'  + (currentModel === 'claude-opus-4-8'           ? '  $(check)' : ''), modelId: 'claude-opus-4-8' },
-          { label: 'claude-haiku-4-5-20251001', description: 'Fastest'       + (currentModel === 'claude-haiku-4-5-20251001' ? '  $(check)' : ''), modelId: 'claude-haiku-4-5-20251001' },
-          { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
+          { label: 'claude-sonnet-4-6',        description: vscode.l10n.t('Balanced')      + (currentModel === 'claude-sonnet-4-6'        ? '  $(check)' : ''), modelId: 'claude-sonnet-4-6' },
+          { label: 'claude-opus-4-8',           description: vscode.l10n.t('Most capable')  + (currentModel === 'claude-opus-4-8'           ? '  $(check)' : ''), modelId: 'claude-opus-4-8' },
+          { label: 'claude-haiku-4-5-20251001', description: vscode.l10n.t('Fastest')       + (currentModel === 'claude-haiku-4-5-20251001' ? '  $(check)' : ''), modelId: 'claude-haiku-4-5-20251001' },
+          { label: `$(edit) ${vscode.l10n.t('Enter model ID…')}`, description: vscode.l10n.t('Specify a custom model ID'), modelId: CUSTOM_ID },
         ];
         const pickedClaudeApi = await vscode.window.showQuickPick(claudeApiModels, {
-          title: 'Select Claude Model',
-          placeHolder: 'Pick a model…',
+          title: vscode.l10n.t('Select Claude Model'),
+          placeHolder: vscode.l10n.t('Pick a model…'),
         });
         if (!pickedClaudeApi) return;
         let chosenClaudeApi = pickedClaudeApi.modelId;
         if (chosenClaudeApi === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'Claude Model ID',
-            prompt: 'Enter the full model ID',
+            title: vscode.l10n.t('Claude Model ID'),
+            prompt: vscode.l10n.t('Enter the full model ID'),
             value: currentModel,
-            placeHolder: 'e.g. claude-opus-4-8',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'claude-opus-4-8'),
           });
           if (input === undefined) return;
           chosenClaudeApi = input.trim();
         }
         await config.update('ai.claudeModel', chosenClaudeApi, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: Claude API — ${chosenClaudeApi || 'default'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'Claude API', chosenClaudeApi || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
 
       } else if (pickedProvider.providerId === 'openai-api') {
         const currentModel: string = config.get('ai.openaiModel', 'gpt-4o');
         const CUSTOM_ID = '__custom__';
         type OpenAIItem = vscode.QuickPickItem & { modelId: string };
         const openaiModels: OpenAIItem[] = [
-          { label: 'gpt-4o',      description: 'Balanced'     + (currentModel === 'gpt-4o'      ? '  $(check)' : ''), modelId: 'gpt-4o' },
-          { label: 'gpt-4o-mini', description: 'Fast & cheap' + (currentModel === 'gpt-4o-mini' ? '  $(check)' : ''), modelId: 'gpt-4o-mini' },
-          { label: 'o3',          description: 'Most capable' + (currentModel === 'o3'          ? '  $(check)' : ''), modelId: 'o3' },
-          { label: 'o4-mini',     description: 'Fast & smart' + (currentModel === 'o4-mini'     ? '  $(check)' : ''), modelId: 'o4-mini' },
-          { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
+          { label: 'gpt-4o',      description: vscode.l10n.t('Balanced')     + (currentModel === 'gpt-4o'      ? '  $(check)' : ''), modelId: 'gpt-4o' },
+          { label: 'gpt-4o-mini', description: vscode.l10n.t('Fast & cheap') + (currentModel === 'gpt-4o-mini' ? '  $(check)' : ''), modelId: 'gpt-4o-mini' },
+          { label: 'o3',          description: vscode.l10n.t('Most capable') + (currentModel === 'o3'          ? '  $(check)' : ''), modelId: 'o3' },
+          { label: 'o4-mini',     description: vscode.l10n.t('Fast & smart') + (currentModel === 'o4-mini'     ? '  $(check)' : ''), modelId: 'o4-mini' },
+          { label: `$(edit) ${vscode.l10n.t('Enter model ID…')}`, description: vscode.l10n.t('Specify a custom model ID'), modelId: CUSTOM_ID },
         ];
         const pickedOpenAI = await vscode.window.showQuickPick(openaiModels, {
-          title: 'Select OpenAI Model',
-          placeHolder: 'Pick a model…',
+          title: vscode.l10n.t('Select OpenAI Model'),
+          placeHolder: vscode.l10n.t('Pick a model…'),
         });
         if (!pickedOpenAI) return;
         let chosenOpenAI = pickedOpenAI.modelId;
         if (chosenOpenAI === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'OpenAI Model ID',
-            prompt: 'Enter the full model ID',
+            title: vscode.l10n.t('OpenAI Model ID'),
+            prompt: vscode.l10n.t('Enter the full model ID'),
             value: currentModel,
-            placeHolder: 'e.g. gpt-4o, o3',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'gpt-4o, o3'),
           });
           if (input === undefined) return;
           chosenOpenAI = input.trim();
         }
         await config.update('ai.openaiModel', chosenOpenAI, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: OpenAI API — ${chosenOpenAI || 'default'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'OpenAI API', chosenOpenAI || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
 
       } else if (pickedProvider.providerId === 'claude-cli') {
         const currentModel: string = config.get('ai.claudeModel', '');
         const CUSTOM_ID = '__custom__';
         type ClaudeItem = vscode.QuickPickItem & { modelId: string };
         const claudeModels: ClaudeItem[] = [
-          { label: 'Default (claude-sonnet-4-6)', description: !currentModel ? '$(check) current' : '', modelId: '' },
-          { label: 'claude-opus-4-7',     description: 'Most capable' + (currentModel === 'claude-opus-4-7'     ? '  $(check)' : ''), modelId: 'claude-opus-4-7' },
-          { label: 'claude-sonnet-4-6',   description: 'Balanced'     + (currentModel === 'claude-sonnet-4-6'   ? '  $(check)' : ''), modelId: 'claude-sonnet-4-6' },
-          { label: 'claude-haiku-4-5-20251001', description: 'Fastest'+ (currentModel === 'claude-haiku-4-5-20251001' ? '  $(check)' : ''), modelId: 'claude-haiku-4-5-20251001' },
-          { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
+          { label: vscode.l10n.t('Default ({0})', 'claude-sonnet-4-6'), description: !currentModel ? `$(check) ${vscode.l10n.t({ message: 'current', comment: ['Marks the currently selected AI model in a quick pick'] })}` : '', modelId: '' },
+          { label: 'claude-opus-4-7',     description: vscode.l10n.t('Most capable') + (currentModel === 'claude-opus-4-7'     ? '  $(check)' : ''), modelId: 'claude-opus-4-7' },
+          { label: 'claude-sonnet-4-6',   description: vscode.l10n.t('Balanced')     + (currentModel === 'claude-sonnet-4-6'   ? '  $(check)' : ''), modelId: 'claude-sonnet-4-6' },
+          { label: 'claude-haiku-4-5-20251001', description: vscode.l10n.t('Fastest')+ (currentModel === 'claude-haiku-4-5-20251001' ? '  $(check)' : ''), modelId: 'claude-haiku-4-5-20251001' },
+          { label: `$(edit) ${vscode.l10n.t('Enter model ID…')}`, description: vscode.l10n.t('Specify a custom model ID'), modelId: CUSTOM_ID },
         ];
         const pickedClaude = await vscode.window.showQuickPick(claudeModels, {
-          title: 'Select Claude Model',
-          placeHolder: 'Pick a model…',
+          title: vscode.l10n.t('Select Claude Model'),
+          placeHolder: vscode.l10n.t('Pick a model…'),
         });
         if (!pickedClaude) return;
         let chosenClaude = pickedClaude.modelId;
         if (chosenClaude === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'Claude Model ID',
-            prompt: 'Enter the full model ID',
+            title: vscode.l10n.t('Claude Model ID'),
+            prompt: vscode.l10n.t('Enter the full model ID'),
             value: currentModel,
-            placeHolder: 'e.g. claude-opus-4-7',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'claude-opus-4-7'),
           });
           if (input === undefined) return;
           chosenClaude = input.trim();
         }
         await config.update('ai.claudeModel', chosenClaude, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: Claude CLI — ${chosenClaude || 'default'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'Claude CLI', chosenClaude || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
 
       } else if (pickedProvider.providerId === 'codex-cli') {
         const currentModel: string = config.get('ai.codexModel', '');
         const CUSTOM_ID = '__custom__';
         type CodexItem = vscode.QuickPickItem & { modelId: string };
         const codexModels: CodexItem[] = [
-          { label: 'Default (codex account default)', description: !currentModel ? '$(check) current' : '', modelId: '' },
-          { label: 'o4-mini',  description: 'Fast & efficient' + (currentModel === 'o4-mini'  ? '  $(check)' : ''), modelId: 'o4-mini' },
-          { label: 'o3',       description: 'Most capable'     + (currentModel === 'o3'       ? '  $(check)' : ''), modelId: 'o3' },
-          { label: 'o3-mini',  description: 'Balanced'         + (currentModel === 'o3-mini'  ? '  $(check)' : ''), modelId: 'o3-mini' },
-          { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
+          { label: vscode.l10n.t('Default ({0} account default)', 'codex'), description: !currentModel ? `$(check) ${vscode.l10n.t({ message: 'current', comment: ['Marks the currently selected AI model in a quick pick'] })}` : '', modelId: '' },
+          { label: 'o4-mini',  description: vscode.l10n.t('Fast & efficient') + (currentModel === 'o4-mini'  ? '  $(check)' : ''), modelId: 'o4-mini' },
+          { label: 'o3',       description: vscode.l10n.t('Most capable')     + (currentModel === 'o3'       ? '  $(check)' : ''), modelId: 'o3' },
+          { label: 'o3-mini',  description: vscode.l10n.t('Balanced')         + (currentModel === 'o3-mini'  ? '  $(check)' : ''), modelId: 'o3-mini' },
+          { label: `$(edit) ${vscode.l10n.t('Enter model ID…')}`, description: vscode.l10n.t('Specify a custom model ID'), modelId: CUSTOM_ID },
         ];
         const pickedCodex = await vscode.window.showQuickPick(codexModels, {
-          title: 'Select Codex Model',
-          placeHolder: 'Pick a model…',
+          title: vscode.l10n.t('Select Codex Model'),
+          placeHolder: vscode.l10n.t('Pick a model…'),
         });
         if (!pickedCodex) return;
         let chosenCodex = pickedCodex.modelId;
         if (chosenCodex === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'Codex Model ID',
-            prompt: 'Enter the full model ID',
+            title: vscode.l10n.t('Codex Model ID'),
+            prompt: vscode.l10n.t('Enter the full model ID'),
             value: currentModel,
-            placeHolder: 'e.g. o3, o4-mini',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'o3, o4-mini'),
           });
           if (input === undefined) return;
           chosenCodex = input.trim();
         }
         await config.update('ai.codexModel', chosenCodex, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`AI: Codex CLI — ${chosenCodex || 'default'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'Codex CLI', chosenCodex || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
 
       } else if (pickedProvider.providerId === 'gemini-api' || pickedProvider.providerId === 'gemini-cli') {
         const isApi = pickedProvider.providerId === 'gemini-api';
@@ -633,31 +626,31 @@ export function registerCommands(
         const CUSTOM_ID = '__custom__';
         type GeminiItem = vscode.QuickPickItem & { modelId: string };
         const geminiModels: GeminiItem[] = [
-          { label: isApi ? 'Default (gemini-2.0-flash)' : 'Default (gemini account default)', description: !currentModel ? '$(check) current' : '', modelId: '' },
-          { label: 'gemini-2.0-flash',  description: 'Fast & efficient' + (currentModel === 'gemini-2.0-flash'  ? '  $(check)' : ''), modelId: 'gemini-2.0-flash' },
-          { label: 'gemini-2.5-flash',  description: 'Balanced'         + (currentModel === 'gemini-2.5-flash'  ? '  $(check)' : ''), modelId: 'gemini-2.5-flash' },
-          { label: 'gemini-2.5-pro',    description: 'Most capable'     + (currentModel === 'gemini-2.5-pro'    ? '  $(check)' : ''), modelId: 'gemini-2.5-pro' },
-          { label: '$(edit) Enter model ID…', description: 'Specify a custom model ID', modelId: CUSTOM_ID },
+          { label: isApi ? vscode.l10n.t('Default ({0})', 'gemini-2.0-flash') : vscode.l10n.t('Default ({0} account default)', 'gemini'), description: !currentModel ? `$(check) ${vscode.l10n.t({ message: 'current', comment: ['Marks the currently selected AI model in a quick pick'] })}` : '', modelId: '' },
+          { label: 'gemini-2.0-flash',  description: vscode.l10n.t('Fast & efficient') + (currentModel === 'gemini-2.0-flash'  ? '  $(check)' : ''), modelId: 'gemini-2.0-flash' },
+          { label: 'gemini-2.5-flash',  description: vscode.l10n.t('Balanced')         + (currentModel === 'gemini-2.5-flash'  ? '  $(check)' : ''), modelId: 'gemini-2.5-flash' },
+          { label: 'gemini-2.5-pro',    description: vscode.l10n.t('Most capable')     + (currentModel === 'gemini-2.5-pro'    ? '  $(check)' : ''), modelId: 'gemini-2.5-pro' },
+          { label: `$(edit) ${vscode.l10n.t('Enter model ID…')}`, description: vscode.l10n.t('Specify a custom model ID'), modelId: CUSTOM_ID },
         ];
         const pickedGemini = await vscode.window.showQuickPick(geminiModels, {
-          title: `Select Gemini Model`,
-          placeHolder: 'Pick a model…',
+          title: vscode.l10n.t('Select Gemini Model'),
+          placeHolder: vscode.l10n.t('Pick a model…'),
         });
         if (!pickedGemini) return;
         let chosenGemini = pickedGemini.modelId;
         if (chosenGemini === CUSTOM_ID) {
           const input = await vscode.window.showInputBox({
-            title: 'Gemini Model ID',
-            prompt: 'Enter the full model ID',
+            title: vscode.l10n.t('Gemini Model ID'),
+            prompt: vscode.l10n.t('Enter the full model ID'),
             value: currentModel,
-            placeHolder: 'e.g. gemini-2.5-pro',
+            placeHolder: vscode.l10n.t('e.g. {0}', 'gemini-2.5-pro'),
           });
           if (input === undefined) return;
           chosenGemini = input.trim();
         }
         await config.update('ai.geminiModel', chosenGemini, vscode.ConfigurationTarget.Global);
         const label = isApi ? 'Gemini API' : 'Gemini CLI';
-        vscode.window.showInformationMessage(`AI: ${label} — ${chosenGemini || 'default'}`);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', label, chosenGemini || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
       }
     }),
 
@@ -672,7 +665,7 @@ export function registerCommands(
       } else if (metas.length > 1) {
         const picked = await vscode.window.showQuickPick(
           metas.map(m => ({ label: m.name, description: m.rootPath, id: m.id })),
-          { title: 'New Worktree — Select Repository', placeHolder: 'Select a repository…' }
+          { title: vscode.l10n.t('New Worktree — Select Repository'), placeHolder: vscode.l10n.t('Select a repository…') }
         );
         if (!picked) return;
         repoId = picked.id;
@@ -690,7 +683,7 @@ export function registerCommands(
       } else if (metas.length > 1) {
         const picked = await vscode.window.showQuickPick(
           metas.map(m => ({ label: m.name, description: m.rootPath, id: m.id })),
-          { title: 'Prune Worktrees — Select Repository', placeHolder: 'Select a repository…' }
+          { title: vscode.l10n.t('Prune Worktrees — Select Repository'), placeHolder: vscode.l10n.t('Select a repository…') }
         );
         if (!picked) return;
         repoId = picked.id;
@@ -729,9 +722,9 @@ export function registerCommands(
         items.push({ label: account.label, description: account.host, iconPath: avatars[i], accountId: account.id });
       });
       items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
-      items.push({ label: '$(add) Add account…', accountId: ADD_NEW });
+      items.push({ label: `$(add) ${vscode.l10n.t('Add account…')}`, accountId: ADD_NEW });
 
-      const picked = await vscode.window.showQuickPick(items, { title: 'Pull Request Accounts', placeHolder: 'Select an account, or add a new one' });
+      const picked = await vscode.window.showQuickPick(items, { title: vscode.l10n.t('Pull Request Accounts'), placeHolder: vscode.l10n.t('Select an account, or add a new one') });
       if (!picked || !picked.accountId) return;
 
       if (picked.accountId === ADD_NEW) {
@@ -741,12 +734,12 @@ export function registerCommands(
             { label: 'Bitbucket Cloud', provider: 'bitbucket' as const },
             { label: 'Gitea / Forgejo', provider: 'gitea' as const },
           ],
-          { title: 'Add Account', placeHolder: 'Select a forge (GitHub uses your VS Code account, no token needed)' }
+          { title: vscode.l10n.t('Add Account'), placeHolder: vscode.l10n.t('Select a forge (GitHub uses your VS Code account, no token needed)') }
         );
         if (!provider) return;
         const host = await vscode.window.showInputBox({
-          title: 'Add Account — Host',
-          prompt: 'Enter the host for this account',
+          title: vscode.l10n.t('Add Account — Host'),
+          prompt: vscode.l10n.t('Enter the host for this account'),
           placeHolder: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : 'gitea.example.com',
           value: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : undefined,
         });
@@ -754,19 +747,21 @@ export function registerCommands(
 
         let email: string | undefined;
         if (provider.provider === 'bitbucket') {
-          email = await vscode.window.showInputBox({ title: 'Add Account — Account Email', prompt: 'Enter your Atlassian account email', placeHolder: 'you@example.com' });
+          email = await vscode.window.showInputBox({ title: vscode.l10n.t('Add Account — Account Email'), prompt: vscode.l10n.t('Enter your Atlassian account email'), placeHolder: 'you@example.com' });
           if (!email?.trim()) return;
         }
         const apiToken = await vscode.window.showInputBox({
-          title: `Add Account — ${provider.provider === 'bitbucket' ? 'API Token' : 'Personal Access Token'}`,
-          prompt: `Enter a ${provider.provider === 'bitbucket' ? 'Bitbucket API Token' : 'Personal Access Token'} for ${host.trim()}`,
-          placeHolder: 'Token is stored securely and never leaves this machine',
+          title: provider.provider === 'bitbucket' ? vscode.l10n.t('Add Account — API Token') : vscode.l10n.t('Add Account — Personal Access Token'),
+          prompt: provider.provider === 'bitbucket'
+            ? vscode.l10n.t('Enter a Bitbucket API Token for {0}', host.trim())
+            : vscode.l10n.t('Enter a Personal Access Token for {0}', host.trim()),
+          placeHolder: vscode.l10n.t('Token is stored securely and never leaves this machine'),
           password: true,
         });
         if (!apiToken?.trim()) return;
         const label = await vscode.window.showInputBox({
-          title: 'Add Account — Label',
-          prompt: 'Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later',
+          title: vscode.l10n.t('Add Account — Label'),
+          prompt: vscode.l10n.t('Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later'),
           placeHolder: email?.trim() || host.trim(),
         });
 
@@ -775,10 +770,10 @@ export function registerCommands(
           { apiToken: apiToken.trim(), email: email?.trim() }
         );
         if (!result.ok) {
-          vscode.window.showErrorMessage(result.error ?? 'Failed to validate token');
+          vscode.window.showErrorMessage(result.error ?? vscode.l10n.t('Failed to validate token'));
           return;
         }
-        vscode.window.showInformationMessage(`Added account for ${host.trim()}. Assign it to a repo from the Pull Requests panel.`);
+        vscode.window.showInformationMessage(vscode.l10n.t('Added account for {0}. Assign it to a repo from the Pull Requests panel.', host.trim()));
         return;
       }
 
@@ -788,8 +783,8 @@ export function registerCommands(
 
       const accountAction = await vscode.window.showQuickPick(
         [
-          { label: '$(edit) Rename', action: 'rename' as const },
-          { label: '$(trash) Remove', action: 'remove' as const },
+          { label: `$(edit) ${vscode.l10n.t('Rename')}`, action: 'rename' as const },
+          { label: `$(trash) ${vscode.l10n.t('Remove')}`, action: 'remove' as const },
         ],
         { title: account.label, placeHolder: `${forgeProviderLabel(account.provider)} — ${account.host}` }
       );
@@ -797,23 +792,24 @@ export function registerCommands(
 
       if (accountAction.action === 'rename') {
         const newLabel = await vscode.window.showInputBox({
-          title: 'Rename Account',
-          prompt: 'Enter a new label for this account',
+          title: vscode.l10n.t('Rename Account'),
+          prompt: vscode.l10n.t('Enter a new label for this account'),
           value: account.label,
         });
         if (!newLabel?.trim() || newLabel.trim() === account.label) return;
         await pullRequestManager.renameAccount(account.id, newLabel.trim());
         await commitPanel.requestPullRequestRefresh();
-        vscode.window.showInformationMessage(`Renamed to "${newLabel.trim()}".`);
+        vscode.window.showInformationMessage(vscode.l10n.t('Renamed to "{0}".', newLabel.trim()));
         return;
       }
 
       // accountAction.action === 'remove'
-      const confirm = await vscode.window.showWarningMessage(`Remove the "${account.label}" account? Any repo assigned to it will be disconnected.`, { modal: true }, 'Remove');
-      if (confirm !== 'Remove') return;
+      const remove = vscode.l10n.t('Remove');
+      const confirm = await vscode.window.showWarningMessage(vscode.l10n.t('Remove the "{0}" account? Any repo assigned to it will be disconnected.', account.label), { modal: true }, remove);
+      if (confirm !== remove) return;
       await pullRequestManager.removeAccount(account.id);
       await commitPanel.requestPullRequestRefresh();
-      vscode.window.showInformationMessage(`Removed "${account.label}".`);
+      vscode.window.showInformationMessage(vscode.l10n.t('Removed "{0}".', account.label));
     }),
 
     // ── File History ──────────────────────────────────────────────────────────
@@ -823,7 +819,7 @@ export function registerCommands(
       // uri comes from explorer/context or editor/context; fall back to active editor
       const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!fileUri || fileUri.scheme !== 'file') {
-        vscode.window.showInformationMessage('Open a file to view its history.');
+        vscode.window.showInformationMessage(vscode.l10n.t('Open a file to view its history.'));
         return;
       }
       await openFileHistoryPanel(extensionUri, manager, fileUri, logPanel);
@@ -836,7 +832,7 @@ export function registerCommands(
       // uri comes from explorer/context or editor/context; fall back to active editor
       const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!fileUri || fileUri.scheme !== 'file') {
-        vscode.window.showInformationMessage('Select a file or folder to compare.');
+        vscode.window.showInformationMessage(vscode.l10n.t('Select a file or folder to compare.'));
         return;
       }
       await compareWithCommand(manager, fileUri);
@@ -885,7 +881,7 @@ async function pickSubmodule(
 ): Promise<{ parentRepoId: string; submodulePath: string } | undefined> {
   const metas = manager?.getRepoMetas().filter(m => m.isSubmodule) ?? [];
   if (metas.length === 0) {
-    vscode.window.showInformationMessage('No submodules found in this workspace.');
+    vscode.window.showInformationMessage(vscode.l10n.t('No submodules found in this workspace.'));
     return undefined;
   }
 
@@ -894,7 +890,7 @@ async function pickSubmodule(
   if (!meta) {
     const picked = await vscode.window.showQuickPick(
       metas.map(m => ({ label: m.name, description: m.submodulePath ?? '', id: m.id })),
-      { title: 'Select Submodule', placeHolder: 'Select a submodule…' }
+      { title: vscode.l10n.t('Select Submodule'), placeHolder: vscode.l10n.t('Select a submodule…') }
     );
     if (!picked) return undefined;
     meta = metas.find(m => m.id === picked.id);

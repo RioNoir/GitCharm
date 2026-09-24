@@ -1,7 +1,9 @@
+import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import simpleGit, { SimpleGit } from 'simple-git';
+import { SimpleGit } from 'simple-git';
+import { createGit } from './gitClient';
 import type { ShelveEntry } from '../types/messages';
 
 type ChangelistAssignment = NonNullable<ShelveEntry['changelistAssignments']>[number];
@@ -29,7 +31,7 @@ export class ShelveService {
   private metaPath: string;
 
   constructor(public readonly rootPath: string, globalStorage: string) {
-    this.git = simpleGit(rootPath);
+    this.git = createGit(rootPath);
     const repoHash = crypto.createHash('sha1').update(rootPath).digest('hex').slice(0, 16);
     this.shelfDir = path.join(globalStorage, 'shelves', repoHash);
     this.metaPath = path.join(this.shelfDir, META_FILE);
@@ -92,7 +94,7 @@ export class ShelveService {
       ? allChanged.filter(f => paths.includes(f))
       : allChanged;
 
-    if (filesToShelve.length === 0) throw new Error('No changes to shelve');
+    if (filesToShelve.length === 0) throw new Error(vscode.l10n.t('No changes to shelve'));
 
     const trackedFiles = filesToShelve.filter(f => !statusOutput.not_added.includes(f));
     const untrackedFiles = filesToShelve.filter(f => statusOutput.not_added.includes(f));
@@ -131,7 +133,7 @@ export class ShelveService {
     }
 
     if (!combinedDiff.trim() && binaryFiles.length === 0) {
-      throw new Error('Nothing to shelve (diff is empty)');
+      throw new Error(vscode.l10n.t('Nothing to shelve (diff is empty)'));
     }
 
     // ── Write patch file ──────────────────────────────────────────────────────
@@ -214,10 +216,10 @@ export class ShelveService {
   async apply(shelveId: string, paths?: string[]): Promise<ChangelistAssignment[] | undefined> {
     const meta = this.readMeta();
     const entry = meta.shelves.find(s => s.id === shelveId);
-    if (!entry) throw new Error(`Shelve "${shelveId}" not found`);
+    if (!entry) throw new Error(vscode.l10n.t('Shelve "{0}" not found', shelveId));
 
     const patchAbs = path.join(this.shelfDir, entry.patchFile);
-    if (!fs.existsSync(patchAbs)) throw new Error('Patch file not found on disk');
+    if (!fs.existsSync(patchAbs)) throw new Error(vscode.l10n.t('Patch file not found on disk'));
 
     // ── Apply text/binary patch ───────────────────────────────────────────────
     const fullPatch = fs.readFileSync(patchAbs, 'utf8');
@@ -252,7 +254,7 @@ export class ShelveService {
           }
           // Fallback without --3way (older git)
           await this.git.raw(['apply', '--binary', '--whitespace=fix', applyAbs]).catch(() => {
-            throw new Error(`Failed to apply patch: ${e}`);
+            throw new Error(vscode.l10n.t('Failed to apply patch: {0}', String(e)));
           });
         }
       }
@@ -286,7 +288,7 @@ export class ShelveService {
   drop(shelveId: string): void {
     const meta = this.readMeta();
     const idx = meta.shelves.findIndex(s => s.id === shelveId);
-    if (idx === -1) throw new Error(`Shelve "${shelveId}" not found`);
+    if (idx === -1) throw new Error(vscode.l10n.t('Shelve "{0}" not found', shelveId));
     const entry = meta.shelves[idx];
     // Delete patch file
     try { fs.unlinkSync(path.join(this.shelfDir, entry.patchFile)); } catch { /* already gone */ }
@@ -301,7 +303,7 @@ export class ShelveService {
   rename(shelveId: string, newName: string): void {
     const meta = this.readMeta();
     const entry = meta.shelves.find(s => s.id === shelveId);
-    if (!entry) throw new Error(`Shelve "${shelveId}" not found`);
+    if (!entry) throw new Error(vscode.l10n.t('Shelve "{0}" not found', shelveId));
     entry.name = newName;
     this.writeMeta(meta);
   }
@@ -309,7 +311,7 @@ export class ShelveService {
   getFileDiff(shelveId: string, filePath: string): string {
     const meta = this.readMeta();
     const entry = meta.shelves.find(s => s.id === shelveId);
-    if (!entry) throw new Error(`Shelve "${shelveId}" not found`);
+    if (!entry) throw new Error(vscode.l10n.t('Shelve "{0}" not found', shelveId));
 
     const patchAbs = path.join(this.shelfDir, entry.patchFile);
     if (!fs.existsSync(patchAbs)) return '';

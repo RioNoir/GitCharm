@@ -63,22 +63,25 @@ export class ProfileStatusBar implements vscode.Disposable {
 
     let displayName: string;
     if (profile.builtIn === 'local') {
-      displayName = 'Local';
+      displayName = vscode.l10n.t('Local');
     } else if (profile.builtIn === 'global') {
-      displayName = 'Global';
+      displayName = vscode.l10n.t('Global');
     } else {
       displayName = profile.name;
     }
 
-    const sourceBadge = source === 'local' ? ' (local)' : source === 'global' ? ' (global)' : '';
+    const identity = `${profile.gitName} <${profile.gitEmail}>`;
     this.statusBarItem.text = `$(account) ${displayName}`;
-    this.statusBarItem.tooltip =
-      `GitCharm Profile: ${profile.gitName} <${profile.gitEmail}>${sourceBadge}\nClick to manage profiles`;
+    this.statusBarItem.tooltip = source === 'local'
+      ? vscode.l10n.t('GitCharm Profile: {0} (local)\nClick to manage profiles', identity)
+      : source === 'global'
+        ? vscode.l10n.t('GitCharm Profile: {0} (global)\nClick to manage profiles', identity)
+        : vscode.l10n.t('GitCharm Profile: {0}\nClick to manage profiles', identity);
   }
 
   private renderNoProfile(): void {
-    this.statusBarItem.text = `$(account) No profile`;
-    this.statusBarItem.tooltip = 'No Git identity configured — click to set one';
+    this.statusBarItem.text = `$(account) ${vscode.l10n.t('No profile')}`;
+    this.statusBarItem.tooltip = vscode.l10n.t('No Git identity configured — click to set one');
   }
 
   // ── Main menu ────────────────────────────────────────────────────────────────
@@ -94,14 +97,14 @@ export class ProfileStatusBar implements vscode.Disposable {
     // ── Named profiles ────────────────────────────────────────────────────────
     const namedProfiles = profiles.filter(p => !p.builtIn);
     if (namedProfiles.length > 0) {
-      items.push(sep('PROFILES'));
+      items.push(sep(vscode.l10n.t('PROFILES')));
       const avatars = await Promise.all(namedProfiles.map(p => this.avatarIconPath(p.gitEmail)));
       namedProfiles.forEach((p, i) => {
         const isActive = p.id === activeId;
         const iconPath = avatars[i];
         items.push({
           label: iconPath ? p.name : `${isActive ? '$(check)' : '$(account)'} ${p.name}`,
-          description: `${p.gitName} <${p.gitEmail}>${isActive ? '  ·  active' : ''}`,
+          description: `${p.gitName} <${p.gitEmail}>${isActive ? `  ·  ${vscode.l10n.t('active')}` : ''}`,
           iconPath,
           action: () => this.showProfileActionMenu(p),
         });
@@ -115,10 +118,10 @@ export class ProfileStatusBar implements vscode.Disposable {
     {
       const icon = localIsActive ? '$(check)' : '$(home)';
       items.push({
-        label: `${icon} Local${localIsActive ? '  ·  active' : ''}`,
+        label: `${icon} ${vscode.l10n.t('Local')}${localIsActive ? `  ·  ${vscode.l10n.t('active')}` : ''}`,
         description: localCreds
-          ? `${localCreds.gitName} <${localCreds.gitEmail}>  ·  from .git/config`
-          : repoPath ? 'No local git identity in this repo' : 'No repo open',
+          ? `${localCreds.gitName} <${localCreds.gitEmail}>  ·  ${vscode.l10n.t('from {0}', '.git/config')}`
+          : repoPath ? vscode.l10n.t('No local git identity in this repo') : vscode.l10n.t('No repo open'),
         action: () => this.showBuiltInActionMenu('local', localCreds),
       });
     }
@@ -129,21 +132,21 @@ export class ProfileStatusBar implements vscode.Disposable {
     {
       const icon = globalIsActive ? '$(check)' : '$(globe)';
       items.push({
-        label: `${icon} Global${globalIsActive ? '  ·  active' : ''}`,
+        label: `${icon} ${vscode.l10n.t('Global')}${globalIsActive ? `  ·  ${vscode.l10n.t('active')}` : ''}`,
         description: globalCreds
-          ? `${globalCreds.gitName} <${globalCreds.gitEmail}>  ·  from ~/.gitconfig`
-          : 'No global git identity configured',
+          ? `${globalCreds.gitName} <${globalCreds.gitEmail}>  ·  ${vscode.l10n.t('from {0}', '~/.gitconfig')}`
+          : vscode.l10n.t('No global git identity configured'),
         action: () => this.showBuiltInActionMenu('global', globalCreds),
       });
     }
 
     items.push(
       sep(),
-      { label: '$(add) New Profile…', description: 'Create a new Git identity profile', action: () => this.createProfile() },
+      { label: `$(add) ${vscode.l10n.t('New Profile…')}`, description: vscode.l10n.t('Create a new Git identity profile'), action: () => this.createProfile() },
     );
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: 'GitCharm — Git Profiles',
+      title: vscode.l10n.t('GitCharm — Git Profiles'),
       matchOnDescription: true,
     }) as MenuItem | undefined;
 
@@ -157,30 +160,37 @@ export class ProfileStatusBar implements vscode.Disposable {
     creds: { gitName: string; gitEmail: string } | undefined,
   ): Promise<void> {
     const id = type === 'local' ? LOCAL_PROFILE_ID : GLOBAL_PROFILE_ID;
-    const label = type === 'local' ? 'Local' : 'Global';
+    const isLocal = type === 'local';
+    const label = isLocal ? vscode.l10n.t('Local') : vscode.l10n.t('Global');
     const activeId = this.profileService.getActiveProfileId();
     const isActive = activeId === id;
 
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
     const items: ActionItem[] = [
-      { label: '$(arrow-left) Back', action: () => this.showMenu() },
+      { label: `$(arrow-left) ${vscode.l10n.t('Back')}`, action: () => this.showMenu() },
       sep() as unknown as ActionItem,
     ];
 
     if (!isActive) {
       items.push({
-        label: '$(check) Use for this workspace',
-        description: `Set ${label} as active profile for this workspace`,
+        label: `$(check) ${vscode.l10n.t('Use for this workspace')}`,
+        description: isLocal
+          ? vscode.l10n.t('Set Local as active profile for this workspace')
+          : vscode.l10n.t('Set Global as active profile for this workspace'),
         action: async () => {
           await this.profileService.setActiveProfile(id);
           this.refresh();
-          vscode.window.showInformationMessage(`${label} set as active profile for this workspace.`);
+          vscode.window.showInformationMessage(isLocal
+            ? vscode.l10n.t('Local set as active profile for this workspace.')
+            : vscode.l10n.t('Global set as active profile for this workspace.'));
         },
       });
     } else {
       items.push({
-        label: '$(check) Active (in use)',
-        description: `${label} is the active profile for this workspace`,
+        label: `$(check) ${vscode.l10n.t('Active (in use)')}`,
+        description: isLocal
+          ? vscode.l10n.t('Local is the active profile for this workspace')
+          : vscode.l10n.t('Global is the active profile for this workspace'),
         action: async () => { await this.showMenu(); },
       });
     }
@@ -201,32 +211,32 @@ export class ProfileStatusBar implements vscode.Disposable {
 
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
     const items: ActionItem[] = [
-      { label: '$(arrow-left) Back', action: () => this.showMenu() },
+      { label: `$(arrow-left) ${vscode.l10n.t('Back')}`, action: () => this.showMenu() },
       sep() as unknown as ActionItem,
     ];
 
     if (!isActive) {
       items.push({
-        label: '$(check) Use for this project/workspace',
-        description: `Set "${profile.name}" as active profile for this workspace`,
+        label: `$(check) ${vscode.l10n.t('Use for this project/workspace')}`,
+        description: vscode.l10n.t('Set "{0}" as active profile for this workspace', profile.name),
         action: () => this.activateProfile(profile),
       });
     } else {
       items.push({
-        label: '$(check) Active (in use)',
-        description: 'This profile is active for this workspace',
+        label: `$(check) ${vscode.l10n.t('Active (in use)')}`,
+        description: vscode.l10n.t('This profile is active for this workspace'),
         action: async () => { await this.showMenu(); },
       });
     }
 
     items.push(
       sep() as unknown as ActionItem,
-      { label: '$(edit) Edit…', action: () => this.editProfile(profile) },
-      { label: '$(trash) Delete', description: `Remove "${profile.name}"`, action: () => this.deleteProfile(profile) },
+      { label: `$(edit) ${vscode.l10n.t('Edit…')}`, action: () => this.editProfile(profile) },
+      { label: `$(trash) ${vscode.l10n.t('Delete')}`, description: vscode.l10n.t('Remove "{0}"', profile.name), action: () => this.deleteProfile(profile) },
     );
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: `Profile: ${profile.name}`,
+      title: vscode.l10n.t('Profile: {0}', profile.name),
       matchOnDescription: true,
     }) as ActionItem | undefined;
 
@@ -238,34 +248,34 @@ export class ProfileStatusBar implements vscode.Disposable {
   private async activateProfile(profile: GitProfile): Promise<void> {
     await this.profileService.setActiveProfile(profile.id);
     this.refresh();
-    vscode.window.showInformationMessage(`"${profile.name}" is now active.`);
+    vscode.window.showInformationMessage(vscode.l10n.t('"{0}" is now active.', profile.name));
   }
 
   async createProfile(): Promise<void> {
     const displayName = await vscode.window.showInputBox({
-      title: 'New Git Profile — Display Name',
-      prompt: 'A label for this profile (e.g. Work, Personal)',
-      placeHolder: 'Work',
+      title: vscode.l10n.t('New Git Profile — Display Name'),
+      prompt: vscode.l10n.t('A label for this profile (e.g. Work, Personal)'),
+      placeHolder: vscode.l10n.t('Work'),
       validateInput: v => {
-        if (!v.trim()) return 'Name cannot be empty';
-        if (['local', 'global'].includes(v.trim().toLowerCase())) return `"${v.trim()}" is a reserved name`;
+        if (!v.trim()) return vscode.l10n.t('Name cannot be empty');
+        if (['local', 'global'].includes(v.trim().toLowerCase())) return vscode.l10n.t('"{0}" is a reserved name', v.trim());
         return undefined;
       },
     });
     if (!displayName) return;
 
     const gitName = await vscode.window.showInputBox({
-      title: 'New Git Profile — Git Name',
-      prompt: 'Value for git user.name',
-      placeHolder: 'John Doe',
+      title: vscode.l10n.t('New Git Profile — Git Name'),
+      prompt: vscode.l10n.t('Value for git {0}', 'user.name'),
+      placeHolder: vscode.l10n.t('John Doe'),
     });
     if (gitName === undefined) return;
 
     const gitEmail = await vscode.window.showInputBox({
-      title: 'New Git Profile — Git Email',
-      prompt: 'Value for git user.email',
+      title: vscode.l10n.t('New Git Profile — Git Email'),
+      prompt: vscode.l10n.t('Value for git {0}', 'user.email'),
       placeHolder: 'john@example.com',
-      validateInput: v => (v.trim() ? undefined : 'Email cannot be empty'),
+      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Email cannot be empty')),
     });
     if (!gitEmail) return;
 
@@ -280,10 +290,10 @@ export class ProfileStatusBar implements vscode.Disposable {
 
     const activatePick = await vscode.window.showQuickPick(
       [
-        { label: '$(check) Yes, use it now', value: true },
-        { label: '$(close) No, just save it', value: false },
+        { label: `$(check) ${vscode.l10n.t('Yes, use it now')}`, value: true },
+        { label: `$(close) ${vscode.l10n.t('No, just save it')}`, value: false },
       ],
-      { title: `Profile "${profile.name}" created — activate for this workspace?` }
+      { title: vscode.l10n.t('Profile "{0}" created — activate for this workspace?', profile.name) }
     ) as { label: string; value: boolean } | undefined;
 
     if (activatePick?.value) {
@@ -295,41 +305,41 @@ export class ProfileStatusBar implements vscode.Disposable {
 
   private async editProfile(profile: GitProfile): Promise<void> {
     const displayName = await vscode.window.showInputBox({
-      title: `Edit Profile — Display Name`,
+      title: vscode.l10n.t('Edit Profile — Display Name'),
       value: profile.name,
       validateInput: v => {
-        if (!v.trim()) return 'Name cannot be empty';
-        if (['local', 'global'].includes(v.trim().toLowerCase())) return `"${v.trim()}" is a reserved name`;
+        if (!v.trim()) return vscode.l10n.t('Name cannot be empty');
+        if (['local', 'global'].includes(v.trim().toLowerCase())) return vscode.l10n.t('"{0}" is a reserved name', v.trim());
         return undefined;
       },
     });
     if (!displayName) return;
 
-    const gitName = await vscode.window.showInputBox({ title: `Edit Profile — Git Name`, value: profile.gitName });
+    const gitName = await vscode.window.showInputBox({ title: vscode.l10n.t('Edit Profile — Git Name'), value: profile.gitName });
     if (gitName === undefined) return;
 
     const gitEmail = await vscode.window.showInputBox({
-      title: `Edit Profile — Git Email`,
+      title: vscode.l10n.t('Edit Profile — Git Email'),
       value: profile.gitEmail,
-      validateInput: v => (v.trim() ? undefined : 'Email cannot be empty'),
+      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Email cannot be empty')),
     });
     if (!gitEmail) return;
 
     await this.profileService.saveProfile({ ...profile, name: displayName.trim(), gitName: gitName.trim(), gitEmail: gitEmail.trim() });
     this.refresh();
-    vscode.window.showInformationMessage(`Profile "${displayName}" updated.`);
+    vscode.window.showInformationMessage(vscode.l10n.t('Profile "{0}" updated.', displayName));
   }
 
   private async deleteProfile(profile: GitProfile): Promise<void> {
     const confirm = await vscode.window.showQuickPick(
-      [{ label: '$(trash) Delete', value: true }, { label: '$(close) Cancel', value: false }],
-      { title: `Delete profile "${profile.name}"?` }
+      [{ label: `$(trash) ${vscode.l10n.t('Delete')}`, value: true }, { label: `$(close) ${vscode.l10n.t('Cancel')}`, value: false }],
+      { title: vscode.l10n.t('Delete profile "{0}"?', profile.name) }
     ) as { label: string; value: boolean } | undefined;
 
     if (!confirm?.value) return;
     await this.profileService.deleteProfile(profile.id);
     this.refresh();
-    vscode.window.showInformationMessage(`Profile "${profile.name}" deleted.`);
+    vscode.window.showInformationMessage(vscode.l10n.t('Profile "{0}" deleted.', profile.name));
   }
 
   // ── Command palette: switch ───────────────────────────────────────────────────
@@ -337,7 +347,7 @@ export class ProfileStatusBar implements vscode.Disposable {
   async switchProfile(): Promise<void> {
     const profiles = this.profileService.getProfiles().filter(p => !p.builtIn);
     if (profiles.length === 0) {
-      const create = await vscode.window.showWarningMessage('No profiles configured.', 'Create Profile');
+      const create = await vscode.window.showWarningMessage(vscode.l10n.t('No profiles configured.'), vscode.l10n.t('Create Profile'));
       if (create) await this.createProfile();
       return;
     }
@@ -350,14 +360,14 @@ export class ProfileStatusBar implements vscode.Disposable {
       const isActive = p.id === activeId;
       return {
         label: iconPath ? p.name : `${isActive ? '$(check) ' : '$(account) '}${p.name}`,
-        description: `${p.gitName} <${p.gitEmail}>${isActive ? '  ·  active' : ''}`,
+        description: `${p.gitName} <${p.gitEmail}>${isActive ? `  ·  ${vscode.l10n.t('active')}` : ''}`,
         iconPath,
         id: p.id,
       };
     });
 
     const pick = await vscode.window.showQuickPick(items, {
-      title: 'GitCharm — Switch Git Profile',
+      title: vscode.l10n.t('GitCharm — Switch Git Profile'),
       matchOnDescription: true,
     }) as Item | undefined;
 
@@ -366,7 +376,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     const selected = profiles.find(p => p.id === pick.id);
     if (selected) {
       this.refresh();
-      vscode.window.showInformationMessage(`"${selected.name}" is now active.`);
+      vscode.window.showInformationMessage(vscode.l10n.t('"{0}" is now active.', selected.name));
     }
   }
 

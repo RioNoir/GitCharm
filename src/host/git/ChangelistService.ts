@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import type { ChangelistData, RepoStatus } from '../types/git';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../types/git';
 
@@ -12,6 +13,17 @@ interface ChangelistsJson {
 interface WorkspaceFileJson {
   gitcharm?: { changelists?: unknown };
   [key: string]: unknown;
+}
+
+/**
+ * Name to show for a changelist. The two fixed changelists can't be renamed, so their stored
+ * name is always the English default; translating only at display time keeps the saved file
+ * language-neutral (it may be shared by a team through .vscode/).
+ */
+export function changelistDisplayName(cl: ChangelistData): string {
+  if (cl.id === CHANGELIST_DEFAULT_ID) return vscode.l10n.t('Changes');
+  if (cl.id === CHANGELIST_UNVERSIONED_ID) return vscode.l10n.t('Unversioned Files');
+  return cl.name;
 }
 
 function makeDefaultChangelists(): ChangelistData[] {

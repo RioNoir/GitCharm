@@ -1,4 +1,7 @@
 import React from 'react';
+import * as l10n from '@vscode/l10n';
+import { plural } from '../../shared/l10n';
+import { isImeComposing } from '../../shared/ime';
 
 interface Props {
   repoId: string;
@@ -34,17 +37,17 @@ export function CommitForm({
         </span>
         {aheadBehind && (aheadBehind.ahead > 0 || aheadBehind.behind > 0) && (
           <span style={styles.aheadBehind}>
-            {aheadBehind.ahead > 0 && <span title="Commits ahead">↑{aheadBehind.ahead}</span>}
-            {aheadBehind.behind > 0 && <span title="Commits behind">↓{aheadBehind.behind}</span>}
+            {aheadBehind.ahead > 0 && <span title={l10n.t('Commits ahead')}>↑{aheadBehind.ahead}</span>}
+            {aheadBehind.behind > 0 && <span title={l10n.t('Commits behind')}>↓{aheadBehind.behind}</span>}
           </span>
         )}
         <button
           style={styles.pullBtn}
           onClick={onPull}
           disabled={loading}
-          title="Pull from remote"
+          title={l10n.t('Pull from remote')}
         >
-          ↓ Pull
+          ↓ {l10n.t('Pull')}
         </button>
       </div>
 
@@ -52,10 +55,11 @@ export function CommitForm({
         style={styles.textarea}
         value={message}
         onChange={(e) => onMessageChange(e.target.value)}
-        placeholder="Commit message"
+        placeholder={l10n.t('Commit message')}
         rows={3}
         disabled={loading}
         onKeyDown={(e) => {
+          if (isImeComposing(e)) return;
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             if (canCommit) onCommit();
@@ -72,10 +76,10 @@ export function CommitForm({
             disabled={loading}
             style={{ marginRight: '5px' }}
           />
-          Amend last commit
+          {l10n.t('Amend last commit')}
         </label>
         <span style={styles.stagedCount}>
-          {stagedCount} file{stagedCount !== 1 ? 's' : ''} staged
+          {plural(stagedCount, l10n.t('1 file staged'), l10n.t('{0} files staged', stagedCount))}
         </span>
       </div>
 
@@ -84,17 +88,17 @@ export function CommitForm({
           style={styles.commitBtn(canCommit && !loading, false)}
           onClick={onCommit}
           disabled={!canCommit || loading}
-          title="Commit staged changes (⌘Enter)"
+          title={l10n.t('Commit staged changes (⌘Enter)')}
         >
-          Commit
+          {l10n.t('Commit')}
         </button>
         <button
           style={styles.commitBtn(canCommit && !loading, true)}
           onClick={onCommitAndPush}
           disabled={!canCommit || loading}
-          title="Commit and push to remote"
+          title={l10n.t('Commit and push to remote')}
         >
-          Commit &amp; Push
+          {l10n.t('Commit & Push')}
         </button>
       </div>
     </div>

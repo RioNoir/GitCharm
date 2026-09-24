@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { renderMarkdown } from '../../shared/renderMarkdown';
 import { SkeletonText } from '../../shared/Skeleton';
+import * as l10n from '@vscode/l10n';
 
 interface Props {
   description: string;
@@ -11,7 +12,7 @@ export function DescriptionPanel({ description, loading }: Props) {
   const html = useMemo(() => renderMarkdown(description), [description]);
 
   if (loading) return <SkeletonText lines={3} />;
-  if (!html) return <div style={css.empty}>No description provided.</div>;
+  if (!html) return <div style={css.empty}>{l10n.t('No description provided.')}</div>;
 
   return <div className="markdown-body" style={css.markdown} dangerouslySetInnerHTML={{ __html: html }} />;
 }

@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type {
   ActionResult, ChangedFile, CiCheck, CiStatus, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs,
   ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestCapabilities,
@@ -513,11 +514,11 @@ export class BitbucketProvider implements PullRequestProvider {
   }
 
   async updateAssignees(): Promise<ActionResult | UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Bitbucket does not support assignees on pull requests, only reviewers.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Bitbucket does not support assignees on pull requests, only reviewers.') };
   }
 
   async updateLabels(): Promise<ActionResult | UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Bitbucket does not support labels on pull requests.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Bitbucket does not support labels on pull requests.') };
   }
 
   /** Bitbucket Cloud only lets a comment's own author edit it; delete also allows a workspace/repo admin
@@ -645,11 +646,11 @@ export class BitbucketProvider implements PullRequestProvider {
   }
 
   async hideComment(): Promise<UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Bitbucket Cloud has no concept of hiding a comment.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Bitbucket Cloud has no concept of hiding a comment.') };
   }
 
   async unhideComment(): Promise<UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Bitbucket Cloud has no concept of hiding a comment.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Bitbucket Cloud has no concept of hiding a comment.') };
   }
 
   async listChangedFiles(owner: string, repo: string, number: number): Promise<ChangedFile[]> {
@@ -747,13 +748,13 @@ export class BitbucketProvider implements PullRequestProvider {
   }
 
   async reopenPullRequest(): Promise<ActionResult | UnsupportedResult> {
-    return { ok: false, unsupported: true, error: 'Bitbucket does not support reopening a declined pull request. This is a permanent platform limitation.' };
+    return { ok: false, unsupported: true, error: vscode.l10n.t('Bitbucket does not support reopening a declined pull request. This is a permanent platform limitation.') };
   }
 
   async submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult> {
     if (input.event === 'comment') {
       if (!input.body?.trim()) {
-        return { ok: false, error: 'A comment body is required for this review type' };
+        return { ok: false, error: vscode.l10n.t('A comment body is required for this review type') };
       }
       const result = await this.postComment(owner, repo, number, input.body);
       return result.ok ? { ok: true } : { ok: false, error: result.error };

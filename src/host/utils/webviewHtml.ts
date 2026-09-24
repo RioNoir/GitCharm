@@ -16,6 +16,11 @@ export function getWebviewHtml(
 ): string {
   const nonce = generateNonce();
 
+  // Read by src/webview/shared/l10n.ts. Escape "<" so a translation containing "</script>"
+  // can't terminate the inline script.
+  const l10nJson = JSON.stringify({ bundle: vscode.l10n.bundle, locale: vscode.env.language })
+    .replace(/</g, '\\u003c');
+
   const jsPath = vscode.Uri.joinPath(extensionUri, 'out', 'webview', appName, 'index.js');
   // Cache-bust with the bundle's mtime: some webviews (esp. sidebar WebviewViews, which can
   // outlive an extension host reload) reuse Chromium's disk cache for vscode-webview-resource
@@ -36,7 +41,7 @@ export function getWebviewHtml(
   ].join('; ');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${vscode.env.language}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -238,7 +243,8 @@ export function getWebviewHtml(
 <body>
   <div id="root"></div>
   <script nonce="${nonce}">if (/Cursor/.test(navigator.userAgent)) document.body.classList.add('cursor-host');
-window.__GITCHARM_AVATARS__ = ${avatarsEnabled()};${initialConfig ? `\nwindow.__INITIAL_CONFIG__ = ${JSON.stringify(initialConfig)};` : ''}</script>
+window.__GITCHARM_AVATARS__ = ${avatarsEnabled()};
+window.__L10N__ = ${l10nJson};${initialConfig ? `\nwindow.__INITIAL_CONFIG__ = ${JSON.stringify(initialConfig)};` : ''}</script>
   <script nonce="${nonce}" type="module" src="${jsUri}"></script>
 </body>
 </html>`;

@@ -384,8 +384,15 @@ out/                      Built extension and webview bundles
 | `npm run lint` | Runs ESLint on TypeScript and TSX sources. |
 | `npm run typecheck` | Type-checks the main TypeScript project. |
 | `npm run typecheck:webview` | Type-checks the webview TypeScript project. |
+| `npm run l10n:export` | Regenerates `l10n/bundle.l10n.json` from the `l10n.t()` calls in `src/`. |
+| `npm run l10n:check` | Validates translation files (missing/stale keys, placeholders). `--strict` also fails on missing translations. |
 | `npm run package` | Creates a VSIX package with `vsce`. |
 | `npm run publish` | Publishes the extension with `vsce publish`. |
+
+## 🌐 Languages
+
+GitCharm follows VS Code's display language. Available translations: English, Deutsch, Español, Français, Italiano, 简体中文 (zh-cn), 繁體中文 (zh-tw).
+Translations are welcome — see [Localization](CONTRIBUTING.md#localization).
 
 ## 📌 Notes
 

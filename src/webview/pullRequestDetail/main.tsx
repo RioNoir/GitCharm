@@ -1,3 +1,5 @@
+import '../shared/l10n';
+import * as l10n from '@vscode/l10n';
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PullRequestHeader } from './components/PullRequestHeader';
@@ -188,7 +190,7 @@ function App() {
             setMergeError(undefined);
             send({ type: 'PRDETAIL_REQUEST_DETAIL' });
           } else {
-            setMergeError(msg.error ?? 'Failed to merge pull request');
+            setMergeError(msg.error ?? l10n.t('Failed to merge pull request'));
           }
           break;
         case 'PRDETAIL_CLOSE_RESULT':
@@ -197,7 +199,7 @@ function App() {
             setCloseError(undefined);
             send({ type: 'PRDETAIL_REQUEST_DETAIL' });
           } else {
-            setCloseError(msg.error ?? 'Failed to close pull request');
+            setCloseError(msg.error ?? l10n.t('Failed to close pull request'));
           }
           break;
         case 'PRDETAIL_REOPEN_RESULT':
@@ -206,7 +208,7 @@ function App() {
             setReopenError(undefined);
             send({ type: 'PRDETAIL_REQUEST_DETAIL' });
           } else {
-            setReopenError(msg.error ?? 'Failed to reopen pull request');
+            setReopenError(msg.error ?? l10n.t('Failed to reopen pull request'));
           }
           break;
         case 'PRDETAIL_CHECKOUT_RESULT':
@@ -416,10 +418,10 @@ function App() {
 
       <div style={css.tabBar}>
         {([
-          { id: 'overview' as const, label: 'Overview', icon: 'note', count: (commentsLoading ? summary?.commentCount : comments.length) || undefined },
-          { id: 'changes' as const, label: 'Changes', icon: 'diff', count: files.length || undefined },
-          { id: 'commits' as const, label: 'Commits', icon: 'git-commit', count: commits.length || undefined },
-          { id: 'checks' as const, label: 'Checks', icon: 'checklist', count: checks.length || undefined },
+          { id: 'overview' as const, label: l10n.t('Overview'), icon: 'note', count: (commentsLoading ? summary?.commentCount : comments.length) || undefined },
+          { id: 'changes' as const, label: l10n.t('Changes'), icon: 'diff', count: files.length || undefined },
+          { id: 'commits' as const, label: l10n.t('Commits'), icon: 'git-commit', count: commits.length || undefined },
+          { id: 'checks' as const, label: l10n.t('Checks'), icon: 'checklist', count: checks.length || undefined },
         ]).map(tab => (
           <button
             key={tab.id}
@@ -440,12 +442,12 @@ function App() {
         {activeTab === 'overview' && (
           <div className="pr-overview-layout">
             <div className="pr-overview-main">
-              <CollapsibleSection title="Description" icon="note" first>
+              <CollapsibleSection title={l10n.t('Description')} icon="note" first>
                 <div style={css.descriptionBox}>
                   <DescriptionPanel description={detail?.description ?? ''} loading={detailLoading} />
                 </div>
               </CollapsibleSection>
-              <CollapsibleSection title="Activity" icon="comment-discussion">
+              <CollapsibleSection title={l10n.t('Activity')} icon="comment-discussion">
                 <CommentsThread
                   comments={comments}
                   commits={commits}
@@ -468,33 +470,33 @@ function App() {
             </div>
             <div className="pr-overview-sidebar">
               <StaticSection
-                title="Reviewers" icon="eye" first
+                title={l10n.t('Reviewers')} icon="eye" first
                 headerAction={!!detail && detail.capabilities.canManageReviewers && detail.canWrite && (
-                  <EditFieldButton label="Reviewers" updating={updatingReviewers} onPick={handlePickReviewers} />
+                  <EditFieldButton title={l10n.t('Edit reviewers')} updating={updatingReviewers} onPick={handlePickReviewers} />
                 )}
               >
                 {!detail ? <SkeletonChips count={2} /> : <PeopleField people={detail.reviewers} />}
               </StaticSection>
               <StaticSection
-                title="Assignees" icon="account"
+                title={l10n.t('Assignees')} icon="account"
                 headerAction={!!detail && detail.capabilities.canManageAssignees && detail.canWrite && (
-                  <EditFieldButton label="Assignees" updating={updatingAssignees} onPick={handlePickAssignees} />
+                  <EditFieldButton title={l10n.t('Edit assignees')} updating={updatingAssignees} onPick={handlePickAssignees} />
                 )}
               >
                 {!detail ? <SkeletonChips count={2} /> : !detail.capabilities.canManageAssignees ? (
-                  <span style={css.notAvailable}>Not available for this provider</span>
+                  <span style={css.notAvailable}>{l10n.t('Not available for this provider')}</span>
                 ) : (
                   <PeopleField people={detail.assignees} />
                 )}
               </StaticSection>
               <StaticSection
-                title="Labels" icon="tag"
+                title={l10n.t('Labels')} icon="tag"
                 headerAction={!!detail && detail.capabilities.canManageLabels && detail.canWrite && (
-                  <EditFieldButton label="Labels" updating={updatingLabels} onPick={handlePickLabels} />
+                  <EditFieldButton title={l10n.t('Edit labels')} updating={updatingLabels} onPick={handlePickLabels} />
                 )}
               >
                 {!detail ? <SkeletonChips count={2} /> : !detail.capabilities.canManageLabels ? (
-                  <span style={css.notAvailable}>Not available for this provider</span>
+                  <span style={css.notAvailable}>{l10n.t('Not available for this provider')}</span>
                 ) : (
                   <LabelsPanel labels={detail.labels} hasLabels={detail.capabilities.canManageLabels} />
                 )}

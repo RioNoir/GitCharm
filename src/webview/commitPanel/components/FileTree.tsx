@@ -7,6 +7,7 @@ import { FileIcon } from '../../shared/FileIcon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { TreeGuideLines, useTreeGuideHoverStyle } from '../../shared/TreeGuides';
 import { focusOnHover } from '../../shared/keyboardNav';
+import * as l10n from '@vscode/l10n';
 
 interface Props {
   repoId: string;
@@ -183,7 +184,7 @@ function TreeDirNode({ node, depth, ...shared }: { node: TreeDir; depth: number 
           <span style={styles.folderName}>{node.name}</span>
         </div>
         <div style={styles.rowActions}>
-          <InlineIconBtn icon="discard" title="Rollback all files in folder" visible={hovered} onClick={(e) => { e.stopPropagation(); onRollback(allFiles); }} />
+          <InlineIconBtn icon="discard" title={l10n.t('Rollback all files in folder')} visible={hovered} onClick={(e) => { e.stopPropagation(); onRollback(allFiles); }} />
           <span style={styles.dirCount}>{allFiles.length}</span>
         </div>
       </div>
@@ -251,10 +252,10 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
       <div style={styles.rowActions}>
         {!isSubmodule && <>
           {file.status === 'conflicted' && (
-            <InlineIconBtn icon="git-merge" title="Resolve Conflicts" visible={hovered} onClick={(e) => { e.stopPropagation(); onResolveMerge(file); }} />
+            <InlineIconBtn icon="git-merge" title={l10n.t('Resolve Conflicts')} visible={hovered} onClick={(e) => { e.stopPropagation(); onResolveMerge(file); }} />
           )}
-          <InlineIconBtn icon="go-to-file" title="Open file" visible={hovered} onClick={(e) => { e.stopPropagation(); onOpenFile(file); }} />
-          <InlineIconBtn icon="discard" title="Rollback" visible={hovered} onClick={(e) => { e.stopPropagation(); onRollback([file]); }} />
+          <InlineIconBtn icon="go-to-file" title={l10n.t('Open file')} visible={hovered} onClick={(e) => { e.stopPropagation(); onOpenFile(file); }} />
+          <InlineIconBtn icon="discard" title={l10n.t('Rollback')} visible={hovered} onClick={(e) => { e.stopPropagation(); onRollback([file]); }} />
         </>}
         <span style={styles.statusLetter(color)}>{letter}</span>
       </div>

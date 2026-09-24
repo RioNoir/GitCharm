@@ -43,7 +43,7 @@ export class CreatePullRequestPanel {
 
     const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
     if (!meta) {
-      vscode.window.showErrorMessage('Repository not found');
+      vscode.window.showErrorMessage(vscode.l10n.t('Repository not found'));
       return;
     }
 
@@ -57,9 +57,10 @@ export class CreatePullRequestPanel {
       if (themes.length > 0) localResourceRoots.push(vscode.Uri.file(ext.extensionPath));
     }
 
+    const panelTitle = vscode.l10n.t('New Pull Request — {0}', meta.name);
     const panel = vscode.window.createWebviewPanel(
       'gitcharm.createPullRequest',
-      `New Pull Request — ${meta.name}`,
+      panelTitle,
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
     );
@@ -69,7 +70,7 @@ export class CreatePullRequestPanel {
       panel.webview,
       this.extensionUri,
       'pullRequestCreate',
-      `New Pull Request — ${meta.name}`
+      panelTitle
     );
 
     const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
@@ -96,7 +97,7 @@ export class CreatePullRequestPanel {
     switch (msg.type) {
       case 'PRCREATE_REQUEST_BRANCHES': {
         const repo = this.manager.getRepo(repoId);
-        if (!repo) { post({ type: 'PRCREATE_BRANCHES_RESULT', branches: [], error: 'Repository not found' }); break; }
+        if (!repo) { post({ type: 'PRCREATE_BRANCHES_RESULT', branches: [], error: vscode.l10n.t('Repository not found') }); break; }
         try {
           const branches = await repo.getBranches();
           post({ type: 'PRCREATE_BRANCHES_RESULT', branches });
@@ -110,8 +111,8 @@ export class CreatePullRequestPanel {
         const repo = this.manager.getRepo(repoId);
         if (!repo) { post({ type: 'PRCREATE_BRANCH_PICKED', requestId: msg.requestId, role: msg.role, branch: undefined }); break; }
         const picked = await pickRefQuickPick(repo, {
-          placeHolder: msg.role === 'source' ? 'Select source branch' : 'Select target branch',
-          title: msg.role === 'source' ? 'Pull Request: Source Branch' : 'Pull Request: Target Branch',
+          placeHolder: msg.role === 'source' ? vscode.l10n.t('Select source branch') : vscode.l10n.t('Select target branch'),
+          title: msg.role === 'source' ? vscode.l10n.t('Pull Request: Source Branch') : vscode.l10n.t('Pull Request: Target Branch'),
           includeTags: false,
         });
         post({ type: 'PRCREATE_BRANCH_PICKED', requestId: msg.requestId, role: msg.role, branch: picked });
@@ -121,7 +122,7 @@ export class CreatePullRequestPanel {
       case 'PRCREATE_REQUEST_COMPARE': {
         this.latestCompareRequestId.set(repoId, msg.requestId);
         const repo = this.manager.getRepo(repoId);
-        if (!repo) { post({ type: 'PRCREATE_COMPARE_RESULT', requestId: msg.requestId, files: [], commits: [], error: 'Repository not found' }); break; }
+        if (!repo) { post({ type: 'PRCREATE_COMPARE_RESULT', requestId: msg.requestId, files: [], commits: [], error: vscode.l10n.t('Repository not found') }); break; }
         try {
           const [baseHash, headHash] = await Promise.all([repo.resolveRef(msg.targetBranch), repo.resolveRef(msg.sourceBranch)]);
           const [rawFiles, commits] = await Promise.all([
@@ -146,10 +147,10 @@ export class CreatePullRequestPanel {
           const isDeleted = msg.file.status === 'deleted';
           const left = gitUri(repo.rootPath, isAdded ? EMPTY_TREE : baseHash, msg.file.oldPath ?? msg.file.path);
           const right = gitUri(repo.rootPath, isDeleted ? EMPTY_TREE : headHash, msg.file.path);
-          const title = `${msg.file.path} (${msg.sourceBranch} vs ${msg.targetBranch})`;
+          const title = vscode.l10n.t('{0} ({1} vs {2})', msg.file.path, msg.sourceBranch, msg.targetBranch);
           await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: true });
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`Cannot open diff: ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Cannot open diff: {0}', formatGitError(e)));
         }
         break;
       }
@@ -161,7 +162,7 @@ export class CreatePullRequestPanel {
           const [baseHash, headHash] = await Promise.all([repo.resolveRef(msg.targetBranch), repo.resolveRef(msg.sourceBranch)]);
           const rawFiles = await repo.getFilesBetween([baseHash, headHash]);
           if (rawFiles.length === 0) {
-            vscode.window.showInformationMessage(`No differences between '${msg.targetBranch}' and '${msg.sourceBranch}'.`);
+            vscode.window.showInformationMessage(vscode.l10n.t("No differences between '{0}' and '{1}'.", msg.targetBranch, msg.sourceBranch));
             break;
           }
           const resources = rawFiles.filter(f => f.status !== 'U').map(f => {
@@ -170,9 +171,9 @@ export class CreatePullRequestPanel {
             const modified = gitUri(repo.rootPath, f.status === 'D' ? EMPTY_TREE : headHash, f.path);
             return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
           });
-          await vscode.commands.executeCommand('vscode.changes', `${msg.sourceBranch} vs ${msg.targetBranch}`, resources);
+          await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('{0} vs {1}', msg.sourceBranch, msg.targetBranch), resources);
         } catch (e: unknown) {
-          vscode.window.showErrorMessage(`Cannot open comparison: ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Cannot open comparison: {0}', formatGitError(e)));
         }
         break;
       }

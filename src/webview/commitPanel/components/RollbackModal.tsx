@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { FileStatus, RepoStatus } from '../../shared/types';
 import type { RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
+import * as l10n from '@vscode/l10n';
+import { plural } from '../../shared/l10n';
+import { isImeComposing } from '../../shared/ime';
 
 // ── Tree types (mirrors FileTree logic) ──────────────────────────────────────
 
@@ -230,7 +233,7 @@ export function RollbackModal({ repos, repoMetas, onConfirm, onClose }: Props) {
 
   // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e: KeyboardEvent) => { if (isImeComposing(e)) return; if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
@@ -241,14 +244,14 @@ export function RollbackModal({ repos, repoMetas, onConfirm, onClose }: Props) {
         {/* Header */}
         <div style={s.header}>
           <Codicon name="discard" style={{ fontSize: '14px', opacity: 0.8 }} />
-          <span style={s.title}>Rollback changes</span>
+          <span style={s.title}>{l10n.t('Rollback changes')}</span>
           <button style={s.closeBtn} onClick={onClose}>
             <Codicon name="close" />
           </button>
         </div>
 
         <div style={s.subtitle}>
-          Select the files to discard. This action cannot be undone.
+          {l10n.t('Select the files to discard. This action cannot be undone.')}
         </div>
 
         {/* Tree */}
@@ -275,16 +278,16 @@ export function RollbackModal({ repos, repoMetas, onConfirm, onClose }: Props) {
         {/* Footer */}
         <div style={s.footer}>
           <span style={s.footerCount}>
-            {totalSelected} file{totalSelected !== 1 ? 's' : ''} selected
+            {plural(totalSelected, l10n.t('1 file selected'), l10n.t('{0} files selected', totalSelected))}
           </span>
-          <button style={s.cancelBtn} onClick={onClose}>Cancel</button>
+          <button style={s.cancelBtn} onClick={onClose}>{l10n.t('Cancel')}</button>
           <button
             style={{ ...s.confirmBtn, opacity: totalSelected === 0 ? 0.4 : 1 }}
             disabled={totalSelected === 0}
             onClick={handleConfirm}
           >
             <Codicon name="discard" style={{ marginRight: '5px' }} />
-            Rollback {totalSelected > 0 ? totalSelected : ''} file{totalSelected !== 1 ? 's' : ''}
+            {totalSelected === 0 ? l10n.t('Rollback files') : plural(totalSelected, l10n.t('Rollback 1 file'), l10n.t('Rollback {0} files', totalSelected))}
           </button>
         </div>
       </div>

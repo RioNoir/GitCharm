@@ -50,6 +50,9 @@ jobs:
       - name: Typecheck webviews
         run: npm run typecheck:webview
 
+      - name: Check translations
+        run: npm run l10n:check
+
       - name: Package VSIX
         run: |
           mkdir -p dist

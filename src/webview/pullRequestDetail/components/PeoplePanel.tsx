@@ -2,6 +2,7 @@ import React from 'react';
 import type { PullRequestUser } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
+import * as l10n from '@vscode/l10n';
 
 interface PeopleFieldProps {
   people: PullRequestUser[];
@@ -23,16 +24,16 @@ export function PeopleField({ people }: PeopleFieldProps) {
   return (
     <div style={css.chipsRow}>
       {people.length === 0
-        ? <span style={css.emptyText}>No one</span>
+        ? <span style={css.emptyText}>{l10n.t('No one')}</span>
         : people.map(p => <PersonChip key={p.id} person={p} />)
       }
     </div>
   );
 }
 
-export function EditFieldButton({ label, updating, onPick }: { label: string; updating: boolean; onPick: () => void }) {
+export function EditFieldButton({ title, updating, onPick }: { title: string; updating: boolean; onPick: () => void }) {
   return (
-    <button className="icon-btn" style={css.editIconBtn} onClick={onPick} title={`Edit ${label.toLowerCase()}`} disabled={updating}>
+    <button className="icon-btn" style={css.editIconBtn} onClick={onPick} title={title} disabled={updating}>
       <Codicon name="edit" style={{ fontSize: '12px' }} />
     </button>
   );

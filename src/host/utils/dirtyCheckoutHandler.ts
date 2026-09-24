@@ -44,54 +44,52 @@ export async function handleDirtyCheckout(
   const doCheckoutForce = options?.checkoutForce ?? (() => repo.checkoutForce(branchName));
 
   type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> };
+  const cancelItem: ActionItem = {
+    label: `$(close) ${vscode.l10n.t('Cancel')}`,
+    detail: '',
+    action: async () => { /* no-op */ },
+  };
   const items: ActionItem[] = [
     {
-      label: '$(archive) Stash and checkout',
-      detail: 'Save changes to stash, then switch to the branch',
+      label: `$(archive) ${vscode.l10n.t('Stash and checkout')}`,
+      detail: vscode.l10n.t('Save changes to stash, then switch to the branch'),
       action: async () => {
         await repo.stashPush(`WIP before checkout to ${branchName}`);
         await doCheckout();
-        const doneMsg = `[${repoLabel}]: changes stashed, switched to "${branchName}"`;
-        vscode.window.showInformationMessage(doneMsg);
-        logInfo(`checkout:${repoLabel}`, doneMsg);
+        vscode.window.showInformationMessage(vscode.l10n.t('[{0}]: changes stashed, switched to "{1}"', repoLabel, branchName));
+        logInfo(`checkout:${repoLabel}`, `[${repoLabel}]: changes stashed, switched to "${branchName}"`);
       },
     },
     {
-      label: '$(arrow-right) Bring changes to new branch',
-      detail: 'Carry uncommitted changes into the new branch',
+      label: `$(arrow-right) ${vscode.l10n.t('Bring changes to new branch')}`,
+      detail: vscode.l10n.t('Carry uncommitted changes into the new branch'),
       action: async () => {
         await repo.stashPush(`WIP migrating to ${branchName}`);
         await doCheckout();
         await repo.stashPop();
-        const doneMsg = `[${repoLabel}]: changes migrated to "${branchName}"`;
-        vscode.window.showInformationMessage(doneMsg);
-        logInfo(`checkout:${repoLabel}`, doneMsg);
+        vscode.window.showInformationMessage(vscode.l10n.t('[{0}]: changes migrated to "{1}"', repoLabel, branchName));
+        logInfo(`checkout:${repoLabel}`, `[${repoLabel}]: changes migrated to "${branchName}"`);
       },
     },
     {
-      label: '$(warning) Force checkout',
-      detail: 'Discard local changes and switch to the branch',
+      label: `$(warning) ${vscode.l10n.t('Force checkout')}`,
+      detail: vscode.l10n.t('Discard local changes and switch to the branch'),
       action: async () => {
         await doCheckoutForce();
-        const doneMsg = `[${repoLabel}]: force checkout to "${branchName}" (changes discarded)`;
-        vscode.window.showInformationMessage(doneMsg);
-        logInfo(`checkout:${repoLabel}`, doneMsg);
+        vscode.window.showInformationMessage(vscode.l10n.t('[{0}]: force checkout to "{1}" (changes discarded)', repoLabel, branchName));
+        logInfo(`checkout:${repoLabel}`, `[${repoLabel}]: force checkout to "${branchName}" (changes discarded)`);
       },
     },
-    {
-      label: '$(close) Cancel',
-      detail: '',
-      action: async () => { /* no-op */ },
-    },
+    cancelItem,
   ];
 
   const pick = await vscode.window.showQuickPick(items, {
-    title: `[${repoLabel}]: Uncommitted changes`,
-    placeHolder: `Choose how to handle local changes before switching to "${branchName}"`,
+    title: vscode.l10n.t('[{0}]: Uncommitted changes', repoLabel),
+    placeHolder: vscode.l10n.t('Choose how to handle local changes before switching to "{0}"', branchName),
     ignoreFocusOut: true,
   });
 
-  if (!pick || pick.label === '$(close) Cancel') return { matched: true, succeeded: false };
+  if (!pick || pick === cancelItem) return { matched: true, succeeded: false };
   await pick.action();
   return { matched: true, succeeded: true };
 }

@@ -1,12 +1,15 @@
+// VS Code's display language rather than navigator.language, so dates match the rest of the UI.
+import { locale } from './l10n';
+
 export function formatDateTime(dateStr: string): string {
   try {
     const date = new Date(dateStr);
-    const datePart = new Intl.DateTimeFormat(navigator.language, {
+    const datePart = new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     }).format(date);
-    const timePart = new Intl.DateTimeFormat(navigator.language, {
+    const timePart = new Intl.DateTimeFormat(locale, {
       hour: '2-digit',
       minute: '2-digit',
     }).format(date);
@@ -19,7 +22,7 @@ export function formatDateTime(dateStr: string): string {
 export function formatDateOnly(dateStr: string): string {
   try {
     const date = new Date(dateStr);
-    return new Intl.DateTimeFormat(navigator.language, {
+    return new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -32,7 +35,7 @@ export function formatDateOnly(dateStr: string): string {
 export function formatDateCompact(dateStr: string): string {
   try {
     const date = new Date(dateStr);
-    return new Intl.DateTimeFormat(navigator.language, {
+    return new Intl.DateTimeFormat(locale, {
       year: '2-digit',
       month: '2-digit',
       day: '2-digit',
@@ -46,7 +49,7 @@ export function formatDate(dateStr: string): string {
   try {
     const date = new Date(dateStr);
     const diffD = Math.floor((Date.now() - date.getTime()) / 86400000);
-    return new Intl.DateTimeFormat(navigator.language, {
+    return new Intl.DateTimeFormat(locale, {
       month: 'short',
       day: 'numeric',
       ...(diffD > 365 ? { year: 'numeric' } : {}),

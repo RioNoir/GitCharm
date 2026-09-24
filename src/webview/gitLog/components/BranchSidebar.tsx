@@ -5,6 +5,8 @@ import { isPrimaryBranch } from '../../shared/branchUtils';
 import { primaryBranchColor } from '../../shared/branchColors';
 import { Codicon } from '../../shared/Codicon';
 import { focusOnHover, handleTreeNavKeyDown } from '../../shared/keyboardNav';
+import * as l10n from '@vscode/l10n';
+import { isImeComposing } from '../../shared/ime';
 
 interface Props {
   repos: RepoMeta[];
@@ -349,10 +351,10 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               style={styles.searchInput}
               value={filter}
               onChange={e => onFilterChange(e.target.value)}
-              placeholder="Filter branches & tags..."
+              placeholder={l10n.t('Filter branches & tags...')}
             />
           </div>
-          <button style={styles.collapseBtn} onClick={onCollapse} title="Collapse sidebar">
+          <button style={styles.collapseBtn} onClick={onCollapse} title={l10n.t('Collapse sidebar')}>
             <div data-top-action-btn="" style={styles.collapseBtnInner}>
               <Codicon name="layout-sidebar-left" style={{ fontSize: '14px' }} />
             </div>
@@ -364,7 +366,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       {/* LOCAL section */}
       <SectionHeader
         icon="git-branch"
-        label="Local"
+        label={l10n.t({ message: 'Local', comment: ['Branch sidebar section header: local branches'] })}
         count={localMerged.length}
         sectionKey="local"
         collapsed={collapsed}
@@ -445,7 +447,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
         <>
           <SectionHeader
             icon="tag"
-            label="Tags"
+            label={l10n.t('Tags')}
             count={mergedTags.length}
             sectionKey="tags"
             collapsed={collapsed}
@@ -566,7 +568,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
         onDoubleClick();
       }}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
-      title={`${baseName}\nClick to focus branch head · Double-click to filter · Right-click for git actions`}
+      title={`${baseName}\n${l10n.t('Click to focus branch head · Double-click to filter · Right-click for git actions')}`}
     >
       <span style={styles.chevronSpacer} />
       <Codicon
@@ -592,7 +594,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
       )}
 
       {!isRemote && merged.instances.some(i => i.upstreamGone) && (
-        <span style={styles.orphanBadge} title="Remote branch no longer exists (likely deleted after a merge)">
+        <span style={styles.orphanBadge} title={l10n.t('Remote branch no longer exists (likely deleted after a merge)')}>
           <Codicon name="cloud-offline" style={{ fontSize: '12px' }} />
         </span>
       )}
@@ -632,7 +634,7 @@ function SectionHeader({ icon, label, count, sectionKey, collapsed, onToggleSect
       {hasFolders && hovered && (
         <button
           style={styles.sectionActionBtn(actionHovered)}
-          title={allCollapsed ? 'Expand all folders' : 'Collapse all folders'}
+          title={allCollapsed ? l10n.t('Expand all folders') : l10n.t('Collapse all folders')}
           onMouseEnter={() => setActionHovered(true)}
           onMouseLeave={() => setActionHovered(false)}
           onClick={(e) => {
@@ -805,7 +807,7 @@ function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoCo
         </span>
       )}
       {aheadBehind && (aheadBehind.ahead > 0 || aheadBehind.behind > 0) && (
-        <span style={styles.aheadBehind} title={`${aheadBehind.ahead} to push, ${aheadBehind.behind} to pull (total for branches in this folder)`}>
+        <span style={styles.aheadBehind} title={l10n.t('{0} to push, {1} to pull (total for branches in this folder)', aheadBehind.ahead, aheadBehind.behind)}>
           {aheadBehind.ahead > 0 && <span>↑{aheadBehind.ahead}</span>}
           {aheadBehind.behind > 0 && <span>↓{aheadBehind.behind}</span>}
         </span>
@@ -909,7 +911,7 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       onContextMenu={onContextMenu}
-      title={`Tag: ${mergedTag.name}${isActive ? ' (current)' : ''}\nRight-click for actions`}
+      title={`${isActive ? l10n.t('Tag: {0} (current)', mergedTag.name) : l10n.t('Tag: {0}', mergedTag.name)}\n${l10n.t('Right-click for actions')}`}
     >
       <span style={styles.chevronSpacer} />
       <Codicon name="tag" style={styles.branchIcon(false, isActive, primaryColor)} />
@@ -977,7 +979,7 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   useEffect(() => {
     const onBlur = () => onClose();
     const onMouseDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKeyDown = (e: KeyboardEvent) => { if (isImeComposing(e)) return; if (e.key === 'Escape') onClose(); };
     window.addEventListener('blur', onBlur);
     document.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('keydown', onKeyDown);
@@ -988,11 +990,11 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
     };
   }, [onClose]);
   const items: MenuItem[] = [
-    { icon: 'arrow-right', label: `Checkout "${mergedTag.name}"`, action: onCheckout },
+    { icon: 'arrow-right', label: l10n.t('Checkout "{0}"', mergedTag.name), action: onCheckout },
     { sep: true },
-    { icon: 'git-merge', label: 'Merge into current', action: onMerge },
-    { icon: 'cloud-upload', label: 'Push to remote...', action: onPush },
-    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete tag', action: onDelete, danger: true }] : []),
+    { icon: 'git-merge', label: l10n.t('Merge into current'), action: onMerge },
+    { icon: 'cloud-upload', label: l10n.t('Push to remote...'), action: onPush },
+    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: l10n.t('Delete tag'), action: onDelete, danger: true }] : []),
   ];
 
   return (
@@ -1022,7 +1024,7 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
   useEffect(() => {
     const onBlur = () => onClose();
     const onMouseDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKeyDown = (e: KeyboardEvent) => { if (isImeComposing(e)) return; if (e.key === 'Escape') onClose(); };
     window.addEventListener('blur', onBlur);
     document.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('keydown', onKeyDown);
@@ -1037,19 +1039,19 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
     onClose();
   };
   const items: MenuItem[] = [
-    { icon: 'arrow-right', label: `Checkout "${merged.baseName}"`, action: onCheckout },
+    { icon: 'arrow-right', label: l10n.t('Checkout "{0}"', merged.baseName), action: onCheckout },
     { sep: true },
-    { icon: 'git-merge', label: 'Merge into current', action: onMerge },
-    { icon: 'repo-forked', label: `Rebase onto "${merged.baseName}"`, action: onRebase },
+    { icon: 'git-merge', label: l10n.t('Merge into current'), action: onMerge },
+    { icon: 'repo-forked', label: l10n.t('Rebase onto "{0}"', merged.baseName), action: onRebase },
     ...(onPull || onPush ? [
       { sep: true as const },
-      ...(onPull ? [{ icon: 'cloud-download', label: `Pull "${merged.baseName}"`, action: onPull }] : []),
-      ...(onPush ? [{ icon: 'cloud-upload', label: `Push "${merged.baseName}"...`, action: onPush }] : []),
+      ...(onPull ? [{ icon: 'cloud-download', label: l10n.t('Pull "{0}"', merged.baseName), action: onPull }] : []),
+      ...(onPush ? [{ icon: 'cloud-upload', label: l10n.t('Push "{0}"...', merged.baseName), action: onPush }] : []),
     ] : []),
     { sep: true },
-    ...(onRename ? [{ icon: 'edit', label: 'Rename…', action: onRename }] : []),
-    { icon: 'copy', label: 'Copy Branch Name', action: copyName },
-    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: 'Delete branch', action: onDelete, danger: true }] : []),
+    ...(onRename ? [{ icon: 'edit', label: l10n.t('Rename…'), action: onRename }] : []),
+    { icon: 'copy', label: l10n.t('Copy Branch Name'), action: copyName },
+    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: l10n.t('Delete branch'), action: onDelete, danger: true }] : []),
   ];
 
   return (

@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import type { CommitFilters } from '../store/logStore';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
+import * as l10n from '@vscode/l10n';
+import { locale } from '../../shared/l10n';
+import { isImeComposing } from '../../shared/ime';
 
 interface Props {
   filters: CommitFilters;
@@ -77,7 +80,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         {/* Search */}
         <DebouncedInput
           value={filters.text}
-          placeholder="Search commits…"
+          placeholder={l10n.t('Search commits…')}
           icon="search"
           onChange={v => onFilterChange('text', v)}
           debounceMs={600}
@@ -86,7 +89,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         {/* Author */}
         <DebouncedInput
           value={filters.author}
-          placeholder="Author…"
+          placeholder={l10n.t('Author…')}
           icon="person"
           onChange={v => onFilterChange('author', v)}
           debounceMs={600}
@@ -112,7 +115,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         />
 
         {hasFilters && (
-          <button data-top-action-btn="" style={styles.clearBtn} onClick={onClear} title="Clear all filters">
+          <button data-top-action-btn="" style={styles.clearBtn} onClick={onClear} title={l10n.t('Clear all filters')}>
             <Codicon name="clear-all" style={{ fontSize: '15px' }} />
           </button>
         )}
@@ -154,7 +157,7 @@ function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
         data-top-action-btn=""
         style={styles.moreBtn}
         onClick={() => setOpen(o => !o)}
-        title="More actions"
+        title={l10n.t('More actions')}
       >
         <Codicon name="three-bars" style={{ fontSize: '14px' }} />
       </button>
@@ -165,7 +168,7 @@ function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
             onClick={() => { onFetchAll(); setOpen(false); }}
           >
             <Codicon name="sync" style={{ fontSize: '13px', opacity: 0.7 }} />
-            <span>Fetch and Refresh</span>
+            <span>{l10n.t('Fetch and Refresh')}</span>
           </div>
 
           {!hideUndock && (
@@ -176,7 +179,7 @@ function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
                 onClick={() => { onUndock?.('pick'); setOpen(false); }}
               >
                 <Codicon name="multiple-windows" style={{ fontSize: '13px', opacity: 0.7 }} />
-                <span>Undock…</span>
+                <span>{l10n.t('Undock…')}</span>
               </div>
             </>
           )}
@@ -211,6 +214,7 @@ function DebouncedInput({ value, placeholder, icon, onChange, width, maxWidth: _
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(e)) return;
     if (e.key === 'Escape') { handleChange(''); e.currentTarget.blur(); }
     if (e.key === 'Enter' && !local.trim()) { handleChange(''); }
   }
@@ -303,11 +307,11 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
       <button
         style={{ ...styles.pickerBtn(!!value, open), width: '100%' }}
         onClick={() => setOpen(o => !o)}
-        title={value || 'Filter by branch or tag'}
+        title={value || l10n.t('Filter by branch or tag')}
       >
         <Codicon name={buttonIcon} style={styles.fieldIcon} />
         <span style={value ? styles.pickerLabelActive : { ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>
-          {value || 'Branch / Tag…'}
+          {value || l10n.t('Branch / Tag…')}
         </span>
         <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
       </button>
@@ -319,10 +323,10 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
             <input
               autoFocus
               style={styles.dropdownInput}
-              placeholder="Filter…"
+              placeholder={l10n.t('Filter…')}
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}
+              onKeyDown={e => { if (isImeComposing(e)) return; if (e.key === 'Escape') setOpen(false); }}
             />
           </div>
           <div style={styles.dropdownList}>
@@ -330,10 +334,10 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
               style={styles.dropdownItem(!value)}
               onClick={() => { onChange(''); setOpen(false); }}
             >
-              <span style={{ opacity: 0.5, fontSize: '12px' }}>All branches & tags</span>
+              <span style={{ opacity: 0.5, fontSize: '12px' }}>{l10n.t('All branches & tags')}</span>
             </div>
             {displayedLocalBranches.length > 0 && (
-              <div style={styles.dropdownGroupLabel}>Local Branches</div>
+              <div style={styles.dropdownGroupLabel}>{l10n.t('Local Branches')}</div>
             )}
             {displayedLocalBranches.map(({ name, repoIds, isRemote }) => (
               <div
@@ -354,7 +358,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
               </div>
             ))}
             {displayedRemoteBranches.length > 0 && (
-              <div style={styles.dropdownGroupLabel}>Remote Branches</div>
+              <div style={styles.dropdownGroupLabel}>{l10n.t('Remote Branches')}</div>
             )}
             {displayedRemoteBranches.map(({ name, repoIds, isRemote }) => (
               <div
@@ -375,7 +379,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
               </div>
             ))}
             {displayedTags.length > 0 && (
-              <div style={styles.dropdownGroupLabel}>Tags</div>
+              <div style={styles.dropdownGroupLabel}>{l10n.t('Tags')}</div>
             )}
             {displayedTags.map(({ name, repoIds }) => (
               <div
@@ -396,7 +400,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
               </div>
             ))}
             {isEmpty && (
-              <div style={styles.dropdownEmpty}>No matches</div>
+              <div style={styles.dropdownEmpty}>{l10n.t('No matches')}</div>
             )}
           </div>
         </div>
@@ -415,17 +419,17 @@ export function RepoTabs({ value, repos, onChange }: {
   if (repos.length <= 1) return null;
 
   return (
-    <div style={styles.repoTabs} role="tablist" aria-label="Repositories">
+    <div style={styles.repoTabs} role="tablist" aria-label={l10n.t('Repositories')}>
       <button
         type="button"
         role="tab"
         aria-selected={value === null}
         style={styles.repoTab(value === null)}
         onClick={() => onChange(null)}
-        title="All repositories (Ctrl/Cmd+Alt+0)"
+        title={l10n.t('All repositories ({0})', 'Ctrl/Cmd+Alt+0')}
       >
         <Codicon name="repo" style={{ fontSize: '12px', opacity: 0.65 }} />
-        <span>All</span>
+        <span>{l10n.t({ message: 'All', comment: ['Repository tab: show commits of all repositories'] })}</span>
       </button>
 
       {repos.map((repo, index) => (
@@ -448,8 +452,30 @@ export function RepoTabs({ value, repos, onChange }: {
 
 /* ─── DateRangePicker ─────────────────────────────────────────────────────── */
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+function monthLabel(year: number, month: number): string {
+  return new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' }).format(new Date(year, month, 1));
+}
+
+/** First weekday of the calendar grid as a Date#getDay() index (Monday for it/zh, Sunday for en). */
+function weekStartDay(): number {
+  try {
+    const loc = new Intl.Locale(locale) as Intl.Locale & {
+      getWeekInfo?: () => { firstDay: number };
+      weekInfo?: { firstDay: number };
+    };
+    const firstDay = loc.getWeekInfo?.().firstDay ?? loc.weekInfo?.firstDay; // 1 = Monday … 7 = Sunday
+    return firstDay ? firstDay % 7 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Short weekday names in grid order, starting from weekStartDay(). */
+function weekdayLabels(start: number): string[] {
+  const fmt = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+  // 2023-01-01 was a Sunday.
+  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2023, 0, 1 + start + i)));
+}
 
 function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -467,19 +493,20 @@ function CalendarMonth({ year, month, from, to, hovered, onDay, onHover }: {
   onDay: (d: Date) => void;
   onHover: (d: Date | null) => void;
 }) {
-  const firstDay = new Date(year, month, 1).getDay();
+  const weekStart = weekStartDay();
+  const leadingBlanks = (new Date(year, month, 1).getDay() - weekStart + 7) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (Date | null)[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let i = 0; i < leadingBlanks; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
 
   const rangeEnd = hovered ?? to;
 
   return (
     <div style={calStyles.month}>
-      <div style={calStyles.monthTitle}>{MONTHS[month]} {year}</div>
+      <div style={calStyles.monthTitle}>{monthLabel(year, month)}</div>
       <div style={calStyles.grid}>
-        {DAYS.map(d => <div key={d} style={calStyles.dayHeader}>{d}</div>)}
+        {weekdayLabels(weekStart).map((d, i) => <div key={i} style={calStyles.dayHeader}>{d}</div>)}
         {cells.map((date, i) => {
           if (!date) return <div key={`e${i}`} />;
           const ymd = toYMD(date);
@@ -581,7 +608,7 @@ function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
         <Codicon name="calendar" style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
         {label
           ? <span style={styles.pickerLabelActive}>{label}</span>
-          : <span style={{ ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>From → To</span>}
+          : <span style={{ ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>{l10n.t('From → To')}</span>}
         {hasRange && (
           <span
             style={{ ...styles.fieldClear, marginLeft: 2 }}
@@ -598,7 +625,7 @@ function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
           <div style={calStyles.calCol}>
             <div style={calStyles.navRow}>
               <button style={calStyles.navBtn} onClick={() => navLeft(-1)}><Codicon name="chevron-left" style={{ fontSize: '12px' }} /></button>
-              <span style={calStyles.navLabel}>{MONTHS[leftYM.m]} {leftYM.y}</span>
+              <span style={calStyles.navLabel}>{monthLabel(leftYM.y, leftYM.m)}</span>
               <button style={calStyles.navBtn} onClick={() => navLeft(1)}><Codicon name="chevron-right" style={{ fontSize: '12px' }} /></button>
             </div>
             <CalendarMonth year={leftYM.y} month={leftYM.m} from={fromDate} to={toDate} hovered={hovered} onDay={handleDay} onHover={setHovered} />
@@ -610,7 +637,7 @@ function DateRangePicker({ from, to, isLight, onFromChange, onToChange }: {
           <div style={calStyles.calCol}>
             <div style={calStyles.navRow}>
               <button style={calStyles.navBtn} onClick={() => navRight(-1)}><Codicon name="chevron-left" style={{ fontSize: '12px' }} /></button>
-              <span style={calStyles.navLabel}>{MONTHS[rightYM.m]} {rightYM.y}</span>
+              <span style={calStyles.navLabel}>{monthLabel(rightYM.y, rightYM.m)}</span>
               <button style={calStyles.navBtn} onClick={() => navRight(1)}><Codicon name="chevron-right" style={{ fontSize: '12px' }} /></button>
             </div>
             <CalendarMonth year={rightYM.y} month={rightYM.m} from={fromDate} to={toDate} hovered={hovered} onDay={handleDay} onHover={setHovered} />

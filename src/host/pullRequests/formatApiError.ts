@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { HttpJsonError } from './httpJson';
 
 interface GitHubErrorBody {
@@ -24,12 +25,12 @@ interface GiteaErrorBody {
  * invalid/already_exists/custom — only "custom" reliably includes its own `message`). */
 function formatGitHubErrorItem(item: NonNullable<GitHubErrorBody['errors']>[number]): string {
   if (item.message) return item.message;
-  const field = item.field ? `'${item.field}'` : 'field';
+  const field = item.field ? `'${item.field}'` : vscode.l10n.t('field');
   switch (item.code) {
-    case 'missing': return `${field} is missing`;
-    case 'missing_field': return `${field} is required`;
-    case 'invalid': return `${field} is invalid`;
-    case 'already_exists': return `${field} already exists`;
+    case 'missing': return vscode.l10n.t('{0} is missing', field);
+    case 'missing_field': return vscode.l10n.t('{0} is required', field);
+    case 'invalid': return vscode.l10n.t('{0} is invalid', field);
+    case 'already_exists': return vscode.l10n.t('{0} already exists', field);
     default: return `${field}: ${item.code ?? 'invalid'}`;
   }
 }

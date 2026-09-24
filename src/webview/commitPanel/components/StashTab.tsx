@@ -7,6 +7,8 @@ import type { ViewMode } from '../store/commitStore';
 import { useCommitStore } from '../store/commitStore';
 import { GenericFileTree } from '../../shared/GenericFileTree';
 import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
+import * as l10n from '@vscode/l10n';
+import { plural, locale } from '../../shared/l10n';
 
 interface Props {
   repoId: string;
@@ -31,13 +33,15 @@ interface Props {
   isLast?: boolean;
 }
 
-const STASH_CTX_ITEMS: ContextMenuEntry[] = [
-  { id: 'pop',    label: 'Pop (apply & drop)', icon: 'git-stash-pop' },
-  { id: 'apply',  label: 'Apply (keep stash)', icon: 'git-stash-apply' },
-  { id: 'rename', label: 'Rename',             icon: 'edit' },
-  { separator: true },
-  { id: 'drop',   label: 'Delete',             icon: 'trash', danger: true },
-];
+function stashCtxItems(): ContextMenuEntry[] {
+  return [
+    { id: 'pop',    label: l10n.t('Pop (apply & drop)'), icon: 'git-stash-pop' },
+    { id: 'apply',  label: l10n.t('Apply (keep stash)'), icon: 'git-stash-apply' },
+    { id: 'rename', label: l10n.t('Rename'),             icon: 'edit' },
+    { separator: true },
+    { id: 'drop',   label: l10n.t('Delete'),             icon: 'trash', danger: true },
+  ];
+}
 
 const STATUS_COLORS: Record<string, string> = {
   // extended names (Shelf uses these)
@@ -65,18 +69,20 @@ function statusLetter(status: string): string {
   return STATUS_LETTERS[status] ?? 'M';
 }
 
+const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
+
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
     const diffMs = Date.now() - d.getTime();
     const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return l10n.t('just now');
+    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h ago`;
+    if (diffH < 24) return rtf.format(-diffH, 'hour');
     const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return `${diffD}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
+    if (diffD < 7) return rtf.format(-diffD, 'day');
+    return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
   } catch { return iso; }
 }
 
@@ -127,7 +133,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
         onMouseLeave={() => setHovered(false)}
         onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
         onDoubleClick={() => onPop(repoId, entry.ref)}
-        title={`${entry.ref} — double-click to pop`}
+        title={l10n.t('{0} — double-click to pop', entry.ref)}
       >
         <button style={row.chevronBtn} onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}>
           <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65 }} />
@@ -139,7 +145,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
           </span>
           <span style={row.meta}>
             {formatDate(entry.date)}
-            {' · '}{entry.files.length} {entry.files.length === 1 ? 'file' : 'files'}
+            {' · '}{plural(entry.files.length, l10n.t('1 file'), l10n.t('{0} files', entry.files.length))}
             {(() => {
               const a = entry.files.reduce((s, f) => s + (f.added   ?? 0), 0);
               const r = entry.files.reduce((s, f) => s + (f.removed ?? 0), 0);
@@ -156,9 +162,9 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
         </div>
         {hovered && (
           <div style={row.actions}>
-            <InlineIconBtn icon="git-stash-pop" title="Pop (apply and drop)" visible onClick={e => { e.stopPropagation(); onPop(repoId, entry.ref); }} />
-            <InlineIconBtn icon="git-stash-apply" title="Apply (keep stash)" visible onClick={e => { e.stopPropagation(); onApply(repoId, entry.ref); }} />
-            <InlineIconBtn icon="trash" title="Drop stash" visible danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.ref); }} />
+            <InlineIconBtn icon="git-stash-pop" title={l10n.t('Pop (apply and drop)')} visible onClick={e => { e.stopPropagation(); onPop(repoId, entry.ref); }} />
+            <InlineIconBtn icon="git-stash-apply" title={l10n.t('Apply (keep stash)')} visible onClick={e => { e.stopPropagation(); onApply(repoId, entry.ref); }} />
+            <InlineIconBtn icon="trash" title={l10n.t('Drop stash')} visible danger onClick={e => { e.stopPropagation(); onDrop(repoId, entry.ref); }} />
           </div>
         )}
       </div>
@@ -167,7 +173,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
       {expanded && (
         <div style={row.fileList} onKeyDown={(e) => handleTreeNavKeyDown(e, e.currentTarget)}>
           {entry.files.length === 0 ? (
-            <div style={row.emptyFiles}>No files</div>
+            <div style={row.emptyFiles}>{l10n.t('No files')}</div>
           ) : (
             <GenericFileTree<StashFile>
               files={entry.files}
@@ -186,7 +192,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
       {ctxMenu && (
         <ContextMenu
           x={ctxMenu.x} y={ctxMenu.y}
-          items={STASH_CTX_ITEMS}
+          items={stashCtxItems()}
           onSelect={id => {
             setCtxMenu(null);
             if (id === 'pop')    onPop(repoId, entry.ref);
@@ -248,9 +254,9 @@ export function StashTab({
       )}
       {!sectionCollapsed && (
         loading ? (
-          <div style={css.empty}>Loading…</div>
+          <div style={css.empty}>{l10n.t('Loading…')}</div>
         ) : stashes.length === 0 ? (
-          <div style={css.empty}>No stashes</div>
+          <div style={css.empty}>{l10n.t('No stashes')}</div>
         ) : (
           stashes.map((entry, i) => (
             <StashRow

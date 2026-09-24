@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git';
+import { createGit } from './gitClient';
 import * as path from 'path';
 
 export interface BlameLine {
@@ -16,7 +16,7 @@ export class BlameService {
   async getBlame(filePath: string, rootPath: string): Promise<BlameLine[]> {
     if (this.cache.has(filePath)) return this.cache.get(filePath)!;
 
-    const git = simpleGit(rootPath);
+    const git = createGit(rootPath);
     const relPath = path.relative(rootPath, filePath);
 
     let raw: string;

@@ -1,4 +1,6 @@
 import type { RepoStatus } from '../shared/types';
+import * as l10n from '@vscode/l10n';
+import { plural } from '../shared/l10n';
 
 /**
  * What the primary button in the commit tab should do when there is nothing to commit.
@@ -22,7 +24,7 @@ export interface SyncState {
   icon: string;
 }
 
-const NONE: SyncState = { action: 'none', ahead: 0, behind: 0, repoIds: [], label: 'Sync Changes', icon: 'sync' };
+const none = (): SyncState => ({ action: 'none', ahead: 0, behind: 0, repoIds: [], label: l10n.t('Sync Changes'), icon: 'sync' });
 
 /**
  * Derives the publish/sync state for the commit tab from the repos it shows.
@@ -33,7 +35,7 @@ const NONE: SyncState = { action: 'none', ahead: 0, behind: 0, repoIds: [], labe
 export function computeSyncState(repos: RepoStatus[]): SyncState {
   // A detached HEAD has no branch to publish or track.
   const eligible = repos.filter(r => !r.isDetachedHead);
-  if (eligible.length === 0) return NONE;
+  if (eligible.length === 0) return none();
 
   const unpublished = eligible.filter(r => !r.branch.upstream);
   if (unpublished.length > 0) {
@@ -42,13 +44,13 @@ export function computeSyncState(repos: RepoStatus[]): SyncState {
       ahead: 0,
       behind: 0,
       repoIds: unpublished.map(r => r.repoId),
-      label: unpublished.length === 1 ? 'Publish Branch' : `Publish ${unpublished.length} Branches`,
+      label: plural(unpublished.length, l10n.t('Publish Branch'), l10n.t('Publish {0} Branches', unpublished.length)),
       icon: 'cloud-upload',
     };
   }
 
   const outOfSync = eligible.filter(r => (r.branch.aheadBehind?.ahead ?? 0) > 0 || (r.branch.aheadBehind?.behind ?? 0) > 0);
-  if (outOfSync.length === 0) return NONE;
+  if (outOfSync.length === 0) return none();
 
   let ahead = 0;
   let behind = 0;
@@ -62,7 +64,7 @@ export function computeSyncState(repos: RepoStatus[]): SyncState {
     ahead,
     behind,
     repoIds: outOfSync.map(r => r.repoId),
-    label: 'Sync Changes',
+    label: l10n.t('Sync Changes'),
     icon: 'sync',
   };
 }

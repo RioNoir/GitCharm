@@ -8,6 +8,7 @@ import { Codicon } from '../../shared/Codicon';
 import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
+import * as l10n from '@vscode/l10n';
 
 export interface RepoFileGroup {
   repoId: string;
@@ -101,7 +102,7 @@ export function ChangelistGroup({
           onClick={totalFiles > 0 ? toggleAll : e => e.stopPropagation()}
           disabled={totalFiles === 0}
           style={{ ...styles.clCheckbox, ...(totalFiles === 0 ? { opacity: 0.3, cursor: 'default', pointerEvents: 'none' } : {}) }}
-          title={totalFiles > 0 ? "Select all files in this changelist" : undefined}
+          title={totalFiles > 0 ? l10n.t('Select all files in this changelist') : undefined}
         />
         <div style={styles.headerMain} onClick={() => toggleCollapsed(collapseKey)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
@@ -120,7 +121,7 @@ export function ChangelistGroup({
       {!collapsed && (
         <div style={styles.body}>
           {repoGroups.length === 0 && (
-            <div style={styles.empty}>No files</div>
+            <div style={styles.empty}>{l10n.t('No files')}</div>
           )}
           {repoGroups.map((group, idx) => (
               <RepoSubGroup
@@ -269,7 +270,7 @@ function RepoSubGroup({
             onChange={() => {}}
             onClick={totalFiles > 0 ? toggleAll : e => e.stopPropagation()}
             style={{ ...styles.repoCheckbox, ...(totalFiles === 0 ? { opacity: 0.3, cursor: 'default', pointerEvents: 'none' } : {}) }}
-            title={totalFiles > 0 ? `Select all files in ${repoName}` : undefined}
+            title={totalFiles > 0 ? l10n.t('Select all files in {0}', repoName) : undefined}
             disabled={totalFiles === 0}
           />
           <div style={styles.repoHeaderMain} onClick={() => toggleCollapsed(collapseKey)}>
@@ -279,7 +280,7 @@ function RepoSubGroup({
               {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
             </span>
             {isSubmodule && (
-              <span style={styles.submoduleBadge} title={submodulePath ? `Submodule: ${submodulePath}` : 'Submodule'}>SUB</span>
+              <span style={styles.submoduleBadge} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>{l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}</span>
             )}
             {repoStatus && (
               <span
@@ -287,7 +288,7 @@ function RepoSubGroup({
                 onClick={e => { e.stopPropagation(); onBranchClick(repoId); }}
                 onMouseEnter={e => { e.stopPropagation(); setBranchHovered(true); }}
                 onMouseLeave={e => { e.stopPropagation(); setBranchHovered(false); }}
-                title={repoStatus.branch.detachedTag ? `Tag: ${repoStatus.branch.detachedTag} (detached HEAD)` : repoStatus.branch.detachedHash ? `Detached HEAD at ${repoStatus.branch.detachedHash}` : repoStatus.branch.name}
+                title={repoStatus.branch.detachedTag ? l10n.t('Tag: {0} (detached HEAD)', repoStatus.branch.detachedTag) : repoStatus.branch.detachedHash ? l10n.t('Detached HEAD at {0}', repoStatus.branch.detachedHash) : repoStatus.branch.name}
               >
                 <Codicon
                   name={isWorktree ? 'worktree' : repoStatus.branch.detachedTag ? 'tag' : repoStatus.branch.detachedHash ? 'git-commit' : 'git-branch'}
@@ -302,7 +303,7 @@ function RepoSubGroup({
               {viewMode === 'tree' && totalFiles > 0 && !collapsed && dirKeys.length > 0 && (
                 <InlineIconBtn
                   icon={expanded ? 'collapse-all' : 'expand-all'}
-                  title={expanded ? 'Collapse' : 'Expand'}
+                  title={expanded ? l10n.t('Collapse') : l10n.t('Expand')}
                   visible={hovered}
                   onClick={e => { e.stopPropagation(); setDirsCollapsed(dirKeys, expanded); }}
                 />
@@ -320,7 +321,7 @@ function RepoSubGroup({
       {(!multiRepo || singleRepo || !collapsed) && (
         <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
           {files.length === 0 ? (
-            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>No changes</div>
+            <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>{l10n.t('No changes')}</div>
           ) : (
             <FileTree
               repoId={repoId}

@@ -7,6 +7,7 @@ import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
 import { PROJECT_COLORS } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
+import { mergeCommitLists } from '../utils/mergeCommitLists';
 
 const MAX_SUBMODULE_DEPTH = 5;
 /**
@@ -703,11 +704,12 @@ export class WorkspaceGitManager implements vscode.Disposable {
   ): Promise<void> {
     const names = files.map(f => f.relPath);
     const label = names.length === 1
-      ? `Do you want to add "${names[0]}" to Git?`
-      : `Do you want to add ${names.length} new files to Git?`;
+      ? vscode.l10n.t('Do you want to add "{0}" to Git?', names[0])
+      : vscode.l10n.t('Do you want to add {0} new files to Git?', names.length);
 
-    const answer = await vscode.window.showInformationMessage(label, 'Add', 'Cancel');
-    if (answer !== 'Add') return;
+    const add = vscode.l10n.t('Add');
+    const answer = await vscode.window.showInformationMessage(label, add, vscode.l10n.t('Cancel'));
+    if (answer !== add) return;
 
     for (const { repo, relPath } of files) {
       await repo.stageFiles([relPath]).catch(() => {});
@@ -996,11 +998,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const results = await Promise.allSettled(
       targets.map(r => r.getLog(fetchLimit, fetchSkip, { ...opts, worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
     );
-    const allCommits = results
+    const allCommits = mergeCommitLists(results
       .filter((r): r is PromiseFulfilledResult<CommitNode[]> => r.status === 'fulfilled')
-      .flatMap(r => r.value);
+      .map(r => r.value));
 
-    allCommits.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
     const pageStart = isInterleaved ? skip : 0;
     return allCommits.slice(pageStart, pageStart + limit);
   }

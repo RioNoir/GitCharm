@@ -1,7 +1,7 @@
 {
   "name": "gitcharm",
   "displayName": "GitCharm",
-  "description": "Jetbrains-style Git management for VS Code — Commit panel, Multi-repo, Shelf, Stash, Pull Requests, Git Log with graph and more.",
+  "description": "%extension.description%",
   "version": "0.4.9",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
@@ -45,11 +45,15 @@
   "activationEvents": [
     "workspaceContains:**/.git",
     "onStartupFinished",
+    "onView:gitcharm.commitPanel",
+    "onView:gitcharm.gitLog",
+    "onCommand:gitcharm.openLog",
     "onWebviewPanel:gitcharm.undocked",
     "onWebviewPanel:gitcharm.commitFullDetail",
     "onWebviewPanel:gitcharm.pullRequestDetail"
   ],
   "main": "./out/host/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "submenus": [
       {
@@ -58,15 +62,15 @@
       },
       {
         "id": "gitcharm/commitPanel.fileView",
-        "label": "File View"
+        "label": "%submenu.commitPanel.fileView.label%"
       },
       {
         "id": "gitcharm/commitPanel.sortRepos",
-        "label": "Sort Repository By"
+        "label": "%submenu.commitPanel.sortRepos.label%"
       },
       {
         "id": "gitcharm/commitPanel.reposWithoutChanges",
-        "label": "Repository View"
+        "label": "%submenu.commitPanel.reposWithoutChanges.label%"
       }
     ],
     "viewsContainers": {
@@ -80,7 +84,7 @@
       "panel": [
         {
           "id": "gitcharm-log",
-          "title": "GitCharm Log",
+          "title": "%viewsContainer.gitcharm-log.title%",
           "icon": "media/icons/git-merge.svg"
         }
       ]
@@ -103,7 +107,7 @@
         {
           "type": "webview",
           "id": "gitcharm.gitLog",
-          "name": "Git Log",
+          "name": "%view.gitLog.name%",
           "retainContextWhenHidden": true,
           "when": "!gitcharm.gitLogDefaultUndocked"
         }
@@ -112,281 +116,281 @@
     "commands": [
       {
         "command": "gitcharm.openLog",
-        "title": "Focus Git Log",
+        "title": "%command.openLog.title%",
         "category": "GitCharm",
         "icon": "$(history)"
       },
       {
         "command": "gitcharm.showOutputLog",
-        "title": "Show Output Log",
+        "title": "%command.showOutputLog.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.commit",
-        "title": "Commit",
+        "title": "%command.commit.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.commitAndPush",
-        "title": "Commit & Push",
+        "title": "%command.commitAndPush.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.pull",
-        "title": "Pull",
+        "title": "%command.pull.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.push",
-        "title": "Push All",
+        "title": "%command.push.title%",
         "category": "GitCharm",
         "icon": "$(repo-push)"
       },
       {
         "command": "gitcharm.fetchAll",
-        "title": "Fetch All Remotes",
+        "title": "%command.fetchAll.title%",
         "category": "GitCharm",
         "icon": "$(repo-fetch)"
       },
       {
         "command": "gitcharm.checkOrphanBranches",
-        "title": "Check for Orphaned Branches",
+        "title": "%command.checkOrphanBranches.title%",
         "category": "GitCharm",
         "icon": "$(cloud-offline)"
       },
       {
         "command": "gitcharm.syncAll",
-        "title": "Sync All (Pull + Push)",
+        "title": "%command.syncAll.title%",
         "category": "GitCharm",
         "icon": "$(sync)"
       },
       {
         "command": "gitcharm.openMergeEditor",
-        "title": "Open Merge Editor",
+        "title": "%command.openMergeEditor.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.refreshCommitPanel",
-        "title": "Refresh",
+        "title": "%command.refreshCommitPanel.title%",
         "category": "GitCharm",
         "icon": "$(refresh)"
       },
       {
         "command": "gitcharm.setFileViewFlat",
-        "title": "Flat List",
+        "title": "%command.setFileViewFlat.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.setFileViewFlatChecked",
-        "title": "✓ Flat List",
+        "title": "%command.setFileViewFlatChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.setFileViewTree",
-        "title": "Tree View",
+        "title": "%command.setFileViewTree.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.setFileViewTreeChecked",
-        "title": "✓ Tree View",
+        "title": "%command.setFileViewTreeChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.sortReposByDiscovery",
-        "title": "Discovery Time",
+        "title": "%command.sortReposByDiscovery.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.sortReposByDiscoveryChecked",
-        "title": "✓ Discovery Time",
+        "title": "%command.sortReposByDiscoveryChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.sortReposByName",
-        "title": "Name",
+        "title": "%command.sortReposByName.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.sortReposByNameChecked",
-        "title": "✓ Name",
+        "title": "%command.sortReposByNameChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.sortReposByPath",
-        "title": "Path",
+        "title": "%command.sortReposByPath.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.sortReposByPathChecked",
-        "title": "✓ Path",
+        "title": "%command.sortReposByPathChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.showReposWithoutChanges",
-        "title": "Show All",
+        "title": "%command.showReposWithoutChanges.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.showReposWithoutChangesChecked",
-        "title": "✓ Show All",
+        "title": "%command.showReposWithoutChangesChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.hideReposWithoutChanges",
-        "title": "Hide without changes",
+        "title": "%command.hideReposWithoutChanges.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.hideReposWithoutChangesChecked",
-        "title": "✓ Hide without changes",
+        "title": "%command.hideReposWithoutChangesChecked.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.showBranchMenu",
-        "title": "Branch Menu",
+        "title": "%command.showBranchMenu.title%",
         "category": "GitCharm",
         "icon": "$(git-branch)"
       },
       {
         "command": "gitcharm.updateProject",
-        "title": "Pull All (Update Project)",
+        "title": "%command.updateProject.title%",
         "category": "GitCharm",
         "icon": "$(repo-pull)"
       },
       {
         "command": "gitcharm.openSettings",
-        "title": "Settings",
+        "title": "%command.openSettings.title%",
         "category": "GitCharm",
         "icon": "$(settings-gear)"
       },
       {
         "command": "gitcharm.resetViewLocations",
-        "title": "Reset View Locations",
+        "title": "%command.resetViewLocations.title%",
         "category": "GitCharm",
         "icon": "$(discard)"
       },
       {
         "command": "gitcharm.openGitAnnotations",
-        "title": "Open Git Annotations",
+        "title": "%command.openGitAnnotations.title%",
         "category": "GitCharm",
         "icon": "$(git-commit)"
       },
       {
         "command": "gitcharm.closeGitAnnotations",
-        "title": "Close Git Annotations",
+        "title": "%command.closeGitAnnotations.title%",
         "category": "GitCharm",
         "icon": "$(git-commit)"
       },
       {
         "command": "gitcharm.toggleGitAnnotations",
-        "title": "Toggle Git Annotations",
+        "title": "%command.toggleGitAnnotations.title%",
         "category": "GitCharm",
         "icon": "$(git-commit)"
       },
       {
         "command": "gitcharm.navigateToAnnotationCommit",
-        "title": "Navigate to Commit",
+        "title": "%command.navigateToAnnotationCommit.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.manageHiddenRepos",
-        "title": "Manage Hidden Repositories",
+        "title": "%command.manageHiddenRepos.title%",
         "category": "GitCharm",
         "icon": "$(eye-closed)"
       },
       {
         "command": "gitcharm.manageProfiles",
-        "title": "Manage Git Profiles",
+        "title": "%command.manageProfiles.title%",
         "category": "GitCharm",
         "icon": "$(account)"
       },
       {
         "command": "gitcharm.switchProfile",
-        "title": "Switch Git Profile",
+        "title": "%command.switchProfile.title%",
         "category": "GitCharm",
         "icon": "$(account)"
       },
       {
         "command": "gitcharm.submodule.init",
-        "title": "Initialize Submodule",
+        "title": "%command.submodule.init.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.update",
-        "title": "Update Submodule",
+        "title": "%command.submodule.update.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.updateRecursive",
-        "title": "Update Submodule (Recursive)",
+        "title": "%command.submodule.updateRecursive.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.deinit",
-        "title": "Deinit Submodule",
+        "title": "%command.submodule.deinit.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.deinitForce",
-        "title": "Force Deinit Submodule",
+        "title": "%command.submodule.deinitForce.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.submodule.openInNewWindow",
-        "title": "Open Submodule in New Window",
+        "title": "%command.submodule.openInNewWindow.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.worktree.add",
-        "title": "Add Worktree",
+        "title": "%command.worktree.add.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.worktree.prune",
-        "title": "Prune Worktrees",
+        "title": "%command.worktree.prune.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.pullRequests.manageCredentials",
-        "title": "Manage Pull Request Credentials",
+        "title": "%command.pullRequests.manageCredentials.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.pullRequests.refresh",
-        "title": "Refresh Pull Requests",
+        "title": "%command.pullRequests.refresh.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.selectAiModel",
-        "title": "Select AI Model",
+        "title": "%command.selectAiModel.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.showBranchOptions",
-        "title": "Branch Options",
+        "title": "%command.showBranchOptions.title%",
         "category": "GitCharm"
       },
       {
         "command": "gitcharm.undock",
-        "title": "Undock",
+        "title": "%command.undock.title%",
         "category": "GitCharm",
         "icon": "$(multiple-windows)"
       },
       {
         "command": "gitcharm.setGitLogDefaultLocation",
-        "title": "Set Default Git Log Location",
+        "title": "%command.setGitLogDefaultLocation.title%",
         "category": "GitCharm",
         "icon": "$(settings-gear)"
       },
       {
         "command": "gitcharm.showFileHistory",
-        "title": "Show File History",
+        "title": "%command.showFileHistory.title%",
         "category": "GitCharm",
         "icon": "$(history)"
       },
       {
         "command": "gitcharm.compareWith",
-        "title": "Compare with...",
+        "title": "%command.compareWith.title%",
         "category": "GitCharm",
         "icon": "$(git-compare)"
       }
@@ -808,7 +812,7 @@
     "colors": [
       {
         "id": "gitcharm.statusBarPullForeground",
-        "description": "Status bar text color when incoming commits are available (pull needed)",
+        "description": "%color.statusBarPullForeground.description%",
         "defaults": {
           "dark": "#64b5f6",
           "light": "#1565c0",
@@ -818,7 +822,7 @@
       },
       {
         "id": "gitcharm.statusBarPushForeground",
-        "description": "Status bar text color when there are unpushed commits or the branch is not on remote",
+        "description": "%color.statusBarPushForeground.description%",
         "defaults": {
           "dark": "#ce93d8",
           "light": "#6a1b9a",
@@ -828,7 +832,7 @@
       },
       {
         "id": "gitcharm.statusBarDirtyForeground",
-        "description": "Status bar text color when there are uncommitted changes",
+        "description": "%color.statusBarDirtyForeground.description%",
         "defaults": {
           "dark": "#81c784",
           "light": "#2e7d32",
@@ -839,7 +843,7 @@
     ],
     "configuration": [
       {
-        "title": "Basic Settings",
+        "title": "%config.section.basicSettings.title%",
         "properties": {
           "gitcharm.graphMaxCommits": {
             "order": 80,
@@ -847,7 +851,7 @@
             "default": 1000,
             "minimum": 100,
             "maximum": 10000,
-            "description": "Maximum commits to load in the Git Log graph. Scrolling stops paging in more once this many are loaded."
+            "description": "%config.graphMaxCommits.description%"
           },
           "gitcharm.repositoryScanMaxDepth": {
             "order": 60,
@@ -855,7 +859,7 @@
             "default": 1,
             "minimum": 0,
             "maximum": 10,
-            "description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders)."
+            "description": "%config.repositoryScanMaxDepth.description%"
           },
           "gitcharm.repositoryScanIgnoredFolders": {
             "order": 70,
@@ -866,7 +870,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories."
+            "description": "%config.repositoryScanIgnoredFolders.description%"
           },
           "gitcharm.branchNameModels": {
             "order": 75,
@@ -875,69 +879,69 @@
             "items": {
               "type": "string"
             },
-            "description": "Branch name prefixes suggested when creating a new branch (e.g. \"feature/\", \"bugfix/\", \"revert-\"). Stored normalized with a trailing \"*\" (e.g. \"feature/*\"); entries already containing a wildcard (e.g. \"feature/**\") are kept as-is."
+            "description": "%config.branchNameModels.description%"
           },
           "gitcharm.fetchOnStartup": {
             "order": 40,
             "type": "boolean",
             "default": true,
-            "description": "Automatically fetch all remotes when the extension activates"
+            "description": "%config.fetchOnStartup.description%"
           },
           "gitcharm.notifyOnIncomingCommits": {
             "order": 50,
             "type": "boolean",
             "default": true,
-            "description": "Show a notification on startup when there are incoming commits available to pull"
+            "description": "%config.notifyOnIncomingCommits.description%"
           },
           "gitcharm.notifyOnUnpushedCommits": {
             "order": 55,
             "type": "boolean",
             "default": true,
-            "description": "Show a notification on startup when there are unpushed commits ready to push"
+            "description": "%config.notifyOnUnpushedCommits.description%"
           },
           "gitcharm.notifyOnOrphanBranches": {
             "order": 57,
             "type": "boolean",
             "default": true,
-            "description": "Show a notification after fetching when local branches have lost their remote (upstream deleted, e.g. after a PR merge)"
+            "description": "%config.notifyOnOrphanBranches.description%"
           },
           "gitcharm.showLastCommitInBranchMenu": {
             "order": 58,
             "type": "boolean",
             "default": false,
-            "description": "Show each branch's or tag's last commit (hash, author, message, relative time) in the branch and tag menus"
+            "description": "%config.showLastCommitInBranchMenu.description%"
           },
           "gitcharm.projectColors": {
             "order": 110,
             "type": "object",
             "default": {},
-            "description": "Map of workspace folder/repository name to hex color for the commit graph (e.g. {\"my-repo\": \"#ff6b6b\"})"
+            "description": "%config.projectColors.description%"
           },
           "gitcharm.autoRefreshInterval": {
             "order": 30,
             "type": "number",
             "default": 0,
             "minimum": 0,
-            "description": "Auto-refresh interval in seconds (0 = disabled, use file watchers only)"
+            "description": "%config.autoRefreshInterval.description%"
           },
           "gitcharm.gitAnnotations.enabled": {
             "order": 90,
             "type": "boolean",
             "default": true,
-            "description": "Enable Git Annotations in the editor."
+            "description": "%config.gitAnnotations.enabled.description%"
           },
           "gitcharm.gitGhostText.enabled": {
             "order": 100,
             "type": "boolean",
             "default": true,
-            "description": "Enable inline Git ghost text in the editor."
+            "description": "%config.gitGhostText.enabled.description%"
           },
           "gitcharm.avatars.enabled": {
             "order": 105,
             "type": "boolean",
             "default": false,
             "scope": "application",
-            "markdownDescription": "Show author avatars. **Privacy:** when enabled, a hash of each commit author's email is sent to gravatar.com (or GitHub for noreply addresses). Leave disabled for private or company repositories."
+            "markdownDescription": "%config.avatars.enabled.markdownDescription%"
           },
           "gitcharm.gitLogDefaultLocation": {
             "order": 12,
@@ -948,12 +952,12 @@
               "newWindow"
             ],
             "enumDescriptions": [
-              "Open the GitCharm Log in the bottom panel, next to the terminal",
-              "Open the GitCharm Log as an editor tab",
-              "Open the GitCharm Log in a separate window"
+              "%config.gitLogDefaultLocation.enum.panel%",
+              "%config.gitLogDefaultLocation.enum.editorTab%",
+              "%config.gitLogDefaultLocation.enum.newWindow%"
             ],
             "default": "panel",
-            "description": "Where the Git Log opens by default: bottom panel, editor tab, or a new window.",
+            "description": "%config.gitLogDefaultLocation.description%",
             "scope": "window"
           },
           "gitcharm.gitLogDefaultLayout": {
@@ -964,11 +968,11 @@
               "logOnly"
             ],
             "enumDescriptions": [
-              "Show the Git Log and the Commit panel side by side",
-              "Show only the Git Log"
+              "%config.gitLogDefaultLayout.enum.logAndCommit%",
+              "%config.gitLogDefaultLayout.enum.logOnly%"
             ],
             "default": "logAndCommit",
-            "description": "What the Git Log shows when opened outside the bottom panel.",
+            "description": "%config.gitLogDefaultLayout.description%",
             "scope": "window"
           },
           "gitcharm.changesViewMode": {
@@ -980,18 +984,18 @@
               "vscode"
             ],
             "enumDescriptions": [
-              "Show Staged and Unstaged sections per repository (default behavior)",
-              "Show files grouped by Changelists, similar to PhpStorm",
-              "Show Staged Changes / Changes sections like native VS Code, with inline stage/unstage buttons"
+              "%config.changesViewMode.enum.simplified%",
+              "%config.changesViewMode.enum.changelists%",
+              "%config.changesViewMode.enum.vscode%"
             ],
             "default": "simplified",
-            "description": "How to display changed files in the Changes tab."
+            "description": "%config.changesViewMode.description%"
           },
           "gitcharm.promptAddUntrackedToGit": {
             "order": 25,
             "type": "boolean",
             "default": true,
-            "description": "Show a prompt when new untracked files are detected, offering to add them to Git."
+            "description": "%config.promptAddUntrackedToGit.description%"
           },
           "gitcharm.defaultCommitAction": {
             "order": 20,
@@ -1001,11 +1005,11 @@
               "commitAndPush"
             ],
             "enumDescriptions": [
-              "The main button commits without pushing",
-              "The main button commits and pushes immediately"
+              "%config.defaultCommitAction.enum.commit%",
+              "%config.defaultCommitAction.enum.commitAndPush%"
             ],
             "default": "commit",
-            "description": "Default action for the commit button in the Commit Panel."
+            "description": "%config.defaultCommitAction.description%"
           },
           "gitcharm.defaultSaveAction": {
             "order": 21,
@@ -1015,40 +1019,40 @@
               "shelve"
             ],
             "enumDescriptions": [
-              "The main Save button stashes selected changes",
-              "The main Save button shelves selected changes"
+              "%config.defaultSaveAction.enum.stash%",
+              "%config.defaultSaveAction.enum.shelve%"
             ],
             "default": "stash",
-            "description": "Default action for the Save button in the Commit Panel."
+            "description": "%config.defaultSaveAction.description%"
           },
           "gitcharm.openCommitPanelOnConflictResolved": {
             "order": 22,
             "type": "boolean",
             "default": true,
-            "description": "Automatically open the GitCharm sidebar when a merge conflict is resolved. Matches VS Code Source Control, which opens after completing a merge."
+            "description": "%config.openCommitPanelOnConflictResolved.description%"
           },
           "gitcharm.suppressDivergedBranchWarning": {
             "order": 35,
             "type": "boolean",
             "default": false,
-            "description": "Suppress the 'Branches have diverged' warning in the Git Menu and status bar."
+            "description": "%config.suppressDivergedBranchWarning.description%"
           }
         }
       },
       {
-        "title": "AI Settings",
+        "title": "%config.section.aiSettings.title%",
         "properties": {
           "gitcharm.ai.enabled": {
             "order": 0,
             "type": "boolean",
             "default": true,
-            "description": "Enable AI features in GitCharm (commit message generation, commit explanation). When disabled, all AI actions are hidden."
+            "description": "%config.ai.enabled.description%"
           },
           "gitcharm.ai.language": {
             "order": 1,
             "type": "string",
             "default": "",
-            "markdownDescription": "Language for AI-generated text (e.g. `en`, `it`, `fr`, `de`). Leave empty to use the VS Code display language."
+            "markdownDescription": "%config.ai.language.markdownDescription%"
           },
           "gitcharm.ai.provider": {
             "order": 2,
@@ -1065,108 +1069,108 @@
               "lmstudio"
             ],
             "enumDescriptions": [
-              "Use VS Code Language Model API (GitHub Copilot or any registered LM extension)",
-              "Use Anthropic API directly (requires API key)",
-              "Use OpenAI API directly (requires API key)",
-              "Use Google Gemini API directly (requires API key)",
-              "Use Claude CLI (claude --print)",
-              "Use Codex CLI (codex exec)",
-              "Use Gemini CLI (gemini -p)",
-              "Use a local Ollama model via HTTP API",
-              "Use a local LM Studio model via HTTP API"
+              "%config.ai.provider.enum.vscode-lm%",
+              "%config.ai.provider.enum.claude-api%",
+              "%config.ai.provider.enum.openai-api%",
+              "%config.ai.provider.enum.gemini-api%",
+              "%config.ai.provider.enum.claude-cli%",
+              "%config.ai.provider.enum.codex-cli%",
+              "%config.ai.provider.enum.gemini-cli%",
+              "%config.ai.provider.enum.ollama%",
+              "%config.ai.provider.enum.lmstudio%"
             ],
             "default": "vscode-lm",
-            "description": "AI provider to use for all AI features."
+            "description": "%config.ai.provider.description%"
           },
           "gitcharm.ai.modelId": {
             "order": 2,
             "type": "string",
             "default": "",
-            "description": "VS Code LM model ID (e.g. 'copilot:gpt-4o'). Only used when provider is 'vscode-lm'. Leave empty to auto-select. Use the 'GitCharm: Select AI Model' command to pick interactively."
+            "description": "%config.ai.modelId.description%"
           },
           "gitcharm.ai.claudeApiKey": {
             "order": 3,
             "type": "string",
             "default": "",
-            "description": "Anthropic API key. Only used when provider is 'claude-api'. Get your key at console.anthropic.com."
+            "description": "%config.ai.claudeApiKey.description%"
           },
           "gitcharm.ai.claudeModel": {
             "order": 4,
             "type": "string",
             "default": "",
-            "description": "Claude model ID (e.g. 'claude-opus-4-7', 'claude-sonnet-4-6'). Used when provider is 'claude-api' or 'claude-cli'. Leave empty to use the default. Use the 'GitCharm: Select AI Model' command to pick interactively."
+            "description": "%config.ai.claudeModel.description%"
           },
           "gitcharm.ai.claudePath": {
             "order": 5,
             "type": "string",
             "default": "claude",
-            "description": "Path to the Claude CLI binary. Only used when provider is 'claude-cli'. Defaults to 'claude' (must be on PATH)."
+            "description": "%config.ai.claudePath.description%"
           },
           "gitcharm.ai.openaiApiKey": {
             "order": 6,
             "type": "string",
             "default": "",
-            "description": "OpenAI API key. Only used when provider is 'openai-api'. Get your key at platform.openai.com."
+            "description": "%config.ai.openaiApiKey.description%"
           },
           "gitcharm.ai.openaiModel": {
             "order": 7,
             "type": "string",
             "default": "gpt-4o",
-            "description": "OpenAI model ID (e.g. 'gpt-4o', 'gpt-4o-mini', 'o3'). Only used when provider is 'openai-api'."
+            "description": "%config.ai.openaiModel.description%"
           },
           "gitcharm.ai.geminiApiKey": {
             "order": 8,
             "type": "string",
             "default": "",
-            "description": "Google Gemini API key. Only used when provider is 'gemini-api'. Get your key at aistudio.google.com."
+            "description": "%config.ai.geminiApiKey.description%"
           },
           "gitcharm.ai.geminiModel": {
             "order": 9,
             "type": "string",
             "default": "gemini-2.0-flash",
-            "description": "Gemini model ID (e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'). Used when provider is 'gemini-api' or 'gemini-cli'."
+            "description": "%config.ai.geminiModel.description%"
           },
           "gitcharm.ai.geminiPath": {
             "order": 10,
             "type": "string",
             "default": "gemini",
-            "description": "Path to the Gemini CLI binary. Only used when provider is 'gemini-cli'. Defaults to 'gemini' (must be on PATH)."
+            "description": "%config.ai.geminiPath.description%"
           },
           "gitcharm.ai.codexModel": {
             "order": 11,
             "type": "string",
             "default": "",
-            "description": "Codex model ID to use (e.g. 'o3', 'o4-mini'). Only used when provider is 'codex-cli'. Leave empty to use the CLI default. Use the 'GitCharm: Select AI Model' command to pick interactively."
+            "description": "%config.ai.codexModel.description%"
           },
           "gitcharm.ai.codexPath": {
             "order": 9,
             "type": "string",
             "default": "codex",
-            "description": "Path to the Codex CLI binary. Only used when provider is 'codex-cli'. Defaults to 'codex' (must be on PATH)."
+            "description": "%config.ai.codexPath.description%"
           },
           "gitcharm.ai.lmStudioModel": {
             "order": 7,
             "type": "string",
             "default": "",
-            "description": "LM Studio model identifier. Only used when provider is 'lmstudio'. Leave empty to use the currently loaded model. Use the 'GitCharm: Select AI Model' command to pick interactively."
+            "description": "%config.ai.lmStudioModel.description%"
           },
           "gitcharm.ai.lmStudioUrl": {
             "order": 8,
             "type": "string",
             "default": "http://localhost:1234",
-            "description": "Base URL of the LM Studio local server. Only used when provider is 'lmstudio'."
+            "description": "%config.ai.lmStudioUrl.description%"
           },
           "gitcharm.ai.ollamaModel": {
             "order": 11,
             "type": "string",
             "default": "llama3",
-            "description": "Ollama model name (e.g. 'llama3', 'mistral', 'qwen3.5:9b'). Only used when provider is 'ollama'."
+            "description": "%config.ai.ollamaModel.description%"
           },
           "gitcharm.ai.ollamaUrl": {
             "order": 12,
             "type": "string",
             "default": "http://localhost:11434",
-            "description": "Base URL of the Ollama API. Only used when provider is 'ollama'."
+            "description": "%config.ai.ollamaUrl.description%"
           },
           "gitcharm.ai.maxDiffChars": {
             "order": 13,
@@ -1174,66 +1178,66 @@
             "default": 8000,
             "minimum": 1000,
             "maximum": 100000,
-            "description": "Maximum characters of git diff to send to the AI model. Larger values give more context but consume more tokens."
+            "description": "%config.ai.maxDiffChars.description%"
           }
         }
       },
       {
-        "title": "Pull Requests",
+        "title": "%config.section.pullRequests.title%",
         "properties": {
           "gitcharm.pullRequests.hostProviderOverrides": {
             "order": 1,
             "type": "object",
             "default": {},
-            "description": "Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. { \"git.mycompany.com\": \"gitea\" }. Valid values: github, gitlab, bitbucket, gitea."
+            "description": "%config.pullRequests.hostProviderOverrides.description%"
           },
           "gitcharm.pullRequests.defaultTargetBranch": {
             "order": 2,
             "type": "string",
             "default": "",
-            "description": "Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master)."
+            "description": "%config.pullRequests.defaultTargetBranch.description%"
           },
           "gitcharm.pullRequests.defaultMergeStrategy": {
             "order": 3,
             "type": "string",
             "enum": ["merge", "squash", "rebase", "fastForward"],
             "enumDescriptions": [
-              "Create a merge commit",
-              "Squash and merge",
-              "Rebase and merge",
-              "Fast-forward merge"
+              "%config.pullRequests.defaultMergeStrategy.enum.merge%",
+              "%config.pullRequests.defaultMergeStrategy.enum.squash%",
+              "%config.pullRequests.defaultMergeStrategy.enum.rebase%",
+              "%config.pullRequests.defaultMergeStrategy.enum.fastForward%"
             ],
             "default": "merge",
-            "description": "Default strategy pre-selected on the \"Merge pull request\" button in the Pull Request Detail panel. Falls back to the first strategy the forge/provider actually supports if this one isn't available for a given PR."
+            "description": "%config.pullRequests.defaultMergeStrategy.description%"
           },
           "gitcharm.pullRequests.defaultCheckoutAction": {
             "order": 4,
             "type": "string",
             "enum": ["pr", "branch"],
             "enumDescriptions": [
-              "Checkout Pull Request (creates/updates a local pr/{author}/{number} branch)",
-              "Checkout Branch (downloads or updates the PR's actual source branch)"
+              "%config.pullRequests.defaultCheckoutAction.enum.pr%",
+              "%config.pullRequests.defaultCheckoutAction.enum.branch%"
             ],
             "default": "pr",
-            "description": "Default action for the main \"Checkout\" button in the Pull Request Detail panel — the other option is still available from its dropdown."
+            "description": "%config.pullRequests.defaultCheckoutAction.description%"
           }
         }
       },
       {
-        "title": "Experimental",
+        "title": "%config.section.experimental.title%",
         "properties": {
           "gitcharm.resetViewLocationsOnStartup": {
             "order": 1,
             "type": "boolean",
             "default": false,
-            "description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally."
+            "description": "%config.resetViewLocationsOnStartup.description%"
           }
         }
       }
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "npm run l10n:export && npm run build",
     "build": "npm run build:host && npm run build:webview",
     "build:host": "node esbuild.mjs --prod",
     "build:webview": "node build-webview.mjs",
@@ -1244,14 +1248,18 @@
     "publish": "vsce publish",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json"
+    "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json",
+    "l10n:export": "vscode-l10n-dev export --outDir ./l10n ./src",
+    "l10n:check": "node scripts/l10n-check.mjs"
   },
   "dependencies": {
+    "@simple-git/argv-parser": "^1.1.1",
     "@tiptap/extension-link": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
+    "@vscode/l10n": "^0.0.18",
     "dompurify": "^3.4.14",
     "marked": "^18.0.11",
     "prismjs": "^1.30.0",
@@ -1270,6 +1278,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@vscode/codicons": "^0.0.45",
+    "@vscode/l10n-dev": "^0.0.35",
     "@vscode/vsce": "^3.9.2",
     "concurrently": "^8.2.0",
     "esbuild": "^0.28.1",

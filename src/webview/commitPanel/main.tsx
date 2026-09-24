@@ -1,3 +1,6 @@
+import { plural } from '../shared/l10n';
+import * as l10n from '@vscode/l10n';
+import { isImeComposing } from '../shared/ime';
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useCommitStore } from './store/commitStore';
@@ -21,6 +24,7 @@ import type { FileStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
 import { sortRepos } from './repoSort';
+import { displayWidth } from '../../host/utils/displayWidth';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -35,10 +39,9 @@ function formatBadgeCount(n: number): string {
 
 function dynItems(items: ContextMenuEntry[], n: number): ContextMenuEntry[] {
   const label = (id: string) => {
-    const count = n === 1 ? 'this file' : `${n} files`;
-    if (id === 'rollback'    || id === 'cl-rollback') return `Rollback ${count}`;
-    if (id === 'shelve'      || id === 'cl-shelve')   return `Silently Shelve ${count}`;
-    if (id === 'stash'       || id === 'cl-stash')    return `Silently Stash ${count}`;
+    if (id === 'rollback'    || id === 'cl-rollback') return plural(n, l10n.t('Rollback this file'), l10n.t('Rollback {0} files', n));
+    if (id === 'shelve'      || id === 'cl-shelve')   return plural(n, l10n.t('Silently Shelve this file'), l10n.t('Silently Shelve {0} files', n));
+    if (id === 'stash'       || id === 'cl-stash')    return plural(n, l10n.t('Silently Stash this file'), l10n.t('Silently Stash {0} files', n));
     return null;
   };
   return items.map(i => {
@@ -51,201 +54,201 @@ function dynItems(items: ContextMenuEntry[], n: number): ContextMenuEntry[] {
 
 // ── Context menu items ────────────────────────────────────────────────────────
 
-const REVEAL_OS_LABEL = 'Reveal in File Manager';
+const revealOsLabel = () => l10n.t('Reveal in File Manager');
 
-const FILE_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',        label: 'Rollback',            icon: 'discard' },
-  { id: 'shelve',          label: 'Shelve',              icon: 'archive' },
-  { id: 'stash',           label: 'Stash',               icon: 'git-stash' },
-  { id: 'diff',            label: 'Show Diff',           icon: 'diff' },
-  { id: 'compare-with',    label: 'Compare with…',       icon: 'git-compare' },
-  { id: 'file-history',    label: 'Show File History',   icon: 'history' },
-  { id: 'jump',            label: 'Jump to Source',      icon: 'go-to-file' },
-  { id: 'reveal-explorer', label: 'Reveal in Explorer',  icon: 'list-tree' },
-  { id: 'reveal-os',       label: REVEAL_OS_LABEL,       icon: 'folder-opened' },
+const FILE_CONTEXT_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'rollback',        label: l10n.t('Rollback'),            icon: 'discard' },
+  { id: 'shelve',          label: l10n.t('Shelve'),              icon: 'archive' },
+  { id: 'stash',           label: l10n.t('Stash'),               icon: 'git-stash' },
+  { id: 'diff',            label: l10n.t('Show Diff'),           icon: 'diff' },
+  { id: 'compare-with',    label: l10n.t('Compare with…'),       icon: 'git-compare' },
+  { id: 'file-history',    label: l10n.t('Show File History'),   icon: 'history' },
+  { id: 'jump',            label: l10n.t('Jump to Source'),      icon: 'go-to-file' },
+  { id: 'reveal-explorer', label: l10n.t('Reveal in Explorer'),  icon: 'list-tree' },
+  { id: 'reveal-os',       label: revealOsLabel(),       icon: 'folder-opened' },
   { separator: true },
-  { id: 'gitignore',       label: 'Add to .gitignore',   icon: 'exclude' },
+  { id: 'gitignore',       label: l10n.t('Add to .gitignore'),   icon: 'exclude' },
   { separator: true },
-  { id: 'delete',          label: 'Delete',              icon: 'trash', danger: true },
+  { id: 'delete',          label: l10n.t('Delete'),              icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',         label: 'Refresh',             icon: 'refresh' },
+  { id: 'refresh',         label: l10n.t('Refresh'),             icon: 'refresh' },
 ];
 
-const FILE_CONTEXT_ITEMS_CONFLICT: ContextMenuEntry[] = [
-  { id: 'resolve',   label: 'Resolve Conflicts',  icon: 'git-merge' },
+const FILE_CONTEXT_ITEMS_CONFLICT = (): ContextMenuEntry[] => [
+  { id: 'resolve',   label: l10n.t('Resolve Conflicts'),  icon: 'git-merge' },
   { separator: true },
-  ...FILE_CONTEXT_ITEMS,
+  ...FILE_CONTEXT_ITEMS(),
 ];
 
-const FOLDER_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',  label: 'Rollback',           icon: 'discard' },
-  { id: 'shelve',    label: 'Shelve Changes',      icon: 'archive' },
-  { id: 'stash',     label: 'Stash Changes',       icon: 'git-stash' },
-  { id: 'compare-with', label: 'Compare with…',    icon: 'git-compare' },
+const FOLDER_CONTEXT_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'rollback',  label: l10n.t('Rollback'),           icon: 'discard' },
+  { id: 'shelve',    label: l10n.t('Shelve Changes'),      icon: 'archive' },
+  { id: 'stash',     label: l10n.t('Stash Changes'),       icon: 'git-stash' },
+  { id: 'compare-with', label: l10n.t('Compare with…'),    icon: 'git-compare' },
   { separator: true },
-  { id: 'gitignore', label: 'Add to .gitignore',  icon: 'exclude' },
+  { id: 'gitignore', label: l10n.t('Add to .gitignore'),  icon: 'exclude' },
   { separator: true },
-  { id: 'delete',    label: 'Delete',              icon: 'trash', danger: true },
+  { id: 'delete',    label: l10n.t('Delete'),              icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',   label: 'Refresh',             icon: 'refresh' },
+  { id: 'refresh',   label: l10n.t('Refresh'),             icon: 'refresh' },
 ];
 
-const REPO_CONTEXT_ITEMS: ContextMenuEntry[] = [
-  { id: 'rollback',          label: 'Rollback',              icon: 'discard' },
-  { id: 'shelve',            label: 'Shelve Changes',         icon: 'archive' },
-  { id: 'stash',             label: 'Stash Changes',          icon: 'git-stash' },
+const REPO_CONTEXT_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'rollback',          label: l10n.t('Rollback'),              icon: 'discard' },
+  { id: 'shelve',            label: l10n.t('Shelve Changes'),         icon: 'archive' },
+  { id: 'stash',             label: l10n.t('Stash Changes'),          icon: 'git-stash' },
   { separator: true },
-  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
-  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
+  { id: 'manage-repo',       label: l10n.t('Manage Repository'),      icon: 'git-branch' },
+  { id: 'view-git-log',      label: l10n.t('View Git Log'),           icon: 'git-commit' },
   { separator: true },
-  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
-  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
-  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
+  { id: 'reveal-explorer',   label: l10n.t('Reveal in Explorer'),     icon: 'list-tree' },
+  { id: 'open-new-window',   label: l10n.t('Open in New Window'),     icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: revealOsLabel(),          icon: 'folder-opened' },
   { separator: true },
-  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
+  { id: 'hide-repo',         label: l10n.t('Hide Repository'),        icon: 'eye-closed' },
   { separator: true },
-  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
+  { id: 'refresh',           label: l10n.t('Refresh'),                icon: 'refresh' },
 ];
 
-const VSCODE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage',         label: 'Unstage',              icon: 'remove' },
+const VSCODE_FILE_STAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'unstage',         label: l10n.t('Unstage'),              icon: 'remove' },
   { separator: true },
-  { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
-  { id: 'compare-with',    label: 'Compare with…',        icon: 'git-compare' },
-  { id: 'file-history',    label: 'Show File History',    icon: 'history' },
-  { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
-  { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
-  { id: 'reveal-os',       label: REVEAL_OS_LABEL,        icon: 'folder-opened' },
+  { id: 'diff',            label: l10n.t('Show Diff'),            icon: 'diff' },
+  { id: 'compare-with',    label: l10n.t('Compare with…'),        icon: 'git-compare' },
+  { id: 'file-history',    label: l10n.t('Show File History'),    icon: 'history' },
+  { id: 'jump',            label: l10n.t('Jump to Source'),       icon: 'go-to-file' },
+  { id: 'reveal-explorer', label: l10n.t('Reveal in Explorer'),   icon: 'list-tree' },
+  { id: 'reveal-os',       label: revealOsLabel(),        icon: 'folder-opened' },
   { separator: true },
-  { id: 'refresh',         label: 'Refresh',              icon: 'refresh' },
+  { id: 'refresh',         label: l10n.t('Refresh'),              icon: 'refresh' },
 ];
 
-const VSCODE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage',           label: 'Stage',                icon: 'add' },
-  { id: 'rollback',        label: 'Rollback',             icon: 'discard' },
-  { id: 'shelve',          label: 'Shelve',               icon: 'archive' },
-  { id: 'stash',           label: 'Stash',                icon: 'git-stash' },
+const VSCODE_FILE_UNSTAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'stage',           label: l10n.t('Stage'),                icon: 'add' },
+  { id: 'rollback',        label: l10n.t('Rollback'),             icon: 'discard' },
+  { id: 'shelve',          label: l10n.t('Shelve'),               icon: 'archive' },
+  { id: 'stash',           label: l10n.t('Stash'),                icon: 'git-stash' },
   { separator: true },
-  { id: 'diff',            label: 'Show Diff',            icon: 'diff' },
-  { id: 'compare-with',    label: 'Compare with…',        icon: 'git-compare' },
-  { id: 'file-history',    label: 'Show File History',    icon: 'history' },
-  { id: 'jump',            label: 'Jump to Source',       icon: 'go-to-file' },
-  { id: 'reveal-explorer', label: 'Reveal in Explorer',   icon: 'list-tree' },
-  { id: 'reveal-os',       label: REVEAL_OS_LABEL,        icon: 'folder-opened' },
+  { id: 'diff',            label: l10n.t('Show Diff'),            icon: 'diff' },
+  { id: 'compare-with',    label: l10n.t('Compare with…'),        icon: 'git-compare' },
+  { id: 'file-history',    label: l10n.t('Show File History'),    icon: 'history' },
+  { id: 'jump',            label: l10n.t('Jump to Source'),       icon: 'go-to-file' },
+  { id: 'reveal-explorer', label: l10n.t('Reveal in Explorer'),   icon: 'list-tree' },
+  { id: 'reveal-os',       label: revealOsLabel(),        icon: 'folder-opened' },
   { separator: true },
-  { id: 'gitignore',       label: 'Add to .gitignore',    icon: 'exclude' },
+  { id: 'gitignore',       label: l10n.t('Add to .gitignore'),    icon: 'exclude' },
   { separator: true },
-  { id: 'delete',          label: 'Delete',               icon: 'trash', danger: true },
+  { id: 'delete',          label: l10n.t('Delete'),               icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',         label: 'Refresh',              icon: 'refresh' },
+  { id: 'refresh',         label: l10n.t('Refresh'),              icon: 'refresh' },
 ];
 
-const VSCODE_FOLDER_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage',  label: 'Unstage Folder',       icon: 'remove' },
+const VSCODE_FOLDER_STAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'unstage',  label: l10n.t('Unstage Folder'),       icon: 'remove' },
   { separator: true },
-  { id: 'compare-with', label: 'Compare with…',    icon: 'git-compare' },
+  { id: 'compare-with', label: l10n.t('Compare with…'),    icon: 'git-compare' },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+  { id: 'refresh',  label: l10n.t('Refresh'),              icon: 'refresh' },
 ];
 
-const VSCODE_FOLDER_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage',    label: 'Stage Folder',         icon: 'add' },
-  { id: 'rollback', label: 'Rollback',             icon: 'discard' },
-  { id: 'shelve',   label: 'Shelve Changes',        icon: 'archive' },
-  { id: 'stash',    label: 'Stash Changes',         icon: 'git-stash' },
-  { id: 'compare-with', label: 'Compare with…',    icon: 'git-compare' },
+const VSCODE_FOLDER_UNSTAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'stage',    label: l10n.t('Stage Folder'),         icon: 'add' },
+  { id: 'rollback', label: l10n.t('Rollback'),             icon: 'discard' },
+  { id: 'shelve',   label: l10n.t('Shelve Changes'),        icon: 'archive' },
+  { id: 'stash',    label: l10n.t('Stash Changes'),         icon: 'git-stash' },
+  { id: 'compare-with', label: l10n.t('Compare with…'),    icon: 'git-compare' },
   { separator: true },
-  { id: 'gitignore',label: 'Add to .gitignore',    icon: 'exclude' },
+  { id: 'gitignore',label: l10n.t('Add to .gitignore'),    icon: 'exclude' },
   { separator: true },
-  { id: 'delete',   label: 'Delete',               icon: 'trash', danger: true },
+  { id: 'delete',   label: l10n.t('Delete'),               icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',              icon: 'refresh' },
+  { id: 'refresh',  label: l10n.t('Refresh'),              icon: 'refresh' },
 ];
 
-const VSCODE_REPO_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage-all',       label: 'Unstage All',           icon: 'remove' },
+const VSCODE_REPO_STAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'unstage-all',       label: l10n.t('Unstage All'),           icon: 'remove' },
   { separator: true },
-  { id: 'manage-repo',       label: 'Manage Repository',      icon: 'git-branch' },
-  { id: 'view-git-log',      label: 'View Git Log',           icon: 'git-commit' },
+  { id: 'manage-repo',       label: l10n.t('Manage Repository'),      icon: 'git-branch' },
+  { id: 'view-git-log',      label: l10n.t('View Git Log'),           icon: 'git-commit' },
   { separator: true },
-  { id: 'reveal-explorer',   label: 'Reveal in Explorer',     icon: 'list-tree' },
-  { id: 'open-new-window',   label: 'Open in New Window',     icon: 'multiple-windows' },
-  { id: 'reveal-os',         label: REVEAL_OS_LABEL,          icon: 'folder-opened' },
+  { id: 'reveal-explorer',   label: l10n.t('Reveal in Explorer'),     icon: 'list-tree' },
+  { id: 'open-new-window',   label: l10n.t('Open in New Window'),     icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: revealOsLabel(),          icon: 'folder-opened' },
   { separator: true },
-  { id: 'hide-repo',         label: 'Hide Repository',        icon: 'eye-closed' },
+  { id: 'hide-repo',         label: l10n.t('Hide Repository'),        icon: 'eye-closed' },
   { separator: true },
-  { id: 'refresh',           label: 'Refresh',                icon: 'refresh' },
+  { id: 'refresh',           label: l10n.t('Refresh'),                icon: 'refresh' },
 ];
 
-const VSCODE_REPO_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage-all',         label: 'Stage All',             icon: 'add' },
-  { id: 'rollback',          label: 'Rollback',               icon: 'discard' },
-  { id: 'shelve',            label: 'Shelve Changes',          icon: 'archive' },
-  { id: 'stash',             label: 'Stash Changes',           icon: 'git-stash' },
+const VSCODE_REPO_UNSTAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'stage-all',         label: l10n.t('Stage All'),             icon: 'add' },
+  { id: 'rollback',          label: l10n.t('Rollback'),               icon: 'discard' },
+  { id: 'shelve',            label: l10n.t('Shelve Changes'),          icon: 'archive' },
+  { id: 'stash',             label: l10n.t('Stash Changes'),           icon: 'git-stash' },
   { separator: true },
-  { id: 'manage-repo',       label: 'Manage Repository',       icon: 'git-branch' },
-  { id: 'view-git-log',      label: 'View Git Log',            icon: 'git-commit' },
+  { id: 'manage-repo',       label: l10n.t('Manage Repository'),       icon: 'git-branch' },
+  { id: 'view-git-log',      label: l10n.t('View Git Log'),            icon: 'git-commit' },
   { separator: true },
-  { id: 'reveal-explorer',   label: 'Reveal in Explorer',      icon: 'list-tree' },
-  { id: 'open-new-window',   label: 'Open in New Window',      icon: 'multiple-windows' },
-  { id: 'reveal-os',         label: REVEAL_OS_LABEL,           icon: 'folder-opened' },
+  { id: 'reveal-explorer',   label: l10n.t('Reveal in Explorer'),      icon: 'list-tree' },
+  { id: 'open-new-window',   label: l10n.t('Open in New Window'),      icon: 'multiple-windows' },
+  { id: 'reveal-os',         label: revealOsLabel(),           icon: 'folder-opened' },
   { separator: true },
-  { id: 'hide-repo',         label: 'Hide Repository',         icon: 'eye-closed' },
+  { id: 'hide-repo',         label: l10n.t('Hide Repository'),         icon: 'eye-closed' },
   { separator: true },
-  { id: 'refresh',           label: 'Refresh',                 icon: 'refresh' },
+  { id: 'refresh',           label: l10n.t('Refresh'),                 icon: 'refresh' },
 ];
 
-const SUBMODULE_FILE_STAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'unstage',  label: 'Unstage',   icon: 'remove' },
+const SUBMODULE_FILE_STAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'unstage',  label: l10n.t('Unstage'),   icon: 'remove' },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',   icon: 'refresh' },
+  { id: 'refresh',  label: l10n.t('Refresh'),   icon: 'refresh' },
 ];
 
-const SUBMODULE_FILE_UNSTAGED_ITEMS: ContextMenuEntry[] = [
-  { id: 'stage',    label: 'Stage',     icon: 'add' },
+const SUBMODULE_FILE_UNSTAGED_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'stage',    label: l10n.t('Stage'),     icon: 'add' },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',   icon: 'refresh' },
+  { id: 'refresh',  label: l10n.t('Refresh'),   icon: 'refresh' },
 ];
 
-const CHANGELIST_EMPTY_AREA_ITEMS: ContextMenuEntry[] = [
-  { id: 'cl-new',   label: 'New Changelist…', icon: 'add' },
+const CHANGELIST_EMPTY_AREA_ITEMS = (): ContextMenuEntry[] => [
+  { id: 'cl-new',   label: l10n.t('New Changelist…'), icon: 'add' },
   { separator: true },
-  { id: 'refresh',  label: 'Refresh',         icon: 'refresh' },
+  { id: 'refresh',  label: l10n.t('Refresh'),         icon: 'refresh' },
 ];
 
-const CHANGELIST_HEADER_ITEMS_FIXED: ContextMenuEntry[] = [
-  { id: 'cl-rollback', label: 'Rollback',          icon: 'discard' },
-  { id: 'cl-shelve',   label: 'Shelve Changes',    icon: 'archive' },
-  { id: 'cl-stash',    label: 'Stash Changes',     icon: 'git-stash' },
+const CHANGELIST_HEADER_ITEMS_FIXED = (): ContextMenuEntry[] => [
+  { id: 'cl-rollback', label: l10n.t('Rollback'),          icon: 'discard' },
+  { id: 'cl-shelve',   label: l10n.t('Shelve Changes'),    icon: 'archive' },
+  { id: 'cl-stash',    label: l10n.t('Stash Changes'),     icon: 'git-stash' },
   { separator: true },
-  { id: 'cl-new',      label: 'New Changelist…',   icon: 'add' },
+  { id: 'cl-new',      label: l10n.t('New Changelist…'),   icon: 'add' },
   { separator: true },
-  { id: 'refresh',     label: 'Refresh',           icon: 'refresh' },
+  { id: 'refresh',     label: l10n.t('Refresh'),           icon: 'refresh' },
 ];
 
-const CHANGELIST_HEADER_ITEMS_UNVERSIONED: ContextMenuEntry[] = [
-  { id: 'cl-rollback',   label: 'Rollback',         icon: 'discard' },
-  { id: 'cl-shelve',     label: 'Shelve Changes',   icon: 'archive' },
-  { id: 'cl-stash',      label: 'Stash Changes',    icon: 'git-stash' },
+const CHANGELIST_HEADER_ITEMS_UNVERSIONED = (): ContextMenuEntry[] => [
+  { id: 'cl-rollback',   label: l10n.t('Rollback'),         icon: 'discard' },
+  { id: 'cl-shelve',     label: l10n.t('Shelve Changes'),   icon: 'archive' },
+  { id: 'cl-stash',      label: l10n.t('Stash Changes'),    icon: 'git-stash' },
   { separator: true },
-  { id: 'cl-add-to-git', label: 'Add to Git',       icon: 'add' },
+  { id: 'cl-add-to-git', label: l10n.t('Add to Git'),       icon: 'add' },
   { separator: true },
-  { id: 'cl-new',        label: 'New Changelist…',  icon: 'add' },
+  { id: 'cl-new',        label: l10n.t('New Changelist…'),  icon: 'add' },
   { separator: true },
-  { id: 'refresh',       label: 'Refresh',          icon: 'refresh' },
+  { id: 'refresh',       label: l10n.t('Refresh'),          icon: 'refresh' },
 ];
 
-const CHANGELIST_HEADER_ITEMS_CUSTOM: ContextMenuEntry[] = [
-  { id: 'cl-rollback', label: 'Rollback',          icon: 'discard' },
-  { id: 'cl-shelve',   label: 'Shelve Changes',    icon: 'archive' },
-  { id: 'cl-stash',    label: 'Stash Changes',     icon: 'git-stash' },
+const CHANGELIST_HEADER_ITEMS_CUSTOM = (): ContextMenuEntry[] => [
+  { id: 'cl-rollback', label: l10n.t('Rollback'),          icon: 'discard' },
+  { id: 'cl-shelve',   label: l10n.t('Shelve Changes'),    icon: 'archive' },
+  { id: 'cl-stash',    label: l10n.t('Stash Changes'),     icon: 'git-stash' },
   { separator: true },
-  { id: 'cl-new',      label: 'New Changelist…',   icon: 'add' },
-  { id: 'cl-rename',   label: 'Rename Changelist…', icon: 'edit' },
+  { id: 'cl-new',      label: l10n.t('New Changelist…'),   icon: 'add' },
+  { id: 'cl-rename',   label: l10n.t('Rename Changelist…'), icon: 'edit' },
   { separator: true },
-  { id: 'cl-delete',   label: 'Delete Changelist',  icon: 'trash', danger: true },
+  { id: 'cl-delete',   label: l10n.t('Delete Changelist'),  icon: 'trash', danger: true },
   { separator: true },
-  { id: 'refresh',     label: 'Refresh',           icon: 'refresh' },
+  { id: 'refresh',     label: l10n.t('Refresh'),           icon: 'refresh' },
 ];
 
 type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests';
@@ -570,7 +573,8 @@ function App() {
             if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
           } else {
             if (msg.hasConflicts && msg.conflictFiles?.length) {
-              notifyInfo(`Conflicts in ${msg.conflictFiles.length} file(s) — merge editor opened`);
+              const n = msg.conflictFiles.length;
+              notifyInfo(plural(n, l10n.t('Conflicts in 1 file — merge editor opened'), l10n.t('Conflicts in {0} files — merge editor opened', n)));
             }
             // Refresh the shelf list for the affected repo after any successful op
             setShelveLoading(prev => ({ ...prev, [msg.repoId]: true }));
@@ -1206,7 +1210,7 @@ function App() {
   if (repos.length === 0 && !store.status) {
     return (
       <div style={css.fullCenter}>
-        <span style={{ opacity: 0.5, fontSize: '13px' }}>Loading repositories…</span>
+        <span style={{ opacity: 0.5, fontSize: '13px' }}>{l10n.t('Loading repositories…')}</span>
       </div>
     );
   }
@@ -1216,11 +1220,11 @@ function App() {
       return (
         <div style={{ ...css.fullCenter, flexDirection: 'column', gap: '12px', padding: '24px' }}>
           <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
-            You have not yet opened a folder.
+            {l10n.t('You have not yet opened a folder.')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '200px' }}>
-            <button style={css.initRepoBtn} onClick={() => send({ type: 'COMMIT_OPEN_FOLDER' } as CommitToHostMsg)}>Open Folder</button>
-            <button style={css.initRepoBtn} onClick={() => send({ type: 'COMMIT_CLONE_REPO' } as CommitToHostMsg)}>Clone Repository</button>
+            <button style={css.initRepoBtn} onClick={() => send({ type: 'COMMIT_OPEN_FOLDER' } as CommitToHostMsg)}>{l10n.t('Open Folder')}</button>
+            <button style={css.initRepoBtn} onClick={() => send({ type: 'COMMIT_CLONE_REPO' } as CommitToHostMsg)}>{l10n.t('Clone Repository')}</button>
           </div>
         </div>
       );
@@ -1229,13 +1233,13 @@ function App() {
       return (
         <div style={{ ...css.fullCenter, flexDirection: 'column', gap: '12px', padding: '24px' }}>
           <div style={{ textAlign: 'center', color: 'var(--vscode-foreground)', fontSize: '13px', lineHeight: '1.5', opacity: 0.8 }}>
-            The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.
+            {l10n.t("The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.")}
           </div>
           <button
             style={css.initRepoBtn}
             onClick={() => send({ type: 'COMMIT_INIT_REPO' } as CommitToHostMsg)}
           >
-            Initialize Repository
+            {l10n.t('Initialize Repository')}
           </button>
         </div>
       );
@@ -1244,7 +1248,7 @@ function App() {
       <div style={css.fullCenter}>
         <div style={{ textAlign: 'center', opacity: 0.45 }}>
           <div style={{ fontSize: '22px' }}>✓</div>
-          <div style={{ fontSize: '13px', marginTop: '6px' }}>No changes in workspace</div>
+          <div style={{ fontSize: '13px', marginTop: '6px' }}>{l10n.t('No changes in workspace')}</div>
         </div>
       </div>
     );
@@ -1342,9 +1346,11 @@ function App() {
         // number of PRs actually downloaded so far — falls back to the downloaded count for providers/queries
         // where no cheap total is available (see ListPullRequestsResult.totalCount).
         const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + (r.totalCount ?? r.pullRequests.length), 0);
-        const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode') ? 'Commit' : 'Changes';
+        const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode')
+          ? l10n.t({ message: 'Commit', comment: ['Tab title: the tab with the commit form and changed files'] })
+          : l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
         const tabMeta = (tab: TabId) => ({
-          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? 'Shelf' : tab === 'stash' ? 'Stash' : tab === 'worktree' ? 'Worktrees' : tab === 'pullrequests' ? 'Pull Requests' : 'Push',
+          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : l10n.t({ message: 'Push', comment: ['Tab title: commits not pushed yet'] }),
           iconName: tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload',
           badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalToPush : tab === 'pullrequests' ? totalPullRequests : 0,
         });
@@ -1362,7 +1368,7 @@ function App() {
         const activeMeta = tabMeta(activeTab);
         // Longest label among all tabs — used by the width probe below as the one tab whose label
         // gets expanded, since only one tab (the active one) is ever expanded at a time.
-        const widestTab = allTabs.reduce((a, b) => tabMeta(b).label.length > tabMeta(a).label.length ? b : a);
+        const widestTab = allTabs.reduce((a, b) => displayWidth(tabMeta(b).label) > displayWidth(tabMeta(a).label) ? b : a);
         return (
           <div ref={tabBarRefCb} style={css.tabBar}>
             {/* Real tab strip — hidden (not unmounted) when collapsed, so it keeps its state and re-appears instantly once space is available again. */}
@@ -1465,9 +1471,9 @@ function App() {
             {hideReposWithoutChanges && changesRepos.length === 0 ? (
               <div style={css.filteredEmptyState}>
                 <Codicon name="filter" style={{ fontSize: '18px', opacity: 0.55 }} />
-                <div>No repositories with changes</div>
+                <div>{l10n.t('No repositories with changes')}</div>
                 <button style={css.clearFilterBtn} onClick={() => updateViewAndSort({ hideReposWithoutChanges: false })}>
-                  Show all repositories
+                  {l10n.t('Show all repositories')}
                 </button>
               </div>
             ) : store.changesViewMode === 'vscode' ? (
@@ -1595,19 +1601,19 @@ function App() {
                       <div style={css.detachedBanner}>
                         <Codicon name="git-commit" style={{ flexShrink: 0, opacity: 0.8 }} />
                         <span style={{ flex: 1 }}>
-                          <strong>{repoName}</strong> is in detached HEAD ({detachedCommit}). Checkout a branch to commit.
+                          {l10n.t('{0} is in detached HEAD ({1}). Checkout a branch to commit.', repoName, detachedCommit)}
                         </span>
                         <button
                           style={css.detachedBannerBtn}
                           onClick={() => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId })}
-                          title="Checkout or create a branch"
+                          title={l10n.t('Checkout or create a branch')}
                         >
-                          Checkout branch
+                          {l10n.t('Checkout branch')}
                         </button>
                         <button
                           style={{ ...css.detachedBannerBtn, background: 'transparent', opacity: 0.5 }}
                           onClick={() => setDetachedWarnings(prev => { const n = { ...prev }; delete n[repoId]; return n; })}
-                          title="Dismiss"
+                          title={l10n.t('Dismiss')}
                         >
                           ✕
                         </button>
@@ -1686,8 +1692,9 @@ function App() {
                 style={css.shelvePromptInput}
                 value={shelvePromptName}
                 onChange={e => setShelvePromptName(e.target.value)}
-                placeholder="Shelve name…"
+                placeholder={l10n.t('Shelve name…')}
                 onKeyDown={e => {
+                  if (isImeComposing(e)) return;
                   if (e.key === 'Enter') confirmShelve(shelvePrompt.repoId, shelvePromptName, shelvePrompt.paths);
                   if (e.key === 'Escape') setShelvePrompt(null);
                 }}
@@ -1696,11 +1703,11 @@ function App() {
                 style={css.shelvePromptOk}
                 onClick={() => confirmShelve(shelvePrompt.repoId, shelvePromptName, shelvePrompt.paths)}
                 disabled={!shelvePromptName.trim()}
-                title="Confirm shelve"
+                title={l10n.t('Confirm shelve')}
               >
                 <Codicon name="check" />
               </button>
-              <button style={css.shelvePromptCancel} onClick={() => setShelvePrompt(null)} title="Cancel">
+              <button style={css.shelvePromptCancel} onClick={() => setShelvePrompt(null)} title={l10n.t('Cancel')}>
                 <Codicon name="close" />
               </button>
             </div>
@@ -1945,48 +1952,48 @@ function App() {
         const isUntracked = file.status === 'untracked';
         const isSubmodule = file.status === 'submodule';
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
-        const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT : FILE_CONTEXT_ITEMS;
+        const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT() : FILE_CONTEXT_ITEMS();
         let items: ContextMenuEntry[] = baseItems;
         if (isSubmodule) {
-          items = ctxMenuStaged ? SUBMODULE_FILE_STAGED_ITEMS : SUBMODULE_FILE_UNSTAGED_ITEMS;
+          items = ctxMenuStaged ? SUBMODULE_FILE_STAGED_ITEMS() : SUBMODULE_FILE_UNSTAGED_ITEMS();
         } else if (store.changesViewMode === 'vscode') {
-          items = ctxMenuStaged ? VSCODE_FILE_STAGED_ITEMS : VSCODE_FILE_UNSTAGED_ITEMS;
+          items = ctxMenuStaged ? VSCODE_FILE_STAGED_ITEMS() : VSCODE_FILE_UNSTAGED_ITEMS();
         } else if (store.changesViewMode === 'simplified' && isUntracked) {
           items = [
-            { id: 'add-to-git',    label: 'Add to Git',          icon: 'add' },
-            { id: 'rollback',      label: 'Rollback',             icon: 'discard' },
-            { id: 'shelve',        label: 'Shelve',               icon: 'archive' },
-            { id: 'stash',         label: 'Stash',                icon: 'git-stash' },
-            { id: 'diff',          label: 'Show Diff',            icon: 'diff' },
-            { id: 'file-history',  label: 'Show File History',    icon: 'history' },
-            { id: 'jump',          label: 'Jump to Source',       icon: 'go-to-file' },
+            { id: 'add-to-git',    label: l10n.t('Add to Git'),          icon: 'add' },
+            { id: 'rollback',      label: l10n.t('Rollback'),             icon: 'discard' },
+            { id: 'shelve',        label: l10n.t('Shelve'),               icon: 'archive' },
+            { id: 'stash',         label: l10n.t('Stash'),                icon: 'git-stash' },
+            { id: 'diff',          label: l10n.t('Show Diff'),            icon: 'diff' },
+            { id: 'file-history',  label: l10n.t('Show File History'),    icon: 'history' },
+            { id: 'jump',          label: l10n.t('Jump to Source'),       icon: 'go-to-file' },
             { separator: true },
-            { id: 'gitignore',     label: 'Add to .gitignore',    icon: 'exclude' },
+            { id: 'gitignore',     label: l10n.t('Add to .gitignore'),    icon: 'exclude' },
             { separator: true },
-            { id: 'delete',        label: 'Delete',               icon: 'trash', danger: true },
+            { id: 'delete',        label: l10n.t('Delete'),               icon: 'trash', danger: true },
             { separator: true },
-            { id: 'refresh',       label: 'Refresh',              icon: 'refresh' },
+            { id: 'refresh',       label: l10n.t('Refresh'),              icon: 'refresh' },
           ];
         } else if (store.changesViewMode === 'changelists') {
           if (isUntracked) {
             items = [
-              { id: 'add-to-git',   label: 'Add to Git',         icon: 'add' },
-              { id: 'rollback',     label: 'Rollback',            icon: 'discard' },
-              { id: 'shelve',       label: 'Shelve',              icon: 'archive' },
-              { id: 'stash',        label: 'Stash',               icon: 'git-stash' },
-              { id: 'diff',         label: 'Show Diff',           icon: 'diff' },
-              { id: 'file-history', label: 'Show File History',   icon: 'history' },
-              { id: 'jump',         label: 'Jump to Source',      icon: 'go-to-file' },
+              { id: 'add-to-git',   label: l10n.t('Add to Git'),         icon: 'add' },
+              { id: 'rollback',     label: l10n.t('Rollback'),            icon: 'discard' },
+              { id: 'shelve',       label: l10n.t('Shelve'),              icon: 'archive' },
+              { id: 'stash',        label: l10n.t('Stash'),               icon: 'git-stash' },
+              { id: 'diff',         label: l10n.t('Show Diff'),           icon: 'diff' },
+              { id: 'file-history', label: l10n.t('Show File History'),   icon: 'history' },
+              { id: 'jump',         label: l10n.t('Jump to Source'),      icon: 'go-to-file' },
               { separator: true },
-              { id: 'gitignore',    label: 'Add to .gitignore',   icon: 'exclude' },
+              { id: 'gitignore',    label: l10n.t('Add to .gitignore'),   icon: 'exclude' },
               { separator: true },
-              { id: 'delete',       label: 'Delete',              icon: 'trash', danger: true },
+              { id: 'delete',       label: l10n.t('Delete'),              icon: 'trash', danger: true },
               { separator: true },
-              { id: 'refresh',      label: 'Refresh',             icon: 'refresh' },
+              { id: 'refresh',      label: l10n.t('Refresh'),             icon: 'refresh' },
             ];
           } else {
             items = hasCustomCls
-              ? [...baseItems, { separator: true }, { id: 'move-to-cl', label: 'Move to Changelist…', icon: 'list-unordered' }]
+              ? [...baseItems, { separator: true }, { id: 'move-to-cl', label: l10n.t('Move to Changelist…'), icon: 'list-unordered' }]
               : baseItems;
           }
         }
@@ -2015,28 +2022,28 @@ function App() {
         const files = folderCtxMenu.files;
         const allUntracked = files.length > 0 && files.every(f => f.status === 'untracked');
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
-        let items: ContextMenuEntry[] = FOLDER_CONTEXT_ITEMS;
+        let items: ContextMenuEntry[] = FOLDER_CONTEXT_ITEMS();
         if (store.changesViewMode === 'vscode') {
-          items = folderCtxMenuStaged ? VSCODE_FOLDER_STAGED_ITEMS : VSCODE_FOLDER_UNSTAGED_ITEMS;
+          items = folderCtxMenuStaged ? VSCODE_FOLDER_STAGED_ITEMS() : VSCODE_FOLDER_UNSTAGED_ITEMS();
         } else if (store.changesViewMode === 'changelists') {
           if (allUntracked) {
             items = [
-              { id: 'add-to-git', label: 'Add to Git',        icon: 'add' },
-              { id: 'rollback',   label: 'Rollback',           icon: 'discard' },
-              { id: 'shelve',     label: 'Shelve Changes',     icon: 'archive' },
-              { id: 'stash',      label: 'Stash Changes',      icon: 'git-stash' },
-              { id: 'compare-with', label: 'Compare with…',   icon: 'git-compare' },
+              { id: 'add-to-git', label: l10n.t('Add to Git'),        icon: 'add' },
+              { id: 'rollback',   label: l10n.t('Rollback'),           icon: 'discard' },
+              { id: 'shelve',     label: l10n.t('Shelve Changes'),     icon: 'archive' },
+              { id: 'stash',      label: l10n.t('Stash Changes'),      icon: 'git-stash' },
+              { id: 'compare-with', label: l10n.t('Compare with…'),   icon: 'git-compare' },
               { separator: true },
-              { id: 'gitignore',  label: 'Add to .gitignore', icon: 'exclude' },
+              { id: 'gitignore',  label: l10n.t('Add to .gitignore'), icon: 'exclude' },
               { separator: true },
-              { id: 'delete',     label: 'Delete',             icon: 'trash', danger: true },
+              { id: 'delete',     label: l10n.t('Delete'),             icon: 'trash', danger: true },
               { separator: true },
-              { id: 'refresh',    label: 'Refresh',            icon: 'refresh' },
+              { id: 'refresh',    label: l10n.t('Refresh'),            icon: 'refresh' },
             ];
           } else {
             items = hasCustomCls
-              ? [...FOLDER_CONTEXT_ITEMS, { separator: true }, { id: 'move-to-cl', label: 'Move to Changelist…', icon: 'list-unordered' }]
-              : FOLDER_CONTEXT_ITEMS;
+              ? [...FOLDER_CONTEXT_ITEMS(), { separator: true }, { id: 'move-to-cl', label: l10n.t('Move to Changelist…'), icon: 'list-unordered' }]
+              : FOLDER_CONTEXT_ITEMS();
           }
         }
         return (
@@ -2062,28 +2069,28 @@ function App() {
       {repoCtxMenu && (() => {
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
         const isInDefaultCl = !repoCtxMenu.changelistId || repoCtxMenu.changelistId === CHANGELIST_DEFAULT_ID;
-        let repoItems = REPO_CONTEXT_ITEMS;
+        let repoItems = REPO_CONTEXT_ITEMS();
         if (store.changesViewMode === 'vscode') {
-          repoItems = repoCtxMenu.stagedSection ? VSCODE_REPO_STAGED_ITEMS : VSCODE_REPO_UNSTAGED_ITEMS;
+          repoItems = repoCtxMenu.stagedSection ? VSCODE_REPO_STAGED_ITEMS() : VSCODE_REPO_UNSTAGED_ITEMS();
         } else if (store.changesViewMode === 'changelists') {
           const baseItems: ContextMenuEntry[] = [
-            { id: 'rollback',     label: 'Rollback',              icon: 'discard' },
-            { id: 'shelve',       label: 'Shelve Changes',         icon: 'archive' },
-            { id: 'stash',        label: 'Stash Changes',          icon: 'git-stash' },
+            { id: 'rollback',     label: l10n.t('Rollback'),              icon: 'discard' },
+            { id: 'shelve',       label: l10n.t('Shelve Changes'),         icon: 'archive' },
+            { id: 'stash',        label: l10n.t('Stash Changes'),          icon: 'git-stash' },
             ...( (!isInDefaultCl || hasCustomCls) ? [{ separator: true } as ContextMenuEntry] : []),
-            ...(!isInDefaultCl ? [{ id: 'add-to-git', label: 'Add to Git', icon: 'add' } as ContextMenuEntry] : []),
-            ...(hasCustomCls ? [{ id: 'move-to-cl', label: 'Move to Changelist…', icon: 'list-unordered' } as ContextMenuEntry] : []),
+            ...(!isInDefaultCl ? [{ id: 'add-to-git', label: l10n.t('Add to Git'), icon: 'add' } as ContextMenuEntry] : []),
+            ...(hasCustomCls ? [{ id: 'move-to-cl', label: l10n.t('Move to Changelist…'), icon: 'list-unordered' } as ContextMenuEntry] : []),
             { separator: true },
-            { id: 'manage-repo',      label: 'Manage Repository',   icon: 'git-branch' },
-            { id: 'view-git-log',     label: 'View Git Log',        icon: 'git-commit' },
+            { id: 'manage-repo',      label: l10n.t('Manage Repository'),   icon: 'git-branch' },
+            { id: 'view-git-log',     label: l10n.t('View Git Log'),        icon: 'git-commit' },
             { separator: true },
-            { id: 'reveal-explorer',  label: 'Reveal in Explorer',  icon: 'list-tree' },
-            { id: 'open-new-window',  label: 'Open in New Window',  icon: 'multiple-windows' },
-            { id: 'reveal-os',        label: REVEAL_OS_LABEL,       icon: 'folder-opened' },
+            { id: 'reveal-explorer',  label: l10n.t('Reveal in Explorer'),  icon: 'list-tree' },
+            { id: 'open-new-window',  label: l10n.t('Open in New Window'),  icon: 'multiple-windows' },
+            { id: 'reveal-os',        label: revealOsLabel(),       icon: 'folder-opened' },
             { separator: true },
-            { id: 'hide-repo',        label: 'Hide Repository',     icon: 'eye-closed' },
+            { id: 'hide-repo',        label: l10n.t('Hide Repository'),     icon: 'eye-closed' },
             { separator: true },
-            { id: 'refresh',          label: 'Refresh',             icon: 'refresh' },
+            { id: 'refresh',          label: l10n.t('Refresh'),             icon: 'refresh' },
           ];
           repoItems = baseItems;
         }
@@ -2142,16 +2149,16 @@ function App() {
         const noneSubmodule = files.every(f => f.status !== 'submodule');
         const items: ContextMenuEntry[] = [
           ...(noneSubmodule && allSameRepo ? [
-            { id: 'multi-rollback', label: `Rollback ${n} files`, icon: 'discard' } as ContextMenuEntry,
-            { id: 'multi-shelve',   label: `Silently Shelve ${n} files`, icon: 'archive' } as ContextMenuEntry,
-            { id: 'multi-stash',    label: `Silently Stash ${n} files`, icon: 'git-stash' } as ContextMenuEntry,
+            { id: 'multi-rollback', label: l10n.t('Rollback {0} files', n), icon: 'discard' } as ContextMenuEntry,
+            { id: 'multi-shelve',   label: l10n.t('Silently Shelve {0} files', n), icon: 'archive' } as ContextMenuEntry,
+            { id: 'multi-stash',    label: l10n.t('Silently Stash {0} files', n), icon: 'git-stash' } as ContextMenuEntry,
             { separator: true } as ContextMenuEntry,
           ] : []),
           ...(noneSubmodule ? [
-            { id: 'multi-gitignore', label: 'Add to .gitignore', icon: 'exclude' } as ContextMenuEntry,
+            { id: 'multi-gitignore', label: l10n.t('Add to .gitignore'), icon: 'exclude' } as ContextMenuEntry,
             { separator: true } as ContextMenuEntry,
           ] : []),
-          { id: 'multi-refresh', label: 'Refresh', icon: 'refresh' } as ContextMenuEntry,
+          { id: 'multi-refresh', label: l10n.t('Refresh'), icon: 'refresh' } as ContextMenuEntry,
         ];
         return (
           <ContextMenu
@@ -2191,12 +2198,12 @@ function App() {
         const isUnversioned = clHeaderCtxMenu.changelistId === CHANGELIST_UNVERSIONED_ID;
         const isFixed = clHeaderCtxMenu.changelistId === CHANGELIST_DEFAULT_ID || isUnversioned;
         const baseItems = isEmpty
-          ? CHANGELIST_EMPTY_AREA_ITEMS
+          ? CHANGELIST_EMPTY_AREA_ITEMS()
           : isUnversioned
-            ? CHANGELIST_HEADER_ITEMS_UNVERSIONED
+            ? CHANGELIST_HEADER_ITEMS_UNVERSIONED()
             : isFixed
-              ? CHANGELIST_HEADER_ITEMS_FIXED
-              : CHANGELIST_HEADER_ITEMS_CUSTOM;
+              ? CHANGELIST_HEADER_ITEMS_FIXED()
+              : CHANGELIST_HEADER_ITEMS_CUSTOM();
         const clFileCount = (() => {
           if (isEmpty) return 0;
           if (isUnversioned) return changesRepos.reduce((sum, r) => sum + r.unstagedFiles.filter(f => f.status === 'untracked').length, 0);

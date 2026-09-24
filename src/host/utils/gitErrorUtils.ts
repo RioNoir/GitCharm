@@ -1,30 +1,33 @@
 import * as vscode from 'vscode';
 import { GitErrorCodes } from '../git/git.d';
-import { logError, showLogChannel } from './Logger';
+import { logError, notifyWithLogAction } from './Logger';
 
 // eslint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
 
-const FRIENDLY_MESSAGES: Partial<Record<GitErrorCodes, string>> = {
-  [GitErrorCodes.PushRejected]: 'Push rejected — the remote has commits you don\'t have locally. Pull or fetch first.',
-  [GitErrorCodes.ForcePushWithLeaseRejected]: 'Force push rejected — the remote branch changed since you last fetched.',
-  [GitErrorCodes.ForcePushWithLeaseIfIncludesRejected]: 'Force push rejected — the remote branch changed since you last fetched.',
-  [GitErrorCodes.AuthenticationFailed]: 'Authentication failed — check your git credentials.',
-  [GitErrorCodes.RemoteConnectionError]: 'Could not connect to the remote repository.',
-  [GitErrorCodes.CantAccessRemote]: 'Could not access the remote repository.',
-  [GitErrorCodes.RepositoryNotFound]: 'Remote repository not found.',
-  [GitErrorCodes.RepositoryIsLocked]: 'Repository is locked by another git process.',
-  [GitErrorCodes.DirtyWorkTree]: 'You have uncommitted changes — commit or stash them first.',
-  [GitErrorCodes.NoUpstreamBranch]: 'The current branch has no upstream branch.',
-  [GitErrorCodes.NoUserNameConfigured]: 'Git user.name is not configured.',
-  [GitErrorCodes.NoUserEmailConfigured]: 'Git user.email is not configured.',
-  [GitErrorCodes.Conflict]: 'Merge conflict — resolve conflicting files before continuing.',
-  [GitErrorCodes.StashConflict]: 'Applying the stash caused a conflict.',
-  [GitErrorCodes.UnmergedChanges]: 'You have unmerged changes.',
-  [GitErrorCodes.LocalChangesOverwritten]: 'Local changes would be overwritten — commit or stash them first.',
-  [GitErrorCodes.BranchNotFullyMerged]: 'Branch is not fully merged.',
-  [GitErrorCodes.PermissionDenied]: 'Permission denied.',
-};
+// A function rather than a constant: vscode.l10n.t() runs per call, never at module load.
+function friendlyMessages(): Partial<Record<GitErrorCodes, string>> {
+  return {
+    [GitErrorCodes.PushRejected]: vscode.l10n.t('Push rejected — the remote has commits you don\'t have locally. Pull or fetch first.'),
+    [GitErrorCodes.ForcePushWithLeaseRejected]: vscode.l10n.t('Force push rejected — the remote branch changed since you last fetched.'),
+    [GitErrorCodes.ForcePushWithLeaseIfIncludesRejected]: vscode.l10n.t('Force push rejected — the remote branch changed since you last fetched.'),
+    [GitErrorCodes.AuthenticationFailed]: vscode.l10n.t('Authentication failed — check your git credentials.'),
+    [GitErrorCodes.RemoteConnectionError]: vscode.l10n.t('Could not connect to the remote repository.'),
+    [GitErrorCodes.CantAccessRemote]: vscode.l10n.t('Could not access the remote repository.'),
+    [GitErrorCodes.RepositoryNotFound]: vscode.l10n.t('Remote repository not found.'),
+    [GitErrorCodes.RepositoryIsLocked]: vscode.l10n.t('Repository is locked by another git process.'),
+    [GitErrorCodes.DirtyWorkTree]: vscode.l10n.t('You have uncommitted changes — commit or stash them first.'),
+    [GitErrorCodes.NoUpstreamBranch]: vscode.l10n.t('The current branch has no upstream branch.'),
+    [GitErrorCodes.NoUserNameConfigured]: vscode.l10n.t('Git user.name is not configured.'),
+    [GitErrorCodes.NoUserEmailConfigured]: vscode.l10n.t('Git user.email is not configured.'),
+    [GitErrorCodes.Conflict]: vscode.l10n.t('Merge conflict — resolve conflicting files before continuing.'),
+    [GitErrorCodes.StashConflict]: vscode.l10n.t('Applying the stash caused a conflict.'),
+    [GitErrorCodes.UnmergedChanges]: vscode.l10n.t('You have unmerged changes.'),
+    [GitErrorCodes.LocalChangesOverwritten]: vscode.l10n.t('Local changes would be overwritten — commit or stash them first.'),
+    [GitErrorCodes.BranchNotFullyMerged]: vscode.l10n.t('Branch is not fully merged.'),
+    [GitErrorCodes.PermissionDenied]: vscode.l10n.t('Permission denied.'),
+  };
+}
 
 function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, '');
@@ -68,7 +71,7 @@ export function formatGitError(e: unknown, maxLines = 3): string {
   const stderr = err.stderr?.trim();
   if (stderr && HOOK_FAILURE_PATTERN.test(stderr)) return capitalizeFirst(meaningfulLines(stderr, maxLines));
 
-  const friendly = err.gitErrorCode ? FRIENDLY_MESSAGES[err.gitErrorCode as GitErrorCodes] : undefined;
+  const friendly = err.gitErrorCode ? friendlyMessages()[err.gitErrorCode as GitErrorCodes] : undefined;
   if (friendly) return friendly;
 
   if (stderr) return capitalizeFirst(meaningfulLines(stderr, maxLines));
@@ -125,7 +128,5 @@ export function getRawErrorDetail(e: unknown): string | undefined {
 export function showGitError(context: string, e: unknown, maxLines = 3): void {
   const summary = formatGitError(e, maxLines);
   logError(context, summary, getRawErrorDetail(e));
-  void vscode.window.showErrorMessage(summary, 'Show Log').then(choice => {
-    if (choice === 'Show Log') showLogChannel();
-  });
+  notifyWithLogAction('error', summary);
 }

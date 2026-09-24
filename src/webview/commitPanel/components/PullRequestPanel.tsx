@@ -3,6 +3,7 @@ import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../
 import { Codicon } from '../../shared/Codicon';
 import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
+import * as l10n from '@vscode/l10n';
 
 function useSkeletonStyle() {
   useEffect(() => {
@@ -32,23 +33,31 @@ interface Props {
   onOpenSearch: (repoId: string) => void;
 }
 
-const SELECTABLE_PROVIDERS: { value: ForgeProvider; label: string }[] = [
-  { value: 'github', label: 'GitHub Enterprise' },
-  { value: 'gitlab', label: 'GitLab (self-hosted)' },
-  { value: 'bitbucket', label: 'Bitbucket Server' },
-  { value: 'gitea', label: 'Gitea / Forgejo' },
-];
+function selectableProviders(): { value: ForgeProvider; label: string }[] {
+  return [
+    { value: 'github', label: 'GitHub Enterprise' },
+    { value: 'gitlab', label: l10n.t('GitLab (self-hosted)') },
+    { value: 'bitbucket', label: 'Bitbucket Server' },
+    { value: 'gitea', label: 'Gitea / Forgejo' },
+  ];
+}
 
-const FORGE_PROVIDER_LABELS: Record<ForgeProvider, string> = {
-  github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', gitea: 'Gitea', unknown: 'Unknown',
-};
+function forgeProviderLabel(provider: ForgeProvider): string {
+  switch (provider) {
+    case 'github': return 'GitHub';
+    case 'gitlab': return 'GitLab';
+    case 'bitbucket': return 'Bitbucket';
+    case 'gitea': return 'Gitea';
+    default: return l10n.t('Unknown');
+  }
+}
 
 function stateIcon(state: PullRequestSummary['state']): { icon: string; color: string; label: string } {
   switch (state) {
-    case 'draft':  return { icon: 'git-pull-request-draft',  color: 'var(--vscode-descriptionForeground)', label: 'Draft' };
-    case 'merged': return { icon: 'git-merge',                color: '#a371f7', label: 'Merged' };
-    case 'closed': return { icon: 'git-pull-request-closed',  color: 'var(--vscode-errorForeground)', label: 'Closed' };
-    default:       return { icon: 'git-pull-request',         color: '#3fb950', label: 'Open' };
+    case 'draft':  return { icon: 'git-pull-request-draft',  color: 'var(--vscode-descriptionForeground)', label: l10n.t('Draft') };
+    case 'merged': return { icon: 'git-merge',                color: '#a371f7', label: l10n.t('Merged') };
+    case 'closed': return { icon: 'git-pull-request-closed',  color: 'var(--vscode-errorForeground)', label: l10n.t('Closed') };
+    default:       return { icon: 'git-pull-request',         color: '#3fb950', label: l10n.t('Open') };
   }
 }
 
@@ -95,7 +104,7 @@ function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, o
         </span>
       </div>
       {hovered && (
-        <InlineIconBtn icon="link-external" title="Open in browser" visible onClick={e => { e.stopPropagation(); onOpenInBrowser(pr.url); }} />
+        <InlineIconBtn icon="link-external" title={l10n.t('Open in browser')} visible onClick={e => { e.stopPropagation(); onOpenInBrowser(pr.url); }} />
       )}
     </div>
   );
@@ -109,15 +118,15 @@ function UnknownProviderPrompt({ repo, onSetHostOverride }: {
   return (
     <div style={css.connectBox}>
       <Codicon name="question" style={{ fontSize: '20px', opacity: 0.5, marginBottom: '6px' }} />
-      <div style={css.connectText}>Could not detect a supported Git forge for this repo's remote.</div>
+      <div style={css.connectText}>{l10n.t("Could not detect a supported Git forge for this repo's remote.")}</div>
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <select style={css.select} value={selected} onChange={e => setSelected(e.target.value as ForgeProvider)}>
-          {SELECTABLE_PROVIDERS.map(p => (
+          {selectableProviders().map(p => (
             <option key={p.value} value={p.value}>{p.label}</option>
           ))}
         </select>
         <button style={css.actionBtn} onClick={() => onSetHostOverride(repo.connection.host, selected)}>
-          Use this
+          {l10n.t('Use this')}
         </button>
       </div>
     </div>
@@ -136,10 +145,10 @@ function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: {
   return (
     <div style={css.connectBox}>
       <Codicon name={isGitHub ? 'github' : 'plug'} style={{ fontSize: '20px', opacity: 0.5, marginBottom: '6px' }} />
-      <div style={css.connectText}>Not connected to {repo.connection.host || FORGE_PROVIDER_LABELS[repo.connection.provider]}</div>
+      <div style={css.connectText}>{l10n.t('Not connected to {0}', repo.connection.host || forgeProviderLabel(repo.connection.provider))}</div>
       <button style={css.actionBtn} onClick={() => onOpenAccountPicker(repo.repoId)}>
         <Codicon name={isGitHub ? 'github' : 'key'} style={{ marginRight: '4px', fontSize: '12px' }} />
-        Connect…
+        {l10n.t('Connect…')}
       </button>
     </div>
   );
@@ -203,17 +212,17 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
         {repo.pending && <Codicon name="loading" className="codicon-modifier-spin" style={{ fontSize: '11px', opacity: 0.5, flexShrink: 0 }} />}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }} onClick={e => e.stopPropagation()}>
           {connected && isExpanded && (
-            <InlineIconBtn icon="search" title="Search pull requests" onClick={() => onOpenSearch(repo.repoId)} />
+            <InlineIconBtn icon="search" title={l10n.t('Search pull requests')} onClick={() => onOpenSearch(repo.repoId)} />
           )}
           {connected && isExpanded && (
-            <InlineIconBtn icon="filter" title="Filter pull requests" onClick={() => onOpenFilters(repo.repoId)} />
+            <InlineIconBtn icon="filter" title={l10n.t('Filter pull requests')} onClick={() => onOpenFilters(repo.repoId)} />
           )}
-          <InlineIconBtn icon="refresh" title="Refresh" onClick={() => onRefresh(repo.repoId)} />
+          <InlineIconBtn icon="refresh" title={l10n.t('Refresh')} onClick={() => onRefresh(repo.repoId)} />
           {connected && !repo.connection.detectionFailed && (
-            <InlineIconBtn icon="account" title="Switch account" onClick={() => onOpenAccountPicker(repo.repoId)} />
+            <InlineIconBtn icon="account" title={l10n.t('Switch account')} onClick={() => onOpenAccountPicker(repo.repoId)} />
           )}
           {connected && (
-            <InlineIconBtn icon="add" title="New Pull Request" onClick={() => onRequestCreate(repo.repoId)} />
+            <InlineIconBtn icon="add" title={l10n.t('New Pull Request')} onClick={() => onRequestCreate(repo.repoId)} />
           )}
         </div>
       </div>
@@ -232,7 +241,7 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
               {!connected ? (
                 <ConnectPrompt repo={repo} onOpenAccountPicker={onOpenAccountPicker} onSetHostOverride={onSetHostOverride} />
               ) : repo.pullRequests.length === 0 ? (
-                <div style={css.empty}>No pull requests match the current filters</div>
+                <div style={css.empty}>{l10n.t('No pull requests match the current filters')}</div>
               ) : (
                 <>
                   {repo.pullRequests.map((pr, idx) => (
@@ -245,7 +254,7 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
                       onOpenDetail={onOpenDetail}
                     />
                   ))}
-                  {loadingMore && <div style={css.loadingMore}>Loading more…</div>}
+                  {loadingMore && <div style={css.loadingMore}>{l10n.t('Loading more…')}</div>}
                 </>
               )}
             </>
@@ -254,19 +263,19 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
             <div style={css.singleRepoActions}>
               <button style={css.actionBtn} onClick={() => onOpenSearch(repo.repoId)}>
                 <Codicon name="search" style={{ marginRight: '4px', fontSize: '12px' }} />
-                Search
+                {l10n.t('Search')}
               </button>
               <button style={css.actionBtn} onClick={() => onOpenFilters(repo.repoId)}>
                 <Codicon name="filter" style={{ marginRight: '4px', fontSize: '12px' }} />
-                Filter
+                {l10n.t('Filter')}
               </button>
               <button style={css.actionBtn} onClick={() => onRefresh(repo.repoId)}>
                 <Codicon name="refresh" style={{ marginRight: '4px', fontSize: '12px' }} />
-                Refresh
+                {l10n.t('Refresh')}
               </button>
               <button style={css.actionBtn} onClick={() => onRequestCreate(repo.repoId)}>
                 <Codicon name="add" style={{ marginRight: '4px', fontSize: '12px' }} />
-                New Pull Request
+                {l10n.t('New Pull Request')}
               </button>
             </div>
           )}
@@ -284,7 +293,7 @@ export function PullRequestPanel({
   return (
     <div style={css.root}>
       {loading && repos.length === 0 ? (
-        <div style={css.empty}>Loading…</div>
+        <div style={css.empty}>{l10n.t('Loading…')}</div>
       ) : (
         repos.map((repo, idx) => (
           <RepoSection

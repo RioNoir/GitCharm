@@ -12,7 +12,8 @@ import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { pickRefQuickPick } from '../utils/refPicker';
-import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
+import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger';
+import { plural } from '../utils/plural';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
 import { promptBranchName } from '../utils/branchNamePrompt';
@@ -32,17 +33,34 @@ function mergeCurrentIntoBranches(branches: BranchInfo[], current: BranchInfo): 
 
 type DeleteTagChoice = 'local' | 'remote' | 'both' | null;
 
+function deleteTagLabels() {
+  return {
+    local: vscode.l10n.t('Delete Local'),
+    remote: vscode.l10n.t('Delete on Remote'),
+    both: vscode.l10n.t('Delete Local and Remote'),
+  };
+}
+
+function errorsSummary(errors: string[]): string {
+  return plural(
+    errors.length,
+    vscode.l10n.t('1 error: {0}', errors.join('; ')),
+    vscode.l10n.t('{0} errors: {1}', errors.length, errors.join('; ')),
+  );
+}
+
 async function confirmDeleteTag(tagName: string, _title: string): Promise<DeleteTagChoice> {
+  const labels = deleteTagLabels();
   const pick = await vscode.window.showWarningMessage(
-    `Delete tag "${tagName}"?`,
+    vscode.l10n.t('Delete tag "{0}"?', tagName),
     { modal: true },
-    'Delete Local',
-    'Delete on Remote',
-    'Delete Local and Remote',
+    labels.local,
+    labels.remote,
+    labels.both,
   );
   if (!pick) return null;
-  if (pick === 'Delete on Remote') return 'remote';
-  if (pick === 'Delete Local and Remote') return 'both';
+  if (pick === labels.remote) return 'remote';
+  if (pick === labels.both) return 'both';
   return 'local';
 }
 
@@ -61,12 +79,12 @@ async function deleteTagWithRemoteOption(
     // Remote only — don't delete locally
     if (remotes.length === 0) {
       logWarn('deleteTag', 'No remotes configured.');
-      vscode.window.showWarningMessage(`No remotes configured.`);
+      vscode.window.showWarningMessage(vscode.l10n.t('No remotes configured.'));
       return;
     }
     const remote = remotes.length === 1
       ? remotes[0]
-      : (await vscode.window.showQuickPick(remotes.map(r => ({ label: r })), { title: `Delete "${tagName}" from remote` }))?.label;
+      : (await vscode.window.showQuickPick(remotes.map(r => ({ label: r })), { title: vscode.l10n.t('Delete "{0}" from remote', tagName) }))?.label;
     if (!remote) return;
     await repo.deleteTagRemote(tagName, remote);
     return;
@@ -75,12 +93,12 @@ async function deleteTagWithRemoteOption(
   await repo.deleteTag(tagName);
   if (remotes.length === 0) {
     logWarn('deleteTag', `Tag "${tagName}" deleted locally, but no remotes configured.`);
-    vscode.window.showWarningMessage(`Tag "${tagName}" deleted locally, but no remotes configured.`);
+    vscode.window.showWarningMessage(vscode.l10n.t('Tag "{0}" deleted locally, but no remotes configured.', tagName));
     return;
   }
   const remote = remotes.length === 1
     ? remotes[0]
-    : (await vscode.window.showQuickPick(remotes.map(r => ({ label: r })), { title: `Delete "${tagName}" from remote` }))?.label;
+    : (await vscode.window.showQuickPick(remotes.map(r => ({ label: r })), { title: vscode.l10n.t('Delete "{0}" from remote', tagName) }))?.label;
   if (!remote) return;
   await repo.deleteTagRemote(tagName, remote);
 }
@@ -103,6 +121,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private pendingScrollHash: string | null = null;
   private pendingScrollRepoId: string | null = null;
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  private lastLogLoadErrorNotice = 0;
   // Scroll/filter intents queued while a freshly opened undocked panel boots up.
   private pendingUndocked: {
     scroll?: { hash: string; repoId: string };
@@ -122,12 +141,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     type Item = vscode.QuickPickItem & { value: 'editorTab' | 'newWindow'; showCommit: boolean };
     const pick = await vscode.window.showQuickPick<Item>(
       [
-        { label: '$(editor-layout) Undock in Editor Tab (Log & Commit)', value: 'editorTab', showCommit: true },
-        { label: '$(empty-window) Undock in New Window (Log & Commit)', value: 'newWindow', showCommit: true },
-        { label: '$(editor-layout) Undock in Editor Tab (Only Log)', value: 'editorTab', showCommit: false },
-        { label: '$(empty-window) Undock in New Window (Only Log)', value: 'newWindow', showCommit: false },
+        { label: `$(editor-layout) ${vscode.l10n.t('Undock in Editor Tab (Log & Commit)')}`, value: 'editorTab', showCommit: true },
+        { label: `$(empty-window) ${vscode.l10n.t('Undock in New Window (Log & Commit)')}`, value: 'newWindow', showCommit: true },
+        { label: `$(editor-layout) ${vscode.l10n.t('Undock in Editor Tab (Only Log)')}`, value: 'editorTab', showCommit: false },
+        { label: `$(empty-window) ${vscode.l10n.t('Undock in New Window (Only Log)')}`, value: 'newWindow', showCommit: false },
       ],
-      { title: 'Undock', placeHolder: 'Choose where to open the panel' },
+      { title: vscode.l10n.t('Undock'), placeHolder: vscode.l10n.t('Choose where to open the panel') },
     );
     if (!pick) return;
     this.undockedPanel.open(pick.value, pick.showCommit);
@@ -166,21 +185,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     const currentLayout = getGitLogDefaultLayout();
 
     const items: Item[] = [
-      { label: '$(layout-panel) Bottom Panel', location: 'panel', layout: currentLayout },
-      { label: '$(editor-layout) Editor Tab (Log & Commit)', location: 'editorTab', layout: 'logAndCommit' },
-      { label: '$(editor-layout) Editor Tab (Only Log)', location: 'editorTab', layout: 'logOnly' },
-      { label: '$(empty-window) New Window (Log & Commit)', location: 'newWindow', layout: 'logAndCommit' },
-      { label: '$(empty-window) New Window (Only Log)', location: 'newWindow', layout: 'logOnly' },
+      { label: `$(layout-panel) ${vscode.l10n.t('Bottom Panel')}`, location: 'panel', layout: currentLayout },
+      { label: `$(editor-layout) ${vscode.l10n.t('Editor Tab (Log & Commit)')}`, location: 'editorTab', layout: 'logAndCommit' },
+      { label: `$(editor-layout) ${vscode.l10n.t('Editor Tab (Only Log)')}`, location: 'editorTab', layout: 'logOnly' },
+      { label: `$(empty-window) ${vscode.l10n.t('New Window (Log & Commit)')}`, location: 'newWindow', layout: 'logAndCommit' },
+      { label: `$(empty-window) ${vscode.l10n.t('New Window (Only Log)')}`, location: 'newWindow', layout: 'logOnly' },
     ];
     for (const item of items) {
       const isCurrent = item.location === currentLocation
         && (item.location === 'panel' || item.layout === currentLayout);
-      if (isCurrent) item.description = 'current default';
+      if (isCurrent) item.description = vscode.l10n.t('current default');
     }
 
     const pick = await vscode.window.showQuickPick<Item>(items, {
-      title: 'Default GitCharm Log Location',
-      placeHolder: 'Where should the Git Log open from now on?',
+      title: vscode.l10n.t('Default GitCharm Log Location'),
+      placeHolder: vscode.l10n.t('Where should the Git Log open from now on?'),
     });
     if (!pick) return;
 
@@ -198,7 +217,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   handleUndockedMessage(msg: LogToHostMsg, _provider: UndockedPanelProvider): void {
     if (msg.type === 'LOG_UNDOCK') return; // undock from undocked panel is a no-op
-    void this.handleMessage(msg, 'undocked').catch(e => logError('logMessage', String(e)));
+    void this.handleMessage(msg, 'undocked').catch(e => this.handleMessageFailure(msg, 'undocked', e));
   }
 
   /** Re-query repos and branches and push them to the webview. */
@@ -267,15 +286,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       ],
     };
 
-    webviewView.webview.html = getWebviewHtml(
-      webviewView.webview,
-      this.extensionUri,
-      'gitLog',
-      'Git Log'
-    );
+    try {
+      webviewView.webview.html = getWebviewHtml(
+        webviewView.webview,
+        this.extensionUri,
+        'gitLog',
+        'Git Log'
+      );
+    } catch (e: unknown) {
+      logError('gitLogHtml', String(e), e instanceof Error ? e.stack : undefined);
+      webviewView.webview.html = this.getLoadFailureHtml(vscode.l10n.t('Git Log failed to load.'), vscode.l10n.t('Run the build task and reload the window, then check the GitCharm output log if it still fails.'));
+      notifyWithLogAction('error', vscode.l10n.t('Git Log failed to load. See the GitCharm output log for details.'));
+    }
 
     webviewView.webview.onDidReceiveMessage(
-      (msg: LogToHostMsg) => this.handleMessage(msg),
+      (msg: LogToHostMsg) => {
+        void this.handleMessage(msg).catch(e => this.handleMessageFailure(msg, 'sidebar', e));
+      },
       null,
       this.disposables
     );
@@ -425,6 +452,61 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.undockedPanel?.postToLog(msg);
   }
 
+  private handleMessageFailure(msg: LogToHostMsg, origin: ReplyTarget, error: unknown): void {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    logError('logMessage', `Failed to handle ${msg.type}: ${error instanceof Error ? error.message : String(error)}`, detail);
+
+    if (msg.type === 'LOG_REQUEST_COMMITS') {
+      this.postTo(origin, { type: 'LOG_INIT_DATA', repos: [], branches: [] });
+      this.postTo(origin, {
+        type: 'LOG_COMMITS_BATCH',
+        commits: [],
+        isLast: true,
+        batchIndex: 0,
+        requestId: msg.requestId,
+      });
+
+      const now = Date.now();
+      if (now - this.lastLogLoadErrorNotice > 10_000) {
+        this.lastLogLoadErrorNotice = now;
+        notifyWithLogAction('error', vscode.l10n.t('Git Log failed to load. See the GitCharm output log for details.'));
+      }
+    }
+  }
+
+  private getLoadFailureHtml(title: string, detail: string): string {
+    const esc = (s: string) => s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!));
+    return `<!DOCTYPE html>
+<html lang="${esc(vscode.env.language)}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: var(--vscode-foreground);
+      background: var(--vscode-editor-background);
+      font-family: var(--vscode-font-family);
+    }
+    main { max-width: 360px; text-align: center; line-height: 1.45; }
+    h1 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+    p { margin: 0; font-size: 12px; opacity: 0.72; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${esc(title)}</h1>
+    <p>${esc(detail)}</p>
+  </main>
+</body>
+</html>`;
+  }
+
   async refreshTagsForRepo(repoId: string): Promise<void> {
     const repo = this.manager.getRepo(repoId);
     if (!repo) return;
@@ -482,14 +564,19 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         };
       });
     if (candidates.length === 0) {
-      vscode.window.showWarningMessage(`No repository found for branch "${branchName}".`);
+      vscode.window.showWarningMessage(vscode.l10n.t('No repository found for branch "{0}".', branchName));
       return null;
     }
     if (candidates.length === 1) return candidates[0].repoId;
-    const picked = await vscode.window.showQuickPick(candidates, {
-      title: `${action} "${branchName}" — Select repository`,
-      placeHolder: `Select the repository in which to ${action.toLowerCase()} this branch`,
-    });
+    const picked = await vscode.window.showQuickPick(candidates, action === 'Pull'
+      ? {
+        title: vscode.l10n.t('Pull "{0}" — Select repository', branchName),
+        placeHolder: vscode.l10n.t('Select the repository in which to pull this branch'),
+      }
+      : {
+        title: vscode.l10n.t('Push "{0}" — Select repository', branchName),
+        placeHolder: vscode.l10n.t('Select the repository in which to push this branch'),
+      });
     return picked?.repoId ?? null;
   }
 
@@ -754,15 +841,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           await repo.cherryPickFile(msg.hash, msg.filePath, msg.oldPath);
           post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: true });
           logInfo('cherryPickFile', `Cherry-picked changes for ${msg.filePath}.`);
-          vscode.window.showInformationMessage(`Cherry-picked changes for ${msg.filePath}.`);
+          vscode.window.showInformationMessage(vscode.l10n.t('Cherry-picked changes for {0}.', msg.filePath));
         } catch (e: unknown) {
           const errMsg = formatGitError(e);
           post({ type: 'LOG_FILE_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('FILE_CHERRY_PICK_CONFLICT')) {
             const files = errMsg.split('FILE_CHERRY_PICK_CONFLICT:')[1]?.trim();
             logWarn('cherryPickFile', `Cherry-pick of ${msg.filePath} has conflicts${files ? ` in ${files}` : ''}.`);
-            vscode.window.showWarningMessage(
-              `Cherry-pick of ${msg.filePath} has conflicts${files ? ` in ${files}` : ''}. Resolve them in the editor.`
+            vscode.window.showWarningMessage(files
+              ? vscode.l10n.t('Cherry-pick of {0} has conflicts in {1}. Resolve them in the editor.', msg.filePath, files)
+              : vscode.l10n.t('Cherry-pick of {0} has conflicts. Resolve them in the editor.', msg.filePath)
             );
           } else {
             showGitError('cherryPickFile', e);
@@ -804,7 +892,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Pulling', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling'), cancellable: false },
           async () => {
             try {
               const output = await repo.pull();
@@ -829,7 +917,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
         if (isCurrent) {
           await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: `Pulling "${msg.branchName}"`, cancellable: false },
+            { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling "{0}"', msg.branchName), cancellable: false },
             async () => {
               try {
                 await repo.pull();
@@ -847,16 +935,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         // same upstream resolution as LOG_PUSH_BRANCH_PICK below.
         const branches = await repo.getBranches().catch(() => []);
         if (!branches.some(branch => !branch.isRemote && branch.name === msg.branchName)) {
-          vscode.window.showWarningMessage(`Local branch "${msg.branchName}" was not found.`);
+          vscode.window.showWarningMessage(vscode.l10n.t('Local branch "{0}" was not found.', msg.branchName));
           break;
         }
         const upstream = await repo.getBranchUpstream(msg.branchName);
         if (!upstream) {
-          vscode.window.showWarningMessage(`Branch "${msg.branchName}" has no upstream to pull from.`);
+          vscode.window.showWarningMessage(vscode.l10n.t('Branch "{0}" has no upstream to pull from.', msg.branchName));
           break;
         }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Pulling "${msg.branchName}"`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling "{0}"', msg.branchName), cancellable: false },
           async () => {
             try {
               await repo.pullBranchFastForward(upstream.remote, upstream.branchName, msg.branchName);
@@ -874,7 +962,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Pushing', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing'), cancellable: false },
           async () => {
             try {
               await repo.push(msg.force, msg.remote);
@@ -896,7 +984,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) break;
         const branches = await repo.getBranches().catch(() => []);
         if (!branches.some(branch => !branch.isRemote && branch.name === msg.branchName)) {
-          vscode.window.showWarningMessage(`Local branch "${msg.branchName}" was not found.`);
+          vscode.window.showWarningMessage(vscode.l10n.t('Local branch "{0}" was not found.', msg.branchName));
           break;
         }
 
@@ -906,26 +994,26 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!remote) {
           const remotes = await repo.getRemotes().catch(() => [] as string[]);
           if (remotes.length === 0) {
-            vscode.window.showWarningMessage('No remotes configured.');
+            vscode.window.showWarningMessage(vscode.l10n.t('No remotes configured.'));
             break;
           }
           remote = remotes.length === 1
             ? remotes[0]
             : (await vscode.window.showQuickPick(
                 remotes.map(name => ({ label: `$(cloud-upload) ${name}`, remote: name })),
-                { title: `Push "${msg.branchName}" — Select remote` }
+                { title: vscode.l10n.t('Push "{0}" — Select remote', msg.branchName) }
               ))?.remote;
           if (!remote) break;
           remoteBranchName = msg.branchName;
         }
 
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Pushing "${msg.branchName}" to ${remote}`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing "{0}" to {1}', msg.branchName, remote), cancellable: false },
           async () => {
             try {
               await repo.pushBranch(msg.branchName, remote!, remoteBranchName, !upstream);
               logInfo('pushBranch', `Pushed "${msg.branchName}" to "${remote}/${remoteBranchName}" successfully.`);
-              vscode.window.showInformationMessage(`Pushed "${msg.branchName}" to "${remote}/${remoteBranchName}" successfully.`);
+              vscode.window.showInformationMessage(vscode.l10n.t('Pushed "{0}" to "{1}" successfully.', msg.branchName, `${remote}/${remoteBranchName}`));
               post({ type: 'LOG_REFRESH' });
             } catch (e: unknown) {
               showGitError('pushBranch', e);
@@ -955,7 +1043,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const { upToDate } = await repo.merge(msg.from);
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
-          if (upToDate) vscode.window.showInformationMessage(`"${msg.from}" is already up to date — nothing to merge.`);
+          if (upToDate) vscode.window.showInformationMessage(vscode.l10n.t('"{0}" is already up to date — nothing to merge.', msg.from));
         } catch (e: unknown) {
           const errMsg = formatGitError(e);
           const isDirty = errMsg.includes('Your local changes') || errMsg.includes('overwritten by merge') || (e as { gitErrorCode?: string })?.gitErrorCode === 'DirtyWorkTree';
@@ -966,12 +1054,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             const repoName = repoMeta?.name ?? msg.repoId;
             const pick = await vscode.window.showQuickPick(
               [
-                { label: '$(archive) Stash and merge', detail: 'Save local changes to stash, then merge', value: 'stash' },
-                { label: '$(close) Cancel', detail: '', value: 'cancel' },
+                { label: `$(archive) ${vscode.l10n.t('Stash and merge')}`, detail: vscode.l10n.t('Save local changes to stash, then merge'), value: 'stash' },
+                { label: `$(close) ${vscode.l10n.t('Cancel')}`, detail: '', value: 'cancel' },
               ],
               {
-                title: `[${repoName}]: Uncommitted changes`,
-                placeHolder: `Local changes would be overwritten by merging "${msg.from}"`,
+                title: vscode.l10n.t('[{0}]: Uncommitted changes', repoName),
+                placeHolder: vscode.l10n.t('Local changes would be overwritten by merging "{0}"', msg.from),
                 ignoreFocusOut: true,
               }
             );
@@ -981,7 +1069,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
                 const { upToDate } = await repo.merge(msg.from);
                 post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
                 post({ type: 'LOG_REFRESH' });
-                if (upToDate) vscode.window.showInformationMessage(`"${msg.from}" is already up to date — nothing to merge.`);
+                if (upToDate) vscode.window.showInformationMessage(vscode.l10n.t('"{0}" is already up to date — nothing to merge.', msg.from));
               } catch (e2: unknown) {
                 logError('merge:stash', formatGitError(e2), getRawErrorDetail(e2));
                 post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: String(e2) });
@@ -994,15 +1082,15 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           if (errMsg.includes('CONFLICT')) {
             void this.commitPanel?.seedCommitMessage();
             vscode.window.showWarningMessage(
-              'Merge conflicts detected. Use the Merge Editor to resolve them.',
-              'Open Commit Panel'
+              vscode.l10n.t('Merge conflicts detected. Use the Merge Editor to resolve them.'),
+              vscode.l10n.t('Open Commit Panel')
             ).then(choice => {
               if (choice) vscode.commands.executeCommand('gitcharm.commitPanel.focus');
             });
           } else {
             // The webview only logs this to its console, so the failure is
             // invisible unless it is reported here.
-            vscode.window.showErrorMessage(`Merge of "${msg.from}" failed: ${errMsg}`);
+            vscode.window.showErrorMessage(vscode.l10n.t('Merge of "{0}" failed: {1}', msg.from, errMsg));
           }
         }
         break;
@@ -1018,7 +1106,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         } catch (e: unknown) {
           logError('rebase', formatGitError(e), getRawErrorDetail(e));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
-          vscode.window.showErrorMessage(`Rebase onto "${msg.onto}" failed: ${formatGitError(e)}`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Rebase onto "{0}" failed: {1}', msg.onto, formatGitError(e)));
         }
         break;
       }
@@ -1034,17 +1122,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const defaultBranch = await repo.getRemoteDefaultBranch(remote);
           if (defaultBranch && bareName === defaultBranch) {
             const warnMsg = `"${bareName}" is the default branch on "${remote}" — it can't be deleted from the remote.`;
-            vscode.window.showWarningMessage(warnMsg);
+            vscode.window.showWarningMessage(vscode.l10n.t('"{0}" is the default branch on "{1}" — it can\'t be deleted from the remote.', bareName, remote));
             logWarn('deleteBranch', warnMsg);
             post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Default branch' });
             return;
           }
         }
 
+        const deleteLabel = vscode.l10n.t('Delete');
         const confirm = await vscode.window.showWarningMessage(
-          `Delete branch "${msg.branchName}"?`, { modal: true }, 'Delete'
+          vscode.l10n.t('Delete branch "{0}"?', msg.branchName), { modal: true }, deleteLabel
         );
-        if (confirm !== 'Delete') {
+        if (confirm !== deleteLabel) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
@@ -1085,7 +1174,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         });
         if (eligibleRepoIds.length === 0) {
           logWarn('deleteBranchMulti', `Cannot delete "${msg.branchName}" — it is currently checked out in all target repositories.`);
-          vscode.window.showWarningMessage(`Cannot delete "${msg.branchName}" — it is currently checked out in all target repositories.`);
+          vscode.window.showWarningMessage(vscode.l10n.t('Cannot delete "{0}" — it is currently checked out in all target repositories.', msg.branchName));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Checked out' });
           return;
         }
@@ -1110,26 +1199,33 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         eligibleRepoIds = defaultBranchChecks.filter(r => !r.isDefaultOnRemote).map(r => r.repoId);
         if (eligibleRepoIds.length === 0) {
           const warnMsg = `Cannot delete "${msg.branchName}" — it's the default branch on the remote in: ${isDefaultOnRemote.join(', ')}.`;
-          vscode.window.showWarningMessage(warnMsg);
+          vscode.window.showWarningMessage(vscode.l10n.t('Cannot delete "{0}" — it\'s the default branch on the remote in: {1}.', msg.branchName, isDefaultOnRemote.join(', ')));
           logWarn('deleteBranchMulti', warnMsg);
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Default branch' });
           return;
         }
 
         const skippedMsg = [
-          checkedOutIn.length > 0 ? `currently checked out in: ${checkedOutIn.join(', ')}` : undefined,
-          isDefaultOnRemote.length > 0 ? `default branch on the remote in: ${isDefaultOnRemote.join(', ')}` : undefined,
+          checkedOutIn.length > 0 ? vscode.l10n.t('currently checked out in: {0}', checkedOutIn.join(', ')) : undefined,
+          isDefaultOnRemote.length > 0 ? vscode.l10n.t('default branch on the remote in: {0}', isDefaultOnRemote.join(', ')) : undefined,
         ].filter(Boolean).join('; ');
         const repoCount = eligibleRepoIds.length;
+        const deleteQuestion = plural(
+          repoCount,
+          vscode.l10n.t('Delete branch "{0}" in 1 repository?', msg.branchName),
+          vscode.l10n.t('Delete branch "{0}" in {1} repositories?', msg.branchName, repoCount),
+        );
+        const deleteLabel = vscode.l10n.t('Delete');
+        const forceDeleteLabel = vscode.l10n.t('Force Delete');
         const confirm = await vscode.window.showWarningMessage(
-          `Delete branch "${msg.branchName}" in ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}?${skippedMsg ? ` (skipped — ${skippedMsg})` : ''}`,
-          { modal: true }, 'Delete', 'Force Delete'
+          skippedMsg ? vscode.l10n.t('{0} (skipped — {1})', deleteQuestion, skippedMsg) : deleteQuestion,
+          { modal: true }, deleteLabel, forceDeleteLabel
         );
         if (!confirm) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
-        const force = confirm === 'Force Delete';
+        const force = confirm === forceDeleteLabel;
         const errors: string[] = [];
         for (const repoId of eligibleRepoIds) {
           const repo = this.manager.getRepo(repoId);
@@ -1155,9 +1251,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }
         }
         if (errors.length > 0) {
-          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log').then(choice => {
-            if (choice === 'Show Log') showLogChannel();
-          });
+          notifyWithLogAction('warning', errorsSummary(errors));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
         } else {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -1169,9 +1263,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_RENAME_BRANCH_MULTI': {
         const repoCount = msg.repoIds.length;
         const newName = await vscode.window.showInputBox({
-          title: repoCount === 1 ? `Rename branch '${msg.oldName}'` : `Rename branch '${msg.oldName}' in ${repoCount} repos`,
+          title: repoCount === 1
+            ? vscode.l10n.t('Rename branch \'{0}\'', msg.oldName)
+            : vscode.l10n.t('Rename branch \'{0}\' in {1} repos', msg.oldName, repoCount),
           value: msg.oldName,
-          validateInput: v => (v.trim() ? undefined : 'Branch name cannot be empty'),
+          validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
         });
         if (!newName || newName === msg.oldName) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
@@ -1196,9 +1292,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }
         }
         if (errors.length > 0) {
-          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log').then(choice => {
-            if (choice === 'Show Log') showLogChannel();
-          });
+          notifyWithLogAction('warning', errorsSummary(errors));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
         } else {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -1213,7 +1307,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_FETCH_ALL': {
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Fetching all', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Fetching all'), cancellable: false },
           async () => { await this.manager.fetchAll(); }
         );
         // A fetch can move the remote's default branch (e.g. origin/HEAD repointed after a
@@ -1254,15 +1348,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not apply')) {
             logWarn('cherryPick', `Cherry-pick of ${msg.hash.slice(0, 8)} has conflicts.`, getRawErrorDetail(e));
+            const continueLabel = vscode.l10n.t('Continue');
+            const skipLabel = vscode.l10n.t('Skip');
+            const abortLabel = vscode.l10n.t('Abort');
             const choice = await vscode.window.showWarningMessage(
-              `Cherry-pick of ${msg.hash.slice(0, 8)} has conflicts. Resolve them in the editor, then choose an action.`,
-              'Continue', 'Skip', 'Abort'
+              vscode.l10n.t('Cherry-pick of {0} has conflicts. Resolve them in the editor, then choose an action.', msg.hash.slice(0, 8)),
+              continueLabel, skipLabel, abortLabel
             );
-            if (choice === 'Continue') {
+            if (choice === continueLabel) {
               await repo.cherryPickContinue();
-            } else if (choice === 'Skip') {
+            } else if (choice === skipLabel) {
               await repo.cherryPickSkip();
-            } else if (choice === 'Abort') {
+            } else if (choice === abortLabel) {
               await repo.cherryPickAbort();
             }
           } else {
@@ -1276,11 +1373,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         {
+          const revertLabel = vscode.l10n.t('Revert');
           const confirm = await vscode.window.showWarningMessage(
-            `Revert commit ${msg.hash.slice(0, 8)}? This creates a new commit that undoes the changes.`,
-            { modal: true }, 'Revert'
+            vscode.l10n.t('Revert commit {0}? This creates a new commit that undoes the changes.', msg.hash.slice(0, 8)),
+            { modal: true }, revertLabel
           );
-          if (confirm !== 'Revert') {
+          if (confirm !== revertLabel) {
             post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
             return;
           }
@@ -1293,13 +1391,15 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not revert')) {
             logWarn('revertCommit', `Revert of ${msg.hash.slice(0, 8)} has conflicts.`, getRawErrorDetail(e));
+            const continueLabel = vscode.l10n.t('Continue');
+            const abortLabel = vscode.l10n.t('Abort');
             const choice = await vscode.window.showWarningMessage(
-              `Revert of ${msg.hash.slice(0, 8)} has conflicts. Resolve them in the editor, then choose an action.`,
-              'Continue', 'Abort'
+              vscode.l10n.t('Revert of {0} has conflicts. Resolve them in the editor, then choose an action.', msg.hash.slice(0, 8)),
+              continueLabel, abortLabel
             );
-            if (choice === 'Continue') {
+            if (choice === continueLabel) {
               await repo.revertContinue();
-            } else if (choice === 'Abort') {
+            } else if (choice === abortLabel) {
               await repo.revertAbort();
             }
           } else {
@@ -1312,12 +1412,15 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_RESET_TO': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
-        const modeLabel = msg.mode === 'hard' ? 'Hard Reset (discard all changes)' : msg.mode === 'mixed' ? 'Mixed Reset (keep unstaged)' : 'Soft Reset (keep staged)';
+        const modeLabel = msg.mode === 'hard'
+          ? vscode.l10n.t('Hard Reset (discard all changes)')
+          : msg.mode === 'mixed' ? vscode.l10n.t('Mixed Reset (keep unstaged)') : vscode.l10n.t('Soft Reset (keep staged)');
+        const resetLabel = vscode.l10n.t('Reset');
         const confirm = await vscode.window.showWarningMessage(
-          `Reset current branch to ${msg.hash.slice(0, 8)}? (${modeLabel})`,
-          { modal: true }, 'Reset'
+          vscode.l10n.t('Reset current branch to {0}? ({1})', msg.hash.slice(0, 8), modeLabel),
+          { modal: true }, resetLabel
         );
-        if (confirm !== 'Reset') {
+        if (confirm !== resetLabel) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
@@ -1338,12 +1441,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const patch = await repo.createPatch(msg.hash);
           const uri = await vscode.window.showSaveDialog({
             defaultUri: vscode.Uri.file(`${msg.hash.slice(0, 8)}.patch`),
-            filters: { 'Patch files': ['patch'], 'All files': ['*'] },
+            filters: { [vscode.l10n.t('Patch files')]: ['patch'], [vscode.l10n.t('All files')]: ['*'] },
           });
           if (uri) {
             logInfo('createPatch', `Patch saved to ${uri.fsPath}`);
             await vscode.workspace.fs.writeFile(uri, Buffer.from(patch, 'utf8'));
-            vscode.window.showInformationMessage(`Patch saved to ${uri.fsPath}`);
+            vscode.window.showInformationMessage(vscode.l10n.t('Patch saved to {0}', uri.fsPath));
           }
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
         } catch (e: unknown) {
@@ -1365,12 +1468,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not apply')) {
             logWarn('cherryPickMulti', 'Cherry-pick has conflicts.', getRawErrorDetail(e));
+            const continueLabel = vscode.l10n.t('Continue');
+            const skipLabel = vscode.l10n.t('Skip');
             const choice = await vscode.window.showWarningMessage(
-              'Cherry-pick has conflicts. Resolve them, then choose an action.',
-              'Continue', 'Skip', 'Abort'
+              vscode.l10n.t('Cherry-pick has conflicts. Resolve them, then choose an action.'),
+              continueLabel, skipLabel, vscode.l10n.t('Abort')
             );
-            if (choice === 'Continue') await repo.cherryPickContinue();
-            else if (choice === 'Skip') await repo.cherryPickSkip();
+            if (choice === continueLabel) await repo.cherryPickContinue();
+            else if (choice === skipLabel) await repo.cherryPickSkip();
             else await repo.cherryPickAbort();
           } else {
             showGitError('cherryPickMulti', e);
@@ -1383,11 +1488,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         {
+          const revertLabel = vscode.l10n.t('Revert');
           const confirm = await vscode.window.showWarningMessage(
-            `Revert ${msg.hashes.length} commits? This creates new commits that undo the changes.`,
-            { modal: true }, 'Revert'
+            plural(
+              msg.hashes.length,
+              vscode.l10n.t('Revert 1 commit? This creates a new commit that undoes the changes.'),
+              vscode.l10n.t('Revert {0} commits? This creates new commits that undo the changes.', msg.hashes.length),
+            ),
+            { modal: true }, revertLabel
           );
-          if (confirm !== 'Revert') {
+          if (confirm !== revertLabel) {
             post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
             return;
           }
@@ -1401,11 +1511,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errMsg });
           if (errMsg.includes('CONFLICT') || errMsg.includes('could not revert')) {
             logWarn('revertCommits', 'Revert has conflicts.', getRawErrorDetail(e));
+            const continueLabel = vscode.l10n.t('Continue');
             const choice = await vscode.window.showWarningMessage(
-              'Revert has conflicts. Resolve them, then choose an action.',
-              'Continue', 'Abort'
+              vscode.l10n.t('Revert has conflicts. Resolve them, then choose an action.'),
+              continueLabel, vscode.l10n.t('Abort')
             );
-            if (choice === 'Continue') await repo.revertContinue();
+            if (choice === continueLabel) await repo.revertContinue();
             else await repo.revertAbort();
           } else {
             showGitError('revertCommits', e);
@@ -1417,11 +1528,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_DROP_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const dropLabel = vscode.l10n.t('Drop');
         const confirm = await vscode.window.showWarningMessage(
-          `Drop ${msg.hashes.length} commits? This rewrites history and cannot be undone.`,
-          { modal: true }, 'Drop'
+          plural(
+            msg.hashes.length,
+            vscode.l10n.t('Drop 1 commit? This rewrites history and cannot be undone.'),
+            vscode.l10n.t('Drop {0} commits? This rewrites history and cannot be undone.', msg.hashes.length),
+          ),
+          { modal: true }, dropLabel
         );
-        if (confirm !== 'Drop') {
+        if (confirm !== dropLabel) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
@@ -1444,7 +1560,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             canSelectFiles: false,
             canSelectFolders: true,
             canSelectMany: false,
-            openLabel: 'Save patches here',
+            openLabel: vscode.l10n.t('Save patches here'),
           });
           if (!folderUris || folderUris.length === 0) {
             post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -1457,7 +1573,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), Buffer.from(patch, 'utf8'));
           }
           logInfo('createPatchMulti', `${msg.hashes.length} patches saved to ${folderPath}`);
-          vscode.window.showInformationMessage(`${msg.hashes.length} patches saved to ${folderPath}`);
+          vscode.window.showInformationMessage(plural(
+            msg.hashes.length,
+            vscode.l10n.t('1 patch saved to {0}', folderPath),
+            vscode.l10n.t('{0} patches saved to {1}', msg.hashes.length, folderPath),
+          ));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
         } catch (e: unknown) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
@@ -1469,11 +1589,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_DROP_COMMIT': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const dropLabel = vscode.l10n.t('Drop');
         const confirm = await vscode.window.showWarningMessage(
-          `Drop commit ${msg.hash.slice(0, 8)}? This rewrites history. Only drop unpushed commits — dropping a pushed commit will require a force push.`,
-          { modal: true }, 'Drop'
+          vscode.l10n.t('Drop commit {0}? This rewrites history. Only drop unpushed commits — dropping a pushed commit will require a force push.', msg.hash.slice(0, 8)),
+          { modal: true }, dropLabel
         );
-        if (confirm !== 'Drop') {
+        if (confirm !== dropLabel) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
@@ -1513,11 +1634,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_UNDO_COMMIT': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
+        const undoLabel = vscode.l10n.t('Undo Commit');
         const confirm = await vscode.window.showWarningMessage(
-          'Undo last commit? Changes will be moved back to the staged area.',
-          { modal: true }, 'Undo Commit'
+          vscode.l10n.t('Undo last commit? Changes will be moved back to the staged area.'),
+          { modal: true }, undoLabel
         );
-        if (confirm !== 'Undo Commit') {
+        if (confirm !== undoLabel) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
         }
@@ -1556,8 +1678,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const branchName = await promptBranchName({
-          title: `Create new branch from ${msg.hash.slice(0, 8)}`,
-          prompt: `Create new branch from ${msg.hash.slice(0, 8)}`,
+          title: vscode.l10n.t('Create new branch from {0}', msg.hash.slice(0, 8)),
+          prompt: vscode.l10n.t('Create new branch from {0}', msg.hash.slice(0, 8)),
           placeHolder: 'my-feature-branch',
         });
         if (!branchName) {
@@ -1581,9 +1703,9 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const tagName = await vscode.window.showInputBox({
-          prompt: `Tag name for commit ${msg.hash.slice(0, 8)}`,
+          prompt: vscode.l10n.t('Tag name for commit {0}', msg.hash.slice(0, 8)),
           placeHolder: 'v1.0.0',
-          validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
+          validateInput: v => v.trim() ? undefined : vscode.l10n.t('Tag name cannot be empty'),
         });
         if (!tagName) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
@@ -1596,12 +1718,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_TAGS_UPDATE', repoId: msg.repoId, tags: rawTags.map(t => ({ ...t, repoId: msg.repoId })) });
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
+          const pushLabel = vscode.l10n.t('Push');
           const push = await vscode.window.showInformationMessage(
-            `Tag "${trimmed}" created. Push to remote?`,
+            vscode.l10n.t('Tag "{0}" created. Push to remote?', trimmed),
             { modal: false },
-            'Push'
+            pushLabel
           );
-          if (push === 'Push') await this.pushTagWithRemotePicker(repo, trimmed);
+          if (push === pushLabel) await this.pushTagWithRemotePicker(repo, trimmed);
         } catch (e: unknown) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
           showGitError('createTag', e);
@@ -1643,7 +1766,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) return;
         const tags = await repo.getTagsForCommit(msg.hash).catch(() => [] as string[]);
         if (tags.length === 0) {
-          vscode.window.showInformationMessage('No tags on this commit.');
+          vscode.window.showInformationMessage(vscode.l10n.t('No tags on this commit.'));
           return;
         }
         await this.showManageCommitTagsMenu(repo, msg.repoId, msg.hash, tags, msg.currentBranch);
@@ -1685,22 +1808,28 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         });
         if (eligibleRepoIds.length === 0) {
           logWarn('deleteTagMulti', `Cannot delete tag "${msg.tagName}" — HEAD is detached on it in all target repositories.`);
-          vscode.window.showWarningMessage(`Cannot delete tag "${msg.tagName}" — HEAD is detached on it in all target repositories.`);
+          vscode.window.showWarningMessage(vscode.l10n.t('Cannot delete tag "{0}" — HEAD is detached on it in all target repositories.', msg.tagName));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Checked out' });
           return;
         }
-        const skippedMsg = checkedOutTagIn.length > 0
-          ? ` (skipped in: ${checkedOutTagIn.join(', ')} — HEAD detached on this tag)`
-          : '';
         const repoCount = eligibleRepoIds.length;
+        const deleteQuestion = plural(
+          repoCount,
+          vscode.l10n.t('Delete tag "{0}" in 1 repository?', msg.tagName),
+          vscode.l10n.t('Delete tag "{0}" in {1} repositories?', msg.tagName, repoCount),
+        );
+        const confirmMsg = checkedOutTagIn.length > 0
+          ? vscode.l10n.t('{0} (skipped in: {1} — HEAD detached on this tag)', deleteQuestion, checkedOutTagIn.join(', '))
+          : deleteQuestion;
         const choice = await (async (): Promise<DeleteTagChoice> => {
+          const labels = deleteTagLabels();
           const pick = await vscode.window.showWarningMessage(
-            `Delete tag "${msg.tagName}" in ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}?${skippedMsg}`,
-            { modal: true }, 'Delete Local', 'Delete on Remote', 'Delete Local and Remote'
+            confirmMsg,
+            { modal: true }, labels.local, labels.remote, labels.both
           );
           if (!pick) return null;
-          if (pick === 'Delete on Remote') return 'remote';
-          if (pick === 'Delete Local and Remote') return 'both';
+          if (pick === labels.remote) return 'remote';
+          if (pick === labels.both) return 'both';
           return 'local';
         })();
         if (!choice) {
@@ -1722,9 +1851,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }
         }
         if (errors.length > 0) {
-          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log').then(choice => {
-            if (choice === 'Show Log') showLogChannel();
-          });
+          notifyWithLogAction('warning', errorsSummary(errors));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
         } else {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
@@ -1737,13 +1864,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Pushing tag "${msg.tagName}" to ${msg.remote}…`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing tag "{0}" to {1}…', msg.tagName, msg.remote), cancellable: false },
           async () => {
             try {
               await repo.pushTag(msg.tagName, msg.remote);
               post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
               logInfo('pushTag', `Tag "${msg.tagName}" pushed to "${msg.remote}".`);
-              vscode.window.showInformationMessage(`Tag "${msg.tagName}" pushed to "${msg.remote}".`);
+              vscode.window.showInformationMessage(vscode.l10n.t('Tag "{0}" pushed to "{1}".', msg.tagName, msg.remote));
             } catch (e: unknown) {
               post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
               showGitError('pushTag', e);
@@ -1772,7 +1899,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_REFS_UPDATE', repoId: msg.repoId, branches: [...branches, detachedHeadEntry] });
           post({ type: 'LOG_REFRESH' });
           logInfo('checkoutTag', `Checked out tag "${msg.tagName}" (detached HEAD).`);
-          vscode.window.showInformationMessage(`Checked out tag "${msg.tagName}" (detached HEAD).`);
+          vscode.window.showInformationMessage(vscode.l10n.t('Checked out tag "{0}" (detached HEAD).', msg.tagName));
         } catch (e: unknown) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
           showGitError('checkoutTag', e);
@@ -1788,7 +1915,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
           logInfo('mergeTag', `Merged tag "${msg.tagName}".`);
-          vscode.window.showInformationMessage(`Merged tag "${msg.tagName}".`);
+          vscode.window.showInformationMessage(vscode.l10n.t('Merged tag "{0}".', msg.tagName));
         } catch (e: unknown) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
           showGitError('mergeTag', e);
@@ -1810,13 +1937,15 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }
         }
         if (errors.length > 0) {
-          void vscode.window.showWarningMessage(`${errors.length} error(s): ${errors.join('; ')}`, 'Show Log').then(choice => {
-            if (choice === 'Show Log') showLogChannel();
-          });
+          notifyWithLogAction('warning', errorsSummary(errors));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: errors.join('; ') });
         } else {
           logInfo('mergeTagMulti', `Merged tag "${msg.tagName}" in ${msg.repoIds.length} ${msg.repoIds.length === 1 ? 'repository' : 'repositories'}.`);
-          vscode.window.showInformationMessage(`Merged tag "${msg.tagName}" in ${msg.repoIds.length} ${msg.repoIds.length === 1 ? 'repository' : 'repositories'}.`);
+          vscode.window.showInformationMessage(plural(
+            msg.repoIds.length,
+            vscode.l10n.t('Merged tag "{0}" in 1 repository.', msg.tagName),
+            vscode.l10n.t('Merged tag "{0}" in {1} repositories.', msg.tagName, msg.repoIds.length),
+          ));
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
         }
         post({ type: 'LOG_REFRESH' });
@@ -1829,11 +1958,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         type ModeItem = vscode.QuickPickItem & { mode: 'soft' | 'mixed' | 'hard' };
         const pick = await vscode.window.showQuickPick(
           [
-            { label: '$(arrow-down) Soft', description: 'Keep staged and unstaged changes', mode: 'soft' as const },
-            { label: '$(discard) Mixed', description: 'Keep unstaged changes, unstage staged changes', mode: 'mixed' as const },
-            { label: '$(trash) Hard', description: 'Discard all local changes', mode: 'hard' as const },
+            { label: `$(arrow-down) ${vscode.l10n.t({ message: 'Soft', comment: ['git reset mode'] })}`, description: vscode.l10n.t('Keep staged and unstaged changes'), mode: 'soft' as const },
+            { label: `$(discard) ${vscode.l10n.t({ message: 'Mixed', comment: ['git reset mode'] })}`, description: vscode.l10n.t('Keep unstaged changes, unstage staged changes'), mode: 'mixed' as const },
+            { label: `$(trash) ${vscode.l10n.t({ message: 'Hard', comment: ['git reset mode'] })}`, description: vscode.l10n.t('Discard all local changes'), mode: 'hard' as const },
           ] satisfies ModeItem[],
-          { title: `Reset Current Branch to ${msg.hash.slice(0, 8)}` }
+          { title: vscode.l10n.t('Reset Current Branch to {0}', msg.hash.slice(0, 8)) }
         ) as ModeItem | undefined;
         if (!pick) return;
         const reqId = msg.hash + pick.mode;
@@ -1852,21 +1981,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) return;
         const remotes = await repo.getRemotes().catch(() => [] as string[]);
-        if (remotes.length === 0) { logWarn('push', 'No remotes configured.'); vscode.window.showWarningMessage('No remotes configured.'); return; }
+        if (remotes.length === 0) { logWarn('push', 'No remotes configured.'); vscode.window.showWarningMessage(vscode.l10n.t('No remotes configured.')); return; }
         const remotePick = remotes.length === 1
           ? remotes[0]
           : (await vscode.window.showQuickPick(
               remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
-              { title: 'Push — Select remote' }
+              { title: vscode.l10n.t('Push — Select remote') }
             ) as { label: string; remote: string } | undefined)?.remote;
         if (!remotePick) return;
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Pushing to ${remotePick}…`, cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing to {0}…', remotePick), cancellable: false },
           async () => {
             try {
               await repo.push(false, remotePick);
               logInfo('push', `Pushed to "${remotePick}" successfully.`);
-              vscode.window.showInformationMessage(`Pushed to "${remotePick}" successfully.`);
+              vscode.window.showInformationMessage(vscode.l10n.t('Pushed to "{0}" successfully.', remotePick));
             } catch (e: unknown) {
               showGitError('push', e);
             }
@@ -1915,10 +2044,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           type CheckoutItem = vscode.QuickPickItem & { value: 'branch' | 'revision' };
           const pick = await vscode.window.showQuickPick<CheckoutItem>(
             [
-              { label: `$(arrow-right) Checkout branch '${msg.branchName.replace(/^remotes\//, '')}'`, description: msg.branchName.replace(/^remotes\//, ''), value: 'branch' },
-              { label: '$(git-commit) Checkout revision (detached HEAD)', description: msg.hash.slice(0, 8), value: 'revision' },
+              { label: `$(arrow-right) ${vscode.l10n.t('Checkout branch \'{0}\'', msg.branchName.replace(/^remotes\//, ''))}`, description: msg.branchName.replace(/^remotes\//, ''), value: 'branch' },
+              { label: `$(git-commit) ${vscode.l10n.t('Checkout revision (detached HEAD)')}`, description: msg.hash.slice(0, 8), value: 'revision' },
             ],
-            { title: 'Checkout' }
+            { title: vscode.l10n.t('Checkout') }
           );
           if (!pick) break;
           target = pick.value === 'branch' ? msg.branchName : msg.hash;
@@ -1966,8 +2095,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const commitMeta = await repo.getCommitMeta(msg.hash);
         const shortHash = commitMeta?.shortHash ?? msg.hash.slice(0, 7);
         const pickedRef = await pickRefQuickPick(repo, {
-          placeHolder: `Compare ${shortHash} with…`,
-          title: 'GitCharm - Compare Commit With',
+          placeHolder: vscode.l10n.t('Compare {0} with…', shortHash),
+          title: vscode.l10n.t('GitCharm - Compare Commit With'),
         });
         if (!pickedRef) break;
         let refHash: string;
@@ -1975,7 +2104,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           refHash = await repo.resolveRef(pickedRef);
         } catch {
           logError('resolveRef', `Cannot resolve ref "${pickedRef}"`);
-          vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Cannot resolve ref "{0}"', pickedRef));
           break;
         }
         const rootPath = repo.rootPath;
@@ -1993,7 +2122,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
             return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
           });
-        await vscode.commands.executeCommand('vscode.changes', `${shortHash} vs ${pickedRef}`, resources);
+        await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('{0} vs {1}', shortHash, pickedRef), resources);
         break;
       }
 
@@ -2001,8 +2130,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) break;
         const pickedRef = await pickRefQuickPick(repo, {
-          placeHolder: `Compare ${msg.filePath} with…`,
-          title: 'GitCharm - Compare With',
+          placeHolder: vscode.l10n.t('Compare {0} with…', msg.filePath),
+          title: vscode.l10n.t('GitCharm - Compare With'),
         });
         if (!pickedRef) break;
         let refHash: string;
@@ -2010,7 +2139,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           refHash = await repo.resolveRef(pickedRef);
         } catch {
           logError('resolveRef', `Cannot resolve ref "${pickedRef}"`);
-          vscode.window.showErrorMessage(`Cannot resolve ref "${pickedRef}"`);
+          vscode.window.showErrorMessage(vscode.l10n.t('Cannot resolve ref "{0}"', pickedRef));
           break;
         }
         const rootPath = repo.rootPath;
@@ -2023,7 +2152,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           'vscode.diff',
           gitUri(msg.hash, msg.filePath),
           gitUri(refHash, msg.filePath),
-          `${msg.filePath} (${shortHash} vs ${pickedRef})`,
+          vscode.l10n.t('{0} ({1} vs {2})', msg.filePath, shortHash, pickedRef),
         );
         break;
       }
@@ -2046,7 +2175,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             const modified = gitUri(f.status === 'D' ? EMPTY_TREE : msg.hash, f.path);
             return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
           });
-        await vscode.commands.executeCommand('vscode.changes', `Changes in ${msg.hash.slice(0, 8)}`, resources);
+        await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('Changes in {0}', msg.hash.slice(0, 8)), resources);
         break;
       }
 
@@ -2083,11 +2212,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_STASH_DROP': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) break;
+        const dropLabel = vscode.l10n.t('Drop');
         const confirm = await vscode.window.showWarningMessage(
-          'Drop this stash? This cannot be undone.',
-          { modal: true }, 'Drop'
+          vscode.l10n.t('Drop this stash? This cannot be undone.'),
+          { modal: true }, dropLabel
         );
-        if (confirm !== 'Drop') break;
+        if (confirm !== dropLabel) break;
         try {
           await repo.stashDrop(msg.stashRef);
           this.refresh();
@@ -2116,21 +2246,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   private async pushTagWithRemotePicker(repo: import('../git/GitService').GitService, tagName: string): Promise<void> {
     const remotes = await repo.getRemotes().catch(() => [] as string[]);
-    if (remotes.length === 0) { logWarn('pushTag', 'No remotes configured.'); vscode.window.showWarningMessage('No remotes configured.'); return; }
+    if (remotes.length === 0) { logWarn('pushTag', 'No remotes configured.'); vscode.window.showWarningMessage(vscode.l10n.t('No remotes configured.')); return; }
     const remotePick = remotes.length === 1
       ? remotes[0]
       : (await vscode.window.showQuickPick(
           remotes.map(r => ({ label: `$(cloud-upload) ${r}`, remote: r })),
-          { title: `Push tag "${tagName}" — Select remote` }
+          { title: vscode.l10n.t('Push tag "{0}" — Select remote', tagName) }
         ) as { label: string; remote: string } | undefined)?.remote;
     if (!remotePick) return;
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `Pushing tag "${tagName}" to ${remotePick}…`, cancellable: false },
+      { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pushing tag "{0}" to {1}…', tagName, remotePick), cancellable: false },
       async () => {
         try {
           await repo.pushTag(tagName, remotePick);
           logInfo('pushTag', `Tag "${tagName}" pushed to "${remotePick}".`);
-          vscode.window.showInformationMessage(`Tag "${tagName}" pushed to "${remotePick}".`);
+          vscode.window.showInformationMessage(vscode.l10n.t('Tag "{0}" pushed to "{1}".', tagName, remotePick));
         } catch (e: unknown) {
           showGitError('pushTag', e);
         }
@@ -2149,23 +2279,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
     // Step 1: always show the tag list + "New Tag..." so the user picks a tag first
     const tagListItems: TagListItem[] = [
-      { label: '$(add) New Tag...', tagName: null },
+      { label: `$(add) ${vscode.l10n.t('New Tag...')}`, tagName: null },
       { label: '', kind: vscode.QuickPickItemKind.Separator, tagName: null },
       ...tags.map(t => ({ label: `$(tag) ${t}`, tagName: t })),
     ];
 
     const tagPick = await vscode.window.showQuickPick(tagListItems, {
-      title: `Tags on commit ${hash.slice(0, 8)}`,
-      placeHolder: 'Select a tag or create a new one',
+      title: vscode.l10n.t('Tags on commit {0}', hash.slice(0, 8)),
+      placeHolder: vscode.l10n.t('Select a tag or create a new one'),
     }) as TagListItem | undefined;
     if (!tagPick) return;
 
     // "New Tag..." selected
     if (tagPick.tagName === null) {
       const newName = await vscode.window.showInputBox({
-        prompt: `Tag name for commit ${hash.slice(0, 8)}`,
+        prompt: vscode.l10n.t('Tag name for commit {0}', hash.slice(0, 8)),
         placeHolder: 'v1.0.0',
-        validateInput: v => v.trim() ? undefined : 'Tag name cannot be empty',
+        validateInput: v => v.trim() ? undefined : vscode.l10n.t('Tag name cannot be empty'),
       });
       if (!newName) return;
       try {
@@ -2174,12 +2304,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const rawTags = await repo.getTags();
         this.broadcast({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
         this.broadcast({ type: 'LOG_REFRESH' });
+        const pushLabel = vscode.l10n.t('Push');
         const push = await vscode.window.showInformationMessage(
-          `Tag "${trimmed}" created. Push to remote?`,
+          vscode.l10n.t('Tag "{0}" created. Push to remote?', trimmed),
           { modal: false },
-          'Push'
+          pushLabel
         );
-        if (push === 'Push') await this.pushTagWithRemotePicker(repo, trimmed);
+        if (push === pushLabel) await this.pushTagWithRemotePicker(repo, trimmed);
       } catch (e: unknown) {
         showGitError('createTag', e);
       }
@@ -2191,18 +2322,18 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
     const actionItems: ActionItem[] = [
       {
-        label: '$(arrow-left) Back',
+        label: `$(arrow-left) ${vscode.l10n.t('Back')}`,
         action: () => this.showManageCommitTagsMenu(repo, repoId, hash, tags, currentBranch),
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
-        label: `$(git-merge) Merge "${tagName}" into "${currentBranch}"`,
+        label: `$(git-merge) ${vscode.l10n.t('Merge "{0}" into "{1}"', tagName, currentBranch)}`,
         action: async () => {
           try {
             await repo.mergeTag(tagName);
             this.broadcast({ type: 'LOG_REFRESH' });
             logInfo('mergeTag', `Merged tag "${tagName}" into "${currentBranch}".`);
-            vscode.window.showInformationMessage(`Merged tag "${tagName}" into "${currentBranch}".`);
+            vscode.window.showInformationMessage(vscode.l10n.t('Merged tag "{0}" into "{1}".', tagName, currentBranch));
           } catch (e: unknown) {
             showGitError('mergeTag', e);
           }
@@ -2210,12 +2341,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
-        label: `$(cloud-upload) Push "${tagName}" to remote…`,
+        label: `$(cloud-upload) ${vscode.l10n.t('Push "{0}" to remote…', tagName)}`,
         action: () => this.pushTagWithRemotePicker(repo, tagName),
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
-        label: `$(trash) Delete "${tagName}"`,
+        label: `$(trash) ${vscode.l10n.t('Delete "{0}"', tagName)}`,
         action: async () => {
           const choice = await confirmDeleteTag(tagName, `Delete tag "${tagName}"?`);
           if (!choice) return;
@@ -2225,7 +2356,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             this.broadcast({ type: 'LOG_TAGS_UPDATE', repoId, tags: rawTags.map(t => ({ ...t, repoId })) });
             this.broadcast({ type: 'LOG_REFRESH' });
             logInfo('deleteTag', `Deleted tag "${tagName}".`);
-            vscode.window.showInformationMessage(`Deleted tag "${tagName}".`);
+            vscode.window.showInformationMessage(vscode.l10n.t('Deleted tag "{0}".', tagName));
           } catch (e: unknown) {
             showGitError('deleteTag', e);
           }
@@ -2234,7 +2365,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     ];
 
     const pick = await vscode.window.showQuickPick(actionItems, {
-      title: `Tag: ${tagName}`,
+      title: vscode.l10n.t('Tag: {0}', tagName),
     }) as ActionItem | undefined;
 
     if (pick) await pick.action();
@@ -2283,7 +2414,7 @@ export async function openSmartDiff(
     // File added or copied — left side is empty
     leftUri  = gitUri(EMPTY_TREE, msg.filePath);
     rightUri = gitUri(msg.hash, msg.filePath);
-    title    = `${fileName} (added in ${shortHash})`;
+    title    = vscode.l10n.t('{0} (added in {1})', fileName, shortHash);
 
   } else if (status === 'D') {
     // File deleted — right side is empty; find the correct parent
@@ -2291,7 +2422,7 @@ export async function openSmartDiff(
     const parentRef = parent ?? `${msg.hash}~1`;
     leftUri  = gitUri(parentRef, msg.filePath);
     rightUri = gitUri(EMPTY_TREE, msg.filePath);
-    title    = `${fileName} (deleted in ${shortHash})`;
+    title    = vscode.l10n.t('{0} (deleted in {1})', fileName, shortHash);
 
   } else if (status === 'R') {
     // File renamed — diff old path at parent vs new path at commit
@@ -2300,7 +2431,7 @@ export async function openSmartDiff(
     const parentRef = parent ?? `${msg.hash}~1`;
     leftUri  = gitUri(parentRef, oldFilePath);
     rightUri = gitUri(msg.hash, msg.filePath);
-    title    = `${path.basename(oldFilePath)} → ${fileName} (renamed in ${shortHash})`;
+    title    = vscode.l10n.t('{0} → {1} (renamed in {2})', path.basename(oldFilePath), fileName, shortHash);
 
   } else {
     // Modified (M), or combined/merge diff
@@ -2320,7 +2451,7 @@ export async function openSmartDiff(
     if (!parentHasFile) {
       leftUri  = gitUri(EMPTY_TREE, msg.filePath);
       rightUri = gitUri(msg.hash, msg.filePath);
-      title    = `${fileName} (added in ${shortHash})`;
+      title    = vscode.l10n.t('{0} (added in {1})', fileName, shortHash);
     } else {
       leftUri  = gitUri(parentRef, msg.filePath);
       rightUri = gitUri(msg.hash, msg.filePath);
