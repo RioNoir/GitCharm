@@ -117,26 +117,6 @@ export interface FileDiff {
   language?: string;
 }
 
-export interface ConflictBlock {
-  index: number;
-  oursLabel: string;
-  theirsLabel: string;
-  oursLines: string[];
-  baseLines: string[];
-  theirsLines: string[];
-  startLine: number;
-  endLine: number;
-}
-
-export interface MergeConflictFile {
-  absolutePath: string;
-  relativePath: string;
-  repoId: string;
-  conflicts: ConflictBlock[];
-  oursLabel: string;
-  theirsLabel: string;
-}
-
 export interface WorkspaceStatus {
   repos: RepoStatus[];
 }

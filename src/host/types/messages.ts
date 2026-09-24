@@ -3,7 +3,6 @@ import type {
   ChangelistData,
   CommitNode,
   FileDiff,
-  MergeConflictFile,
   RepoMeta,
   WorkspaceStatus,
 } from './git';
@@ -343,18 +342,6 @@ export type LogToHostMsg =
   | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }
   | { type: 'LOG_COMPARE_FILE_WITH'; repoId: string; hash: string; filePath: string };
-
-// ─── Merge Editor: Host → WebView ────────────────────────────────────────────
-
-export type HostToMergeMsg =
-  | { type: 'MERGE_FILE_LOADED'; file: MergeConflictFile }
-  | { type: 'MERGE_SAVE_RESULT'; requestId: string; ok: boolean; error?: string };
-
-// ─── Merge Editor: WebView → Host ────────────────────────────────────────────
-
-export type MergeToHostMsg =
-  | { type: 'MERGE_SAVE_FILE'; requestId: string; resolvedContent: string }
-  | { type: 'MERGE_OPEN_FILE'; filePath: string };
 
 // ─── Create Pull Request: Host → WebView ─────────────────────────────────────
 
