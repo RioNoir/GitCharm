@@ -9,6 +9,7 @@ import { pickRefQuickPick } from '../utils/refPicker';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 import type { CommitFullDetailToHostMsg, HostToCommitFullDetailMsg, HostToLogMsg, LogToHostMsg } from '../types/messages';
+import { panelIcon } from '../utils/panelIcon';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -151,7 +152,7 @@ async function setupPanel(
       ? vscode.l10n.t('Stash {0}', commitInfo.shortHash)
       : vscode.l10n.t('Commit {0}', commitInfo.shortHash);
   }
-  panel.iconPath = new vscode.ThemeIcon(isStash ? 'archive' : 'git-commit');
+  panel.iconPath = panelIcon(extensionUri, isStash ? 'archive' : 'git-commit');
 
   // Re-applied here (not just at createWebviewPanel time) so a panel restored via
   // registerWebviewPanelSerializer also gets the icon theme extension roots.

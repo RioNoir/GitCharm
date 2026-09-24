@@ -723,7 +723,7 @@ export class GitService {
     return result;
   }
 
-  async getCommitFiles(hash: string, knownParents?: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number }>> {
+  async getCommitFiles(hash: string, knownParents?: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
     // For merge commits, diff-tree uses combined diff and omits most files.
     // Diff against first parent instead to get the full file list.
     let parents = knownParents;

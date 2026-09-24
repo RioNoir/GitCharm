@@ -168,7 +168,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
     const items: ActionItem[] = [
       { label: `$(arrow-left) ${vscode.l10n.t('Back')}`, action: () => this.showMenu() },
-      sep() as unknown as ActionItem,
+      sep(),
     ];
 
     if (!isActive) {
@@ -212,7 +212,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     type ActionItem = vscode.QuickPickItem & { action: () => Promise<void> | void };
     const items: ActionItem[] = [
       { label: `$(arrow-left) ${vscode.l10n.t('Back')}`, action: () => this.showMenu() },
-      sep() as unknown as ActionItem,
+      sep(),
     ];
 
     if (!isActive) {
@@ -230,7 +230,7 @@ export class ProfileStatusBar implements vscode.Disposable {
     }
 
     items.push(
-      sep() as unknown as ActionItem,
+      sep(),
       { label: `$(edit) ${vscode.l10n.t('Edit…')}`, action: () => this.editProfile(profile) },
       { label: `$(trash) ${vscode.l10n.t('Delete')}`, description: vscode.l10n.t('Remove "{0}"', profile.name), action: () => this.deleteProfile(profile) },
     );
@@ -386,8 +386,9 @@ export class ProfileStatusBar implements vscode.Disposable {
   }
 }
 
-function sep(label = ''): vscode.QuickPickItem {
-  return { label, kind: vscode.QuickPickItemKind.Separator } as vscode.QuickPickItem;
+// Separators are never pickable — the no-op action only satisfies the menu item types.
+function sep(label = ''): vscode.QuickPickItem & { action: () => void } {
+  return { label, kind: vscode.QuickPickItemKind.Separator, action: () => {} };
 }
 
 function generateId(): string {

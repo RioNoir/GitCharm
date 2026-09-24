@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import type { HostToAiExplainMsg } from '../types/messages';
+import { panelIcon } from '../utils/panelIcon';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -40,7 +41,7 @@ export function openAiExplainDetail(
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionUri] },
     );
-    panel.iconPath = new vscode.ThemeIcon('sparkle');
+    panel.iconPath = panelIcon(extensionUri, 'sparkle');
     panel.webview.html = getWebviewHtml(panel.webview, extensionUri, 'aiExplainDetail', panel.title);
     panel.onDidDispose(() => panels.delete(subject.key));
     panels.set(subject.key, panel);

@@ -6,6 +6,7 @@ import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import { showGitError } from '../utils/gitErrorUtils';
 import { logWarn } from '../utils/Logger';
 import { plural } from '../utils/plural';
+import { panelIcon } from '../utils/panelIcon';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -55,7 +56,7 @@ export async function openFileHistoryPanel(
       localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
     }
   );
-  panel.iconPath = new vscode.ThemeIcon('history');
+  panel.iconPath = panelIcon(extensionUri, 'history');
 
   const codiconUri = panel.webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, 'media', 'codicons', 'codicon.css')

@@ -9,7 +9,8 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node"]
   },
   "include": ["src/webview/**/*", "src/host/types/**/*"],
   "exclude": ["node_modules", "out"]

@@ -3,7 +3,7 @@
 src/**
 node_modules/**
 .gitignore
-.eslintrc.json
+eslint.config.mjs
 tsconfig*.json
 *.tsbuildinfo
 esbuild.mjs

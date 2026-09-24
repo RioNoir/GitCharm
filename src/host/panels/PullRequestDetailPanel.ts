@@ -9,6 +9,7 @@ import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 import { getAiModelLabel } from '../utils/aiModelLabel';
 import { avatarsEnabled } from '../utils/avatarCache';
+import { panelIcon } from '../utils/panelIcon';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -118,7 +119,7 @@ export class PullRequestDetailPanel {
   private setupPanel(panel: vscode.WebviewPanel, repoId: string, prNumber: number, panelTitle: string, keepExistingTitle = false): void {
     const key = `${repoId}:${prNumber}`;
     if (!keepExistingTitle) panel.title = panelTitle;
-    panel.iconPath = new vscode.ThemeIcon('git-pull-request');
+    panel.iconPath = panelIcon(this.extensionUri, 'git-pull-request');
 
     panel.webview.html = getWebviewHtml(
       panel.webview,

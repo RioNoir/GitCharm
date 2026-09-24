@@ -13,13 +13,13 @@ jobs:
 
     steps:
       - name: Checkout beta
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: beta
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -78,7 +78,7 @@ jobs:
           git push origin "refs/tags/${RELEASE_TAG}"
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: gitcharm-beta-vsix
           path: dist/*.vsix

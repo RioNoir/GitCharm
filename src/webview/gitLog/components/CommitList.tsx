@@ -579,7 +579,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   setPopover({ commit, rowTop: rect.top, listRect, mouseX });
                 }, 1000);
               }}
-              onMouseLeave={(e) => {
+              onMouseLeave={() => {
                 if (isHoverSuppressed()) return;
                 setHoveredIndex(null);
                 if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);

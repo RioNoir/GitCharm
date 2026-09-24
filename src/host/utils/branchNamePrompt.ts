@@ -68,7 +68,7 @@ export async function promptBranchName(options: BranchNamePromptOptions): Promis
   }
 
   return new Promise<string | undefined>(resolve => {
-    const qp = vscode.window.createQuickPick<vscode.QuickPickItem & { fullValue?: string }>();
+    const qp = vscode.window.createQuickPick<vscode.QuickPickItem & { fullValue?: string; isPrefixOnly?: boolean }>();
     qp.title = options.title;
     qp.placeholder = options.placeHolder ?? options.prompt ?? vscode.l10n.t('Enter the new branch name');
     qp.value = options.value ?? '';
@@ -104,10 +104,7 @@ export async function promptBranchName(options: BranchNamePromptOptions): Promis
     };
 
     render(qp.value);
-    qp.onDidChangeValue(() => {
-      qp.validationMessage = undefined;
-      render(qp.value);
-    });
+    qp.onDidChangeValue(() => render(qp.value));
 
     let resolved = false;
     qp.onDidAccept(() => {
@@ -119,10 +116,8 @@ export async function promptBranchName(options: BranchNamePromptOptions): Promis
       }
 
       const picked = (selected?.fullValue ?? qp.value).trim();
-      if (!picked) {
-        qp.validationMessage = vscode.l10n.t('Branch name cannot be empty');
-        return;
-      }
+      // QuickPick has no validation message API — just keep the picker open.
+      if (!picked) return;
       resolved = true;
       resolve(picked);
       qp.hide();

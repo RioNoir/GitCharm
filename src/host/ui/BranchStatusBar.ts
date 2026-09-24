@@ -1393,27 +1393,27 @@ export class BranchStatusBar implements vscode.Disposable {
       items.push({
         label: `$(repo-sync) ${vscode.l10n.t({ message: 'Update', comment: ['Submodule action: git submodule update'] })}`,
         description: `git submodule update ${meta.submodulePath ?? ''}`,
-        action: () => vscode.commands.executeCommand('gitcharm.submodule.update', meta.id),
+        action: async () => { await vscode.commands.executeCommand('gitcharm.submodule.update', meta.id); },
       });
       items.push({
         label: `$(repo-sync) ${vscode.l10n.t('Update (recursive)')}`,
         description: 'git submodule update --init --recursive',
-        action: () => vscode.commands.executeCommand('gitcharm.submodule.updateRecursive', meta.id),
+        action: async () => { await vscode.commands.executeCommand('gitcharm.submodule.updateRecursive', meta.id); },
       });
       items.push({
         label: `$(add) ${vscode.l10n.t({ message: 'Init', comment: ['Submodule action: git submodule init'] })}`,
         description: vscode.l10n.t('Initialize this submodule'),
-        action: () => vscode.commands.executeCommand('gitcharm.submodule.init', meta.id),
+        action: async () => { await vscode.commands.executeCommand('gitcharm.submodule.init', meta.id); },
       });
       items.push({
         label: `$(trash) ${vscode.l10n.t({ message: 'Deinit', comment: ['Submodule action: git submodule deinit'] })}`,
         description: vscode.l10n.t('Deinitialize this submodule'),
-        action: () => vscode.commands.executeCommand('gitcharm.submodule.deinit', meta.id),
+        action: async () => { await vscode.commands.executeCommand('gitcharm.submodule.deinit', meta.id); },
       });
       items.push({
         label: `$(link-external) ${vscode.l10n.t('Open in New Window')}`,
         description: vscode.l10n.t('Open submodule folder in a separate VS Code window'),
-        action: () => vscode.commands.executeCommand('gitcharm.submodule.openInNewWindow', meta.id),
+        action: async () => { await vscode.commands.executeCommand('gitcharm.submodule.openInNewWindow', meta.id); },
       });
     }
 

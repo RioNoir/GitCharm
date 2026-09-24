@@ -8,6 +8,7 @@ import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logError } from '../utils/Logger';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { loadIconTheme } from '../utils/IconThemeService';
+import { panelIcon } from '../utils/panelIcon';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -64,7 +65,7 @@ export class CreatePullRequestPanel {
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
     );
-    panel.iconPath = new vscode.ThemeIcon('git-pull-request');
+    panel.iconPath = panelIcon(this.extensionUri, 'git-pull-request');
 
     panel.webview.html = getWebviewHtml(
       panel.webview,

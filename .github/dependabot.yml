@@ -5,6 +5,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # Must match engines.vscode — newer typings would allow APIs missing in the minimum supported VS Code.
+      - dependency-name: "@types/vscode"
+      # VS Code 1.93 (engines.vscode) runs on Node 20.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint doesn't support TypeScript 7 yet.
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
