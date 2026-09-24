@@ -2,6 +2,32 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.5.0 (pre-release)
+
+### ✨ New Features
+- GitCharm is now localized: German, French, Spanish, Italian, Simplified Chinese and Traditional Chinese translations of every command, setting and UI string, following VS Code's display language. Short labels made only of git terms (Commit, Stash, Shelve, Checkout…) stay in English in the European languages, as developers use them there
+- The Pull Requests list shows each PR's checks GitHub-style (e.g. "✓ 3/3") for GitHub, GitLab, Gitea and Bitbucket
+- The sidebar's merged commits list shows the total in its title and scrolls after 4 rows
+
+### 🐛 Bug Fixes
+- Fixed the commit detail, pull request detail, Create Pull Request and AI Explain tabs staying on "Loading…" forever in Cursor
+- Fixed the Git Log freezing on an empty panel or the loading skeleton when a commit is dated before its parent (clock skew, or rebased/cherry-picked commits keeping older dates)
+- Fixed commit stats and dirty-checkout/conflict detection not working with a localized git: git's output is now always parsed in English
+- Fixed non-ASCII (e.g. accented or CJK) file names being parsed wrong from git's output
+- Confirming a Chinese/Japanese/Korean IME composition with Enter or Escape no longer submits, closes or clears inputs
+- The Git Log now shows an error, with a pointer to the GitCharm output log, instead of spinning forever when it fails to load
+- The extension now activates as soon as a GitCharm view or the Focus Git Log command is opened
+- Fixed the error message for a missing VS Code language model pointing to a non-existent command, and the pull summary counting changed files as "changes"
+
+### 🔧 Other
+- Author avatars are now off by default: resolving one sends a hash of the author's email to gravatar.com, which could leak a private repo's email addresses. A one-time prompt lets you turn them back on via the new **Avatars: Enabled** setting ([#76](https://github.com/RioNoir/GitCharm/pull/76) by [@gaganyadav80](https://github.com/gaganyadav80)). Initials avatars now use the same colour for an author across the Git Log and the pull request views, and are centred consistently
+- **GitCharm: Open Merge Editor** now opens VS Code's built-in merge editor, like every other conflict flow; the Monaco-based editor, which loaded Monaco from a CDN at runtime, is removed
+- Commit Panel polish: the Stash/Shelve button is hidden when there are no changes, the collapsed tab dropdown is wider and shows counts as badges, and flat file lists start further left
+- Pull request views: source → target branches truncate with an ellipsis keeping the target visible, and the timeline no longer repeats label and assignee events that change nothing
+- Webview tab icons show on older VS Code versions too
+- Updated dependencies (React 19, TypeScript 6, ESLint 10, Vite 8 and more) and GitHub Actions; the CI now typechecks the extension host code
+- New pre-release channel: odd minor versions (0.5.x) are published to the VS Code Marketplace and Open VSX as pre-releases, even minor versions as releases
+
 ## v0.4.9
 
 ### ✨ New Features

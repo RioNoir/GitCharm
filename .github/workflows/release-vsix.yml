@@ -109,7 +109,17 @@ jobs:
         id: package
         shell: bash
         run: |
+          set -euo pipefail
           VERSION="$(node -p "require('./package.json').version")"
+
+          # Odd minors (0.5.x) are pre-releases, published by prerelease-vsix.yml — the marketplaces
+          # never accept the same version twice, so a release can't reuse one.
+          MINOR="$(echo "${VERSION}" | cut -d. -f2)"
+          if (( MINOR % 2 == 1 )); then
+            echo "::error::Version ${VERSION} has an odd minor, which is reserved for pre-releases — releases use an even minor (e.g. 0.6.x)."
+            exit 1
+          fi
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Package VSIX
@@ -148,8 +158,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Find the previous tag (exclude the current one if it already exists)
-          PREV_TAG="$(git tag --sort=-version:refname | grep -v "^${RELEASE_TAG}$" | head -1)"
+          # Find the previous release tag: skip beta and pre-release (odd minor) tags, so the notes cover
+          # everything since the last release, and the current one if it already exists. grep exits 1
+          # when nothing matches — `|| true` keeps that from tripping `set -e` under pipefail.
+          PREV_TAG="$(git tag --sort=-version:refname \
+            | { grep -Ev -- '-beta$' || true; } \
+            | { grep -Ev '^v[0-9]+\.[0-9]*[13579]\.' || true; } \
+            | { grep -v "^${RELEASE_TAG}$" || true; } \
+            | head -1)"
 
           if [ -z "${PREV_TAG}" ]; then
             RANGE="HEAD"

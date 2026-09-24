@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "%extension.description%",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {

@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - beta
+      - prerelease
   pull_request:
     branches:
       - main
       - beta
+      - prerelease
 
 jobs:
   verify:
