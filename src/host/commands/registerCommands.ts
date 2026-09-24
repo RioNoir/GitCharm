@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { CommitPanelProvider } from '../panels/CommitPanelProvider';
 import { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
-import { MergeEditorProvider } from '../panels/MergeEditorProvider';
 import { BranchStatusBar } from '../ui/BranchStatusBar';
 import { FileAnnotationController } from '../ui/FileAnnotationController';
 import { ProfileStatusBar } from '../ui/ProfileStatusBar';
@@ -19,7 +18,6 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   commitPanel: CommitPanelProvider,
   logPanel: GitLogPanelProvider,
-  mergeEditor: MergeEditorProvider,
   branchStatusBar: BranchStatusBar,
   annotationController: FileAnnotationController,
   profileStatusBar: ProfileStatusBar,
@@ -98,8 +96,21 @@ export function registerCommands(
       commitPanel.setHideReposWithoutChanges(true);
     }),
 
-    vscode.commands.registerCommand('gitcharm.openMergeEditor', () => {
-      mergeEditor.openCurrentEditorFile();
+    // Hands off to VS Code's built-in merge editor — the same one the Commit
+    // panel's "Resolve" action uses.
+    vscode.commands.registerCommand('gitcharm.openMergeEditor', async () => {
+      const uri = vscode.window.activeTextEditor?.document.uri;
+      if (!uri) {
+        logWarn('mergeEditor', 'No active file');
+        vscode.window.showWarningMessage('No active file');
+        return;
+      }
+      try {
+        await vscode.commands.executeCommand('git.openMergeEditor', uri);
+      } catch {
+        logWarn('mergeEditor', `Could not open the merge editor for ${uri.fsPath}`);
+        vscode.window.showWarningMessage('No merge conflicts in the current file');
+      }
     }),
 
     vscode.commands.registerCommand('gitcharm.commit', () => {

@@ -9,7 +9,7 @@ export function generateNonce(): string {
 export function getWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
-  appName: 'commitPanel' | 'gitLog' | 'mergeEditor' | 'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'commitFullDetail' | 'aiExplainDetail',
+  appName: 'commitPanel' | 'gitLog' | 'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'commitFullDetail' | 'aiExplainDetail',
   title: string,
   initialConfig?: Record<string, unknown>,
 ): string {
@@ -26,17 +26,12 @@ export function getWebviewHtml(
     vscode.Uri.joinPath(extensionUri, 'media', 'codicons', 'codicon.css')
   );
 
-  // Monaco loads from CDN (jsdelivr) by default via @monaco-editor/react.
-  // Phase 4 will switch to bundled Monaco and tighten this CSP.
-  const monacoCdn = 'https://cdn.jsdelivr.net';
   const csp = [
     `default-src 'none'`,
     `img-src ${webview.cspSource} data: https:`,
-    `style-src ${webview.cspSource} 'unsafe-inline' ${monacoCdn}`,
-    `script-src 'nonce-${nonce}' ${monacoCdn}`,
-    `worker-src blob:`,
-    `font-src ${webview.cspSource} data: ${monacoCdn}`,
-    `connect-src ${monacoCdn}`,
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
+    `script-src 'nonce-${nonce}'`,
+    `font-src ${webview.cspSource} data:`,
   ].join('; ');
 
   return `<!DOCTYPE html>

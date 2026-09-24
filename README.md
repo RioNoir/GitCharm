@@ -17,7 +17,7 @@
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
-GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), and a 3-way merge editor for conflict resolution.
+GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), and conflict resolution through VS Code's built-in merge editor.
 
 It activates automatically when the opened workspace contains a Git repository.
 
@@ -212,11 +212,10 @@ When there is nothing left to commit, the primary button turns into the remote a
 - Create new worktrees and prune stale ones directly from the tab.
 - Primary worktree clearly labeled with a **primary** badge.
 
-### ⚔️ Merge Editor
+### ⚔️ Conflict Resolution
 
-- 3-way conflict editor for files containing Git conflict markers.
-- Side-by-side conflict panes with editable result.
-- Conflict navigation, save, and automatic staging on completion.
+- Conflicted files open in VS Code's built-in 3-way merge editor, so your keybindings, themes, and extensions all apply.
+- Reachable from the Commit panel's **Resolve** action, after a failed update/merge, and from `GitCharm: Open Merge Editor`.
 
 ## 📋 Requirements
 
@@ -286,7 +285,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Push` | Pushes all repositories. |
 | `GitCharm: Sync All` | Pulls then pushes all repositories; stops if any pull fails. |
 | `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Git Log panel. |
-| `GitCharm: Open Merge Editor` | Opens the merge editor for the active file when conflict markers are present. |
+| `GitCharm: Open Merge Editor` | Opens VS Code's merge editor for the active file when it has conflicts. |
 | `GitCharm: Branch Menu` | Opens the Status Bar branch menu. |
 | `GitCharm: Settings` | Opens GitCharm settings. |
 | `GitCharm: Manage Hidden Repositories` | Reopens repositories previously hidden from the Commit Panel and Log Panel. |
@@ -358,13 +357,12 @@ Example:
 ```text
 src/host/                 VS Code extension host code
 src/host/git/             Git, diff, conflict, blame, workspace, and shelve services
-src/host/panels/          Webview providers for Commit, Log, Merge Editor, Undocked Panel, and Pull Requests
+src/host/panels/          Webview providers for Commit, Log, Undocked Panel, and Pull Requests
 src/host/pullRequests/    Multi-provider Pull Request manager, per-provider API clients, and credential storage
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
 src/webview/gitLog/       React Git Log panel
 src/webview/commitFullDetail/ React commit "Full Detail" editor-tab panel
-src/webview/mergeEditor/  React 3-way merge editor
 src/webview/undockedPanel/ React undocked panel (Commit + Log side by side)
 src/webview/pullRequestCreate/ React Create Pull Request panel
 src/webview/pullRequestDetail/ React Pull Request detail panel
@@ -392,7 +390,6 @@ out/                      Built extension and webview bundles
 - GitCharm is designed for Git workspaces and multi-root workspaces where each folder may be its own repository.
 - Destructive operations (rollback, delete, branch delete, reset, stash drop, shelve drop, commit undo) ask for confirmation.
 - AI commit-message generation requires an available VS Code language model such as GitHub Copilot.
-- The merge editor works on files that contain Git conflict markers.
 - Git Annotations require the file to be tracked in a Git repository with at least one commit.
 
 ## 🤝 Contributing
@@ -406,8 +403,7 @@ GitCharm is built on top of the excellent work of the open-source community. It 
 | Package | Role |
 |:--|:--|
 | [simple-git](https://github.com/steveukx/git-js) | Direct Git operations fallback when the VS Code Git API is unavailable. |
-| [Monaco Editor](https://github.com/microsoft/monaco-editor) / [@monaco-editor/react](https://github.com/suren-atoyan/monaco-react) | Diff and 3-way merge editor views. |
-| [React](https://react.dev/) | Renders every webview panel (Commit, Log, Merge Editor, Undocked Panel). |
+| [React](https://react.dev/) | Renders every webview panel (Commit, Log, Undocked Panel). |
 | [Zustand](https://github.com/pmndrs/zustand) | State management across all webview panels. |
 | [@tanstack/react-virtual](https://github.com/TanStack/virtual) | Virtualized rendering of large commit and file lists. |
 | [Prism.js](https://prismjs.com/) | Syntax highlighting in diff and file previews. |

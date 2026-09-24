@@ -99,26 +99,3 @@ function parseHunks(lines: string[]): DiffHunk[] {
   if (current) hunks.push(current);
   return hunks;
 }
-
-export function buildMonacoContents(hunks: DiffHunk[]): { original: string; modified: string } {
-  const originalLines: string[] = [];
-  const modifiedLines: string[] = [];
-
-  for (const hunk of hunks) {
-    for (const line of hunk.lines) {
-      if (line.type === 'context') {
-        originalLines.push(line.content);
-        modifiedLines.push(line.content);
-      } else if (line.type === 'remove') {
-        originalLines.push(line.content);
-      } else if (line.type === 'add') {
-        modifiedLines.push(line.content);
-      }
-    }
-  }
-
-  return {
-    original: originalLines.join('\n'),
-    modified: modifiedLines.join('\n'),
-  };
-}
