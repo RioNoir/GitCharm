@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { renderMarkdown } from '../../shared/renderMarkdown';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
 import { formatRelativeTime } from '../../shared/formatRelativeTime';
@@ -414,7 +414,7 @@ const css = {
   avatarImg: { width: '20px', height: '20px', borderRadius: '50%' } as React.CSSProperties,
   avatarFallback: {
     width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '9px', fontWeight: 'bold' as const, color: '#fff',
+    fontSize: initialsFontSize(20), fontWeight: 600, lineHeight: 1, color: '#fff',
   } as React.CSSProperties,
   commentAuthor: { fontWeight: 600 },
   commentDate: { opacity: 0.5, marginLeft: 'auto', flexShrink: 0 },
@@ -458,7 +458,7 @@ const css = {
   commitAvatarFallback: {
     width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '8px', fontWeight: 'bold' as const, color: '#fff',
+    fontSize: initialsFontSize(18), fontWeight: 600, lineHeight: 1, color: '#fff',
   } as React.CSSProperties,
   commitAuthor: {
     fontWeight: 600, flexShrink: 0, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,

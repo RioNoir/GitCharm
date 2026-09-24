@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { MergeStrategy, PullRequestDetail, PullRequestSummary } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 
 interface Props {
   summary: PullRequestSummary;
@@ -369,7 +369,7 @@ const css = {
   avatarFallback: {
     width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '9px', fontWeight: 'bold' as const, color: '#fff',
+    fontSize: initialsFontSize(20), fontWeight: 600, lineHeight: 1, color: '#fff',
   } as React.CSSProperties,
   summaryText: {
     opacity: 0.85, minWidth: 0, lineHeight: 1.8, flex: 1,

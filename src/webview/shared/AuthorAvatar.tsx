@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Codicon } from './Codicon';
-import { avatarsEnabled, avatarColor, initials } from './avatars';
+import { avatarsEnabled, avatarColor, initials, initialsFontSize } from './avatars';
 
 interface Props {
   authorName: string;
@@ -123,7 +123,7 @@ export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: size * 0.38,
+    fontSize: initialsFontSize(size),
     fontWeight: 600,
     lineHeight: 1,
     userSelect: 'none',

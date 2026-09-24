@@ -1,7 +1,7 @@
 import React from 'react';
 import type { PullRequestUser } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 
 interface PeopleFieldProps {
   people: PullRequestUser[];
@@ -53,6 +53,6 @@ const css = {
   chipAvatarFallback: {
     width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '10px', fontWeight: 'bold' as const, color: '#fff',
+    fontSize: initialsFontSize(22), fontWeight: 600, lineHeight: 1, color: '#fff',
   } as React.CSSProperties,
 };

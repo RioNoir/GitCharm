@@ -2,7 +2,7 @@ import React from 'react';
 import type { CommitNode } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
-import { avatarColor, initials } from '../../shared/avatars';
+import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 
 interface Props {
   commits: CommitNode[];
@@ -45,7 +45,7 @@ const css = {
   avatarFallback: {
     width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '10px', fontWeight: 'bold' as const, color: '#fff',
+    fontSize: initialsFontSize(24), fontWeight: 600, lineHeight: 1, color: '#fff',
   } as React.CSSProperties,
   commitMain: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0, gap: '3px' } as React.CSSProperties,
   commitMessage: { fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const } as React.CSSProperties,

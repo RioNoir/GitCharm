@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials } from '../../shared/avatars';
+import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 
 function useSkeletonStyle() {
@@ -382,7 +382,7 @@ const row = {
   avatarFallback: {
     width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '8px', fontWeight: 'bold' as const,
+    fontSize: initialsFontSize(16), fontWeight: 600, lineHeight: 1,
     color: '#fff',
     border: '1px solid rgba(128,128,128,0.35)', boxSizing: 'border-box' as const,
   } as React.CSSProperties,

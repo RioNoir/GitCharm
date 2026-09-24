@@ -20,6 +20,17 @@ export function avatarColor(name: string): string {
   return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
 }
 
+/**
+ * Font size for initials inside a circle of `size` px. With `lineHeight: 1` the text is centred at
+ * (size - fontSize) / 2, so the font is a whole pixel with the same parity as the circle: otherwise the
+ * baseline lands on a fractional pixel, the renderer snaps it, and the letters sit visibly off-centre.
+ * Pair it with `lineHeight: 1` and `fontWeight: 600`, as AuthorAvatar does.
+ */
+export function initialsFontSize(size: number): number {
+  const rounded = Math.round(size * 0.38);
+  return (size - rounded) % 2 === 0 ? rounded : rounded - 1;
+}
+
 export function initials(name: string): string {
   const trimmed = name.trim();
   const parts = trimmed.split(/\s+/).filter(p => /^[a-zA-ZÀ-ÿ]/.test(p));
