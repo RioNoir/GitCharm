@@ -1261,7 +1261,7 @@
     "@types/turndown": "^5.0.6",
     "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/parser": "^8.70.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@vscode/codicons": "^0.0.45",
     "@vscode/vsce": "^3.9.2",
