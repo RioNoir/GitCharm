@@ -2,6 +2,33 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.5.1 (pre-release)
+
+### ✨ New Features
+- Pull request editor (create form, description and comments):
+  - Markdown pasted as plain text (e.g. copied from a `.md` file in VS Code) now keeps its formatting instead of showing literal `**`, `#` and `-`
+  - `@` mentions with autocomplete from the repository's members. Mentions are highlighted in descriptions and comments, and Bitbucket's `@{account_id}` mentions show the person's name
+  - Tables: insert one from the toolbar, add or remove rows and columns, and they're saved as standard Markdown tables
+  - H1, H2 and H3 heading buttons; existing `####`–`######` headings are no longer turned into plain text when editing
+- The pull request description can now be edited in place from the detail panel
+- Generate a pull request's title and description with AI, each from its own ✨ button inside the field, just like the commit message. The description follows the repository's pull request template when there is one
+- AI-generated text now appears as it's written: in the commit message, the pull request title and description, and the AI Explain panel
+- Every AI prompt can be customized with the new `gitcharm.ai.prompts.*` settings (commit message, pull request title and description, commit and pull request explanations). An empty setting uses the default prompt, and the new **GitCharm: Customize AI Prompts** command starts you from the default text or resets a prompt
+- Git Log view title bar: Fetch and Refresh, Undock, Hide/Show Filters and Hide/Show Branch Sidebar are now title bar actions, also in the undocked panel. Clear Filters appears when the filters bar is hidden while a filter is active, and the "…" menu gets Refresh Log, Set Default Log Location and Manage Hidden Repositories
+- The Git Log remembers whether the filters bar and the branch sidebar are shown, separately for the bottom panel and the side bar. In a side bar both start hidden and the commit list leaves out the date, for a more compact layout
+
+### 🐛 Bug Fixes
+- Fixed Bitbucket pull requests showing "changed the title" on almost every timeline entry; the timeline now shows real title, state and reviewer changes
+- Fixed the Codex CLI provider never receiving the prompt
+- Fixed CLI AI providers (Claude, Codex, Gemini) not being found when their folder is added to PATH in `~/.zshrc`/`~/.bashrc` and VS Code doesn't inherit it
+- The undocked Git Log now has everything the docked one has: branches and tags filtered by the selected repository, the two-commit range diff, the active profile and the no-repository screen
+
+### 🔧 Other
+- AI generation with the Claude CLI provider is about twice as fast, and AI Explain on large pull requests prepares its prompt faster
+- Secondary buttons (Cancel, Compare, Close…) now look like the Commit Panel's Stash button in every view, hover included
+- The pull request detail's merge button now reads "Merge PR", and its tab icons are slightly larger
+- The Commit Panel's repository pills are capped at 165px, with the full name in a tooltip
+
 ## v0.5.0 (pre-release)
 
 ### ✨ New Features
