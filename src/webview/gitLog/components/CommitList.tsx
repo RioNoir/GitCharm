@@ -17,6 +17,8 @@ import { formatDateTime, formatDateOnly, formatDateCompact } from '../../shared/
 interface Props {
   layout: GraphLayout;
   selectedHash: string | null;
+  /** Bumped by the parent to clear the multi-select highlight (detail pane closed). */
+  clearSelectionToken?: number;
   repoColors: Record<string, string>;
   repos: RepoMeta[];
   activeRepoId?: string | null;
@@ -164,7 +166,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
+export function CommitList({ layout, selectedHash, clearSelectionToken, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -228,6 +230,9 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     [commits, multiSelectHashes],
   );
   useEffect(() => onMultiSelectionChange?.(multiSelectedCommits), [multiSelectedCommits, onMultiSelectionChange]);
+  useEffect(() => {
+    if (clearSelectionToken) setMultiSelectHashes(new Set());
+  }, [clearSelectionToken]);
 
   const [containerWidth, setContainerWidth] = useState<number>(9999);
   const containerRoRef = useRef<ResizeObserver | null>(null);
