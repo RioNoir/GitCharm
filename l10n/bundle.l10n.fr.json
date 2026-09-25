@@ -1,5 +1,4 @@
 {
-  "Expand sidebar": "Développer la barre latérale",
   "just now": "à l'instant",
   "Open all changes": "Ouvrir toutes les modifications",
   "Loading editor…": "Chargement de l'éditeur…",
@@ -239,7 +238,6 @@
   "Loading files...": "Chargement des fichiers…",
   "No changed files": "Aucun fichier modifié",
   "Filter branches & tags...": "Filtrer les branches et les tags…",
-  "Collapse sidebar": "Réduire la barre latérale",
   "Local/Branch sidebar section header: local branches": "Locales",
   "Click to focus branch head · Double-click to filter · Right-click for git actions": "Clic pour aller à la tête de la branche · Double-clic pour filtrer · Clic droit pour les actions git",
   "Remote branch no longer exists (likely deleted after a merge)": "La branche distante n'existe plus (probablement supprimée après une fusion)",

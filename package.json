@@ -383,6 +383,30 @@
         "icon": "$(repo-fetch)"
       },
       {
+        "command": "gitcharm.log.refresh",
+        "title": "%command.logRefresh.title%",
+        "category": "GitCharm",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitcharm.log.clearFilters",
+        "title": "%command.logClearFilters.title%",
+        "category": "GitCharm",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "gitcharm.log.hideBranchSidebar",
+        "title": "%command.logHideBranchSidebar.title%",
+        "category": "GitCharm",
+        "icon": "$(layout-sidebar-left)"
+      },
+      {
+        "command": "gitcharm.log.showBranchSidebar",
+        "title": "%command.logShowBranchSidebar.title%",
+        "category": "GitCharm",
+        "icon": "$(layout-sidebar-left-off)"
+      },
+      {
         "command": "gitcharm.log.hideFilters",
         "title": "%command.logHideFilters.title%",
         "category": "GitCharm",
@@ -481,19 +505,49 @@
           "group": "navigation@1"
         },
         {
+          "command": "gitcharm.log.clearFilters",
+          "when": "view == gitcharm.gitLog && gitcharm.logFiltersHidden && gitcharm.logFiltersActive",
+          "group": "navigation@2"
+        },
+        {
           "command": "gitcharm.log.hideFilters",
           "when": "view == gitcharm.gitLog && !gitcharm.logFiltersHidden",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "gitcharm.log.showFilters",
           "when": "view == gitcharm.gitLog && gitcharm.logFiltersHidden",
-          "group": "navigation@2"
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitcharm.log.hideBranchSidebar",
+          "when": "view == gitcharm.gitLog && !gitcharm.logSidebarHidden",
+          "group": "navigation@4"
+        },
+        {
+          "command": "gitcharm.log.showBranchSidebar",
+          "when": "view == gitcharm.gitLog && gitcharm.logSidebarHidden",
+          "group": "navigation@4"
         },
         {
           "command": "gitcharm.undock",
           "when": "view == gitcharm.gitLog",
-          "group": "navigation@3"
+          "group": "navigation@5"
+        },
+        {
+          "command": "gitcharm.log.refresh",
+          "when": "view == gitcharm.gitLog",
+          "group": "1_log@1"
+        },
+        {
+          "command": "gitcharm.setGitLogDefaultLocation",
+          "when": "view == gitcharm.gitLog",
+          "group": "2_log@1"
+        },
+        {
+          "command": "gitcharm.manageHiddenRepos",
+          "when": "view == gitcharm.gitLog",
+          "group": "2_log@2"
         }
       ],
       "gitcharm/commitPanel.fileView": [
@@ -599,19 +653,34 @@
           "group": "navigation@5"
         },
         {
-          "command": "gitcharm.log.hideFilters",
-          "when": "activeWebviewPanelId == gitcharm.undocked && !gitcharm.logFiltersHidden",
+          "command": "gitcharm.log.clearFilters",
+          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogFiltersHidden && gitcharm.undockedLogFiltersActive",
           "group": "navigation@6"
         },
         {
+          "command": "gitcharm.log.hideFilters",
+          "when": "activeWebviewPanelId == gitcharm.undocked && !gitcharm.undockedLogFiltersHidden",
+          "group": "navigation@7"
+        },
+        {
           "command": "gitcharm.log.showFilters",
-          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.logFiltersHidden",
-          "group": "navigation@6"
+          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogFiltersHidden",
+          "group": "navigation@7"
+        },
+        {
+          "command": "gitcharm.log.hideBranchSidebar",
+          "when": "activeWebviewPanelId == gitcharm.undocked && !gitcharm.undockedLogSidebarHidden",
+          "group": "navigation@8"
+        },
+        {
+          "command": "gitcharm.log.showBranchSidebar",
+          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogSidebarHidden",
+          "group": "navigation@8"
         },
         {
           "command": "gitcharm.openSettings",
           "when": "activeWebviewPanelId == gitcharm.undocked",
-          "group": "navigation@7"
+          "group": "navigation@9"
         }
       ],
       "scm/sourceControl": [
@@ -726,8 +795,22 @@
           "command": "gitcharm.log.fetchAndRefresh"
         },
         {
+          "command": "gitcharm.log.refresh"
+        },
+        {
+          "command": "gitcharm.log.clearFilters"
+        },
+        {
           "command": "gitcharm.log.hideFilters",
           "when": "!gitcharm.logFiltersHidden"
+        },
+        {
+          "command": "gitcharm.log.hideBranchSidebar",
+          "when": "!gitcharm.logSidebarHidden"
+        },
+        {
+          "command": "gitcharm.log.showBranchSidebar",
+          "when": "gitcharm.logSidebarHidden"
         },
         {
           "command": "gitcharm.log.showFilters",

@@ -30,7 +30,6 @@ interface Props {
   onMergeTag: (repoIds: string[], tagName: string) => void;
   onPushTag: (repoId: string, tagName: string) => void;
   onDeleteTag: (repoIds: string[], tagName: string) => void;
-  onCollapse: () => void;
   hidden?: boolean;
 }
 
@@ -199,7 +198,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
   onCheckout, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
-  onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, onCollapse, hidden,
+  onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
 }, ref) {
   const defaultBranchByRepo = useMemo(
     () => new Map(repos.map(r => [r.id, r.defaultBranch])),
@@ -354,11 +353,6 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               placeholder={l10n.t('Filter branches & tags...')}
             />
           </div>
-          <button style={styles.collapseBtn} onClick={onCollapse} title={l10n.t('Collapse sidebar')}>
-            <div data-top-action-btn="" style={styles.collapseBtnInner}>
-              <Codicon name="layout-sidebar-left" style={{ fontSize: '14px' }} />
-            </div>
-          </button>
         </div>
       </div>
 
@@ -1118,27 +1112,6 @@ const styles = {
     height: '100%',
     boxSizing: 'border-box' as const,
   },
-  collapseBtn: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'none',
-    border: 'none',
-    borderLeft: '1px solid var(--vscode-panel-border)',
-    cursor: 'pointer',
-    padding: '0 5px',
-    borderRadius: 0,
-    color: 'var(--vscode-foreground)',
-    opacity: 0.6,
-  } as React.CSSProperties,
-  collapseBtnInner: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '3px 3px',
-    borderRadius: '3px',
-  } as React.CSSProperties,
   repoDot: (color: string): React.CSSProperties => ({
     width: '7px',
     height: '7px',

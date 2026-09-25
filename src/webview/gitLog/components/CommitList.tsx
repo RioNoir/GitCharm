@@ -37,6 +37,8 @@ interface Props {
   aiEnabled?: boolean;
   themeVersion?: number;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  /** Leave the date column out whatever the width (the hover popover still shows it). */
+  hideDate?: boolean;
 }
 
 interface RepoBlock {
@@ -167,7 +169,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, hideDate }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -772,7 +774,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
                 {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName)}</span>}
               </div>
-              {containerWidth > 330 && (
+              {!hideDate && containerWidth > 330 && (
                 <span style={styles.date}>
                   {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
                 </span>

@@ -1,5 +1,4 @@
 {
-  "Expand sidebar": "展开侧边栏",
   "just now": "刚刚",
   "Open all changes": "打开所有更改",
   "Loading editor…": "正在加载编辑器…",
@@ -239,7 +238,6 @@
   "Loading files...": "正在加载文件…",
   "No changed files": "没有已更改的文件",
   "Filter branches & tags...": "筛选分支和标签…",
-  "Collapse sidebar": "折叠侧边栏",
   "Local/Branch sidebar section header: local branches": "本地",
   "Click to focus branch head · Double-click to filter · Right-click for git actions": "单击聚焦分支头 · 双击筛选 · 右键单击执行 Git 操作",
   "Remote branch no longer exists (likely deleted after a merge)": "远程分支已不存在（可能已在合并后删除）",

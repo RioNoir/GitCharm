@@ -363,8 +363,12 @@ export function activate(context: vscode.ExtensionContext): void {
       await logPanel.fetchAndRefresh();
       commitPanel.refresh();
     }),
-    vscode.commands.registerCommand('gitcharm.log.hideFilters', () => logPanel.setFiltersHidden(true)),
-    vscode.commands.registerCommand('gitcharm.log.showFilters', () => logPanel.setFiltersHidden(false)),
+    vscode.commands.registerCommand('gitcharm.log.refresh', () => logPanel.reload()),
+    vscode.commands.registerCommand('gitcharm.log.clearFilters', () => logPanel.clearFilters()),
+    vscode.commands.registerCommand('gitcharm.log.hideFilters', () => logPanel.setLayoutPref('filtersHidden', true)),
+    vscode.commands.registerCommand('gitcharm.log.showFilters', () => logPanel.setLayoutPref('filtersHidden', false)),
+    vscode.commands.registerCommand('gitcharm.log.hideBranchSidebar', () => logPanel.setLayoutPref('sidebarHidden', true)),
+    vscode.commands.registerCommand('gitcharm.log.showBranchSidebar', () => logPanel.setLayoutPref('sidebarHidden', false)),
   );
 
   if (vscode.workspace.getConfiguration('gitcharm').get<boolean>('resetViewLocationsOnStartup', false)) {

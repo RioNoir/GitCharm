@@ -214,7 +214,6 @@
   "Clone Repository": "Clone Repository",
   "The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.": "The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.",
   "Initialize Repository": "Initialize Repository",
-  "Expand sidebar": "Expand sidebar",
   "No commits yet": "No commits yet",
   "Make your first commit to see the history here": "Make your first commit to see the history here",
   "Open Commit Detail": "Open Commit Detail",
@@ -313,7 +312,6 @@
   "Loading files...": "Loading files...",
   "No changed files": "No changed files",
   "Filter branches & tags...": "Filter branches & tags...",
-  "Collapse sidebar": "Collapse sidebar",
   "Local/Branch sidebar section header: local branches": {
     "message": "Local",
     "comment": [

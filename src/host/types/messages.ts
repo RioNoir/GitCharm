@@ -246,9 +246,26 @@ export interface TagInfo {
   repoId: string;
 }
 
+/** Visibility of the Git Log filters bar and branch sidebar. */
+export interface LogLayoutPrefs {
+  filtersHidden: boolean;
+  sidebarHidden: boolean;
+}
+
+/**
+ * Where a Git Log is shown: a wide area (bottom panel, editor tab) or a tall, narrow
+ * side bar. VS Code doesn't tell a view which container it is in, so the webview
+ * infers it from its own shape.
+ */
+export type LogViewLocation = 'panel' | 'sideBar';
+
+/** Global layout preferences, kept apart for each location. */
+export type LogLayoutByLocation = Record<LogViewLocation, LogLayoutPrefs>;
+
 export type HostToLogMsg =
-  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; filtersHidden?: boolean }
-  | { type: 'LOG_FILTERS_VISIBILITY'; hidden: boolean }
+  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation }
+  | { type: 'LOG_LAYOUT_PREFS'; layout: LogLayoutByLocation }
+  | { type: 'LOG_CLEAR_FILTERS' }
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
@@ -337,7 +354,8 @@ export type LogToHostMsg =
   | { type: 'LOG_STASH_POP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
-  | { type: 'LOG_SET_DEFAULT_LOCATION' }
+  | { type: 'LOG_FILTERS_ACTIVE'; active: boolean }
+  | { type: 'LOG_VIEW_LOCATION'; location: LogViewLocation }
   | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }
   | { type: 'LOG_COMPARE_FILE_WITH'; repoId: string; hash: string; filePath: string };

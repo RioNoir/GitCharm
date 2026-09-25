@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
+import type { LogToHostMsg, HostToLogMsg, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation } from '../types/messages';
 import type { BranchInfo, RepoMeta } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
@@ -106,8 +106,25 @@ async function deleteTagWithRemoteOption(
 
 type ReplyTarget = 'sidebar' | 'undocked';
 
-const FILTERS_HIDDEN_KEY = 'gitcharm.logFiltersHidden';
-const FILTERS_HIDDEN_CONTEXT = 'gitcharm.logFiltersHidden';
+// Layout preferences live in globalState, one entry per location. In a side bar the
+// filters bar and branch sidebar start hidden, since there is little room for them.
+const LAYOUT_STATE_KEYS: Record<LogViewLocation, string> = {
+  panel: 'gitcharm.logLayout.panel',
+  sideBar: 'gitcharm.logLayout.sideBar',
+};
+const DEFAULT_LAYOUT: LogLayoutByLocation = {
+  panel: { filtersHidden: false, sidebarHidden: false },
+  sideBar: { filtersHidden: true, sidebarHidden: true },
+};
+// Context keys driving the title bar toggles of each surface.
+const LAYOUT_CONTEXT: Record<ReplyTarget, Record<keyof LogLayoutPrefs, string>> = {
+  sidebar: { filtersHidden: 'gitcharm.logFiltersHidden', sidebarHidden: 'gitcharm.logSidebarHidden' },
+  undocked: { filtersHidden: 'gitcharm.undockedLogFiltersHidden', sidebarHidden: 'gitcharm.undockedLogSidebarHidden' },
+};
+const FILTERS_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
+  sidebar: 'gitcharm.logFiltersActive',
+  undocked: 'gitcharm.undockedLogFiltersActive',
+};
 
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
@@ -119,6 +136,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private undockedPanel?: UndockedPanelProvider;
   private hiddenRepoIds: string[] = [];
   private defaultBranchCache = new Map<string, string | undefined>();
+  /** Location of the docked view, as reported by its webview. The undocked panel is always 'panel'. */
+  private dockedLocation: LogViewLocation = 'panel';
   private pendingFilterRepoId: string | null = null;
   private pendingFilterBranch: string | null = null;
   private pendingScrollHash: string | null = null;
@@ -155,15 +174,49 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.undockedPanel.open(pick.value, pick.showCommit);
   }
 
-  /** Whether the Git Log filters bar is hidden — a global preference, visible by default. */
-  private get filtersHidden(): boolean {
-    return this.globalState?.get<boolean>(FILTERS_HIDDEN_KEY, false) === true;
+  /** Filters bar and branch sidebar visibility for every location. */
+  getLayoutPrefs(): LogLayoutByLocation {
+    const read = (location: LogViewLocation): LogLayoutPrefs => {
+      const stored = this.globalState?.get<Partial<LogLayoutPrefs>>(LAYOUT_STATE_KEYS[location]) ?? {};
+      const defaults = DEFAULT_LAYOUT[location];
+      return {
+        filtersHidden: typeof stored.filtersHidden === 'boolean' ? stored.filtersHidden : defaults.filtersHidden,
+        sidebarHidden: typeof stored.sidebarHidden === 'boolean' ? stored.sidebarHidden : defaults.sidebarHidden,
+      };
+    };
+    return { panel: read('panel'), sideBar: read('sideBar') };
   }
 
-  async setFiltersHidden(hidden: boolean): Promise<void> {
-    await this.globalState?.update(FILTERS_HIDDEN_KEY, hidden);
-    await vscode.commands.executeCommand('setContext', FILTERS_HIDDEN_CONTEXT, hidden);
-    this.broadcast({ type: 'LOG_FILTERS_VISIBILITY', hidden });
+  /** Change a layout preference for the location of the Git Log the user is looking at. */
+  async setLayoutPref(pref: keyof LogLayoutPrefs, value: boolean): Promise<void> {
+    const location = this.undockedPanel?.isActive() ? 'panel' : this.dockedLocation;
+    const current = this.getLayoutPrefs()[location];
+    await this.globalState?.update(LAYOUT_STATE_KEYS[location], { ...current, [pref]: value });
+    this.syncLayoutContext();
+    this.broadcast({ type: 'LOG_LAYOUT_PREFS', layout: this.getLayoutPrefs() });
+  }
+
+  private syncLayoutContext(): void {
+    const layout = this.getLayoutPrefs();
+    const locations: Record<ReplyTarget, LogViewLocation> = { sidebar: this.dockedLocation, undocked: 'panel' };
+    for (const target of Object.keys(LAYOUT_CONTEXT) as ReplyTarget[]) {
+      for (const pref of Object.keys(LAYOUT_CONTEXT[target]) as Array<keyof LogLayoutPrefs>) {
+        void vscode.commands.executeCommand('setContext', LAYOUT_CONTEXT[target][pref], layout[locations[target]][pref]);
+      }
+    }
+  }
+
+  /** Clear the text/author/branch/date filters of the Git Log the user is looking at. */
+  clearFilters(): void {
+    const msg: HostToLogMsg = { type: 'LOG_CLEAR_FILTERS' };
+    if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
+    else this.post(msg);
+  }
+
+  /** Reload repos, branches and commits without fetching. */
+  async reload(): Promise<void> {
+    await this.pushInitData();
+    this.refresh();
   }
 
   /** Fetch all remotes, then reload repos/branches and commits on every open Git Log. */
@@ -269,7 +322,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     private readonly profileService?: GitProfileService,
     private readonly globalState?: vscode.Memento
   ) {
-    void vscode.commands.executeCommand('setContext', FILTERS_HIDDEN_CONTEXT, this.filtersHidden);
+    this.syncLayoutContext();
     // The graph refresh goes out immediately: the manager has already debounced
     // the underlying file-event burst, so delaying it again only adds lag. The
     // branch query runs in parallel rather than being awaited first, so a slow
@@ -323,7 +376,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         webviewView.webview,
         this.extensionUri,
         'gitLog',
-        'Git Log'
+        'Git Log',
+        { logLayout: this.getLayoutPrefs() },
       );
     } catch (e: unknown) {
       logError('gitLogHtml', String(e), e instanceof Error ? e.stack : undefined);
@@ -458,7 +512,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
       if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
-      if (m.filtersHidden === undefined) m.filtersHidden = this.filtersHidden;
+      if (m.layout === undefined) m.layout = this.getLayoutPrefs();
     }
   }
 
@@ -2243,8 +2297,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
-      case 'LOG_SET_DEFAULT_LOCATION': {
-        await this.triggerDefaultLocationPick();
+      case 'LOG_VIEW_LOCATION': {
+        if (origin === 'sidebar' && msg.location !== this.dockedLocation) {
+          this.dockedLocation = msg.location;
+          this.syncLayoutContext();
+        }
+        break;
+      }
+
+      case 'LOG_FILTERS_ACTIVE': {
+        await vscode.commands.executeCommand('setContext', FILTERS_ACTIVE_CONTEXT[origin], msg.active);
         break;
       }
     }
