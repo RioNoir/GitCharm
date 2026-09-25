@@ -438,6 +438,8 @@ function App() {
 
   // ── Autopilot ─────────────────────────────────────────────────────────────
   const [generatingMessage, setGeneratingMessage]   = useState(false);
+  // What the message was before AI generation started streaming into it — put back if generation fails midway.
+  const messageBeforeGenerate = useRef<string | null>(null);
 
   // ── Selected file (highlighted when diff is open or on right-click) ──────
   const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
@@ -542,10 +544,18 @@ function App() {
             notifyError(msg.error);
           }
           break;
+        case 'COMMIT_GENERATE_MESSAGE_PROGRESS':
+          if (msg.message) store.setCommitMessage(msg.message);
+          break;
         case 'COMMIT_GENERATE_MESSAGE_RESULT':
           setGeneratingMessage(false);
-          if (msg.message) store.setCommitMessage(msg.message);
-          else if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
+          if (msg.message) {
+            store.setCommitMessage(msg.message);
+          } else {
+            if (messageBeforeGenerate.current !== null) store.setCommitMessage(messageBeforeGenerate.current);
+            if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
+          }
+          messageBeforeGenerate.current = null;
           break;
         case 'COMMIT_LAST_COMMIT_MESSAGE_RESULT':
           if (msg.message && !useCommitStore.getState().commitMessage.trim()) {
@@ -1198,6 +1208,7 @@ function App() {
   const doAutopilot = useCallback(() => {
     if (generatingMessage) return;
     setGeneratingMessage(true);
+    messageBeforeGenerate.current = useCommitStore.getState().commitMessage;
     send({ type: 'COMMIT_GENERATE_MESSAGE', requestId: generateId() });
   }, [generatingMessage, send]);
 
@@ -1479,7 +1490,7 @@ function App() {
               <div style={css.filteredEmptyState}>
                 <Codicon name="filter" style={{ fontSize: '18px', opacity: 0.55 }} />
                 <div>{l10n.t('No repositories with changes')}</div>
-                <button style={css.clearFilterBtn} onClick={() => updateViewAndSort({ hideReposWithoutChanges: false })}>
+                <button className="gc-btn-secondary" style={css.clearFilterBtn} onClick={() => updateViewAndSort({ hideReposWithoutChanges: false })}>
                   {l10n.t('Show all repositories')}
                 </button>
               </div>
@@ -1611,6 +1622,7 @@ function App() {
                           {l10n.t('{0} is in detached HEAD ({1}). Checkout a branch to commit.', repoName, detachedCommit)}
                         </span>
                         <button
+                          className="gc-btn-secondary"
                           style={css.detachedBannerBtn}
                           onClick={() => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId })}
                           title={l10n.t('Checkout or create a branch')}
@@ -1618,7 +1630,7 @@ function App() {
                           {l10n.t('Checkout branch')}
                         </button>
                         <button
-                          style={{ ...css.detachedBannerBtn, background: 'transparent', opacity: 0.5 }}
+                          style={css.detachedBannerDismissBtn}
                           onClick={() => setDetachedWarnings(prev => { const n = { ...prev }; delete n[repoId]; return n; })}
                           title={l10n.t('Dismiss')}
                         >
@@ -2306,12 +2318,7 @@ const css = {
     padding: '32px 16px', color: 'var(--vscode-foreground)', opacity: 0.7,
     fontSize: '12px', textAlign: 'center' as const,
   } as React.CSSProperties,
-  clearFilterBtn: {
-    background: 'var(--vscode-button-secondaryBackground, var(--vscode-button-background))',
-    color: 'var(--vscode-button-secondaryForeground, var(--vscode-button-foreground))',
-    border: 'none', borderRadius: '3px', padding: '4px 9px', cursor: 'pointer',
-    fontSize: '11px',
-  } as React.CSSProperties,
+  clearFilterBtn: { padding: '4px 9px', fontSize: '11px' } as React.CSSProperties,
   // Shelve name prompt bar (above commit form)
   detachedBanner: {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px',
@@ -2319,11 +2326,11 @@ const css = {
     borderBottom: '1px solid color-mix(in srgb, var(--vscode-statusBarItem-warningBackground, #c6a300) 35%, transparent)',
     fontSize: '11px', color: 'var(--vscode-foreground)', flexShrink: 0,
   } as React.CSSProperties,
-  detachedBannerBtn: {
-    background: 'var(--vscode-button-secondaryBackground, rgba(255,255,255,0.1))',
-    color: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
+  detachedBannerBtn: { padding: '2px 7px', fontSize: '11px', flexShrink: 0 } as React.CSSProperties,
+  detachedBannerDismissBtn: {
+    background: 'transparent', color: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
     border: 'none', borderRadius: '3px', padding: '2px 7px', cursor: 'pointer',
-    fontSize: '11px', flexShrink: 0,
+    fontSize: '11px', flexShrink: 0, opacity: 0.5,
   } as React.CSSProperties,
   shelvePromptBar: {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px',

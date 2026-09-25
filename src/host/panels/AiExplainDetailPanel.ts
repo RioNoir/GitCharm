@@ -30,7 +30,8 @@ export function openAiExplainDetail(
   extensionUri: vscode.Uri,
   subject: AiExplainSubject,
   modelLabel: string,
-  generate: () => Promise<{ explanation?: string; error?: string }>,
+  /** `onProgress` receives the explanation generated so far, while the AI is still writing it. */
+  generate: (onProgress: (explanationSoFar: string) => void) => Promise<{ explanation?: string; error?: string }>,
 ): void {
   let panel = panels.get(subject.key);
   if (panel) {
@@ -53,7 +54,7 @@ export function openAiExplainDetail(
   const post = (m: HostToAiExplainMsg) => gate.post(m);
   post({ type: 'AIEXPLAIN_INIT', subjectKind: subject.kind, subjectTitle: subject.title, subjectSubtitle: subject.subtitle, modelLabel });
 
-  generate().then(
+  generate(explanation => post({ type: 'AIEXPLAIN_PROGRESS', explanation })).then(
     result => post({ type: 'AIEXPLAIN_RESULT', explanation: result.explanation, error: result.error }),
     (e: unknown) => post({ type: 'AIEXPLAIN_RESULT', error: e instanceof Error ? e.message : String(e) }),
   );

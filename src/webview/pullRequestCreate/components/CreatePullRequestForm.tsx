@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ChangedFile, CommitNode, CreatePullRequestInput, ForgeProvider, IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { focusableFieldStyle } from '../../shared/inputStyles';
+import { focusableFieldStyle, generatingFieldStyle } from '../../shared/inputStyles';
 import { ChangedFilesList } from '../../pullRequestDetail/components/ChangedFilesList';
 import { BranchPickerField } from './BranchPickerField';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
@@ -46,6 +46,13 @@ interface Props {
   submitError?: string;
   onSubmit: (input: CreatePullRequestInput) => void;
   onCancel: () => void;
+
+  aiEnabled: boolean;
+  aiModelLabel: string;
+  /** Which field is currently being generated, if any. */
+  generating: 'title' | 'description' | null;
+  generateError?: string;
+  onGenerate: (field: 'title' | 'description') => void;
 }
 
 export function CreatePullRequestForm({
@@ -54,6 +61,7 @@ export function CreatePullRequestForm({
   title, onTitleChange, description, onDescriptionChange, draft, onDraftChange,
   compareLoading, compareFiles, compareCommits, compareError, onOpenFile, onOpenNativeCompare,
   submitting, submitError, onSubmit, onCancel,
+  aiEnabled, aiModelLabel, generating, generateError, onGenerate,
 }: Props) {
   const [titleFocused, setTitleFocused] = useState(false);
   const [compareCollapsed, setCompareCollapsed] = useState(false);
@@ -70,6 +78,24 @@ export function CreatePullRequestForm({
   const sameBranch = !!sourceBranch && !!targetBranch && sourceBranch === targetBranch;
   const canSubmit = sourceBranch.trim() && targetBranch.trim() && !sameBranch && title.trim() && !submitting;
   const canCompare = sourceBranch.trim() && targetBranch.trim() && !sameBranch;
+  const canGenerate = !!canCompare && !generating && !submitting;
+
+  // Same look and placement as the commit message's generate button: borderless, in the field's top-right corner.
+  const aiButton = (field: 'title' | 'description') => aiEnabled && (
+    <button
+      type="button"
+      data-ai-generate-btn=""
+      style={css.aiBtn(generating === field, canGenerate)}
+      disabled={!canGenerate}
+      onMouseDown={e => e.preventDefault()}
+      onClick={() => onGenerate(field)}
+      title={field === 'title'
+        ? (aiModelLabel ? l10n.t('Generate title with AI ({0})', aiModelLabel) : l10n.t('Generate title with AI'))
+        : (aiModelLabel ? l10n.t('Generate description with AI ({0})', aiModelLabel) : l10n.t('Generate description with AI'))}
+    >
+      <Codicon name={generating === field ? 'loading~spin' : 'sparkle'} style={{ fontSize: '16px' }} />
+    </button>
+  );
   // Nothing to show the user yet (no branches picked, same branch picked twice, or a real "0 changes" result) —
   // hide the whole panel rather than rendering an empty shell, freeing the width back to the form column.
   const hasChangesToShow = !sameBranch && (compareLoading || !!compareError || compareFiles.length > 0 || compareCommits.length > 0);
@@ -124,18 +150,34 @@ export function CreatePullRequestForm({
               </div>
             )}
 
-            <label style={css.fieldLabel}>
-              {l10n.t('Title')}
-              <input
-                style={{ ...focusableFieldStyle(titleFocused), ...css.input }}
-                value={title}
-                onChange={e => onTitleChange(e.target.value)}
-                onFocus={() => setTitleFocused(true)}
-                onBlur={() => setTitleFocused(false)}
-                placeholder={l10n.t('Pull request title')}
-                autoFocus
-              />
-            </label>
+            <div style={css.fieldLabel}>
+              <label htmlFor="pr-create-title">{l10n.t('Title')}</label>
+              <div style={css.titleWrap}>
+                <input
+                  id="pr-create-title"
+                  style={{
+                    ...focusableFieldStyle(titleFocused), ...css.input,
+                    ...(aiEnabled ? { paddingRight: '30px' } : null),
+                    ...(generating === 'title' ? generatingFieldStyle() : null),
+                  }}
+                  value={title}
+                  onChange={e => onTitleChange(e.target.value)}
+                  onFocus={() => setTitleFocused(true)}
+                  onBlur={() => setTitleFocused(false)}
+                  placeholder={generating === 'title' ? l10n.t('Generating title…') : l10n.t('Pull request title')}
+                  readOnly={generating === 'title'}
+                  autoFocus
+                />
+                {aiEnabled && <div style={css.titleAiSlot}>{aiButton('title')}</div>}
+              </div>
+            </div>
+
+            {generateError && (
+              <div style={css.alertError}>
+                <Codicon name="error" style={{ fontSize: '14px', flexShrink: 0 }} />
+                <span>{generateError}</span>
+              </div>
+            )}
 
             <div style={css.fieldLabel}>
               {/* A native <label> here would implicitly associate its click target with the first
@@ -143,7 +185,13 @@ export function CreatePullRequestForm({
                   anywhere in the editor's text area (itself inside the <label>) would fire that button's
                   click handler (toggleBold) as if it had been pressed. A plain <div> avoids that entirely. */}
               {l10n.t('Description')}
-              <MarkdownEditor value={description} onChange={onDescriptionChange} placeholder={l10n.t('Describe your changes…')} />
+              <MarkdownEditor
+                value={description}
+                onChange={onDescriptionChange}
+                placeholder={generating === 'description' ? l10n.t('Generating description…') : l10n.t('Describe your changes…')}
+                generating={generating === 'description'}
+                inlineAction={aiButton('description') || undefined}
+              />
             </div>
 
             {supportsDraft && (
@@ -176,7 +224,8 @@ export function CreatePullRequestForm({
                   <span style={css.compareTitle}>{sourceBranch} → {targetBranch}</span>
                   <button
                     type="button"
-                    style={{ ...css.compareBtn, opacity: canCompare ? 1 : 0.5, cursor: canCompare ? 'pointer' : 'default' }}
+                    className="gc-btn-secondary"
+                    style={css.compareBtn}
                     disabled={!canCompare}
                     onClick={onOpenNativeCompare}
                   >
@@ -208,7 +257,7 @@ export function CreatePullRequestForm({
       )}
 
       <div style={css.footer}>
-        <button style={css.cancelBtn} onClick={onCancel} disabled={submitting}>
+        <button className="gc-btn-secondary" style={css.cancelBtn} onClick={onCancel} disabled={submitting}>
           <Codicon name="close" style={{ fontSize: '13px' }} />
           {l10n.t('Cancel')}
         </button>
@@ -272,9 +321,7 @@ const css = {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
   } as React.CSSProperties,
   compareBtn: {
-    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 10px', borderRadius: '3px',
-    background: 'var(--vscode-button-secondaryBackground, transparent)', color: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
-    border: '1px solid var(--vscode-button-border, var(--vscode-panel-border))', flexShrink: 0,
+    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 10px', flexShrink: 0,
   } as React.CSSProperties,
   compareSection: { display: 'flex', flexDirection: 'column' as const, gap: '8px' } as React.CSSProperties,
   compareSectionDivider: { height: '1px', background: 'var(--vscode-panel-border)', margin: '4px 0' } as React.CSSProperties,
@@ -291,6 +338,16 @@ const css = {
   input: {
     fontSize: '13px', padding: '6px 8px', boxSizing: 'border-box' as const, width: '100%',
   } as React.CSSProperties,
+  titleWrap: { position: 'relative' as const } as React.CSSProperties,
+  titleAiSlot: {
+    position: 'absolute' as const, top: 0, bottom: 0, right: '4px', display: 'flex', alignItems: 'center',
+  } as React.CSSProperties,
+  // Mirrors UnifiedCommitForm's autopilotBtn.
+  aiBtn: (spinning: boolean, enabled: boolean): React.CSSProperties => ({
+    background: 'transparent', border: 'none', padding: '2px', display: 'flex', alignItems: 'center', lineHeight: 1,
+    color: 'var(--vscode-foreground)', cursor: enabled ? 'pointer' : 'default',
+    opacity: spinning ? 0.5 : enabled ? 0.7 : 0.35,
+  }),
   checkboxLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' } as React.CSSProperties,
   alertWarning: {
     display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '8px 12px', borderRadius: '4px',
@@ -307,9 +364,7 @@ const css = {
     padding: '12px 24px 20px', borderTop: '1px solid var(--vscode-panel-border)', flexShrink: 0,
   } as React.CSSProperties,
   cancelBtn: {
-    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 16px', borderRadius: '3px',
-    background: 'var(--vscode-button-secondaryBackground, transparent)', color: 'var(--vscode-button-secondaryForeground, var(--vscode-foreground))',
-    border: '1px solid var(--vscode-button-border, var(--vscode-panel-border))', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 16px',
   } as React.CSSProperties,
   submitBtn: {
     display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 16px', borderRadius: '3px',

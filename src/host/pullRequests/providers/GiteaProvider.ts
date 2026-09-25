@@ -440,7 +440,7 @@ export class GiteaProvider implements PullRequestProvider {
       await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/pulls/${number}`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: input.title, base: input.targetBranch }),
+        body: JSON.stringify({ title: input.title, base: input.targetBranch, body: input.description }),
       });
       return { ok: true };
     } catch (err) {

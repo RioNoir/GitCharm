@@ -166,13 +166,15 @@ function getHtml(nonce: string, csp: string, codiconUri: string, commitCount: nu
       font-family: var(--vscode-font-family);
       font-size: 13px; cursor: pointer; border: none;
     }
+    /* Same look as the Commit panel's Stash/Shelve button (the webviews' .gc-btn-secondary). */
     .btn-cancel {
-      background: var(--vscode-button-secondaryBackground, transparent);
+      background: var(--vscode-button-secondaryBackground, rgba(100,100,100,0.2));
       color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
-      border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+      border: 1px solid var(--vscode-extensionButton-border, rgba(128,128,128,0.35));
+      border-radius: 4px;
     }
     .btn-cancel:hover {
-      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+      background: var(--vscode-button-secondaryHoverBackground, rgba(100,100,100,0.35));
     }
     .btn-confirm {
       background: var(--vscode-button-background);

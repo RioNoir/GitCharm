@@ -5,6 +5,7 @@ import { EMPTY_TREE, openSmartDiff } from './GitLogPanelProvider';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { loadIconTheme } from '../utils/IconThemeService';
 import { getAiModelLabel } from '../utils/aiModelLabel';
+import { buildPrompt } from '../ai/prompts';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
@@ -220,12 +221,11 @@ async function setupPanel(
 async function explainCommit(
   hash: string,
   repo: import('../git/GitService').GitService,
+  onProgress: (explanationSoFar: string) => void,
 ): Promise<{ explanation?: string; error?: string }> {
   try {
     const cfg = vscode.workspace.getConfiguration('gitcharm');
     const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
-    const configuredLang: string = cfg.get('ai.language', '');
-    const language = configuredLang.trim() || vscode.env.language || 'en';
 
     const [diff, fullMessage, commitMeta] = await Promise.all([
       repo.getCommitDiff(hash, maxDiffChars),
@@ -235,28 +235,19 @@ async function explainCommit(
     const commitFiles = await repo.getCommitFiles(hash, commitMeta.parents);
 
     const fileList = commitFiles.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`).join('\n');
-    const prompt = [
-      'You are a code reviewer explaining a git commit to a developer.',
-      '',
-      'Rules:',
-      `- Write the explanation in this language: ${language}`,
-      '- Start with a one-sentence summary of what this commit does',
-      '- Then explain the key changes: what was modified and why',
-      '- Be specific: reference file names, function names, or module names when relevant',
-      '- Keep it concise but complete (3-8 sentences or bullet points)',
-      '- The output is rendered as Markdown: use it (bold, lists, inline code) where it helps readability',
-      '- Output ONLY the explanation, no code fences wrapping the whole response, no preamble',
-      '',
+    const prompt = buildPrompt('explainCommit', [
       `## Commit: ${commitMeta.shortHash}`,
       `## Message: ${fullMessage.trim() || commitMeta.message}`,
       '',
       '## Changed files',
       fileList,
-      diff ? `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\`` : '',
-    ].filter(Boolean).join('\n');
+      diff && `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\``,
+    ], cfg);
 
-    const { generateWithAI } = await import('../ai/aiGenerate');
-    const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg);
+    const { cleanPartialModelOutput, generateWithAI } = await import('../ai/aiGenerate');
+    const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg, {
+      onProgress: text => onProgress(cleanPartialModelOutput(text)),
+    });
     return { explanation };
   } catch (e: unknown) {
     logError('commitFullDetail:explain', formatGitError(e), getRawErrorDetail(e));
@@ -283,7 +274,7 @@ async function handleMessage(
         extensionUri,
         { key: `commit:${msg.repoId}:${msg.hash}`, kind: 'commit', title: vscode.l10n.t('Commit {0}', shortHash) },
         getAiModelLabel(cfg),
-        () => explainCommit(msg.hash, repo),
+        onProgress => explainCommit(msg.hash, repo, onProgress),
       );
       return;
     }

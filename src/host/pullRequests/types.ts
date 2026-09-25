@@ -114,6 +114,9 @@ export interface PullRequestUser {
   id: string;
   username: string;
   avatarUrl?: string;
+  /** The literal markdown text that mentions this user, when it isn't simply `@username` — Bitbucket Cloud's
+   * mentions are `@{account_id}`. Unset means `@username` (GitHub, GitLab, Gitea). */
+  mention?: string;
 }
 
 /** A label reference normalized across forges — `id` is each provider's own write-identifier (GitHub/GitLab: the label name itself, Gitea: numeric label id as a string), opaque to callers. `color` is a hex string without a leading '#'. */
@@ -262,6 +265,7 @@ export interface UnsupportedResult {
 export interface UpdatePullRequestInput {
   title?: string;
   targetBranch?: string;
+  description?: string;
 }
 
 export interface PullRequestProvider {

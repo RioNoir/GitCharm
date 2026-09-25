@@ -143,7 +143,7 @@ function UnknownProviderPrompt({ repo, onSetHostOverride }: {
             <option key={p.value} value={p.value}>{p.label}</option>
           ))}
         </select>
-        <button style={css.actionBtn} onClick={() => onSetHostOverride(repo.connection.host, selected)}>
+        <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onSetHostOverride(repo.connection.host, selected)}>
           {l10n.t('Use this')}
         </button>
       </div>
@@ -164,7 +164,7 @@ function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: {
     <div style={css.connectBox}>
       <Codicon name={isGitHub ? 'github' : 'plug'} style={{ fontSize: '20px', opacity: 0.5, marginBottom: '6px' }} />
       <div style={css.connectText}>{l10n.t('Not connected to {0}', repo.connection.host || forgeProviderLabel(repo.connection.provider))}</div>
-      <button style={css.actionBtn} onClick={() => onOpenAccountPicker(repo.repoId)}>
+      <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onOpenAccountPicker(repo.repoId)}>
         <Codicon name={isGitHub ? 'github' : 'key'} style={{ marginRight: '4px', fontSize: '12px' }} />
         {l10n.t('Connect…')}
       </button>
@@ -279,19 +279,19 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
           )}
           {!multiRepo && connected && !repo.pending && (
             <div style={css.singleRepoActions}>
-              <button style={css.actionBtn} onClick={() => onOpenSearch(repo.repoId)}>
+              <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onOpenSearch(repo.repoId)}>
                 <Codicon name="search" style={{ marginRight: '4px', fontSize: '12px' }} />
                 {l10n.t('Search')}
               </button>
-              <button style={css.actionBtn} onClick={() => onOpenFilters(repo.repoId)}>
+              <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onOpenFilters(repo.repoId)}>
                 <Codicon name="filter" style={{ marginRight: '4px', fontSize: '12px' }} />
                 {l10n.t('Filter')}
               </button>
-              <button style={css.actionBtn} onClick={() => onRefresh(repo.repoId)}>
+              <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onRefresh(repo.repoId)}>
                 <Codicon name="refresh" style={{ marginRight: '4px', fontSize: '12px' }} />
                 {l10n.t('Refresh')}
               </button>
-              <button style={css.actionBtn} onClick={() => onRequestCreate(repo.repoId)}>
+              <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onRequestCreate(repo.repoId)}>
                 <Codicon name="add" style={{ marginRight: '4px', fontSize: '12px' }} />
                 {l10n.t('New Pull Request')}
               </button>
@@ -361,10 +361,7 @@ const css = {
     borderTop: '1px solid var(--vscode-panel-border)',
   } as React.CSSProperties,
   actionBtn: {
-    display: 'flex', alignItems: 'center', fontSize: '11px',
-    background: 'var(--vscode-button-secondaryBackground)',
-    color: 'var(--vscode-button-secondaryForeground)',
-    border: 'none', borderRadius: '3px', padding: '3px 8px', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', fontSize: '11px', padding: '3px 8px',
   } as React.CSSProperties,
   empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
   errorRow: {

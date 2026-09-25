@@ -30,6 +30,11 @@ function App() {
           setExplanation(null);
           setError(null);
           break;
+        case 'AIEXPLAIN_PROGRESS':
+          // Still generating: show what's written so far; `loading` stays on for the footer indicator.
+          setExplanation(msg.explanation);
+          setError(null);
+          break;
         case 'AIEXPLAIN_RESULT':
           setLoading(false);
           if (msg.error) {
@@ -64,15 +69,15 @@ function App() {
         {modelLabel && <span style={css.modelLabel}>{modelLabel}</span>}
       </div>
       <div style={css.body}>
+        {!loading && error && <div style={css.error}>{error}</div>}
+        {!error && explanation && (
+          <div className="markdown-body" style={css.text} dangerouslySetInnerHTML={{ __html: html }} />
+        )}
         {loading && (
-          <div style={css.loading}>
+          <div style={{ ...css.loading, ...(explanation ? { marginTop: '10px' } : null) }}>
             <Codicon name="loading" className="codicon-modifier-spin" style={{ fontSize: '14px' }} />
             <span>{l10n.t('Generating explanation…')}</span>
           </div>
-        )}
-        {!loading && error && <div style={css.error}>{error}</div>}
-        {!loading && !error && explanation && (
-          <div className="markdown-body" style={css.text} dangerouslySetInnerHTML={{ __html: html }} />
         )}
       </div>
     </div>

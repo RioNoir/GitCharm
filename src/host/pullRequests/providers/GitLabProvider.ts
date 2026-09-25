@@ -512,7 +512,7 @@ export class GitLabProvider implements PullRequestProvider {
       await httpJson(`${this.apiBase()}/projects/${projectId}/merge_requests/${number}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: input.title, target_branch: input.targetBranch }),
+        body: JSON.stringify({ title: input.title, target_branch: input.targetBranch, description: input.description }),
       });
       return { ok: true };
     } catch (err) {

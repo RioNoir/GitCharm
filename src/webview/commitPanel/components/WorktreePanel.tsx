@@ -224,13 +224,13 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, on
       {!multiRepo && (hasPrunable || !repo.isLinkedWorktree) && (
         <div style={css.singleRepoActions}>
           {hasPrunable && (
-            <button style={css.actionBtn} onClick={() => onPrune(repo.repoId)}>
+            <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onPrune(repo.repoId)}>
               <Codicon name="git-compare" style={{ marginRight: '4px', fontSize: '12px' }} />
               {l10n.t('Prune stale')}
             </button>
           )}
           {!repo.isLinkedWorktree && (
-            <button style={css.actionBtn} onClick={() => onRequestCreate(repo.repoId)}>
+            <button className="gc-btn-secondary" style={css.actionBtn} onClick={() => onRequestCreate(repo.repoId)}>
               <Codicon name="add" style={{ marginRight: '4px', fontSize: '12px' }} />
               {l10n.t('New Worktree')}
             </button>
@@ -311,10 +311,7 @@ const css = {
     borderTop: '1px solid var(--vscode-panel-border)',
   } as React.CSSProperties,
   actionBtn: {
-    display: 'flex', alignItems: 'center', fontSize: '11px',
-    background: 'var(--vscode-button-secondaryBackground)',
-    color: 'var(--vscode-button-secondaryForeground)',
-    border: 'none', borderRadius: '3px', padding: '3px 8px', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', fontSize: '11px', padding: '3px 8px',
   } as React.CSSProperties,
   empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
   errorRow: {

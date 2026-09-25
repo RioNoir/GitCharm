@@ -845,6 +845,22 @@ export class GitService {
     } catch { return ''; }
   }
 
+  /** What a PR from `head` into `base` would change — `base...head` (three dots) diffs against their merge base, the same view forges show, so commits that landed on `base` meanwhile don't show up as reverted. */
+  async getBranchDiff(base: string, head: string, maxChars = 8000): Promise<string> {
+    try {
+      const raw = await this.git.raw(['diff', '--stat', '--patch', `${base}...${head}`]);
+      return raw.length > maxChars ? raw.slice(0, maxChars) + '\n...[diff truncated]' : raw;
+    } catch { return ''; }
+  }
+
+  /** Full messages (subject + body) of `git log base..head`, oldest first. */
+  async getCommitMessagesBetween(base: string, head: string, limit = 100): Promise<string[]> {
+    try {
+      const raw = await this.git.raw(['log', '--reverse', `--max-count=${limit}`, '--format=%B%x00', `${base}..${head}`]);
+      return raw.split('\0').map(m => m.trim()).filter(Boolean);
+    } catch { return []; }
+  }
+
   async getCombinedFiles(hashes: string[]): Promise<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>> {
     const ordered = await this._sortHashesOldestFirst(hashes);
     const oldest = ordered[0];

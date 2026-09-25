@@ -121,7 +121,7 @@ function CheckoutButton({ enabled, checkingOut, items, defaultAction }: {
   );
 }
 
-/** GitHub-style split merge button: a primary "Merge pull request" action plus a chevron dropdown listing every
+/** GitHub-style split merge button: a primary "Merge PR" action plus a chevron dropdown listing every
  * strategy the provider supports, each with its own explanatory line and a checkmark on the currently selected one. */
 function MergeButton({ strategies, merging, disabled, disabledTitle, onMerge, defaultStrategy }: {
   strategies: MergeStrategy[]; merging: boolean; disabled: boolean; disabledTitle?: string; onMerge: (strategy: MergeStrategy) => void;
@@ -150,7 +150,7 @@ function MergeButton({ strategies, merging, disabled, disabledTitle, onMerge, de
           title={disabled ? disabledTitle : undefined}
         >
           <Codicon name="git-merge" style={{ fontSize: '13px' }} />
-          {merging ? l10n.t('Merging…') : l10n.t('Merge pull request')}
+          {merging ? l10n.t('Merging…') : l10n.t('Merge PR')}
         </button>
         {strategies.length > 1 && (
           <>

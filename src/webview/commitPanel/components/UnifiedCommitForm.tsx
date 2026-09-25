@@ -425,7 +425,7 @@ export function UnifiedCommitForm({
                   >
                     <Codicon name="close" style={{ fontSize: '10px' }} />
                   </button>
-                  <span style={styles.targetPillLabel}>{displayName}</span>
+                  <span style={styles.targetPillLabel} title={displayName}>{displayName}</span>
                   <span style={styles.pillCount}>{r.selectedCount}</span>
                 </span>
               );
@@ -646,7 +646,9 @@ const styles = {
     background: color + '28',
     color,
     border: `1px solid ${color}60`,
-    maxWidth: '100%',
+    // Long repo/worktree names are truncated (full name in the label's tooltip) instead of one pill taking a whole row.
+    maxWidth: 'min(165px, 100%)',
+    boxSizing: 'border-box',
   }),
   targetPillLabel: {
     overflow: 'hidden',
