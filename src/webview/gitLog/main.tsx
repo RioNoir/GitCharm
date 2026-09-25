@@ -14,6 +14,7 @@ import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
 import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi } from '../shared/vscodeApi';
+import { isEmbedded } from '../shared/embedded';
 import type { LogToHostMsg, HostToLogMsg } from '../../host/types/messages';
 import type { CommitNode } from '../shared/types';
 
@@ -34,6 +35,7 @@ function App() {
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [filtersHidden, setFiltersHidden] = useState(false);
   const [themeVersion, setThemeVersion] = useState(0);
   const [multiSelectedCommits, setMultiSelectedCommits] = useState<CommitNode[]>([]);
   const [rangeEndpoints, setRangeEndpoints] = useState<{ older: CommitNode; newer: CommitNode } | null>(null);
@@ -125,6 +127,10 @@ function App() {
           store.setRepos(msg.repos, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
           store.setBranches(msg.branches);
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
+          if (msg.filtersHidden !== undefined) setFiltersHidden(msg.filtersHidden);
+          break;
+        case 'LOG_FILTERS_VISIBILITY':
+          setFiltersHidden(msg.hidden);
           break;
         case 'LOG_COMMITS_BATCH': {
           const match = msg.requestId === activeRequestIdRef.current;
@@ -425,18 +431,17 @@ function App() {
   return (
     <div style={{ ...appStyle, position: 'relative' }} onContextMenu={e => e.preventDefault()}>
       {noRepoOverlay}
-      {/* Filters bar (contains Fetch All on the right) */}
-      <CommitFiltersBar
-        filters={store.commitFilters}
-        branches={store.branches}
-        tags={store.tags}
-        repos={store.repos}
-        onFilterChange={handleFilterChange}
-        onRepoChange={handleRepoChange}
-        onClear={handleClearFilters}
-        onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
-        onUndock={(target) => send({ type: 'LOG_UNDOCK', target } as LogToHostMsg)}
-      />
+      {/* Filters bar — can be hidden from the view title bar */}
+      {!filtersHidden && (
+        <CommitFiltersBar
+          filters={store.commitFilters}
+          branches={store.branches}
+          tags={store.tags}
+          repos={store.repos}
+          onFilterChange={handleFilterChange}
+          onClear={handleClearFilters}
+        />
+      )}
       <RepoTabs
         value={store.commitFilters.repoId}
         repos={store.repos}
@@ -654,5 +659,6 @@ const detailPane: React.CSSProperties = {
   userSelect: 'text',
 };
 
+export { App as LogApp };
 
-createRoot(document.getElementById('root')!).render(<App />);
+if (!isEmbedded()) createRoot(document.getElementById('root')!).render(<App />);

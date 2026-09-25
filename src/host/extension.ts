@@ -281,7 +281,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
   context.subscriptions.push(badgeDisposable);
-  const logPanel = new GitLogPanelProvider(context.extensionUri, manager, profileService);
+  const logPanel = new GitLogPanelProvider(context.extensionUri, manager, profileService, context.globalState);
   context.subscriptions.push(
     manager.onOrphanBranches(newlyOrphaned => notifyOrphanBranches(manager, logPanel, newlyOrphaned))
   );
@@ -359,6 +359,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('gitcharm.undock', () => {
       logPanel.triggerUndockPick();
     }),
+    vscode.commands.registerCommand('gitcharm.log.fetchAndRefresh', async () => {
+      await logPanel.fetchAndRefresh();
+      commitPanel.refresh();
+    }),
+    vscode.commands.registerCommand('gitcharm.log.hideFilters', () => logPanel.setFiltersHidden(true)),
+    vscode.commands.registerCommand('gitcharm.log.showFilters', () => logPanel.setFiltersHidden(false)),
   );
 
   if (vscode.workspace.getConfiguration('gitcharm').get<boolean>('resetViewLocationsOnStartup', false)) {

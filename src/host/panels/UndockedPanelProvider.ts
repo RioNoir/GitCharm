@@ -83,7 +83,6 @@ export class UndockedPanelProvider implements vscode.Disposable {
     this.panel.webview.onDidReceiveMessage(
       (msg: UndockedToHostMsg) => {
         if (isLogMsg(msg)) {
-          if (msg.type === 'LOG_UNDOCK') return; // no-op: already undocked
           this.logPanel.handleUndockedMessage(msg, this);
         } else {
           this.commitPanel.handleUndockedMessage(msg as CommitToHostMsg, this);

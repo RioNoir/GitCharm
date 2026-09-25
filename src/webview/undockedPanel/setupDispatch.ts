@@ -11,7 +11,12 @@
  * Messages from the wrong target arrive but are ignored by the sub-app switch/case.
  */
 
+import { markEmbedded } from '../shared/embedded';
+
 type Target = 'log' | 'commit';
+
+// The Log and Commit entry modules are imported for their App components only.
+markEmbedded();
 
 const logHandlers: Array<(e: MessageEvent) => void> = [];
 const commitHandlers: Array<(e: MessageEvent) => void> = [];

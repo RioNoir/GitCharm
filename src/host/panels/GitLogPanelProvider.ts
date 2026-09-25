@@ -106,6 +106,9 @@ async function deleteTagWithRemoteOption(
 
 type ReplyTarget = 'sidebar' | 'undocked';
 
+const FILTERS_HIDDEN_KEY = 'gitcharm.logFiltersHidden';
+const FILTERS_HIDDEN_CONTEXT = 'gitcharm.logFiltersHidden';
+
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
 
@@ -150,6 +153,34 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     );
     if (!pick) return;
     this.undockedPanel.open(pick.value, pick.showCommit);
+  }
+
+  /** Whether the Git Log filters bar is hidden — a global preference, visible by default. */
+  private get filtersHidden(): boolean {
+    return this.globalState?.get<boolean>(FILTERS_HIDDEN_KEY, false) === true;
+  }
+
+  async setFiltersHidden(hidden: boolean): Promise<void> {
+    await this.globalState?.update(FILTERS_HIDDEN_KEY, hidden);
+    await vscode.commands.executeCommand('setContext', FILTERS_HIDDEN_CONTEXT, hidden);
+    this.broadcast({ type: 'LOG_FILTERS_VISIBILITY', hidden });
+  }
+
+  /** Fetch all remotes, then reload repos/branches and commits on every open Git Log. */
+  async fetchAndRefresh(): Promise<void> {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Fetching all'), cancellable: false },
+      async () => { await this.manager.fetchAll(); }
+    );
+    // A fetch can move the remote's default branch (e.g. origin/HEAD repointed after a
+    // rename on GitHub/GitLab) — drop the cache so it's re-resolved, not stale.
+    this.defaultBranchCache.clear();
+    const [repos, branches] = await Promise.all([
+      this.getVisibleReposWithDefaultBranch(),
+      this.getFilteredBranches(),
+    ]);
+    this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
+    this.broadcast({ type: 'LOG_REFRESH' });
   }
 
   /**
@@ -216,7 +247,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   handleUndockedMessage(msg: LogToHostMsg, _provider: UndockedPanelProvider): void {
-    if (msg.type === 'LOG_UNDOCK') return; // undock from undocked panel is a no-op
     void this.handleMessage(msg, 'undocked').catch(e => this.handleMessageFailure(msg, 'undocked', e));
   }
 
@@ -236,8 +266,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly manager: WorkspaceGitManager,
-    private readonly profileService?: GitProfileService
+    private readonly profileService?: GitProfileService,
+    private readonly globalState?: vscode.Memento
   ) {
+    void vscode.commands.executeCommand('setContext', FILTERS_HIDDEN_CONTEXT, this.filtersHidden);
     // The graph refresh goes out immediately: the manager has already debounced
     // the underlying file-event burst, so delaying it again only adds lag. The
     // branch query runs in parallel rather than being awaited first, so a slow
@@ -355,7 +387,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             filePath = uri.fsPath;
           }
         }
-        if (filePath) this.post({ type: 'LOG_DESELECT_FILE', filePath });
+        if (filePath) this.broadcast({ type: 'LOG_DESELECT_FILE', filePath });
       }
     });
 
@@ -426,6 +458,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
       if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
+      if (m.filtersHidden === undefined) m.filtersHidden = this.filtersHidden;
     }
   }
 
@@ -1302,23 +1335,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           const repo = this.manager.getRepo(repoId);
           if (repo) await offerRenameBranchRemoteSync(repo, label, oldUpstream, newName);
         }
-        break;
-      }
-
-      case 'LOG_FETCH_ALL': {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Fetching all'), cancellable: false },
-          async () => { await this.manager.fetchAll(); }
-        );
-        // A fetch can move the remote's default branch (e.g. origin/HEAD repointed after a
-        // rename on GitHub/GitLab) — drop the cache so it's re-resolved, not stale.
-        this.defaultBranchCache.clear();
-        const [repos, branches] = await Promise.all([
-          this.getVisibleReposWithDefaultBranch(),
-          this.getFilteredBranches(),
-        ]);
-        post({ type: 'LOG_INIT_DATA', repos, branches });
-        post({ type: 'LOG_REFRESH' });
         break;
       }
 
@@ -2223,16 +2239,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           this.refresh();
         } catch (e: unknown) {
           showGitError('stashDrop', e);
-        }
-        break;
-      }
-
-      case 'LOG_UNDOCK': {
-        if (!this.undockedPanel) break;
-        if (msg.target === 'pick') {
-          await this.triggerUndockPick();
-        } else {
-          this.undockedPanel.open(msg.target);
         }
         break;
       }

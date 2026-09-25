@@ -12,12 +12,7 @@ interface Props {
   tags: TagInfo[];
   repos: RepoMeta[];
   onFilterChange: (key: keyof CommitFilters, value: string) => void;
-  onRepoChange: (repoId: string | null) => void;
   onClear: () => void;
-  onFetchAll: () => void;
-  onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
-  /** When true, hides the Undock menu item (already in undocked mode). */
-  hideUndock?: boolean;
 }
 
 function useIsLightTheme() {
@@ -30,7 +25,7 @@ function useIsLightTheme() {
   return light;
 }
 
-export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll, onUndock, hideUndock }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onClear }: Props) {
   const isLight = useIsLightTheme();
   useEffect(() => {
     const id = 'gitcharm-filter-field-focus';
@@ -44,36 +39,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
   const groupedTags = groupByName(tags);
 
   const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo);
-
-  useEffect(() => {
-    if (repos.length <= 1) return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (!(event.altKey && (event.ctrlKey || event.metaKey))) return;
-
-      let nextRepoId: string | null | undefined;
-      if (event.key === '0') {
-        nextRepoId = null;
-      } else if (/^[1-9]$/.test(event.key)) {
-        nextRepoId = repos[Number(event.key) - 1]?.id;
-      } else if (event.key === '[' || event.key === ']') {
-        const currentIndex = filters.repoId
-          ? repos.findIndex(repo => repo.id === filters.repoId)
-          : -1;
-        const options: Array<string | null> = [null, ...repos.map(repo => repo.id)];
-        const optionIndex = currentIndex + 1;
-        const delta = event.key === '[' ? -1 : 1;
-        nextRepoId = options[(optionIndex + delta + options.length) % options.length];
-      }
-
-      if (nextRepoId === undefined || nextRepoId === filters.repoId) return;
-      event.preventDefault();
-      onRepoChange(nextRepoId);
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [filters.repoId, onRepoChange, repos]);
 
   return (
     <div style={styles.bar}>
@@ -119,73 +84,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
             <Codicon name="clear-all" style={{ fontSize: '15px' }} />
           </button>
         )}
-
-        {/* More menu — pushed to the right */}
-        <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
       </div>
-  );
-}
-
-/* ─── MoreMenu ────────────────────────────────────────────────────────────── */
-
-function MoreMenu({ onFetchAll, onUndock, hideUndock }: {
-  onFetchAll: () => void;
-  onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
-  hideUndock?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onOut(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    const onBlur = () => setOpen(false);
-    if (open) {
-      document.addEventListener('mousedown', onOut);
-      window.addEventListener('blur', onBlur);
-    }
-    return () => {
-      document.removeEventListener('mousedown', onOut);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [open]);
-
-  return (
-    <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 'auto' }}>
-      <button
-        data-top-action-btn=""
-        style={styles.moreBtn}
-        onClick={() => setOpen(o => !o)}
-        title={l10n.t('More actions')}
-      >
-        <Codicon name="three-bars" style={{ fontSize: '14px' }} />
-      </button>
-      {open && (
-        <div style={styles.moreDropdown}>
-          <div
-            style={styles.moreItem}
-            onClick={() => { onFetchAll(); setOpen(false); }}
-          >
-            <Codicon name="sync" style={{ fontSize: '13px', opacity: 0.7 }} />
-            <span>{l10n.t('Fetch and Refresh')}</span>
-          </div>
-
-          {!hideUndock && (
-            <>
-              <div style={styles.moreSeparator} />
-              <div
-                style={styles.moreItem}
-                onClick={() => { onUndock?.('pick'); setOpen(false); }}
-              >
-                <Codicon name="multiple-windows" style={{ fontSize: '13px', opacity: 0.7 }} />
-                <span>{l10n.t('Undock…')}</span>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -416,6 +315,37 @@ export function RepoTabs({ value, repos, onChange }: {
   repos: RepoMeta[];
   onChange: (repoId: string | null) => void;
 }) {
+  // Ctrl/Cmd+Alt+0…9 and [ / ] switch tab — kept here so they work even with the filters bar hidden.
+  useEffect(() => {
+    if (repos.length <= 1) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.altKey && (event.ctrlKey || event.metaKey))) return;
+
+      let nextRepoId: string | null | undefined;
+      if (event.key === '0') {
+        nextRepoId = null;
+      } else if (/^[1-9]$/.test(event.key)) {
+        nextRepoId = repos[Number(event.key) - 1]?.id;
+      } else if (event.key === '[' || event.key === ']') {
+        const currentIndex = value
+          ? repos.findIndex(repo => repo.id === value)
+          : -1;
+        const options: Array<string | null> = [null, ...repos.map(repo => repo.id)];
+        const optionIndex = currentIndex + 1;
+        const delta = event.key === '[' ? -1 : 1;
+        nextRepoId = options[(optionIndex + delta + options.length) % options.length];
+      }
+
+      if (nextRepoId === undefined || nextRepoId === value) return;
+      event.preventDefault();
+      onChange(nextRepoId);
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [value, onChange, repos]);
+
   if (repos.length <= 1) return null;
 
   return (
@@ -957,48 +887,5 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  } as React.CSSProperties,
-  moreBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '26px',
-    height: '26px',
-    background: 'none',
-    color: 'var(--vscode-foreground)',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    flexShrink: 0,
-    opacity: 0.7,
-  } as React.CSSProperties,
-  moreDropdown: {
-    position: 'absolute' as const,
-    top: '100%',
-    right: 0,
-    marginTop: '2px',
-    background: 'var(--vscode-menu-background)',
-    border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-    borderRadius: '4px',
-    padding: '3px 0',
-    minWidth: '140px',
-    zIndex: 1000,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-  } as React.CSSProperties,
-  moreItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '5px 12px',
-    fontSize: '12px',
-    cursor: 'pointer',
-    color: 'var(--vscode-menu-foreground, var(--vscode-foreground))',
-    whiteSpace: 'nowrap' as const,
-    position: 'relative' as const,
-  } as React.CSSProperties,
-  moreSeparator: {
-    height: '1px',
-    background: 'var(--vscode-menu-separatorBackground, var(--vscode-panel-border))',
-    margin: '3px 0',
   } as React.CSSProperties,
 };

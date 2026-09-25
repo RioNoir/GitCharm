@@ -3,6 +3,7 @@ import * as l10n from '@vscode/l10n';
 import { isImeComposing } from '../shared/ime';
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { isEmbedded } from '../shared/embedded';
 import { useCommitStore } from './store/commitStore';
 import { ProjectGroup } from './components/ProjectGroup';
 import { ChangelistView } from './components/ChangelistView';
@@ -2378,6 +2379,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 export { App as CommitApp };
 
 const _rootEl = document.getElementById('root');
-if (_rootEl) {
+if (_rootEl && !isEmbedded()) {
   createRoot(_rootEl).render(<ErrorBoundary><App /></ErrorBoundary>);
 }

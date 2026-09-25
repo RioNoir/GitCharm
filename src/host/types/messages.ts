@@ -247,7 +247,8 @@ export interface TagInfo {
 }
 
 export type HostToLogMsg =
-  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } }
+  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; filtersHidden?: boolean }
+  | { type: 'LOG_FILTERS_VISIBILITY'; hidden: boolean }
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
@@ -291,7 +292,6 @@ export type LogToHostMsg =
   | { type: 'LOG_DELETE_BRANCH'; requestId: string; repoId: string; branchName: string; force: boolean }
   | { type: 'LOG_DELETE_BRANCH_MULTI'; requestId: string; repoIds: string[]; branchName: string }
   | { type: 'LOG_RENAME_BRANCH_MULTI'; requestId: string; repoIds: string[]; oldName: string }
-  | { type: 'LOG_FETCH_ALL' }
   | { type: 'LOG_FETCH_REPO'; requestId: string; repoId: string }
   | { type: 'LOG_GET_REMOTES'; requestId: string; repoId: string }
   | { type: 'LOG_CHERRY_PICK'; requestId: string; repoId: string; hash: string }
@@ -337,7 +337,6 @@ export type LogToHostMsg =
   | { type: 'LOG_STASH_POP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
-  | { type: 'LOG_UNDOCK'; target: 'editorTab' | 'newWindow' | 'pick' }
   | { type: 'LOG_SET_DEFAULT_LOCATION' }
   | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }
