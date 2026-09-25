@@ -280,7 +280,7 @@ export function RollbackModal({ repos, repoMetas, onConfirm, onClose }: Props) {
           <span style={s.footerCount}>
             {plural(totalSelected, l10n.t('1 file selected'), l10n.t('{0} files selected', totalSelected))}
           </span>
-          <button style={s.cancelBtn} onClick={onClose}>{l10n.t('Cancel')}</button>
+          <button className="gc-btn-secondary" style={s.cancelBtn} onClick={onClose}>{l10n.t('Cancel')}</button>
           <button
             style={{ ...s.confirmBtn, opacity: totalSelected === 0 ? 0.4 : 1 }}
             disabled={totalSelected === 0}
@@ -430,12 +430,7 @@ const s = {
   },
   footerCount: { flex: 1, fontSize: '11px', opacity: 0.5 },
   cancelBtn: {
-    background: 'transparent',
-    border: '1px solid var(--vscode-button-border, var(--vscode-panel-border))',
-    color: 'var(--vscode-foreground)',
-    borderRadius: '3px',
     padding: '4px 12px',
-    cursor: 'pointer',
     fontSize: '12px',
   } as React.CSSProperties,
   confirmBtn: {

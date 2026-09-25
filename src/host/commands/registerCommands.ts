@@ -340,6 +340,52 @@ export function registerCommands(
       }
     }),
 
+    // ── AI prompts ────────────────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.customizeAiPrompts', async () => {
+      const { AI_PROMPT_IDS, DEFAULT_PROMPTS, getCustomPrompt, promptSettingKey } = await import('../ai/prompts');
+      const labels: Record<(typeof AI_PROMPT_IDS)[number], { label: string; icon: string }> = {
+        commitMessage: { label: vscode.l10n.t('Commit message'), icon: 'git-commit' },
+        pullRequestTitle: { label: vscode.l10n.t('Pull request title'), icon: 'git-pull-request' },
+        pullRequestDescription: { label: vscode.l10n.t('Pull request description'), icon: 'git-pull-request' },
+        explainCommit: { label: vscode.l10n.t('Explain commit'), icon: 'sparkle' },
+        explainPullRequest: { label: vscode.l10n.t('Explain pull request'), icon: 'sparkle' },
+      };
+      const config = vscode.workspace.getConfiguration('gitcharm');
+      const picked = await vscode.window.showQuickPick(
+        AI_PROMPT_IDS.map(id => ({
+          id,
+          label: `$(${labels[id].icon}) ${labels[id].label}`,
+          description: getCustomPrompt(config, id)
+            ? vscode.l10n.t({ message: 'Customized', comment: ['State of an AI prompt: the user replaced the built-in one'] })
+            : vscode.l10n.t({ message: 'Default', comment: ['State of an AI prompt: the built-in one is used'] }),
+        })),
+        { title: vscode.l10n.t('Customize AI Prompts'), placeHolder: vscode.l10n.t('Choose the prompt to customize') },
+      );
+      if (!picked) return;
+
+      const key = promptSettingKey(picked.id);
+      if (getCustomPrompt(config, picked.id)) {
+        const edit = vscode.l10n.t('Edit');
+        const reset = vscode.l10n.t('Reset to Default');
+        const action = await vscode.window.showQuickPick([edit, reset], { title: labels[picked.id].label });
+        if (!action) return;
+        if (action === reset) {
+          // Clear it wherever it was set, so the built-in default applies again.
+          const inspected = config.inspect<string>(key);
+          if (inspected?.workspaceFolderValue !== undefined) await config.update(key, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+          if (inspected?.workspaceValue !== undefined) await config.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+          if (inspected?.globalValue !== undefined) await config.update(key, undefined, vscode.ConfigurationTarget.Global);
+          vscode.window.showInformationMessage(vscode.l10n.t('"{0}" prompt reset to the default.', labels[picked.id].label));
+          return;
+        }
+      } else {
+        // Start from the built-in text rather than an empty box — editing a prompt is far easier than writing one.
+        await config.update(key, DEFAULT_PROMPTS[picked.id], vscode.ConfigurationTarget.Global);
+      }
+      await vscode.commands.executeCommand('workbench.action.openSettings', `gitcharm.${key}`);
+    }),
+
     // ── AI provider / model selection ─────────────────────────────────────────
 
     vscode.commands.registerCommand('gitcharm.selectAiModel', async () => {

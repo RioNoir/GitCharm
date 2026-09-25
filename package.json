@@ -366,6 +366,11 @@
         "category": "GitCharm"
       },
       {
+        "command": "gitcharm.customizeAiPrompts",
+        "title": "%command.customizeAiPrompts.title%",
+        "category": "GitCharm"
+      },
+      {
         "command": "gitcharm.showBranchOptions",
         "title": "%command.showBranchOptions.title%",
         "category": "GitCharm"
@@ -787,6 +792,9 @@
         },
         {
           "command": "gitcharm.selectAiModel"
+        },
+        {
+          "command": "gitcharm.customizeAiPrompts"
         },
         {
           "command": "gitcharm.undock"
@@ -1321,6 +1329,41 @@
             "minimum": 1000,
             "maximum": 100000,
             "description": "%config.ai.maxDiffChars.description%"
+          },
+          "gitcharm.ai.prompts.commitMessage": {
+            "order": 14,
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "markdownDescription": "%config.ai.prompts.commitMessage.markdownDescription%"
+          },
+          "gitcharm.ai.prompts.pullRequestTitle": {
+            "order": 15,
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "markdownDescription": "%config.ai.prompts.pullRequestTitle.markdownDescription%"
+          },
+          "gitcharm.ai.prompts.pullRequestDescription": {
+            "order": 16,
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "markdownDescription": "%config.ai.prompts.pullRequestDescription.markdownDescription%"
+          },
+          "gitcharm.ai.prompts.explainCommit": {
+            "order": 17,
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "markdownDescription": "%config.ai.prompts.explainCommit.markdownDescription%"
+          },
+          "gitcharm.ai.prompts.explainPullRequest": {
+            "order": 18,
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "markdownDescription": "%config.ai.prompts.explainPullRequest.markdownDescription%"
           }
         }
       },
@@ -1342,7 +1385,12 @@
           "gitcharm.pullRequests.defaultMergeStrategy": {
             "order": 3,
             "type": "string",
-            "enum": ["merge", "squash", "rebase", "fastForward"],
+            "enum": [
+              "merge",
+              "squash",
+              "rebase",
+              "fastForward"
+            ],
             "enumDescriptions": [
               "%config.pullRequests.defaultMergeStrategy.enum.merge%",
               "%config.pullRequests.defaultMergeStrategy.enum.squash%",
@@ -1355,7 +1403,10 @@
           "gitcharm.pullRequests.defaultCheckoutAction": {
             "order": 4,
             "type": "string",
-            "enum": ["pr", "branch"],
+            "enum": [
+              "pr",
+              "branch"
+            ],
             "enumDescriptions": [
               "%config.pullRequests.defaultCheckoutAction.enum.pr%",
               "%config.pullRequests.defaultCheckoutAction.enum.branch%"
@@ -1397,10 +1448,13 @@
   "dependencies": {
     "@simple-git/argv-parser": "^1.1.1",
     "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/extension-mention": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-table": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
+    "@tiptap/suggestion": "^3.31.3",
     "@vscode/l10n": "^0.0.18",
     "dompurify": "^3.4.14",
     "marked": "^18.0.11",

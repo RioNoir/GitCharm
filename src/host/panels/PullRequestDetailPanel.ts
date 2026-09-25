@@ -8,6 +8,7 @@ import type { ChangedFile, FileDiffContent, HostToPrDetailMsg, PrDetailToHostMsg
 import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 import { getAiModelLabel } from '../utils/aiModelLabel';
+import { buildPrompt } from '../ai/prompts';
 import { avatarsEnabled } from '../utils/avatarCache';
 import { panelIcon } from '../utils/panelIcon';
 import { webviewReadyGate } from '../utils/webviewReadyGate';
@@ -290,6 +291,19 @@ export class PullRequestDetailPanel {
         break;
       }
 
+      case 'PRDETAIL_REQUEST_MENTION_CANDIDATES': {
+        const users = await this.pullRequestManager.listMentionCandidates(repoId, pr.targetRepoFullName);
+        post({ type: 'PRDETAIL_MENTION_CANDIDATES', users });
+        break;
+      }
+
+      case 'PRDETAIL_UPDATE_DESCRIPTION': {
+        const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { description: msg.description });
+        post({ type: 'PRDETAIL_DESCRIPTION_UPDATED', ok: result.ok, error: result.error });
+        if (result.ok) this.onChanged();
+        break;
+      }
+
       case 'PRDETAIL_EXPLAIN': {
         const { openAiExplainDetail } = await import('./AiExplainDetailPanel');
         const cfg = vscode.workspace.getConfiguration('gitcharm');
@@ -297,7 +311,7 @@ export class PullRequestDetailPanel {
           this.extensionUri,
           { key: `pr:${repoId}:${pr.number}`, kind: 'pull-request', title: vscode.l10n.t('PR #{0} — {1}', pr.number, pr.title), subtitle: `${pr.sourceBranch} → ${pr.targetBranch}` },
           getAiModelLabel(cfg),
-          () => this.explainPullRequest(repoId, pr),
+          onProgress => this.explainPullRequest(repoId, pr, onProgress),
         );
         break;
       }
@@ -632,13 +646,10 @@ export class PullRequestDetailPanel {
    * diffing works from full blobs rather than patch application), plus mergeability/CI signals, and asks the
    * model to both summarize the change and flag anything risky about merging it into the requested branch.
    * Returns the result rather than posting it — the caller displays it in the separate AI Explain Detail panel. */
-  private async explainPullRequest(repoId: string, pr: PullRequestSummary): Promise<{ explanation?: string; error?: string }> {
+  private async explainPullRequest(repoId: string, pr: PullRequestSummary, onProgress: (explanationSoFar: string) => void): Promise<{ explanation?: string; error?: string }> {
     try {
       const cfg = vscode.workspace.getConfiguration('gitcharm');
       const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
-      const configuredLang: string = cfg.get('ai.language', '');
-      const language = configuredLang.trim() || vscode.env.language || 'en';
-
       const detailResult = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
       if ('error' in detailResult) {
         return { error: detailResult.error };
@@ -652,18 +663,36 @@ export class PullRequestDetailPanel {
 
       const { buildSimpleUnifiedDiff } = await import('../utils/simpleUnifiedDiff');
       const MAX_DIFF_FILES = 25;
+      // Each file's diff is two blob fetches from the forge — fetched a few files at a time instead of one after
+      // the other, which on a PR with many files was most of the wait before the AI even got the prompt.
+      const DIFF_FETCH_CONCURRENCY = 6;
+      const diffFiles = files.slice(0, MAX_DIFF_FILES);
+      const contents: Array<FileDiffContent | undefined> = new Array(diffFiles.length);
+      let nextIndex = 0;
+      const fetchNext = async (): Promise<void> => {
+        while (nextIndex < diffFiles.length) {
+          const index = nextIndex++;
+          const file = diffFiles[index];
+          const cacheKey = `${repoId}:${pr.number}:${file.path}`;
+          let content = this.diffCache.get(cacheKey);
+          if (!content) {
+            const diffResult = await this.pullRequestManager.getFileDiff(repoId, pr.number, file, detail);
+            if ('error' in diffResult) continue;
+            content = diffResult;
+            this.diffCache.set(cacheKey, content);
+          }
+          contents[index] = content;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DIFF_FETCH_CONCURRENCY, diffFiles.length) }, fetchNext));
+
+      // Assembled in file order afterwards, so the character budget is spent the same way as before.
       let remainingChars = maxDiffChars;
       const diffBlocks: string[] = [];
-      for (const file of files.slice(0, MAX_DIFF_FILES)) {
+      for (const [index, file] of diffFiles.entries()) {
         if (remainingChars <= 0) break;
-        const cacheKey = `${repoId}:${pr.number}:${file.path}`;
-        let content = this.diffCache.get(cacheKey);
-        if (!content) {
-          const diffResult = await this.pullRequestManager.getFileDiff(repoId, pr.number, file, detail);
-          if ('error' in diffResult) continue;
-          content = diffResult;
-          this.diffCache.set(cacheKey, content);
-        }
+        const content = contents[index];
+        if (!content) continue;
         let diffText = buildSimpleUnifiedDiff(content.beforeContent, content.afterContent);
         if (diffText.length > remainingChars) diffText = `${diffText.slice(0, remainingChars)}\n...[diff truncated]`;
         remainingChars -= diffText.length;
@@ -679,32 +708,21 @@ export class PullRequestDetailPanel {
       if (detail.ciStatus?.state === 'pending') mergeIssues.push('CI checks are still running on this PR.');
       if (detail.canWrite === false) mergeIssues.push('The current user does not have write access to merge this PR directly.');
 
-      const prompt = [
-        'You are a senior code reviewer explaining a pull request to a developer before it gets merged.',
-        '',
-        'Rules:',
-        `- Write the explanation in this language: ${language}`,
-        '- Start with a one-sentence summary of what this PR does',
-        '- Then explain the key changes: what was modified and why, referencing specific files/functions where relevant',
-        '- Finish with a short "Merge considerations" section: flag anything risky about merging this into the target branch',
-        '  (conflicts, failing/pending CI, incomplete-looking changes, missing tests, breaking changes, anything that looks unsafe to merge as-is).',
-        '  If nothing looks risky, say so briefly — do not invent problems.',
-        '- Be concise but complete',
-        '- The output is rendered as Markdown: use it (bold, lists, headings, inline code) where it helps readability',
-        '- Output ONLY the explanation, no code fences wrapping the whole response, no preamble',
-        '',
+      const prompt = buildPrompt('explainPullRequest', [
         `## Pull Request #${pr.number}: ${detail.title}`,
         `## Source branch: ${detail.sourceRepoFullName ? `${detail.sourceRepoFullName}:` : ''}${detail.sourceBranch}`,
         `## Target branch: ${detail.targetRepoFullName ? `${detail.targetRepoFullName}:` : ''}${detail.targetBranch}`,
-        detail.description ? `## Description\n${detail.description.slice(0, 4000)}` : '',
-        mergeIssues.length ? `## Known signals\n${mergeIssues.map(m => `- ${m}`).join('\n')}` : '',
+        detail.description && `## Description\n${detail.description.slice(0, 4000)}`,
+        mergeIssues.length > 0 && `## Known signals\n${mergeIssues.map(m => `- ${m}`).join('\n')}`,
         '## Changed files',
         fileList,
-        diffBlocks.length ? `\n## Diffs\n${diffBlocks.join('\n\n')}` : '',
-      ].filter(Boolean).join('\n');
+        diffBlocks.length > 0 && `\n## Diffs\n${diffBlocks.join('\n\n')}`,
+      ], cfg);
 
-      const { generateWithAI } = await import('../ai/aiGenerate');
-      const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg);
+      const { cleanPartialModelOutput, generateWithAI } = await import('../ai/aiGenerate');
+      const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg, {
+        onProgress: text => onProgress(cleanPartialModelOutput(text)),
+      });
       return { explanation };
     } catch (e: unknown) {
       logError('pullrequest-explain', formatGitError(e), getRawErrorDetail(e));

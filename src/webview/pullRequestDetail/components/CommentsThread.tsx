@@ -4,6 +4,7 @@ import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '..
 import { Codicon } from '../../shared/Codicon';
 import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { renderMarkdown } from '../../shared/renderMarkdown';
+import { useMentionCandidates } from '../../shared/mentions';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
 import { formatRelativeTime } from '../../shared/formatRelativeTime';
 import { SkeletonList } from '../../shared/Skeleton';
@@ -146,7 +147,8 @@ function CommentRow({ comment, onUpdate, onDelete, onHide, onUnhide }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
-  const html = useMemo(() => renderMarkdown(comment.body), [comment.body]);
+  const mentionCandidates = useMentionCandidates();
+  const html = useMemo(() => renderMarkdown(comment.body, mentionCandidates), [comment.body, mentionCandidates]);
 
   const startEdit = () => {
     setDraft(comment.body);
@@ -185,7 +187,7 @@ function CommentRow({ comment, onUpdate, onDelete, onHide, onUnhide }: {
         <div style={css.commentEditWrap}>
           <MarkdownEditor value={draft} onChange={setDraft} placeholder={l10n.t('Edit comment…')} minHeight="80px" bare />
           <div style={css.commentEditActions}>
-            <button className="icon-btn" style={css.commentEditCancelBtn} onClick={() => setEditing(false)}>{l10n.t('Cancel')}</button>
+            <button className="gc-btn-secondary" style={css.commentEditCancelBtn} onClick={() => setEditing(false)}>{l10n.t('Cancel')}</button>
             <button style={{ ...css.submitBtn, opacity: draft.trim() ? 1 : 0.5 }} disabled={!draft.trim()} onClick={save}>
               <Codicon name="check" style={{ fontSize: '13px' }} />
               {l10n.t('Save')}
@@ -372,7 +374,7 @@ export function CommentsThread({
 
       <div style={css.actionsRow}>
         {canClose && (
-          <button className="icon-btn" style={css.closeBtn} disabled={closing} onClick={onClose}>
+          <button className="gc-btn-secondary" style={css.closeBtn} disabled={closing} onClick={onClose}>
             <Codicon name="git-pull-request-closed" style={{ fontSize: '13px', color: '#cf222e' }} />
             {closing ? l10n.t('Closing…') : l10n.t('Close Pull Request')}
           </button>
@@ -455,10 +457,7 @@ const css = {
   commentBody: { fontSize: '13px', lineHeight: 1.5 } as React.CSSProperties,
   commentEditWrap: { display: 'flex', flexDirection: 'column' as const } as React.CSSProperties,
   commentEditActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', padding: '8px 12px 12px' } as React.CSSProperties,
-  commentEditCancelBtn: {
-    fontSize: '12px', padding: '6px 14px', borderRadius: '4px',
-    background: 'transparent', color: 'var(--vscode-foreground)', border: '1px solid var(--vscode-panel-border)', cursor: 'pointer',
-  } as React.CSSProperties,
+  commentEditCancelBtn: { fontSize: '12px', padding: '6px 14px' } as React.CSSProperties,
   commitRow: {
     position: 'relative' as const, zIndex: 1,
     display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer',
@@ -497,9 +496,7 @@ const css = {
   form: { display: 'flex', flexDirection: 'column' as const, gap: '8px', marginTop: '4px' },
   actionsRow: { display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
   closeBtn: {
-    display: 'flex', alignItems: 'center', gap: '6px',
-    fontSize: '12px', padding: '6px 14px', borderRadius: '4px',
-    background: 'transparent', color: 'var(--vscode-foreground)', border: '1px solid var(--vscode-panel-border)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px',
   } as React.CSSProperties,
   submitBtn: {
     display: 'flex', alignItems: 'center', gap: '6px',

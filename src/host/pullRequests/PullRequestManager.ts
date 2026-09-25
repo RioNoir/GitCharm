@@ -131,11 +131,13 @@ function dropRedundantEvents(events: PullRequestEvent[]): PullRequestEvent[] {
 
 const REPO_ACCOUNT_BINDING_KEY = 'gitcharm.pullRequests.repoAccountBindings';
 const REPO_PR_FILTERS_KEY = 'gitcharm.pullRequests.repoFilters';
+const MENTION_CANDIDATES_TTL_MS = 5 * 60 * 1000;
 
 export class PullRequestManager {
   private cache = new Map<string, CacheEntry>();
   /** One provider instance per repo, reused across calls so each provider's own in-memory caches (e.g. GitLab's label-color cache, cached username) actually persist instead of being thrown away and re-fetched on every single request. */
   private providerCache = new Map<string, PullRequestProvider>();
+  private mentionCandidatesCache = new Map<string, { users: PullRequestUser[]; fetchedAt: number }>();
 
   constructor(
     private readonly manager: WorkspaceGitManager,
@@ -525,6 +527,23 @@ export class PullRequestManager {
       logError('pullrequest-list-collaborators', `Failed to load collaborators for ${targetRepoFullName}`, message);
       return { items: [], error: message };
     }
+  }
+
+  /** Users offered by the `@` mention autocomplete (and used to resolve Bitbucket's `@{account_id}` mentions
+   * back to names). Same member list as the reviewer picker, but cached briefly per repo: every open detail
+   * panel and the create form ask for it up front, and the member list rarely changes. `targetRepoFullName`
+   * defaults to the repo's own origin (the create form has no PR, hence no base repo, yet). Best-effort —
+   * a failure just means no suggestions, so it's logged but not surfaced. */
+  async listMentionCandidates(repoId: string, targetRepoFullName?: string): Promise<PullRequestUser[]> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return [];
+    const fullName = targetRepoFullName ?? `${target.owner}/${target.repo}`;
+    const key = `${repoId}|${fullName}`;
+    const cached = this.mentionCandidatesCache.get(key);
+    if (cached && Date.now() - cached.fetchedAt < MENTION_CANDIDATES_TTL_MS) return cached.users;
+    const { items, error } = await this.listCollaborators(repoId, fullName);
+    if (!error) this.mentionCandidatesCache.set(key, { users: items, fetchedAt: Date.now() });
+    return items;
   }
 
   async updateReviewers(repoId: string, number: number, userIds: string[]): Promise<ActionResult> {

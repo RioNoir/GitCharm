@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
-import { generateWithAI } from '../ai/aiGenerate';
+import { cleanPartialModelOutput, generateWithAI } from '../ai/aiGenerate';
+import { buildPrompt } from '../ai/prompts';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
@@ -1507,24 +1508,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           }
 
           const context = sections.join('\n\n');
-          const configuredLang: string = cfg.get('ai.language', '');
-          const language = configuredLang.trim() || vscode.env.language || 'en';
-          const prompt = [
-            'You are a git commit message writer. Analyze the following changes and write a commit message.',
-            '',
-            'Rules:',
-            `- Write the commit message in this language: ${language}`,
-            '- First line: imperative mood, max 72 characters (e.g. "Add user authentication")',
-            '- Leave a blank line after the first line',
-            '- Body: 2-4 bullet points explaining WHAT changed and WHY, each starting with "- "',
-            '- Be specific and technical, reference file names or module names when relevant',
-            '- Output ONLY the commit message, no explanations, no markdown fences',
-            '',
-            context,
-          ].join('\n');
+          const prompt = buildPrompt('commitMessage', [context], cfg);
 
           const provider: string = cfg.get('ai.provider', 'vscode-lm');
-          const message = await generateWithAI(provider, prompt, cfg);
+          const message = await generateWithAI(provider, prompt, cfg, {
+            onProgress: text => this.post({ type: 'COMMIT_GENERATE_MESSAGE_PROGRESS', requestId: msg.requestId, message: cleanPartialModelOutput(text) }),
+          });
           this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, message });
         } catch (e: unknown) {
           logError('ai-generate', formatGitError(e), getRawErrorDetail(e));

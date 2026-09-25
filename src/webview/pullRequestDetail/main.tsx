@@ -14,6 +14,7 @@ import { AiExplainFab } from '../shared/AiExplainFab';
 import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips } from '../shared/Skeleton';
+import { MentionCandidatesContext, toMentionCandidates, type MentionCandidate } from '../shared/mentions';
 import type {
   ChangedFile, CiCheck, HostToPrDetailMsg, IconThemeData, MergeStrategy, PrDetailToHostMsg, PullRequestComment,
   PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestSummary,
@@ -100,6 +101,10 @@ function App() {
   const [updatingReviewers, setUpdatingReviewers] = useState(false);
   const [updatingAssignees, setUpdatingAssignees] = useState(false);
   const [updatingLabels, setUpdatingLabels] = useState(false);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [savingDescription, setSavingDescription] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | undefined>();
+  const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
 
   const send = useCallback((msg: PrDetailToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -124,6 +129,20 @@ function App() {
           send({ type: 'PRDETAIL_REQUEST_FILES' });
           send({ type: 'PRDETAIL_REQUEST_COMMITS' });
           send({ type: 'PRDETAIL_REQUEST_EVENTS' });
+          send({ type: 'PRDETAIL_REQUEST_MENTION_CANDIDATES' });
+          break;
+        case 'PRDETAIL_MENTION_CANDIDATES':
+          setMentionCandidates(toMentionCandidates(msg.users));
+          break;
+        case 'PRDETAIL_DESCRIPTION_UPDATED':
+          setSavingDescription(false);
+          if (msg.ok) {
+            setEditingDescription(false);
+            setDescriptionError(undefined);
+            send({ type: 'PRDETAIL_REQUEST_DETAIL' });
+          } else {
+            setDescriptionError(msg.error ?? l10n.t('Failed to update pull request'));
+          }
           break;
         case 'PRDETAIL_LOADED':
           setDetailLoading(false);
@@ -304,6 +323,17 @@ function App() {
     send({ type: 'PRDETAIL_PICK_LABELS' });
   }, [send]);
 
+  const handleSaveDescription = useCallback((description: string) => {
+    setSavingDescription(true);
+    setDescriptionError(undefined);
+    send({ type: 'PRDETAIL_UPDATE_DESCRIPTION', description });
+  }, [send]);
+
+  const handleCancelDescriptionEdit = useCallback(() => {
+    setEditingDescription(false);
+    setDescriptionError(undefined);
+  }, []);
+
   const handlePostComment = useCallback((body: string) => {
     setPostingComment(true);
     send({ type: 'PRDETAIL_POST_COMMENT', body });
@@ -384,7 +414,10 @@ function App() {
     );
   }
 
+  const canEdit = !!detail && detail.capabilities.canClose && detail.canWrite && (detail.state === 'open' || detail.state === 'draft');
+
   return (
+    <MentionCandidatesContext.Provider value={mentionCandidates}>
     <div style={css.page} className="pr-detail-root">
       <PullRequestHeader
         summary={summary}
@@ -395,7 +428,7 @@ function App() {
           && !(!!currentUsername && currentUsername === detail.authorName)
         }
         approving={approving}
-        canEdit={!!detail && detail.capabilities.canClose && detail.canWrite && (detail.state === 'open' || detail.state === 'draft')}
+        canEdit={canEdit}
         updating={updating}
         merging={merging}
         mergeError={mergeError}
@@ -430,7 +463,7 @@ function App() {
             style={css.tab(activeTab === tab.id)}
             onClick={() => setActiveTab(tab.id)}
           >
-            <Codicon name={tab.icon} style={{ fontSize: '13px', marginRight: '5px' }} />
+            <Codicon name={tab.icon} style={{ fontSize: '15px', marginRight: '6px' }} />
             {tab.label}
             {tab.count !== undefined && <span style={css.tabCount}>{tab.count}</span>}
           </button>
@@ -443,9 +476,22 @@ function App() {
         {activeTab === 'overview' && (
           <div className="pr-overview-layout">
             <div className="pr-overview-main">
-              <CollapsibleSection title={l10n.t('Description')} icon="note" first>
-                <div style={css.descriptionBox}>
-                  <DescriptionPanel description={detail?.description ?? ''} loading={detailLoading} />
+              <CollapsibleSection
+                title={l10n.t('Description')} icon="note" first
+                headerAction={canEdit && !editingDescription && (
+                  <EditFieldButton title={l10n.t('Edit description')} updating={savingDescription} onPick={() => setEditingDescription(true)} />
+                )}
+              >
+                <div style={editingDescription ? undefined : css.descriptionBox}>
+                  <DescriptionPanel
+                    description={detail?.description ?? ''}
+                    loading={detailLoading}
+                    editing={editingDescription}
+                    saving={savingDescription}
+                    saveError={descriptionError}
+                    onSave={handleSaveDescription}
+                    onCancelEdit={handleCancelDescriptionEdit}
+                  />
                 </div>
               </CollapsibleSection>
               <CollapsibleSection title={l10n.t('Activity')} icon="comment-discussion">
@@ -536,6 +582,7 @@ function App() {
         )}
       </div>
     </div>
+    </MentionCandidatesContext.Provider>
   );
 }
 

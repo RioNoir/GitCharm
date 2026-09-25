@@ -13,6 +13,17 @@ export function focusableFieldStyle(focused: boolean): React.CSSProperties {
   };
 }
 
+/** The commit message's "AI is writing this" look (UnifiedCommitForm's textarea while generating): focus-colored
+ * border, no glow, and the content pulsing. Spread over focusableFieldStyle; the keyframes live in webviewHtml.ts. */
+export function generatingFieldStyle(): React.CSSProperties {
+  return {
+    border: '1px solid var(--vscode-focusBorder)',
+    boxShadow: 'none',
+    cursor: 'default',
+    animation: 'gs-ai-generating-pulse 1.2s ease-in-out infinite',
+  };
+}
+
 /** Auto-resizes a textarea to fit its content, capped at a fraction of the viewport height beyond which it scrolls internally instead. Shared with UnifiedCommitForm's resizeTextarea. */
 export function resizeTextareaEl(el: HTMLTextAreaElement, maxHeightFraction = 0.5): void {
   el.style.height = 'auto';
