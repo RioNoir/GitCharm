@@ -442,6 +442,7 @@ function App() {
         repos={store.repos}
         onFilterChange={handleFilterChange}
         onRepoChange={handleRepoChange}
+        onCompareChange={handleCompareChange}
         onClear={handleClearFilters}
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
         onUndock={(target) => send({ type: 'LOG_UNDOCK', target } as LogToHostMsg)}

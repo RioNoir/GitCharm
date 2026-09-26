@@ -321,6 +321,7 @@ function LogApp() {
         repos={store.repos}
         onFilterChange={handleFilterChange}
         onRepoChange={handleRepoChange}
+        onCompareChange={handleCompareChange}
         onClear={handleClearFilters}
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
         hideUndock
