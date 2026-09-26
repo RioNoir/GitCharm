@@ -5,7 +5,8 @@
 
 /**
  * True when `ref` is safe to hand to git as one side of a `base..target` range: it must
- * not be parseable as an option, must not itself be a range, and must be a single token.
+ * not be parseable as an option, must not itself be a range, and must contain no
+ * whitespace. Existence is checked separately (rev-parse) before use.
  */
 export function isSafeCompareRef(ref: string): boolean {
   if (!ref || ref.startsWith('-')) return false;

@@ -160,7 +160,7 @@ export function compareLabels(compare: CompareRange, repos: RepoMeta[]): { targe
   const defaultName = names.size === 1 && !names.has('') ? [...names][0] : null;
   return {
     target: compare.target || 'HEAD',
-    base: compare.base || defaultName || 'default branch',
+    base: compare.base || defaultName || 'the default branch',
     defaultName,
   };
 }

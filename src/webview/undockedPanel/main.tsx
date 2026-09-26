@@ -286,13 +286,15 @@ function LogApp() {
   const selectedRepoColor = store.selectedCommit ? repoColors[store.selectedCommit.repoId] : undefined;
 
   const handleFilterChange = useCallback((key: keyof import('../gitLog/store/logStore').CommitFilters, value: string) => {
-    store.setCommitFilters({ [key]: value });
+    // Picking a branch (from the sidebar or the branch picker) means "show this branch", so it ends compare mode
+    const update = key === 'branch' ? { branch: value, compare: null } : { [key]: value };
+    store.setCommitFilters(update);
     if (key === 'text' || key === 'author') {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      searchDebounceRef.current = setTimeout(() => reloadCommits({ [key]: value }), 0);
+      searchDebounceRef.current = setTimeout(() => reloadCommits(update), 0);
     } else {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      reloadCommits({ [key]: value });
+      reloadCommits(update);
     }
   }, [reloadCommits]);
 
@@ -310,7 +312,7 @@ function LogApp() {
 
   filterRepoRef.current = (repoId: string | null, branch?: string | null) => {
     const filters: { repoId: string | null; branch?: string; compare?: null } = { repoId };
-    // Picking a branch from the sidebar means "show this branch", so it ends compare mode
+    // Revealing a branch from elsewhere in the editor means "show this branch", so it ends compare mode
     if (branch) { filters.branch = branch; filters.compare = null; }
     store.setCommitFilters(filters);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -355,7 +357,7 @@ function LogApp() {
           branches={store.branches}
           tags={store.tags}
           filter={store.branchFilter}
-          selectedBranchFilter={store.commitFilters.branch}
+          selectedBranchFilter={store.commitFilters.compare ? '' : store.commitFilters.branch}
           activeRepoId={store.commitFilters.repoId}
           onFilterChange={store.setBranchFilter}
           onBranchFilterSelect={useCallback((b: string) => handleFilterChange('branch', b), [handleFilterChange])}
