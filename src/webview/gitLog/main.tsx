@@ -4,7 +4,7 @@ import { useLogStore } from './store/logStore';
 import { BranchSidebar } from './components/BranchSidebar';
 import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
-import { CommitFiltersBar, RepoTabs } from './components/CommitFiltersBar';
+import { CommitFiltersBar, RepoTabs, compareLabels } from './components/CommitFiltersBar';
 import { assignLanes } from './utils/graphLayout';
 import type { GraphLayout } from './utils/graphLayout';
 import { ResizeHandle } from '../shared/ResizeHandle';
@@ -293,6 +293,17 @@ function App() {
     store.commitFilters.compare
   );
 
+  // Labels describe the repos actually in view: the filtered repo, or all of them
+  const compareEmptyState = useMemo(() => {
+    const compare = store.commitFilters.compare;
+    if (!compare) return undefined;
+    const inView = store.commitFilters.repoId
+      ? store.repos.filter(r => r.id === store.commitFilters.repoId)
+      : store.repos;
+    const { target, base } = compareLabels(compare, inView);
+    return { title: `No commits on ${target} that aren't on ${base}` };
+  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos]);
+
   // Merge stashes into the commit list, filtering by branch if a branch filter is active
   const commitsWithStashes = useMemo(() => {
     // Stashes loaded before compare mode was turned on stay in the store; don't show them
@@ -559,6 +570,7 @@ function App() {
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
             activeProfile={store.activeProfile}
+            emptyState={compareEmptyState}
           />
         </div>
 

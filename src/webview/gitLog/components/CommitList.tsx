@@ -34,6 +34,8 @@ interface Props {
   aiEnabled?: boolean;
   themeVersion?: number;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  /** Replaces the default "No commits yet" message, e.g. for an empty compare range. */
+  emptyState?: { title: string; subtitle?: string };
 }
 
 interface RepoBlock {
@@ -164,7 +166,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -478,9 +480,11 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   if (commits.length === 0 && !storeHasMore) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', height: '100%', gap: '8px', fontFamily: 'var(--vscode-font-family)', userSelect: 'none' }}>
-        <Codicon name="git-commit" style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
-        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>No commits yet</span>
-        <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>Make your first commit to see the history here</span>
+        <Codicon name={emptyState ? 'git-compare' : 'git-commit'} style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
+        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>{emptyState?.title ?? 'No commits yet'}</span>
+        {(emptyState ? emptyState.subtitle : 'Make your first commit to see the history here') && (
+          <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{emptyState ? emptyState.subtitle : 'Make your first commit to see the history here'}</span>
+        )}
       </div>
     );
   }

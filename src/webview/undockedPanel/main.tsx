@@ -20,7 +20,7 @@ import { useLogStore } from '../gitLog/store/logStore';
 import { BranchSidebar } from '../gitLog/components/BranchSidebar';
 import { CommitList } from '../gitLog/components/CommitList';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
-import { CommitFiltersBar, RepoTabs } from '../gitLog/components/CommitFiltersBar';
+import { CommitFiltersBar, RepoTabs, compareLabels } from '../gitLog/components/CommitFiltersBar';
 import { assignLanes } from '../gitLog/utils/graphLayout';
 import type { GraphLayout } from '../gitLog/utils/graphLayout';
 
@@ -225,6 +225,17 @@ function LogApp() {
     store.commitFilters.dateFrom || store.commitFilters.dateTo || store.commitFilters.compare
   );
 
+  // Labels describe the repos actually in view: the filtered repo, or all of them
+  const compareEmptyState = useMemo(() => {
+    const compare = store.commitFilters.compare;
+    if (!compare) return undefined;
+    const inView = store.commitFilters.repoId
+      ? store.repos.filter(r => r.id === store.commitFilters.repoId)
+      : store.repos;
+    const { target, base } = compareLabels(compare, inView);
+    return { title: `No commits on ${target} that aren't on ${base}` };
+  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos]);
+
   const commitsWithStashes = useMemo(() => {
     // Stashes loaded before compare mode was turned on stay in the store; don't show them
     if (store.commitFilters.compare) return store.commits;
@@ -400,6 +411,7 @@ function LogApp() {
             onScrollTargetHandled={() => store.setPendingScrollTarget(null)}
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
+            emptyState={compareEmptyState}
           />
         </div>
 
