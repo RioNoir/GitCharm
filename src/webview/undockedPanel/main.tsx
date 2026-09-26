@@ -36,7 +36,7 @@ import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
 import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi } from '../shared/vscodeApi';
-import type { LogToHostMsg, HostToLogMsg } from '../../host/types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange } from '../../host/types/messages';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -150,7 +150,9 @@ function LogApp() {
       requestId: reqId,
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
-      filterBranch: f.branch || undefined,
+      // Compare mode names its own refs, so the branch filter is not sent alongside it
+      filterBranch: f.compare ? undefined : (f.branch || undefined),
+      compare: f.compare ?? undefined,
       filterDateFrom: f.dateFrom ? `${f.dateFrom}T00:00:00` : undefined,
       filterDateTo: f.dateTo ? `${f.dateTo}T23:59:59` : undefined,
     } satisfies LogToHostMsg);
@@ -220,17 +222,19 @@ function LogApp() {
 
   const isFiltered = !!(
     store.commitFilters.text || store.commitFilters.author || store.commitFilters.branch ||
-    store.commitFilters.dateFrom || store.commitFilters.dateTo
+    store.commitFilters.dateFrom || store.commitFilters.dateTo || store.commitFilters.compare
   );
 
   const commitsWithStashes = useMemo(() => {
+    // Stashes loaded before compare mode was turned on stay in the store; don't show them
+    if (store.commitFilters.compare) return store.commits;
     const branchFilter = store.commitFilters.branch;
     const visibleStashes = branchFilter ? store.stashes.filter(s => s.stashBranch === branchFilter) : store.stashes;
     if (visibleStashes.length === 0) return store.commits;
     const merged = [...store.commits, ...visibleStashes];
     merged.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
     return merged;
-  }, [store.commits, store.stashes, store.commitFilters.branch]);
+  }, [store.commits, store.stashes, store.commitFilters.branch, store.commitFilters.compare]);
 
   const [graphLayout, setGraphLayout] = useState<GraphLayout>(() => assignLanes(commitsWithStashes, isFiltered));
   const layoutRafRef = useRef<number | null>(null);
@@ -284,16 +288,23 @@ function LogApp() {
     reloadCommits({ repoId });
   }, [reloadCommits]);
 
+  const handleCompareChange = useCallback((compare: CompareRange | null) => {
+    store.setCommitFilters({ compare });
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    reloadCommits({ compare });
+  }, [reloadCommits]);
+
   filterRepoRef.current = (repoId: string | null, branch?: string | null) => {
-    const filters: { repoId: string | null; branch?: string } = { repoId };
-    if (branch) filters.branch = branch;
+    const filters: { repoId: string | null; branch?: string; compare?: null } = { repoId };
+    // Picking a branch from the sidebar means "show this branch", so it ends compare mode
+    if (branch) { filters.branch = branch; filters.compare = null; }
     store.setCommitFilters(filters);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(filters);
   };
 
   const handleClearFilters = useCallback(() => {
-    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null };
+    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null, compare: null };
     store.setCommitFilters(cleared);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(cleared);
