@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg } from '../types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange } from '../types/messages';
 import type { BranchInfo, RepoMeta } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
@@ -16,6 +16,7 @@ import { logInfo, logWarn, logError, showLogChannel } from '../utils/Logger';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
 import { promptBranchName } from '../utils/branchNamePrompt';
+import { pickLocalDefaultBranch } from '../git/compareRange';
 import {
   getGitLogDefaultLayout,
   getGitLogDefaultLocation,
@@ -537,6 +538,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const logRepoIds = msg.repoIds.length > 0
           ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
           : this.getVisibleRepos().map(r => r.id);
+
+        // Compare mode: resolve each repo's own range. An empty base means that repo's
+        // local default branch, so a multi-repo log compares each repo against its own
+        // main/master; a repo where no base resolves is left out of the map.
+        let compareByRepo: Record<string, CompareRange> | undefined;
+        if (msg.compare) {
+          const { base, target } = msg.compare;
+          const metaById = new Map(repos.map(m => [m.id, m]));
+          const resolved = await Promise.all(logRepoIds.map(async (repoId): Promise<[string, CompareRange] | null> => {
+            const repo = this.manager.getRepo(repoId);
+            if (!repo) return null;
+            const repoBase = base || await pickLocalDefaultBranch(metaById.get(repoId)?.defaultBranch, name => repo.localBranchExists(name));
+            return repoBase ? [repoId, { base: repoBase, target: target || 'HEAD' }] : null;
+          }));
+          compareByRepo = Object.fromEntries(resolved.filter((e): e is [string, CompareRange] => e !== null));
+        }
+
         const commits = limit > 0
           ? await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
             filterText: msg.filterText,
@@ -544,6 +562,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             filterBranch: msg.filterBranch,
             filterDateFrom: msg.filterDateFrom,
             filterDateTo: msg.filterDateTo,
+            compareByRepo,
           })
           : [];
         // Last batch when git ran out of commits, or when the ceiling is reached — either
@@ -567,8 +586,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }, 150);
         }
 
-        // Send stashes only on first load (not on pagination)
-        if (msg.skip === 0) {
+        // Stashes belong to neither side of a compare range, so a compare view has none
+        if (msg.skip === 0 && !msg.compare) {
           Promise.all(logRepoIds.map(async (repoId) => {
             const repo = this.manager.getRepo(repoId);
             if (!repo) return [];

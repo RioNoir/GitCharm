@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { CommitFilters } from '../store/logStore';
+import type { CompareRange } from '../../../host/types/messages';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 
@@ -10,6 +11,7 @@ interface Props {
   repos: RepoMeta[];
   onFilterChange: (key: keyof CommitFilters, value: string) => void;
   onRepoChange: (repoId: string | null) => void;
+  onCompareChange: (compare: CompareRange | null) => void;
   onClear: () => void;
   onFetchAll: () => void;
   onUndock?: (target: 'editorTab' | 'newWindow' | 'pick') => void;
@@ -27,7 +29,7 @@ function useIsLightTheme() {
   return light;
 }
 
-export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onClear, onFetchAll, onUndock, hideUndock }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onRepoChange, onCompareChange, onClear, onFetchAll, onUndock, hideUndock }: Props) {
   const isLight = useIsLightTheme();
   useEffect(() => {
     const id = 'gitcharm-filter-field-focus';
@@ -39,8 +41,9 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
   }, []);
   const groupedBranches = groupByName(branches);
   const groupedTags = groupByName(tags);
+  const reposInView = filters.repoId ? repos.filter(r => r.id === filters.repoId) : repos;
 
-  const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo);
+  const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo || filters.compare);
 
   useEffect(() => {
     if (repos.length <= 1) return;
@@ -92,15 +95,37 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
           debounceMs={600}
         />
 
-        {/* Branch / Tag — custom dropdown */}
-        <BranchTagPicker
-          value={filters.branch}
-          branches={groupedBranches}
-          tags={groupedTags}
-          repos={repos}
-          onChange={v => onFilterChange('branch', v)}
-          isLight={isLight}
-        />
+        {/* Branch / Tag — or, in compare mode, target "not in" base */}
+        {filters.compare ? (
+          <CompareControls
+            compare={filters.compare}
+            branches={groupedBranches}
+            tags={groupedTags}
+            repos={repos}
+            reposInView={reposInView}
+            isLight={isLight}
+            onChange={onCompareChange}
+          />
+        ) : (
+          <>
+            <BranchTagPicker
+              value={filters.branch}
+              branches={groupedBranches}
+              tags={groupedTags}
+              repos={repos}
+              onChange={v => onFilterChange('branch', v)}
+              isLight={isLight}
+            />
+            <button
+              data-top-action-btn=""
+              style={styles.compareBtn}
+              onClick={() => onCompareChange({ base: '', target: '' })}
+              title="Compare branches"
+            >
+              <Codicon name="git-compare" style={{ fontSize: '15px' }} />
+            </button>
+          </>
+        )}
 
         {/* Date range */}
         <DateRangePicker
@@ -121,6 +146,23 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
         <MoreMenu onFetchAll={onFetchAll} onUndock={onUndock} hideUndock={hideUndock} />
       </div>
   );
+}
+
+/* ─── Compare labels ──────────────────────────────────────────────────────── */
+
+/**
+ * Display names for a compare range. `defaultName` is the default branch shared by every
+ * repo in view, or null when the repos disagree or none report one — the host still
+ * resolves each repo's own default, this only affects what the labels say.
+ */
+export function compareLabels(compare: CompareRange, repos: RepoMeta[]): { target: string; base: string; defaultName: string | null } {
+  const names = new Set(repos.map(r => r.defaultBranch ?? ''));
+  const defaultName = names.size === 1 && !names.has('') ? [...names][0] : null;
+  return {
+    target: compare.target || 'HEAD',
+    base: compare.base || defaultName || 'the default branch',
+    defaultName,
+  };
 }
 
 /* ─── MoreMenu ────────────────────────────────────────────────────────────── */
@@ -254,9 +296,59 @@ function groupByName(items: Array<{ name: string; repoId: string; isRemote?: boo
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/* ─── CompareControls ─────────────────────────────────────────────────────── */
+
+function CompareControls({ compare, branches, tags, repos, reposInView, isLight, onChange }: {
+  compare: CompareRange;
+  branches: NamedRef[];
+  tags: NamedRef[];
+  repos: RepoMeta[];
+  reposInView: RepoMeta[];
+  isLight: boolean;
+  onChange: (compare: CompareRange | null) => void;
+}) {
+  const { defaultName } = compareLabels(compare, reposInView);
+  const baseDefaultLabel = defaultName ? `Default branch (${defaultName})` : 'Default branch';
+  return (
+    <div style={styles.compareGroup}>
+      <BranchTagPicker
+        value={compare.target}
+        branches={branches}
+        tags={tags}
+        repos={repos}
+        onChange={target => onChange({ ...compare, target })}
+        isLight={isLight}
+        allLabel="HEAD (current branch)"
+        placeholder="HEAD"
+        titleText="Show commits on this branch"
+      />
+      <span style={styles.compareSeparator}>not in</span>
+      <BranchTagPicker
+        value={compare.base}
+        branches={branches}
+        tags={tags}
+        repos={repos}
+        onChange={base => onChange({ ...compare, base })}
+        isLight={isLight}
+        allLabel={baseDefaultLabel}
+        placeholder={baseDefaultLabel}
+        titleText="…that aren't on this branch"
+      />
+      <button
+        data-top-action-btn=""
+        style={styles.compareBtn}
+        onClick={() => onChange(null)}
+        title="Exit compare mode"
+      >
+        <Codicon name="close" style={{ fontSize: '14px' }} />
+      </button>
+    </div>
+  );
+}
+
 /* ─── BranchTagPicker ─────────────────────────────────────────────────────── */
 
-function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLight }: {
+function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLight, allLabel = 'All branches & tags', placeholder = 'Branch / Tag…', titleText = 'Filter by branch or tag' }: {
   value: string;
   branches: NamedRef[];
   tags: NamedRef[];
@@ -264,6 +356,9 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
   onChange: (v: string) => void;
   width?: number;
   isLight: boolean;
+  allLabel?: string;
+  placeholder?: string;
+  titleText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -303,11 +398,11 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
       <button
         style={{ ...styles.pickerBtn(!!value, open), width: '100%' }}
         onClick={() => setOpen(o => !o)}
-        title={value || 'Filter by branch or tag'}
+        title={value || titleText}
       >
         <Codicon name={buttonIcon} style={styles.fieldIcon} />
         <span style={value ? styles.pickerLabelActive : { ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>
-          {value || 'Branch / Tag…'}
+          {value || placeholder}
         </span>
         <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
       </button>
@@ -330,7 +425,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
               style={styles.dropdownItem(!value)}
               onClick={() => { onChange(''); setOpen(false); }}
             >
-              <span style={{ opacity: 0.5, fontSize: '12px' }}>All branches & tags</span>
+              <span style={{ opacity: 0.5, fontSize: '12px' }}>{allLabel}</span>
             </div>
             {displayedLocalBranches.length > 0 && (
               <div style={styles.dropdownGroupLabel}>Local Branches</div>
@@ -929,6 +1024,34 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  compareBtn: {
+    height: '26px',
+    width: '26px',
+    padding: '0',
+    background: 'transparent',
+    color: 'var(--vscode-foreground)',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    opacity: 0.8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  compareGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flex: 2,
+    minWidth: 400,
+  } as React.CSSProperties,
+  compareSeparator: {
+    fontSize: '12px',
+    opacity: 0.6,
+    whiteSpace: 'nowrap',
     flexShrink: 0,
   } as React.CSSProperties,
   moreBtn: {

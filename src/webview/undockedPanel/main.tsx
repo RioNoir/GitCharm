@@ -20,7 +20,7 @@ import { useLogStore } from '../gitLog/store/logStore';
 import { BranchSidebar } from '../gitLog/components/BranchSidebar';
 import { CommitList } from '../gitLog/components/CommitList';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
-import { CommitFiltersBar, RepoTabs } from '../gitLog/components/CommitFiltersBar';
+import { CommitFiltersBar, RepoTabs, compareLabels } from '../gitLog/components/CommitFiltersBar';
 import { assignLanes } from '../gitLog/utils/graphLayout';
 import type { GraphLayout } from '../gitLog/utils/graphLayout';
 
@@ -36,7 +36,7 @@ import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
 import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi } from '../shared/vscodeApi';
-import type { LogToHostMsg, HostToLogMsg } from '../../host/types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange } from '../../host/types/messages';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -150,7 +150,9 @@ function LogApp() {
       requestId: reqId,
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
-      filterBranch: f.branch || undefined,
+      // Compare mode names its own refs, so the branch filter is not sent alongside it
+      filterBranch: f.compare ? undefined : (f.branch || undefined),
+      compare: f.compare ?? undefined,
       filterDateFrom: f.dateFrom ? `${f.dateFrom}T00:00:00` : undefined,
       filterDateTo: f.dateTo ? `${f.dateTo}T23:59:59` : undefined,
     } satisfies LogToHostMsg);
@@ -220,17 +222,33 @@ function LogApp() {
 
   const isFiltered = !!(
     store.commitFilters.text || store.commitFilters.author || store.commitFilters.branch ||
-    store.commitFilters.dateFrom || store.commitFilters.dateTo
+    store.commitFilters.dateFrom || store.commitFilters.dateTo || store.commitFilters.compare
   );
 
+  // Labels describe the repos actually in view: the filtered repo, or all of them
+  const compareEmptyState = useMemo(() => {
+    const compare = store.commitFilters.compare;
+    if (!compare) return undefined;
+    if (store.commitFilters.text || store.commitFilters.author || store.commitFilters.dateFrom || store.commitFilters.dateTo) {
+      return { title: 'No commits in this range match the filters' };
+    }
+    const inView = store.commitFilters.repoId
+      ? store.repos.filter(r => r.id === store.commitFilters.repoId)
+      : store.repos;
+    const { target, base } = compareLabels(compare, inView);
+    return { title: `No commits on ${target} that aren't on ${base}` };
+  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos, store.commitFilters.text, store.commitFilters.author, store.commitFilters.dateFrom, store.commitFilters.dateTo]);
+
   const commitsWithStashes = useMemo(() => {
+    // Stashes loaded before compare mode was turned on stay in the store; don't show them
+    if (store.commitFilters.compare) return store.commits;
     const branchFilter = store.commitFilters.branch;
     const visibleStashes = branchFilter ? store.stashes.filter(s => s.stashBranch === branchFilter) : store.stashes;
     if (visibleStashes.length === 0) return store.commits;
     const merged = [...store.commits, ...visibleStashes];
     merged.sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
     return merged;
-  }, [store.commits, store.stashes, store.commitFilters.branch]);
+  }, [store.commits, store.stashes, store.commitFilters.branch, store.commitFilters.compare]);
 
   const [graphLayout, setGraphLayout] = useState<GraphLayout>(() => assignLanes(commitsWithStashes, isFiltered));
   const layoutRafRef = useRef<number | null>(null);
@@ -268,13 +286,15 @@ function LogApp() {
   const selectedRepoColor = store.selectedCommit ? repoColors[store.selectedCommit.repoId] : undefined;
 
   const handleFilterChange = useCallback((key: keyof import('../gitLog/store/logStore').CommitFilters, value: string) => {
-    store.setCommitFilters({ [key]: value });
+    // Picking a branch (from the sidebar or the branch picker) means "show this branch", so it ends compare mode
+    const update = key === 'branch' ? { branch: value, compare: null } : { [key]: value };
+    store.setCommitFilters(update);
     if (key === 'text' || key === 'author') {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      searchDebounceRef.current = setTimeout(() => reloadCommits({ [key]: value }), 0);
+      searchDebounceRef.current = setTimeout(() => reloadCommits(update), 0);
     } else {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      reloadCommits({ [key]: value });
+      reloadCommits(update);
     }
   }, [reloadCommits]);
 
@@ -284,16 +304,23 @@ function LogApp() {
     reloadCommits({ repoId });
   }, [reloadCommits]);
 
+  const handleCompareChange = useCallback((compare: CompareRange | null) => {
+    store.setCommitFilters({ compare });
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    reloadCommits({ compare });
+  }, [reloadCommits]);
+
   filterRepoRef.current = (repoId: string | null, branch?: string | null) => {
-    const filters: { repoId: string | null; branch?: string } = { repoId };
-    if (branch) filters.branch = branch;
+    const filters: { repoId: string | null; branch?: string; compare?: null } = { repoId };
+    // Revealing a branch from elsewhere in the editor means "show this branch", so it ends compare mode
+    if (branch) { filters.branch = branch; filters.compare = null; }
     store.setCommitFilters(filters);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(filters);
   };
 
   const handleClearFilters = useCallback(() => {
-    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null };
+    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null, compare: null };
     store.setCommitFilters(cleared);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(cleared);
@@ -310,6 +337,7 @@ function LogApp() {
         repos={store.repos}
         onFilterChange={handleFilterChange}
         onRepoChange={handleRepoChange}
+        onCompareChange={handleCompareChange}
         onClear={handleClearFilters}
         onFetchAll={() => send({ type: 'LOG_FETCH_ALL' })}
         hideUndock
@@ -329,7 +357,7 @@ function LogApp() {
           branches={store.branches}
           tags={store.tags}
           filter={store.branchFilter}
-          selectedBranchFilter={store.commitFilters.branch}
+          selectedBranchFilter={store.commitFilters.compare ? '' : store.commitFilters.branch}
           activeRepoId={store.commitFilters.repoId}
           onFilterChange={store.setBranchFilter}
           onBranchFilterSelect={useCallback((b: string) => handleFilterChange('branch', b), [handleFilterChange])}
@@ -388,6 +416,7 @@ function LogApp() {
             onScrollTargetHandled={() => store.setPendingScrollTarget(null)}
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
+            emptyState={compareEmptyState}
           />
         </div>
 

@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## Unreleased
+
+### ✨ New Features
+- Git Log compare mode: the new **Compare** button (⇄) next to the branch filter shows only the commits on one branch that aren't on another — by default, commits on the current branch that aren't on the repo's default branch yet (`main..HEAD`), resolved per repo in multi-repo workspaces ([#52](https://github.com/RioNoir/GitCharm/issues/52))
+
 ## v0.4.9
 
 ### ✨ New Features
