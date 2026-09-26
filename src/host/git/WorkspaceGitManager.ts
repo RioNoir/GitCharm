@@ -5,6 +5,7 @@ import { GitService } from './GitService';
 import type { WorktreeEntry } from './GitService';
 import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
+import type { CompareRange } from '../types/messages';
 import { PROJECT_COLORS } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
 
@@ -972,10 +973,13 @@ export class WorkspaceGitManager implements vscode.Disposable {
     return branches;
   }
 
-  async getInterleavedLog(repoIds: string[], limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }): Promise<CommitNode[]> {
-    const targets = repoIds.length > 0
+  async getInterleavedLog(repoIds: string[], limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compareByRepo?: Record<string, CompareRange> }): Promise<CommitNode[]> {
+    const { compareByRepo, ...logOpts }: NonNullable<typeof opts> = opts ?? {};
+    const requested = repoIds.length > 0
       ? repoIds.map(id => this.repos.get(id)).filter(Boolean) as GitService[]
       : Array.from(this.repos.values());
+    // In compare mode a repo without a resolved range has nothing to show
+    const targets = compareByRepo ? requested.filter(r => compareByRepo[r.repoId]) : requested;
 
     // Build a map from main repo path → worktree GitServices, so getLog can collect
     // unpushed hashes from worktree branches (which appear in the log via --all)
@@ -994,7 +998,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const fetchLimit = isInterleaved ? limit + skip : limit;
     const fetchSkip = isInterleaved ? 0 : skip;
     const results = await Promise.allSettled(
-      targets.map(r => r.getLog(fetchLimit, fetchSkip, { ...opts, worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
+      targets.map(r => r.getLog(fetchLimit, fetchSkip, { ...logOpts, compare: compareByRepo?.[r.repoId], worktreeServices: worktreesByMainRepo.get(r.rootPath) ?? [] }))
     );
     const allCommits = results
       .filter((r): r is PromiseFulfilledResult<CommitNode[]> => r.status === 'fulfilled')

@@ -11,7 +11,8 @@ import type {
   RepoStatus,
   SubmoduleEntry,
 } from '../types/git';
-import type { StashEntry, UnpushedCommit } from '../types/messages';
+import type { CompareRange, StashEntry, UnpushedCommit } from '../types/messages';
+import { isSafeCompareRef } from './compareRange';
 import { parseDiff, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
@@ -569,7 +570,24 @@ export class GitService {
   }
 
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
-  async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
+  async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
+    // Compare mode: both refs are checked before anything is passed to git log, so a ref
+    // can never be read as an option or a second range, and a ref missing from this repo
+    // fails here — the caller's allSettled then drops this repo instead of the whole log.
+    let compareRangeArg: string | null = null;
+    if (opts?.compare) {
+      const { base, target } = opts.compare;
+      if (!isSafeCompareRef(base) || !isSafeCompareRef(target)) {
+        throw new Error(`Invalid compare refs: ${JSON.stringify(base)}..${JSON.stringify(target)}`);
+      }
+      const verified = await Promise.all([base, target].map(ref =>
+        this.git.raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).catch(() => ''),
+      ));
+      if (verified.some(out => !out.trim())) {
+        throw new Error(`Compare ref not found: ${base}..${target}`);
+      }
+      compareRangeArg = `${base}..${target}`;
+    }
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
     const args: string[] = [
       'log',
@@ -587,7 +605,10 @@ export class GitService {
     if (opts?.filterAuthor) args.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
     if (opts?.filterDateFrom) args.push(`--after=${opts.filterDateFrom}`);
     if (opts?.filterDateTo) args.push(`--before=${opts.filterDateTo}`);
-    if (isHashSearch) {
+    if (compareRangeArg) {
+      // Compare mode replaces the branch filter, and scopes hash search to the range too
+      args.push(compareRangeArg);
+    } else if (isHashSearch) {
       // Hash search: scan full history, filter by prefix match after fetching
       args.push('--exclude=refs/stash', '--all');
     } else if (opts?.filterBranch) {
