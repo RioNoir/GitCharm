@@ -41,6 +41,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
   }, []);
   const groupedBranches = groupByName(branches);
   const groupedTags = groupByName(tags);
+  const reposInView = filters.repoId ? repos.filter(r => r.id === filters.repoId) : repos;
 
   const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo || filters.compare);
 
@@ -101,6 +102,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
             branches={groupedBranches}
             tags={groupedTags}
             repos={repos}
+            reposInView={reposInView}
             isLight={isLight}
             onChange={onCompareChange}
           />
@@ -296,15 +298,16 @@ function groupByName(items: Array<{ name: string; repoId: string; isRemote?: boo
 
 /* ─── CompareControls ─────────────────────────────────────────────────────── */
 
-function CompareControls({ compare, branches, tags, repos, isLight, onChange }: {
+function CompareControls({ compare, branches, tags, repos, reposInView, isLight, onChange }: {
   compare: CompareRange;
   branches: NamedRef[];
   tags: NamedRef[];
   repos: RepoMeta[];
+  reposInView: RepoMeta[];
   isLight: boolean;
   onChange: (compare: CompareRange | null) => void;
 }) {
-  const { defaultName } = compareLabels(compare, repos);
+  const { defaultName } = compareLabels(compare, reposInView);
   const baseDefaultLabel = defaultName ? `Default branch (${defaultName})` : 'Default branch';
   return (
     <div style={styles.compareGroup}>
@@ -1043,7 +1046,7 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     flex: 2,
-    minWidth: 340,
+    minWidth: 400,
   } as React.CSSProperties,
   compareSeparator: {
     fontSize: '12px',
