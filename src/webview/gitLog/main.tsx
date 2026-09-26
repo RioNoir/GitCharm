@@ -297,12 +297,15 @@ function App() {
   const compareEmptyState = useMemo(() => {
     const compare = store.commitFilters.compare;
     if (!compare) return undefined;
+    if (store.commitFilters.text || store.commitFilters.author || store.commitFilters.dateFrom || store.commitFilters.dateTo) {
+      return { title: 'No commits in this range match the filters' };
+    }
     const inView = store.commitFilters.repoId
       ? store.repos.filter(r => r.id === store.commitFilters.repoId)
       : store.repos;
     const { target, base } = compareLabels(compare, inView);
     return { title: `No commits on ${target} that aren't on ${base}` };
-  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos]);
+  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos, store.commitFilters.text, store.commitFilters.author, store.commitFilters.dateFrom, store.commitFilters.dateTo]);
 
   // Merge stashes into the commit list, filtering by branch if a branch filter is active
   const commitsWithStashes = useMemo(() => {

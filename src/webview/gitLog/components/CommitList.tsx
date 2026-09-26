@@ -478,12 +478,13 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   }
 
   if (commits.length === 0 && !storeHasMore) {
+    const emptySubtitle = emptyState ? emptyState.subtitle : 'Make your first commit to see the history here';
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', height: '100%', gap: '8px', fontFamily: 'var(--vscode-font-family)', userSelect: 'none' }}>
         <Codicon name={emptyState ? 'git-compare' : 'git-commit'} style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
         <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>{emptyState?.title ?? 'No commits yet'}</span>
-        {(emptyState ? emptyState.subtitle : 'Make your first commit to see the history here') && (
-          <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{emptyState ? emptyState.subtitle : 'Make your first commit to see the history here'}</span>
+        {emptySubtitle && (
+          <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{emptySubtitle}</span>
         )}
       </div>
     );
