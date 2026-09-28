@@ -67,6 +67,7 @@ function App() {
   const reloadRef = useRef<() => void>(() => {});
   const filterRepoRef = useRef<(repoId: string | null, branch?: string | null) => void>(() => {});
   const clearFiltersRef = useRef<() => void>(() => {});
+  const setCompareModeRef = useRef<(active: boolean) => void>(() => {});
   // Prevents concurrent requests
   const loadingInFlightRef = useRef(false);
   // Current requestId — used to discard responses from superseded requests
@@ -150,6 +151,9 @@ function App() {
           break;
         case 'LOG_CLEAR_FILTERS':
           clearFiltersRef.current();
+          break;
+        case 'LOG_SET_COMPARE_MODE':
+          setCompareModeRef.current(msg.active);
           break;
         case 'LOG_COMMITS_BATCH': {
           const match = msg.requestId === activeRequestIdRef.current;
@@ -312,13 +316,15 @@ function App() {
     return map;
   }, [store.repos]);
 
+  // Compare mode on its defaults (HEAD not in the default branch) is a view, not a filter; while it is
+  // on, the branch filter is only kept for when compare mode ends, so it doesn't count either.
+  const compare = store.commitFilters.compare;
   const isFiltered = !!(
     store.commitFilters.text ||
     store.commitFilters.author ||
-    store.commitFilters.branch ||
     store.commitFilters.dateFrom ||
     store.commitFilters.dateTo ||
-    store.commitFilters.compare
+    (compare ? compare.base || compare.target : store.commitFilters.branch)
   );
 
   // Labels describe the repos actually in view: the filtered repo, or all of them
@@ -431,16 +437,19 @@ function App() {
     reloadCommits(filters);
   };
 
-  const handleClearFilters = useCallback(() => {
-    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null, compare: null };
-    store.setCommitFilters(cleared);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    reloadCommits(cleared);
-  }, [reloadCommits]);
+  // Compare toggle from the title bar: entering starts from the defaults (HEAD not in the default branch)
+  setCompareModeRef.current = (active: boolean) => {
+    if (active === !!useLogStore.getState().commitFilters.compare) return;
+    handleCompareChange(active ? { base: '', target: '' } : null);
+  };
 
   // "Clear Filters" from the title bar: the repository tab stays, since it is always on screen.
+  // In compare mode it resets the compared branches to the defaults and stays in compare mode.
   clearFiltersRef.current = () => {
-    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '' };
+    const inCompare = !!useLogStore.getState().commitFilters.compare;
+    const cleared = inCompare
+      ? { text: '', author: '', dateFrom: '', dateTo: '', compare: { base: '', target: '' } }
+      : { text: '', author: '', branch: '', dateFrom: '', dateTo: '' };
     store.setCommitFilters(cleared);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(cleared);
@@ -463,6 +472,12 @@ function App() {
   useEffect(() => {
     send({ type: 'LOG_FILTERS_ACTIVE', active: isFiltered });
   }, [isFiltered, send]);
+
+  // Lets the title bar show the compare toggle in its current state.
+  const compareActive = !!store.commitFilters.compare;
+  useEffect(() => {
+    send({ type: 'LOG_COMPARE_ACTIVE', active: compareActive });
+  }, [compareActive, send]);
 
   const activeRepoId = store.commitFilters.repoId;
   const sidebarBranches = useMemo(
@@ -514,7 +529,6 @@ function App() {
           repos={store.repos}
           onFilterChange={handleFilterChange}
           onCompareChange={handleCompareChange}
-          onClear={handleClearFilters}
         />
       )}
       <RepoTabs

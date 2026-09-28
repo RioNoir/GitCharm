@@ -365,6 +365,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('gitcharm.log.refresh', () => logPanel.reload()),
     vscode.commands.registerCommand('gitcharm.log.clearFilters', () => logPanel.clearFilters()),
+    vscode.commands.registerCommand('gitcharm.log.compare', () => logPanel.setCompareMode(true)),
+    vscode.commands.registerCommand('gitcharm.log.exitCompare', () => logPanel.setCompareMode(false)),
     vscode.commands.registerCommand('gitcharm.log.hideFilters', () => logPanel.setLayoutPref('filtersHidden', true)),
     vscode.commands.registerCommand('gitcharm.log.showFilters', () => logPanel.setLayoutPref('filtersHidden', false)),
     vscode.commands.registerCommand('gitcharm.log.hideBranchSidebar', () => logPanel.setLayoutPref('sidebarHidden', true)),

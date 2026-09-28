@@ -126,6 +126,10 @@ const FILTERS_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
   sidebar: 'gitcharm.logFiltersActive',
   undocked: 'gitcharm.undockedLogFiltersActive',
 };
+const COMPARE_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
+  sidebar: 'gitcharm.logCompareActive',
+  undocked: 'gitcharm.undockedLogCompareActive',
+};
 
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
@@ -207,9 +211,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
   }
 
-  /** Clear the text/author/branch/date filters of the Git Log the user is looking at. */
+  /** Clear the text/author/branch/date filters (and the compared branches) of the Git Log the user is looking at. */
   clearFilters(): void {
     const msg: HostToLogMsg = { type: 'LOG_CLEAR_FILTERS' };
+    if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
+    else this.post(msg);
+  }
+
+  /** Turn compare mode on or off in the Git Log the user is looking at. */
+  async setCompareMode(active: boolean): Promise<void> {
+    // The compare controls live in the filters bar, so entering compare mode reveals it
+    if (active) {
+      const location = this.undockedPanel?.isActive() ? 'panel' : this.dockedLocation;
+      if (this.getLayoutPrefs()[location].filtersHidden) await this.setLayoutPref('filtersHidden', false);
+    }
+    const msg: HostToLogMsg = { type: 'LOG_SET_COMPARE_MODE', active };
     if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
     else this.post(msg);
   }
@@ -2326,6 +2342,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_FILTERS_ACTIVE': {
         await vscode.commands.executeCommand('setContext', FILTERS_ACTIVE_CONTEXT[origin], msg.active);
+        break;
+      }
+
+      case 'LOG_COMPARE_ACTIVE': {
+        await vscode.commands.executeCommand('setContext', COMPARE_ACTIVE_CONTEXT[origin], msg.active);
         break;
       }
     }

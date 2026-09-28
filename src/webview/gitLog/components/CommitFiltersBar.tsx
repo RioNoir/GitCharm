@@ -14,7 +14,6 @@ interface Props {
   repos: RepoMeta[];
   onFilterChange: (key: keyof CommitFilters, value: string) => void;
   onCompareChange: (compare: CompareRange | null) => void;
-  onClear: () => void;
 }
 
 function useIsLightTheme() {
@@ -27,7 +26,7 @@ function useIsLightTheme() {
   return light;
 }
 
-export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onCompareChange, onClear }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onCompareChange }: Props) {
   const isLight = useIsLightTheme();
   useEffect(() => {
     const id = 'gitcharm-filter-field-focus';
@@ -41,7 +40,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
   const groupedTags = groupByName(tags);
   const reposInView = filters.repoId ? repos.filter(r => r.id === filters.repoId) : repos;
 
-  const hasFilters = !!(filters.text || filters.author || filters.branch || filters.dateFrom || filters.dateTo || filters.compare);
 
   return (
     <div style={styles.bar}>
@@ -75,24 +73,14 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
             onChange={onCompareChange}
           />
         ) : (
-          <>
-            <BranchTagPicker
-              value={filters.branch}
-              branches={groupedBranches}
-              tags={groupedTags}
-              repos={repos}
-              onChange={v => onFilterChange('branch', v)}
-              isLight={isLight}
-            />
-            <button
-              data-top-action-btn=""
-              style={styles.compareBtn}
-              onClick={() => onCompareChange({ base: '', target: '' })}
-              title={l10n.t('Compare branches')}
-            >
-              <Codicon name="git-compare" style={{ fontSize: '15px' }} />
-            </button>
-          </>
+          <BranchTagPicker
+            value={filters.branch}
+            branches={groupedBranches}
+            tags={groupedTags}
+            repos={repos}
+            onChange={v => onFilterChange('branch', v)}
+            isLight={isLight}
+          />
         )}
 
         {/* Date range */}
@@ -103,12 +91,6 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
           onFromChange={v => onFilterChange('dateFrom', v)}
           onToChange={v => onFilterChange('dateTo', v)}
         />
-
-        {hasFilters && (
-          <button data-top-action-btn="" style={styles.clearBtn} onClick={onClear} title={l10n.t('Clear all filters')}>
-            <Codicon name="clear-all" style={{ fontSize: '15px' }} />
-          </button>
-        )}
       </div>
   );
 }
@@ -208,7 +190,7 @@ function CompareControls({ compare, branches, tags, repos, reposInView, isLight,
   repos: RepoMeta[];
   reposInView: RepoMeta[];
   isLight: boolean;
-  onChange: (compare: CompareRange | null) => void;
+  onChange: (compare: CompareRange) => void;
 }) {
   const { defaultName } = compareLabels(compare, reposInView);
   const baseDefaultLabel = defaultName ? l10n.t('Default branch ({0})', defaultName) : l10n.t('Default branch');
@@ -225,7 +207,7 @@ function CompareControls({ compare, branches, tags, repos, reposInView, isLight,
         placeholder="HEAD"
         titleText={l10n.t('Show commits on this branch')}
       />
-      <span style={styles.compareSeparator}>{l10n.t('not in')}</span>
+      <NotInIcon title={l10n.t('not in')} />
       <BranchTagPicker
         value={compare.base}
         branches={branches}
@@ -237,15 +219,18 @@ function CompareControls({ compare, branches, tags, repos, reposInView, isLight,
         placeholder={baseDefaultLabel}
         titleText={l10n.t('…that aren\'t on this branch')}
       />
-      <button
-        data-top-action-btn=""
-        style={styles.compareBtn}
-        onClick={() => onChange(null)}
-        title={l10n.t('Exit compare mode')}
-      >
-        <Codicon name="close" style={{ fontSize: '14px' }} />
-      </button>
     </div>
+  );
+}
+
+/** Codicons has no "not in" glyph: its arrow-right path with a slash through the shaft (↛), same 16px grid. */
+function NotInIcon({ title }: { title: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style={styles.compareSeparator} role="img" aria-label={title}>
+      <title>{title}</title>
+      <path d="M13.854 8.14576L8.854 3.14576C8.659 2.95076 8.342 2.95076 8.147 3.14576C7.952 3.34076 7.952 3.65776 8.147 3.85276L12.293 7.99876H2.5C2.224 7.99876 2 8.22276 2 8.49876C2 8.77476 2.224 8.99876 2.5 8.99876H12.293L8.147 13.1448C7.952 13.3398 7.952 13.6568 8.147 13.8518C8.245 13.9498 8.373 13.9978 8.501 13.9978C8.629 13.9978 8.757 13.9488 8.855 13.8518L13.855 8.85176C14.05 8.65676 14.05 8.33976 13.855 8.14476L13.854 8.14576Z" />
+      <path d="M4.5 12L7.5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" fill="none" />
+    </svg>
   );
 }
 
@@ -968,36 +953,6 @@ const styles = {
     alignItems: 'center',
     flexShrink: 0,
   } as React.CSSProperties,
-  clearBtn: {
-    height: '26px',
-    width: '26px',
-    padding: '0',
-    background: 'transparent',
-    color: 'var(--vscode-errorForeground)',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    opacity: 0.8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  } as React.CSSProperties,
-  compareBtn: {
-    height: '26px',
-    width: '26px',
-    padding: '0',
-    background: 'transparent',
-    color: 'var(--vscode-foreground)',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    opacity: 0.8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  } as React.CSSProperties,
   compareGroup: {
     display: 'flex',
     alignItems: 'center',
@@ -1006,9 +961,7 @@ const styles = {
     minWidth: 400,
   } as React.CSSProperties,
   compareSeparator: {
-    fontSize: '12px',
     opacity: 0.6,
-    whiteSpace: 'nowrap',
     flexShrink: 0,
   } as React.CSSProperties,
 };

@@ -60,6 +60,8 @@
   "command.logShowFilters.title": "Afficher les filtres",
   "command.logRefresh.title": "Actualiser le log",
   "command.logClearFilters.title": "Effacer les filtres",
+  "command.logCompare.title": "Comparer les branches",
+  "command.logExitCompare.title": "Quitter le mode comparaison",
   "command.logHideBranchSidebar.title": "Masquer la barre latérale des branches",
   "command.logShowBranchSidebar.title": "Afficher la barre latérale des branches",
   "command.setGitLogDefaultLocation.title": "Définir l'emplacement par défaut du Log",
