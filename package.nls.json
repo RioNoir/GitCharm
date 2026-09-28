@@ -67,6 +67,8 @@
   "command.logShowFilters.title": "Show Filters",
   "command.logRefresh.title": "Refresh Log",
   "command.logClearFilters.title": "Clear Filters",
+  "command.logCompare.title": "Compare Branches",
+  "command.logExitCompare.title": "Exit Compare Mode",
   "command.logHideBranchSidebar.title": "Hide Branch Sidebar",
   "command.logShowBranchSidebar.title": "Show Branch Sidebar",
   "command.setGitLogDefaultLocation.title": "Set Default Log Location",

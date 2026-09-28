@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { BranchInfo, CommitNode, FileDiff, RepoMeta, TagInfo } from '../../shared/types';
-import type { IconThemeData } from '../../../host/types/messages';
+import type { CompareRange, IconThemeData } from '../../../host/types/messages';
 
 export interface CommitFilters {
   text: string;
@@ -9,6 +9,8 @@ export interface CommitFilters {
   dateFrom: string;
   dateTo: string;
   repoId: string | null;
+  /** Compare mode: commits on `target` not on `base`. Null when off; while set, `branch` is ignored. */
+  compare: CompareRange | null;
 }
 
 interface LogState {
@@ -73,6 +75,7 @@ const defaultCommitFilters: CommitFilters = {
   dateFrom: '',
   dateTo: '',
   repoId: null,
+  compare: null,
 };
 
 /**

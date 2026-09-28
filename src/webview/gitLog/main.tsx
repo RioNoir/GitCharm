@@ -6,7 +6,7 @@ import { useLogStore } from './store/logStore';
 import { BranchSidebar } from './components/BranchSidebar';
 import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
-import { CommitFiltersBar, RepoTabs } from './components/CommitFiltersBar';
+import { CommitFiltersBar, RepoTabs, compareLabels } from './components/CommitFiltersBar';
 import { assignLanes } from './utils/graphLayout';
 import { mergeCommitLists } from '../../host/utils/mergeCommitLists';
 import type { GraphLayout } from './utils/graphLayout';
@@ -14,7 +14,7 @@ import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { isEmbedded } from '../shared/embedded';
-import type { LogToHostMsg, HostToLogMsg, LogLayoutByLocation, LogViewLocation } from '../../host/types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutByLocation, LogViewLocation } from '../../host/types/messages';
 import type { CommitNode } from '../shared/types';
 
 function generateId() {
@@ -67,6 +67,7 @@ function App() {
   const reloadRef = useRef<() => void>(() => {});
   const filterRepoRef = useRef<(repoId: string | null, branch?: string | null) => void>(() => {});
   const clearFiltersRef = useRef<() => void>(() => {});
+  const setCompareModeRef = useRef<(active: boolean) => void>(() => {});
   // Prevents concurrent requests
   const loadingInFlightRef = useRef(false);
   // Current requestId — used to discard responses from superseded requests
@@ -151,6 +152,9 @@ function App() {
         case 'LOG_CLEAR_FILTERS':
           clearFiltersRef.current();
           break;
+        case 'LOG_SET_COMPARE_MODE':
+          setCompareModeRef.current(msg.active);
+          break;
         case 'LOG_COMMITS_BATCH': {
           const match = msg.requestId === activeRequestIdRef.current;
           if (!match) break;
@@ -234,7 +238,9 @@ function App() {
       requestId: reqId,
       filterText: f.text || undefined,
       filterAuthor: f.author || undefined,
-      filterBranch: f.branch || undefined,
+      // Compare mode names its own refs, so the branch filter is not sent alongside it
+      filterBranch: f.compare ? undefined : (f.branch || undefined),
+      compare: f.compare ?? undefined,
       // git --after and --before are exclusive; use time suffixes to make the range fully inclusive
       filterDateFrom: f.dateFrom ? `${f.dateFrom}T00:00:00` : undefined,
       filterDateTo: f.dateTo ? `${f.dateTo}T23:59:59` : undefined,
@@ -310,16 +316,35 @@ function App() {
     return map;
   }, [store.repos]);
 
+  // Compare mode on its defaults (HEAD not in the default branch) is a view, not a filter; while it is
+  // on, the branch filter is only kept for when compare mode ends, so it doesn't count either.
+  const compare = store.commitFilters.compare;
   const isFiltered = !!(
     store.commitFilters.text ||
     store.commitFilters.author ||
-    store.commitFilters.branch ||
     store.commitFilters.dateFrom ||
-    store.commitFilters.dateTo
+    store.commitFilters.dateTo ||
+    (compare ? compare.base || compare.target : store.commitFilters.branch)
   );
+
+  // Labels describe the repos actually in view: the filtered repo, or all of them
+  const compareEmptyState = useMemo(() => {
+    const compare = store.commitFilters.compare;
+    if (!compare) return undefined;
+    if (store.commitFilters.text || store.commitFilters.author || store.commitFilters.dateFrom || store.commitFilters.dateTo) {
+      return { title: l10n.t('No commits in this range match the filters') };
+    }
+    const inView = store.commitFilters.repoId
+      ? store.repos.filter(r => r.id === store.commitFilters.repoId)
+      : store.repos;
+    const { target, base } = compareLabels(compare, inView);
+    return { title: l10n.t("No commits on {0} that aren't on {1}", target, base) };
+  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos, store.commitFilters.text, store.commitFilters.author, store.commitFilters.dateFrom, store.commitFilters.dateTo]);
 
   // Merge stashes into the commit list, filtering by branch if a branch filter is active
   const commitsWithStashes = useMemo(() => {
+    // Stashes loaded before compare mode was turned on stay in the store; don't show them
+    if (store.commitFilters.compare) return store.commits;
     const branchFilter = store.commitFilters.branch;
     const visibleStashes = branchFilter
       ? store.stashes.filter(s => s.stashBranch === branchFilter)
@@ -329,7 +354,7 @@ function App() {
     // git's topological order, which the graph layout depends on.
     const stashesNewestFirst = [...visibleStashes].sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
     return mergeCommitLists([store.commits, stashesNewestFirst]);
-  }, [store.commits, store.stashes, store.commitFilters.branch]);
+  }, [store.commits, store.stashes, store.commitFilters.branch, store.commitFilters.compare]);
 
   // assignLanes is expensive — run it off the render path via useEffect + rAF
   // so scroll events never block the UI thread waiting for layout recalc.
@@ -379,13 +404,15 @@ function App() {
 
   // text/author are debounced inside DebouncedInput; branch/date/repo fire immediately
   const handleFilterChange = useCallback((key: keyof import('./store/logStore').CommitFilters, value: string) => {
-    store.setCommitFilters({ [key]: value });
+    // Picking a branch (from the sidebar or the branch picker) means "show this branch", so it ends compare mode
+    const update = key === 'branch' ? { branch: value, compare: null } : { [key]: value };
+    store.setCommitFilters(update);
     if (key === 'text' || key === 'author') {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      searchDebounceRef.current = setTimeout(() => reloadCommits({ [key]: value }), 0);
+      searchDebounceRef.current = setTimeout(() => reloadCommits(update), 0);
     } else {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      reloadCommits({ [key]: value });
+      reloadCommits(update);
     }
   }, [reloadCommits]);
 
@@ -394,24 +421,35 @@ function App() {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits({ repoId });
   }, [reloadCommits]);
+
+  const handleCompareChange = useCallback((compare: CompareRange | null) => {
+    store.setCommitFilters({ compare });
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    reloadCommits({ compare });
+  }, [reloadCommits]);
+
   filterRepoRef.current = (repoId: string | null, branch?: string | null) => {
-    const filters: { repoId: string | null; branch?: string } = { repoId };
-    if (branch) filters.branch = branch;
+    const filters: { repoId: string | null; branch?: string; compare?: null } = { repoId };
+    // Revealing a branch from elsewhere in the editor means "show this branch", so it ends compare mode
+    if (branch) { filters.branch = branch; filters.compare = null; }
     store.setCommitFilters(filters);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(filters);
   };
 
-  const handleClearFilters = useCallback(() => {
-    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '', repoId: null };
-    store.setCommitFilters(cleared);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    reloadCommits(cleared);
-  }, [reloadCommits]);
+  // Compare toggle from the title bar: entering starts from the defaults (HEAD not in the default branch)
+  setCompareModeRef.current = (active: boolean) => {
+    if (active === !!useLogStore.getState().commitFilters.compare) return;
+    handleCompareChange(active ? { base: '', target: '' } : null);
+  };
 
   // "Clear Filters" from the title bar: the repository tab stays, since it is always on screen.
+  // In compare mode it resets the compared branches to the defaults and stays in compare mode.
   clearFiltersRef.current = () => {
-    const cleared = { text: '', author: '', branch: '', dateFrom: '', dateTo: '' };
+    const inCompare = !!useLogStore.getState().commitFilters.compare;
+    const cleared = inCompare
+      ? { text: '', author: '', dateFrom: '', dateTo: '', compare: { base: '', target: '' } }
+      : { text: '', author: '', branch: '', dateFrom: '', dateTo: '' };
     store.setCommitFilters(cleared);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(cleared);
@@ -434,6 +472,12 @@ function App() {
   useEffect(() => {
     send({ type: 'LOG_FILTERS_ACTIVE', active: isFiltered });
   }, [isFiltered, send]);
+
+  // Lets the title bar show the compare toggle in its current state.
+  const compareActive = !!store.commitFilters.compare;
+  useEffect(() => {
+    send({ type: 'LOG_COMPARE_ACTIVE', active: compareActive });
+  }, [compareActive, send]);
 
   const activeRepoId = store.commitFilters.repoId;
   const sidebarBranches = useMemo(
@@ -484,7 +528,7 @@ function App() {
           tags={store.tags}
           repos={store.repos}
           onFilterChange={handleFilterChange}
-          onClear={handleClearFilters}
+          onCompareChange={handleCompareChange}
         />
       )}
       <RepoTabs
@@ -502,7 +546,7 @@ function App() {
           branches={sidebarBranches}
           tags={sidebarTags}
           filter={store.branchFilter}
-          selectedBranchFilter={store.commitFilters.branch}
+          selectedBranchFilter={store.commitFilters.compare ? '' : store.commitFilters.branch}
           activeRepoId={store.commitFilters.repoId}
           onFilterChange={store.setBranchFilter}
           onBranchFilterSelect={useCallback((branchName: string) => {
@@ -591,6 +635,7 @@ function App() {
             aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
             activeProfile={store.activeProfile}
+            emptyState={compareEmptyState}
             hideDate={viewLocation === 'sideBar'}
           />
         </div>

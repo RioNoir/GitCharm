@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation } from '../types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation } from '../types/messages';
 import type { BranchInfo, RepoMeta } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
@@ -17,6 +17,7 @@ import { plural } from '../utils/plural';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
 import { promptBranchName } from '../utils/branchNamePrompt';
+import { pickLocalDefaultBranch } from '../git/compareRange';
 import {
   getGitLogDefaultLayout,
   getGitLogDefaultLocation,
@@ -125,6 +126,10 @@ const FILTERS_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
   sidebar: 'gitcharm.logFiltersActive',
   undocked: 'gitcharm.undockedLogFiltersActive',
 };
+const COMPARE_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
+  sidebar: 'gitcharm.logCompareActive',
+  undocked: 'gitcharm.undockedLogCompareActive',
+};
 
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
@@ -206,9 +211,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
   }
 
-  /** Clear the text/author/branch/date filters of the Git Log the user is looking at. */
+  /** Clear the text/author/branch/date filters (and the compared branches) of the Git Log the user is looking at. */
   clearFilters(): void {
     const msg: HostToLogMsg = { type: 'LOG_CLEAR_FILTERS' };
+    if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
+    else this.post(msg);
+  }
+
+  /** Turn compare mode on or off in the Git Log the user is looking at. */
+  async setCompareMode(active: boolean): Promise<void> {
+    // The compare controls live in the filters bar, so entering compare mode reveals it
+    if (active) {
+      const location = this.undockedPanel?.isActive() ? 'panel' : this.dockedLocation;
+      if (this.getLayoutPrefs()[location].filtersHidden) await this.setLayoutPref('filtersHidden', false);
+    }
+    const msg: HostToLogMsg = { type: 'LOG_SET_COMPARE_MODE', active };
     if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
     else this.post(msg);
   }
@@ -711,6 +728,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const logRepoIds = msg.repoIds.length > 0
           ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
           : this.getVisibleRepos().map(r => r.id);
+
+        // Compare mode: resolve each repo's own range. An empty base means that repo's
+        // local default branch, so a multi-repo log compares each repo against its own
+        // main/master; a repo where no base resolves is left out of the map.
+        let compareByRepo: Record<string, CompareRange> | undefined;
+        if (msg.compare) {
+          const { base, target } = msg.compare;
+          const metaById = new Map(repos.map(m => [m.id, m]));
+          const resolved = await Promise.all(logRepoIds.map(async (repoId): Promise<[string, CompareRange] | null> => {
+            const repo = this.manager.getRepo(repoId);
+            if (!repo) return null;
+            const repoBase = base || await pickLocalDefaultBranch(metaById.get(repoId)?.defaultBranch, name => repo.localBranchExists(name));
+            return repoBase ? [repoId, { base: repoBase, target: target || 'HEAD' }] : null;
+          }));
+          compareByRepo = Object.fromEntries(resolved.filter((e): e is [string, CompareRange] => e !== null));
+        }
+
         const commits = limit > 0
           ? await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
             filterText: msg.filterText,
@@ -718,6 +752,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             filterBranch: msg.filterBranch,
             filterDateFrom: msg.filterDateFrom,
             filterDateTo: msg.filterDateTo,
+            compareByRepo,
           })
           : [];
         // Last batch when git ran out of commits, or when the ceiling is reached — either
@@ -741,8 +776,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }, 150);
         }
 
-        // Send stashes only on first load (not on pagination)
-        if (msg.skip === 0) {
+        // Stashes belong to neither side of a compare range, so a compare view has none
+        if (msg.skip === 0 && !msg.compare) {
           Promise.all(logRepoIds.map(async (repoId) => {
             const repo = this.manager.getRepo(repoId);
             if (!repo) return [];
@@ -2307,6 +2342,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_FILTERS_ACTIVE': {
         await vscode.commands.executeCommand('setContext', FILTERS_ACTIVE_CONTEXT[origin], msg.active);
+        break;
+      }
+
+      case 'LOG_COMPARE_ACTIVE': {
+        await vscode.commands.executeCommand('setContext', COMPARE_ACTIVE_CONTEXT[origin], msg.active);
         break;
       }
     }

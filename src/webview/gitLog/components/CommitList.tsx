@@ -37,6 +37,8 @@ interface Props {
   aiEnabled?: boolean;
   themeVersion?: number;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  /** Replaces the default "No commits yet" message, e.g. for an empty compare range. */
+  emptyState?: { title: string; subtitle?: string };
   /** Leave the date column out whatever the width (the hover popover still shows it). */
   hideDate?: boolean;
 }
@@ -169,7 +171,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, hideDate }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, hideDate }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -481,11 +483,14 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   }
 
   if (commits.length === 0 && !storeHasMore) {
+    const emptySubtitle = emptyState ? emptyState.subtitle : l10n.t('Make your first commit to see the history here');
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', height: '100%', gap: '8px', fontFamily: 'var(--vscode-font-family)', userSelect: 'none' }}>
-        <Codicon name="git-commit" style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
-        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>{l10n.t('No commits yet')}</span>
-        <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{l10n.t('Make your first commit to see the history here')}</span>
+        <Codicon name={emptyState ? 'git-compare' : 'git-commit'} style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
+        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>{emptyState?.title ?? l10n.t('No commits yet')}</span>
+        {emptySubtitle && (
+          <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{emptySubtitle}</span>
+        )}
       </div>
     );
   }

@@ -67,6 +67,8 @@
   "command.logShowFilters.title": "显示筛选器",
   "command.logRefresh.title": "刷新日志",
   "command.logClearFilters.title": "清除筛选器",
+  "command.logCompare.title": "比较分支",
+  "command.logExitCompare.title": "退出比较模式",
   "command.logHideBranchSidebar.title": "隐藏分支侧边栏",
   "command.logShowBranchSidebar.title": "显示分支侧边栏",
   "command.setGitLogDefaultLocation.title": "设置日志默认位置",

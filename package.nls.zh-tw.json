@@ -67,6 +67,8 @@
   "command.logShowFilters.title": "顯示篩選器",
   "command.logRefresh.title": "重新整理記錄",
   "command.logClearFilters.title": "清除篩選器",
+  "command.logCompare.title": "比較分支",
+  "command.logExitCompare.title": "結束比較模式",
   "command.logHideBranchSidebar.title": "隱藏分支側邊欄",
   "command.logShowBranchSidebar.title": "顯示分支側邊欄",
   "command.setGitLogDefaultLocation.title": "設定記錄預設位置",

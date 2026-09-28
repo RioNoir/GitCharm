@@ -23,6 +23,12 @@ export type {
   PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
 };
 
+/** A Git Log compare filter: commits reachable from `target` but not from `base`. Empty strings mean the defaults (HEAD / the repo's default branch). */
+export interface CompareRange {
+  base: string;
+  target: string;
+}
+
 export interface MergeParentCommit {
   hash: string;
   shortHash: string;
@@ -268,6 +274,7 @@ export type HostToLogMsg =
   | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation }
   | { type: 'LOG_LAYOUT_PREFS'; layout: LogLayoutByLocation }
   | { type: 'LOG_CLEAR_FILTERS' }
+  | { type: 'LOG_SET_COMPARE_MODE'; active: boolean }
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
@@ -291,7 +298,7 @@ export type HostToLogMsg =
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
 export type LogToHostMsg =
-  | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
+  | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string; parents?: string[] }
   | { type: 'LOG_REQUEST_RANGE_FILES'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
@@ -357,6 +364,7 @@ export type LogToHostMsg =
   | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_FILTERS_ACTIVE'; active: boolean }
+  | { type: 'LOG_COMPARE_ACTIVE'; active: boolean }
   | { type: 'LOG_VIEW_LOCATION'; location: LogViewLocation }
   | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }
