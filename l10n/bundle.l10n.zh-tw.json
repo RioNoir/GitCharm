@@ -250,6 +250,7 @@
   "Merge into current": "合併至目前分支",
   "Push to remote...": "推送至遠端…",
   "Delete tag": "刪除標籤",
+  "New Branch from \"{0}\"...": "從「{0}」新增分支...",
   "Rebase onto \"{0}\"": "重定基底至「{0}」",
   "Pull \"{0}\"": "拉取「{0}」",
   "Push \"{0}\"...": "推送「{0}」…",

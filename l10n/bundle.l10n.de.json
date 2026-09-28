@@ -250,6 +250,7 @@
   "Merge into current": "In aktuellen Branch mergen",
   "Push to remote...": "Auf das Remote pushen…",
   "Delete tag": "Tag löschen",
+  "New Branch from \"{0}\"...": "Neuer Branch von \"{0}\"...",
   "Rebase onto \"{0}\"": "Auf \"{0}\" rebasen",
   "Pull \"{0}\"": "\"{0}\" pullen",
   "Push \"{0}\"...": "\"{0}\" pushen…",

@@ -315,6 +315,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   commitPanel.setBranchStatusBar(branchStatusBar);
   branchStatusBar.setLogPanel(logPanel);
+  logPanel.setBranchStatusBar(branchStatusBar);
 
   const profileStatusBar = new ProfileStatusBar(profileService, manager, context.globalStorageUri.fsPath);
 

@@ -19,6 +19,7 @@ interface Props {
   onBranchFilterSelect: (branchName: string) => void;
   onBranchFocus: (branch: BranchInfo) => void;
   onCheckout: (repoIds: string[], branchName: string) => void;
+  onNewBranch: (repoIds: string[], fromBranch: string) => void;
   onMerge: (repoId: string, from: string) => void;
   onRebase: (repoId: string, onto: string) => void;
   onRename: (repoIds: string[], branchName: string) => void;
@@ -197,7 +198,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
-  onCheckout, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
+  onCheckout, onNewBranch, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
 }, ref) {
   const defaultBranchByRepo = useMemo(
@@ -486,6 +487,12 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isPrimary)}
             onClose={() => setContextMenu(null)}
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
+            onNewBranch={() => {
+              // Branch off the same ref (local, or remote like origin/x) in every repo that has it
+              const sourceRepoIds = contextMenu.merged.instances.filter(i => i.name === inst.name).map(i => i.repoId);
+              onNewBranch(sourceRepoIds, inst.name);
+              setContextMenu(null);
+            }}
             onMerge={() => { onMerge(opInst.repoId, opInst.name); setContextMenu(null); }}
             onRebase={() => { onRebase(opInst.repoId, opInst.name); setContextMenu(null); }}
             onRename={localRepoIds.length > 0 ? () => { onRename(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
@@ -1001,12 +1008,13 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   );
 }
 
-function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, onRebase, onRename, onDelete, onPull, onPush }: {
+function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onNewBranch, onMerge, onRebase, onRename, onDelete, onPull, onPush }: {
   merged: MergedBranch;
   x: number; y: number;
   canDelete: boolean;
   onClose: () => void;
   onCheckout: () => void;
+  onNewBranch: () => void;
   onMerge: () => void;
   onRebase: () => void;
   onRename?: () => void;
@@ -1034,6 +1042,7 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onMerge, on
   };
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: l10n.t('Checkout "{0}"', merged.baseName), action: onCheckout },
+    { icon: 'git-branch', label: l10n.t('New Branch from "{0}"...', merged.baseName), action: onNewBranch },
     { sep: true },
     { icon: 'git-merge', label: l10n.t('Merge into current'), action: onMerge },
     { icon: 'repo-forked', label: l10n.t('Rebase onto "{0}"', merged.baseName), action: onRebase },

@@ -347,6 +347,7 @@
   "Merge into current": "Merge into current",
   "Push to remote...": "Push to remote...",
   "Delete tag": "Delete tag",
+  "New Branch from \"{0}\"...": "New Branch from \"{0}\"...",
   "Rebase onto \"{0}\"": "Rebase onto \"{0}\"",
   "Pull \"{0}\"": "Pull \"{0}\"",
   "Push \"{0}\"...": "Push \"{0}\"...",

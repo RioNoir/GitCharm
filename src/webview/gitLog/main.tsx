@@ -518,6 +518,9 @@ function App() {
               getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: branch } satisfies LogToHostMsg);
             });
           }}
+          onNewBranch={(repoIds, fromBranch) => {
+            getVsCodeApi().postMessage({ type: 'LOG_NEW_BRANCH_FROM', repoIds, fromBranch } satisfies LogToHostMsg);
+          }}
           onMerge={(repoId, from) => {
             const reqId = generateId();
             getVsCodeApi().postMessage({ type: 'LOG_MERGE', requestId: reqId, repoId, from } satisfies LogToHostMsg);

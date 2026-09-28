@@ -250,6 +250,7 @@
   "Merge into current": "Fusionar en la rama actual",
   "Push to remote...": "Hacer push al remoto…",
   "Delete tag": "Eliminar etiqueta",
+  "New Branch from \"{0}\"...": "Nueva rama desde \"{0}\"...",
   "Rebase onto \"{0}\"": "Hacer rebase sobre \"{0}\"",
   "Pull \"{0}\"": "Hacer pull de \"{0}\"",
   "Push \"{0}\"...": "Hacer push de \"{0}\"…",
