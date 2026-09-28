@@ -2,10 +2,21 @@
 
 All notable changes to GitCharm are documented in this file.
 
-## Unreleased
+## v0.6.1
 
 ### ✨ New Features
 - Git Log compare mode: the new **Compare Branches** action (⇄) in the Git Log title bar shows only the commits on one branch that aren't on another — by default, commits on the current branch that aren't on the repo's default branch yet (`main..HEAD`), resolved per repo in multi-repo workspaces. The filters bar then shows the two branches to compare ([#83](https://github.com/RioNoir/GitCharm/pull/83) by [@DragosMocrii](https://github.com/DragosMocrii), closes [#52](https://github.com/RioNoir/GitCharm/issues/52))
+- New **Sort Changes By** option (Name, Path or Status) in the Commit Panel's "..." menu, below Sort Repository By. It orders the flat list of changes (default: Name); the tree view always sorts by path, with folders before files, so the option is disabled there
+- Right-clicking a branch in the Git Log sidebar now offers **New Branch from "…"**: enter a name, choose whether to check it out, and it's created in every repo that has that branch ([#85](https://github.com/RioNoir/GitCharm/issues/85))
+- New GitCharm icons: the Commit and Git Log panels (the logo's diamond with its branch, and a diamond-shaped history icon), the Focus Git Log action, the Commit and Log entries of the branch menu, and the compare mode toggle. They follow the theme colour like VS Code's own icons. The Changes tab now uses the branch-changes icon
+
+### 🐛 Bug Fixes
+- Dates now follow the operating system's regional format instead of VS Code's display language (e.g. `28/09/2026` with VS Code in English on an Italian region). This covers the Git Log, commit details, stash/shelf/push lists, pull request views, blame annotations and File History, and the date range picker's first day of the week. Relative times ("3 days ago") still follow the display language
+- The Changes tree in the Commit Panel now lists folders before files, alphabetically, instead of in git's order
+
+### 🔧 Other
+- The Git Log filters bar no longer has its own clear button: **Clear Filters** in the title bar now shows whenever a filter is active
+- The extension package is much smaller (about 1.7 MB instead of 6 MB): README screenshots, source maps, leftover build output and IDE files are no longer bundled, and the extension icon was resized, closes [#84](https://github.com/RioNoir/GitCharm/issues/84) by [@ripopov](https://github.com/ripopov)
 
 ## v0.6.0
 
