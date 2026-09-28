@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { avatarsEnabled } from './avatarCache';
+import { getSystemLocale } from './systemLocale';
 
 export function generateNonce(): string {
   return crypto.randomBytes(16).toString('base64');
@@ -16,9 +17,9 @@ export function getWebviewHtml(
 ): string {
   const nonce = generateNonce();
 
-  // Read by src/webview/shared/l10n.ts. Escape "<" so a translation containing "</script>"
+  // Read by src/webview/shared/l10n.ts (dateLocale: OS regional format for absolute dates). Escape "<" so a translation containing "</script>"
   // can't terminate the inline script.
-  const l10nJson = JSON.stringify({ bundle: vscode.l10n.bundle, locale: vscode.env.language })
+  const l10nJson = JSON.stringify({ bundle: vscode.l10n.bundle, locale: vscode.env.language, dateLocale: getSystemLocale() })
     .replace(/</g, '\\u003c');
 
   const jsPath = vscode.Uri.joinPath(extensionUri, 'out', 'webview', appName, 'index.js');

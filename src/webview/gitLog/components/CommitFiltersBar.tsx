@@ -4,7 +4,7 @@ import type { CompareRange } from '../../../host/types/messages';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import * as l10n from '@vscode/l10n';
-import { locale } from '../../shared/l10n';
+import { dateLocale } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 
 interface Props {
@@ -463,13 +463,13 @@ export function RepoTabs({ value, repos, onChange }: {
 /* ─── DateRangePicker ─────────────────────────────────────────────────────── */
 
 function monthLabel(year: number, month: number): string {
-  return new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' }).format(new Date(year, month, 1));
+  return new Intl.DateTimeFormat(dateLocale, { month: 'short', year: 'numeric' }).format(new Date(year, month, 1));
 }
 
-/** First weekday of the calendar grid as a Date#getDay() index (Monday for it/zh, Sunday for en). */
+/** First weekday of the calendar grid as a Date#getDay() index (Monday for it-IT/en-GB, Sunday for en-US). */
 function weekStartDay(): number {
   try {
-    const loc = new Intl.Locale(locale) as Intl.Locale & {
+    const loc = new Intl.Locale(dateLocale) as Intl.Locale & {
       getWeekInfo?: () => { firstDay: number };
       weekInfo?: { firstDay: number };
     };
@@ -482,7 +482,7 @@ function weekStartDay(): number {
 
 /** Short weekday names in grid order, starting from weekStartDay(). */
 function weekdayLabels(start: number): string[] {
-  const fmt = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+  const fmt = new Intl.DateTimeFormat(dateLocale, { weekday: 'short' });
   // 2023-01-01 was a Sunday.
   return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2023, 0, 1 + start + i)));
 }

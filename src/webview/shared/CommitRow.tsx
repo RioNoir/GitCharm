@@ -5,7 +5,7 @@ import { avatarsEnabled } from './avatars';
 import { formatRelativeTime } from './formatRelativeTime';
 import { renderMarkdown } from './renderMarkdown';
 import * as l10n from '@vscode/l10n';
-import { locale, plural } from './l10n';
+import { dateLocale, plural } from './l10n';
 
 export interface CommitRowData {
   hash: string;
@@ -74,7 +74,7 @@ export function CommitRow({ commit, expanded, isLast, onToggle, renderFiles }: P
           </span>
           <span style={css.commitMeta}>
             <strong style={css.commitAuthor}>{commit.authorName}</strong>
-            <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString(locale)}>
+            <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString(dateLocale)}>
               {l10n.t({ message: 'committed {0}', args: [formatRelativeTime(commit.authoredAt)], comment: ['{0} is a relative time, e.g. "3 days ago" or "just now"'] })}
             </span>
             {hasStats && (

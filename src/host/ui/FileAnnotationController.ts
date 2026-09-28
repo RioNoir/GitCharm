@@ -3,6 +3,7 @@ import { BlameService, type BlameLine } from '../git/BlameService';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
 import { displayWidth } from '../utils/displayWidth';
+import { getSystemLocale } from '../utils/systemLocale';
 
 const GHOST_MAX_SUMMARY_LEN = 72;
 const CONTEXT_KEY = 'gitcharm.annotationsVisible';
@@ -37,13 +38,11 @@ function formatRelativeDate(date: Date): string {
 }
 
 function formatDateFull(date: Date): string {
-  return date.toLocaleDateString(vscode.env.language, { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString(getSystemLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function formatDateDMY(date: Date): string {
-  const d = String(date.getDate()).padStart(2, '0');
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  return `${d}/${m}/${date.getFullYear()}`;
+function formatDateNumeric(date: Date): string {
+  return date.toLocaleDateString(getSystemLocale(), { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function truncate(text: string, maxLen: number): string {
@@ -57,7 +56,7 @@ function abbreviateAuthor(name: string): string {
 }
 
 function blameLabel(l: BlameLine): string {
-  return `${formatDateDMY(l.date)}  ${abbreviateAuthor(l.author)}`;
+  return `${formatDateNumeric(l.date)}  ${abbreviateAuthor(l.author)}`;
 }
 
 function annotationAttachment(
