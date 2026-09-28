@@ -76,6 +76,13 @@
           "fontPath": "media/icon-font/gitcharm-icons.woff",
           "fontCharacter": "\\E002"
         }
+      },
+      "gitcharm-commit": {
+        "description": "GitCharm: Commit panel",
+        "default": {
+          "fontPath": "media/icon-font/gitcharm-icons.woff",
+          "fontCharacter": "\\E003"
+        }
       }
     },
     "submenus": [

@@ -1365,7 +1365,7 @@ function App() {
           : l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
         const tabMeta = (tab: TabId) => ({
           label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : l10n.t({ message: 'Push', comment: ['Tab title: commits not pushed yet'] }),
-          iconName: tab === 'changes' ? 'source-control' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload',
+          iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload',
           badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalToPush : tab === 'pullrequests' ? totalPullRequests : 0,
         });
         const selectTab = (tab: TabId) => {

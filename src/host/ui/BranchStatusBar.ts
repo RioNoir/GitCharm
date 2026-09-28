@@ -361,12 +361,12 @@ export class BranchStatusBar implements vscode.Disposable {
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
-        label: `$(git-commit) ${vscode.l10n.t({ message: 'Commit', comment: ['Git menu item that opens the Commit panel'] })}`,
+        label: `$(gitcharm-commit) ${vscode.l10n.t({ message: 'Commit', comment: ['Git menu item that opens the Commit panel'] })}`,
         description: vscode.l10n.t('Open Commit panel'),
         action: () => this.commitPanelReveal(),
       },
       {
-        label: `$(history) ${vscode.l10n.t({ message: 'Log', comment: ['Git menu item that opens the Log panel (commit history)'] })}`,
+        label: `$(gitcharm-log) ${vscode.l10n.t({ message: 'Log', comment: ['Git menu item that opens the Log panel (commit history)'] })}`,
         description: vscode.l10n.t('Open Log panel'),
         action: async () => { await vscode.commands.executeCommand('gitcharm.openLog'); },
       },

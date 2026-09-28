@@ -22,5 +22,6 @@ module.exports = {
     'compare-mode': 0xe000,
     'compare-mode-active': 0xe001,
     log: 0xe002,
+    commit: 0xe003,
   },
 };
