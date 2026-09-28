@@ -2241,7 +2241,8 @@ export class BranchStatusBar implements vscode.Disposable {
 
   // ── Multi-repo branch actions ────────────────────────────────────────────
 
-  private async newBranchFrom(fromBranch: string, metas: RepoMeta[]): Promise<void> {
+  /** Prompt for a name, then create a branch from `fromBranch` in each repo (optionally checking it out). Also used by the Git Log. */
+  async newBranchFrom(fromBranch: string, metas: RepoMeta[]): Promise<void> {
     const branchName = await promptBranchName({
       title: vscode.l10n.t("New Branch from '{0}'", fromBranch),
       prompt: vscode.l10n.t('Enter the new branch name'),

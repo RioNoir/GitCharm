@@ -318,6 +318,7 @@ export type LogToHostMsg =
   | { type: 'LOG_DELETE_BRANCH'; requestId: string; repoId: string; branchName: string; force: boolean }
   | { type: 'LOG_DELETE_BRANCH_MULTI'; requestId: string; repoIds: string[]; branchName: string }
   | { type: 'LOG_RENAME_BRANCH_MULTI'; requestId: string; repoIds: string[]; oldName: string }
+  | { type: 'LOG_NEW_BRANCH_FROM'; repoIds: string[]; fromBranch: string }
   | { type: 'LOG_FETCH_REPO'; requestId: string; repoId: string }
   | { type: 'LOG_GET_REMOTES'; requestId: string; repoId: string }
   | { type: 'LOG_CHERRY_PICK'; requestId: string; repoId: string; hash: string }

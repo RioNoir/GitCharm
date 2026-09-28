@@ -7,6 +7,7 @@ import type { BranchInfo, RepoMeta } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
+import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import type { GitProfileService } from '../git/GitProfileService';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
@@ -138,6 +139,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private disposables: vscode.Disposable[] = [];
   private readonly managerListeners: vscode.Disposable[] = [];
   private commitPanel?: CommitPanelProvider;
+  private branchStatusBar?: BranchStatusBar;
   private undockedPanel?: UndockedPanelProvider;
   private hiddenRepoIds: string[] = [];
   private defaultBranchCache = new Map<string, string | undefined>();
@@ -157,6 +159,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   setCommitPanel(provider: CommitPanelProvider): void {
     this.commitPanel = provider;
+  }
+
+  setBranchStatusBar(bar: BranchStatusBar): void {
+    this.branchStatusBar = bar;
   }
 
   setUndockedPanel(provider: UndockedPanelProvider): void {
@@ -1379,6 +1385,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
         }
+        break;
+      }
+
+      case 'LOG_NEW_BRANCH_FROM': {
+        // Same flow as the branch menu's "New Branch from…": name, checkout?, then every repo.
+        const metas = this.getNonWorktreeRepos().filter(m => msg.repoIds.includes(m.id));
+        if (!this.branchStatusBar || metas.length === 0) break;
+        await this.branchStatusBar.newBranchFrom(msg.fromBranch, metas);
+        await Promise.all(metas.map(async meta => {
+          const repo = this.manager.getRepo(meta.id);
+          if (!repo) return;
+          const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+          post({ type: 'LOG_REFS_UPDATE', repoId: meta.id, branches: mergeCurrentIntoBranches(branches, current) });
+        }));
+        post({ type: 'LOG_REFRESH' });
         break;
       }
 
