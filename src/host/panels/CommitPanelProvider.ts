@@ -24,7 +24,7 @@ import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from 
 import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger';
 import { plural } from '../utils/plural';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
-import type { ViewAndSortSettings } from '../types/settings';
+import type { ChangeSortMode, ViewAndSortSettings } from '../types/settings';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
 import type { PatAccount } from '../pullRequests/PatCredentialStore';
@@ -590,6 +590,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private syncContextKeys(settings: ViewAndSortSettings): void {
     vscode.commands.executeCommand('setContext', 'gitcharm.fileViewMode', settings.fileViewMode);
     vscode.commands.executeCommand('setContext', 'gitcharm.repoSortMode', settings.repoSortMode);
+    vscode.commands.executeCommand('setContext', 'gitcharm.changeSortMode', settings.changeSortMode);
     vscode.commands.executeCommand('setContext', 'gitcharm.hideReposWithoutChanges', settings.hideReposWithoutChanges);
   }
 
@@ -599,6 +600,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   setRepoSortMode(mode: 'discovery' | 'name' | 'path'): void {
     this.viewAndSortSettings.updatePrefs({ repoSortMode: mode }).then(() => this.postViewAndSortSettings());
+  }
+
+  setChangeSortMode(mode: ChangeSortMode): void {
+    this.viewAndSortSettings.updatePrefs({ changeSortMode: mode }).then(() => this.postViewAndSortSettings());
   }
 
   setHideReposWithoutChanges(value: boolean): void {

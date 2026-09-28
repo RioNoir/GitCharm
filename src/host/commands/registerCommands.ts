@@ -84,6 +84,27 @@ export function registerCommands(
       commitPanel.setRepoSortMode('path');
     }),
 
+    vscode.commands.registerCommand('gitcharm.sortChangesByName', () => {
+      commitPanel.setChangeSortMode('name');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortChangesByNameChecked', () => {
+      commitPanel.setChangeSortMode('name');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortChangesByPath', () => {
+      commitPanel.setChangeSortMode('path');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortChangesByPathChecked', () => {
+      commitPanel.setChangeSortMode('path');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortChangesByStatus', () => {
+      commitPanel.setChangeSortMode('status');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortChangesByStatusChecked', () => {
+      commitPanel.setChangeSortMode('status');
+    }),
+
     vscode.commands.registerCommand('gitcharm.showReposWithoutChanges', () => {
       commitPanel.setHideReposWithoutChanges(false);
     }),
