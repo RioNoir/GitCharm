@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { FileStatus, RepoMeta, RepoStatus } from '../../shared/types';
-import type { ViewMode } from '../store/commitStore';
+import { useCommitStore, type ViewMode } from '../store/commitStore';
+import { sortChanges } from '../changeSort';
 import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
@@ -113,6 +114,7 @@ interface RepoSubGroupProps {
 
 function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, isLast = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
+  const changeSortMode = useCommitStore(s => s.viewAndSort.changeSortMode);
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
   const dirKeys: string[] = [];
   for (const f of files) {
@@ -221,7 +223,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
             <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>{l10n.t('No changes')}</div>
           ) : (
             <GenericFileTree<FileStatus>
-              files={files}
+              files={viewMode === 'flat' ? sortChanges(files, changeSortMode) : files}
               viewMode={viewMode}
               flatNoSpacer
               iconTheme={iconTheme}

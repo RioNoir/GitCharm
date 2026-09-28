@@ -495,6 +495,7 @@ function App() {
             fileViewMode: msg.fileViewMode,
             hideReposWithoutChanges: msg.hideReposWithoutChanges,
             repoSortMode: msg.repoSortMode,
+            changeSortMode: msg.changeSortMode,
             hiddenRepoIds: msg.hiddenRepoIds,
           });
           break;

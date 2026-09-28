@@ -69,6 +69,10 @@
         "label": "%submenu.commitPanel.sortRepos.label%"
       },
       {
+        "id": "gitcharm/commitPanel.sortChanges",
+        "label": "%submenu.commitPanel.sortChanges.label%"
+      },
+      {
         "id": "gitcharm/commitPanel.reposWithoutChanges",
         "label": "%submenu.commitPanel.reposWithoutChanges.label%"
       }
@@ -224,6 +228,42 @@
         "command": "gitcharm.sortReposByPathChecked",
         "title": "%command.sortReposByPathChecked.title%",
         "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortChangesByName",
+        "title": "%command.sortChangesByName.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByNameChecked",
+        "title": "%command.sortChangesByNameChecked.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByPath",
+        "title": "%command.sortChangesByPath.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByPathChecked",
+        "title": "%command.sortChangesByPathChecked.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByStatus",
+        "title": "%command.sortChangesByStatus.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByStatusChecked",
+        "title": "%command.sortChangesByStatusChecked.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
       },
       {
         "command": "gitcharm.showReposWithoutChanges",
@@ -495,14 +535,19 @@
           "group": "2_viewSort@2"
         },
         {
-          "submenu": "gitcharm/commitPanel.reposWithoutChanges",
+          "submenu": "gitcharm/commitPanel.sortChanges",
           "when": "view == gitcharm.commitPanel",
           "group": "2_viewSort@3"
         },
         {
-          "command": "gitcharm.manageHiddenRepos",
+          "submenu": "gitcharm/commitPanel.reposWithoutChanges",
           "when": "view == gitcharm.commitPanel",
           "group": "2_viewSort@4"
+        },
+        {
+          "command": "gitcharm.manageHiddenRepos",
+          "when": "view == gitcharm.commitPanel",
+          "group": "2_viewSort@5"
         },
         {
           "command": "gitcharm.log.fetchAndRefresh",
@@ -606,6 +651,38 @@
         {
           "command": "gitcharm.sortReposByPathChecked",
           "when": "gitcharm.repoSortMode == 'path'",
+          "group": "navigation@3"
+        }
+      ],
+      "gitcharm/commitPanel.sortChanges": [
+        {
+          "command": "gitcharm.sortChangesByName",
+          "when": "!(gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'name')",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.sortChangesByNameChecked",
+          "when": "gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'name'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.sortChangesByPath",
+          "when": "!(gitcharm.fileViewMode != 'flat' || gitcharm.changeSortMode == 'path')",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.sortChangesByPathChecked",
+          "when": "gitcharm.fileViewMode != 'flat' || gitcharm.changeSortMode == 'path'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatus",
+          "when": "!(gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'status')",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatusChecked",
+          "when": "gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'status'",
           "group": "navigation@3"
         }
       ],
@@ -736,6 +813,30 @@
         },
         {
           "command": "gitcharm.setFileViewTreeChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByName",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByNameChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByPath",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByPathChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatus",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatusChecked",
           "when": "false"
         },
         {

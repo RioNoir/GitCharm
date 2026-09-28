@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { FileStatus, GitFileStatus } from '../../shared/types';
-import type { ViewMode } from '../store/commitStore';
+import { useCommitStore, type ViewMode } from '../store/commitStore';
+import { compareNames, sortChanges } from '../changeSort';
 import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { FileIcon } from '../../shared/FileIcon';
@@ -74,7 +75,7 @@ function buildTree(files: FileStatus[]): TreeNode[] {
     }
     node.children.push({ kind: 'file', name: parts[parts.length - 1], file });
   }
-  return collapseSingleChildDirs(root.children);
+  return sortNodes(collapseSingleChildDirs(root.children));
 }
 
 // Collapse chains of dirs that contain only one child dir (IntelliJ-style path compacting).
@@ -94,6 +95,16 @@ function collapseSingleChildDirs(nodes: TreeNode[]): TreeNode[] {
     }
     return { ...node, children };
   });
+}
+
+// Directories before files, each group alphabetical — matches VS Code's own Explorer ordering.
+function sortNodes(nodes: TreeNode[]): TreeNode[] {
+  return nodes
+    .map(node => node.kind === 'dir' ? { ...node, children: sortNodes(node.children) } : node)
+    .sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+      return compareNames(a.name, b.name);
+    });
 }
 
 function collectFiles(node: TreeDir): FileStatus[] {
@@ -267,6 +278,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
 
 export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, viewMode, basePad = DEFAULT_BASE_PAD, activeFolderPath, onMultiSelect, multiSelectedFiles }: Props) {
   useTreeGuideHoverStyle();
+  const changeSortMode = useCommitStore(s => s.viewAndSort.changeSortMode);
   if (files.length === 0) return null;
 
   const shared: SharedProps = { repoId, iconTheme, selectedFile, ctxFile, onSelect, onToggleFile, onSetFiles, isFileSelected, isCollapsed, toggleCollapsed, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, basePad, activeFolderPath, onMultiSelect, multiSelectedFiles };
@@ -286,7 +298,7 @@ export function FileTree({ repoId, files, iconTheme, selectedFile, ctxFile, onSe
 
   return (
     <div style={styles.container} data-filetree-container>
-      {files.map((file) => (
+      {sortChanges(files, changeSortMode).map((file) => (
         <FileRow key={`${file.repoId}-${file.path}`} file={file} depth={0} {...shared} />
       ))}
     </div>
