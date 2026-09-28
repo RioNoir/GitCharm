@@ -8,7 +8,7 @@ import { ScrollArea } from '../../shared/ScrollArea';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { useCommitStore } from '../store/commitStore';
 import * as l10n from '@vscode/l10n';
-import { plural, locale } from '../../shared/l10n';
+import { plural, locale, dateLocale } from '../../shared/l10n';
 
 interface Props {
   repos: RepoStatus[];
@@ -151,7 +151,7 @@ function formatDate(iso: string): string {
     if (diffH < 24) return rtf.format(-diffH, 'hour');
     const diffD = Math.floor(diffH / 24);
     if (diffD < 7) return rtf.format(-diffD, 'day');
-    return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
+    return d.toLocaleDateString(dateLocale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
   } catch { return iso; }
 }
 

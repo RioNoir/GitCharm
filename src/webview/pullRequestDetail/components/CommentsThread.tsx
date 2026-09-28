@@ -10,7 +10,7 @@ import { formatRelativeTime } from '../../shared/formatRelativeTime';
 import { SkeletonList } from '../../shared/Skeleton';
 import { LabelChip } from './LabelsPanel';
 import * as l10n from '@vscode/l10n';
-import { locale } from '../../shared/l10n';
+import { dateLocale } from '../../shared/l10n';
 import { interpolateNodes } from './interpolateNodes';
 
 interface Props {
@@ -171,7 +171,7 @@ function CommentRow({ comment, onUpdate, onDelete, onHide, onUnhide }: {
         <span>
           <strong style={css.commentAuthor}>{comment.authorName}</strong>
         </span>
-        <span style={css.commentDate} title={new Date(comment.createdAt).toLocaleString(locale)}>
+        <span style={css.commentDate} title={new Date(comment.createdAt).toLocaleString(dateLocale)}>
           {formatRelativeTime(comment.createdAt)}
         </span>
         {!editing && (
@@ -232,7 +232,7 @@ function CommitRow({ commit, onOpen }: { commit: PullRequestCommit; onOpen: () =
       <span style={css.commitAuthor}>{commit.authorName}</span>
       <span style={css.commitLink}>{commit.message.split('\n')[0]}</span>
       <span style={css.commitSha}>{commit.shortSha}</span>
-      <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString(locale)}>
+      <span style={css.commitDate} title={new Date(commit.authoredAt).toLocaleString(dateLocale)}>
         {formatRelativeTime(commit.authoredAt)}
       </span>
     </div>
@@ -315,7 +315,7 @@ function EventRow({ event }: { event: PullRequestEvent }) {
       <span style={css.eventText}>
         {eventText(event)}
       </span>
-      <span style={css.commitDate} title={new Date(event.createdAt).toLocaleString(locale)}>
+      <span style={css.commitDate} title={new Date(event.createdAt).toLocaleString(dateLocale)}>
         {formatRelativeTime(event.createdAt)}
       </span>
     </div>

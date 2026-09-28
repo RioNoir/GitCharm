@@ -4,7 +4,7 @@ import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
 import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import * as l10n from '@vscode/l10n';
-import { locale } from '../../shared/l10n';
+import { dateLocale } from '../../shared/l10n';
 
 interface Props {
   commits: CommitNode[];
@@ -24,7 +24,7 @@ export function LocalCommitsList({ commits, loading }: Props) {
             <span style={css.commitMessage}>{c.message.split('\n')[0]}</span>
             <span style={css.commitMeta}>
               <strong style={css.commitAuthor}>{c.authorName}</strong>
-              <span title={new Date(c.authorDate).toLocaleString(locale)}>{new Date(c.authorDate).toLocaleDateString(locale)}</span>
+              <span title={new Date(c.authorDate).toLocaleString(dateLocale)}>{new Date(c.authorDate).toLocaleDateString(dateLocale)}</span>
             </span>
           </div>
           <span style={css.commitShaBadge}>

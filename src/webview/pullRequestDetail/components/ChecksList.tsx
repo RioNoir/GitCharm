@@ -4,7 +4,7 @@ import { Codicon } from '../../shared/Codicon';
 import { SkeletonList } from '../../shared/Skeleton';
 import { formatRelativeTime } from '../../shared/formatRelativeTime';
 import * as l10n from '@vscode/l10n';
-import { locale } from '../../shared/l10n';
+import { dateLocale } from '../../shared/l10n';
 
 interface Props {
   checks: CiCheck[];
@@ -43,7 +43,7 @@ function CheckRow({ check, isLast }: { check: CiCheck; isLast: boolean }) {
       <span style={css.meta}>
         {duration && <span>{duration}</span>}
         {check.completedAt && (
-          <span title={new Date(check.completedAt).toLocaleString(locale)}>{formatRelativeTime(check.completedAt)}</span>
+          <span title={new Date(check.completedAt).toLocaleString(dateLocale)}>{formatRelativeTime(check.completedAt)}</span>
         )}
       </span>
       {check.url && (
