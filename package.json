@@ -1174,6 +1174,12 @@
             "maximum": 10000,
             "description": "%config.graphMaxCommits.description%"
           },
+          "gitcharm.showUncommittedChangesInLog": {
+            "order": 81,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.showUncommittedChangesInLog.description%"
+          },
           "gitcharm.repositoryScanMaxDepth": {
             "order": 60,
             "type": "number",

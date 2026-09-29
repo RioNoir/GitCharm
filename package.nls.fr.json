@@ -79,6 +79,7 @@
   "color.statusBarDirtyForeground.description": "Couleur du texte de la barre d'état lorsqu'il y a des modifications non commitées",
   "config.section.basicSettings.title": "Paramètres de base",
   "config.graphMaxCommits.description": "Nombre maximal de commits à charger dans le graphe du Git Log. Une fois cette limite atteinte, le défilement n'en charge plus.",
+  "config.showUncommittedChangesInLog.description": "Afficher en haut du graphe du Git Log une ligne avec les modifications non commitées (fichiers indexés, non indexés et non suivis)",
   "config.repositoryScanMaxDepth.description": "Profondeur maximale des sous-dossiers de l'espace de travail à analyser pour trouver des dépôts Git (0 = uniquement les dossiers de l'espace de travail).",
   "config.repositoryScanIgnoredFolders.description": "Noms de dossiers ou chemins relatifs à l'espace de travail à ignorer lors de la recherche de dépôts Git imbriqués.",
   "config.branchNameModels.description": "Préfixes de nom de branche suggérés lors de la création d'une nouvelle branche (ex. « feature/ », « bugfix/ », « revert- »). Enregistrés sous forme normalisée avec un « * » final (ex. « feature/* ») ; les entrées contenant déjà un caractère générique (ex. « feature/** ») sont conservées telles quelles.",

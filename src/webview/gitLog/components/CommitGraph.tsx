@@ -36,20 +36,22 @@ export const GraphOverlay = React.memo(function GraphOverlay({
     return rowYMap.get(row) ?? row * ROW_HEIGHT + ROW_HEIGHT / 2;
   }
 
-  const branchPaths = new Map<number, { color: string; path: string; lastY: number; lastX: number }>();
+  // One path per branch, plus a separate dashed one for a working-tree row's link to HEAD
+  const branchPaths = new Map<string, { color: string; path: string; lastY: number; lastX: number; dashed: boolean }>();
 
   for (const s of segments) {
     if (s.p2y < firstVisible || s.p1y > lastVisible) continue;
     const x1 = colToX(s.p1x);
     const x2 = colToX(s.p2x);
-    let entry = branchPaths.get(s.branchId);
+    const pathKey = s.dashed ? `${s.branchId}:dashed` : `${s.branchId}`;
+    let entry = branchPaths.get(pathKey);
 
     if (x1 === x2) {
       const y1 = getY(s.p1y);
       const y2 = getY(s.p2y);
       if (!entry) {
-        entry = { color: s.color, path: `M${x1.toFixed(0)},${y1.toFixed(1)}`, lastY: y1, lastX: x1 };
-        branchPaths.set(s.branchId, entry);
+        entry = { color: s.color, path: `M${x1.toFixed(0)},${y1.toFixed(1)}`, lastY: y1, lastX: x1, dashed: !!s.dashed };
+        branchPaths.set(pathKey, entry);
       } else if (entry.lastX !== x1 || entry.lastY !== y1) {
         entry.path += `M${x1.toFixed(0)},${y1.toFixed(1)}`;
       }
@@ -61,8 +63,8 @@ export const GraphOverlay = React.memo(function GraphOverlay({
         const y1 = getY(row);
         const y2 = getY(row + 1);
         if (!entry) {
-          entry = { color: s.color, path: `M${x1.toFixed(0)},${y1.toFixed(1)}`, lastY: y1, lastX: x1 };
-          branchPaths.set(s.branchId, entry);
+          entry = { color: s.color, path: `M${x1.toFixed(0)},${y1.toFixed(1)}`, lastY: y1, lastX: x1, dashed: !!s.dashed };
+          branchPaths.set(pathKey, entry);
         } else if (entry.lastX !== x1 || entry.lastY !== y1) {
           entry.path += `M${x1.toFixed(0)},${y1.toFixed(1)}`;
         }
@@ -74,8 +76,8 @@ export const GraphOverlay = React.memo(function GraphOverlay({
 
   const pathElements: React.ReactNode[] = [];
   let i = 0;
-  for (const [, { color, path }] of branchPaths) {
-    pathElements.push(<path key={i++} d={path} stroke={color} strokeWidth={STROKE} fill="none" />);
+  for (const [, { color, path, dashed }] of branchPaths) {
+    pathElements.push(<path key={i++} d={path} stroke={color} strokeWidth={STROKE} fill="none" strokeDasharray={dashed ? '4 3' : undefined} />);
   }
 
   return (
@@ -119,11 +121,20 @@ export const CommitDot = React.memo(function CommitDot({ commit, isSelected, gra
           strokeWidth={1.5} strokeOpacity={0.6}
         />
       )}
-      <circle cx={dotX} cy={cy} r={r}
-        fill={isSelected ? '#ffffff' : dotColor}
-        stroke={isSelected ? dotColor : 'var(--vscode-editor-background)'}
-        strokeWidth={isSelected ? 2 : 1}
-      />
+      {commit.isWorkingTree && !isSelected ? (
+        // Hollow: the changes aren't a commit yet (its link to HEAD is dashed). Selected, it looks like any other dot.
+        <circle cx={dotX} cy={cy} r={r}
+          fill="var(--vscode-editor-background)"
+          stroke={dotColor}
+          strokeWidth={1.5}
+        />
+      ) : (
+        <circle cx={dotX} cy={cy} r={r}
+          fill={isSelected ? '#ffffff' : dotColor}
+          stroke={isSelected ? dotColor : 'var(--vscode-editor-background)'}
+          strokeWidth={isSelected ? 2 : 1}
+        />
+      )}
     </svg>
   );
 });

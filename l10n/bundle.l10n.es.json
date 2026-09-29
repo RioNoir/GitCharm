@@ -1317,5 +1317,10 @@
   "Customized/State of an AI prompt: the user replaced the built-in one": "Personalizado",
   "Default/State of an AI prompt: the built-in one is used": "Predeterminado",
   "{0} did not answer within {1} seconds": "{0} no respondió en {1} segundos",
-  "{0} exited with code {1}": "{0} terminó con el código {1}"
+  "{0} exited with code {1}": "{0} terminó con el código {1}",
+  "Uncommitted Changes ({0})": "Cambios sin commit ({0})",
+  "Show in Commit Panel": "Mostrar en el panel Commit",
+  "Uncommitted Changes": "Cambios sin commit",
+  "Showing the first {0} commits. Older commits are past the Git Log limit.": "Se muestran los primeros {0} commits. Los commits más antiguos superan el límite de Git Log.",
+  "Change Limit": "Cambiar límite"
 }

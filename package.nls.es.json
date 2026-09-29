@@ -79,6 +79,7 @@
   "color.statusBarDirtyForeground.description": "Color del texto de la barra de estado cuando hay cambios sin commit",
   "config.section.basicSettings.title": "Configuración básica",
   "config.graphMaxCommits.description": "Número máximo de commits que se cargan en el grafo de Git Log. Una vez alcanzado este límite, el desplazamiento deja de cargar más.",
+  "config.showUncommittedChangesInLog.description": "Mostrar en la parte superior del grafo de Git Log una fila con los cambios sin confirmar (archivos preparados, sin preparar y sin seguimiento)",
   "config.repositoryScanMaxDepth.description": "Profundidad máxima de subcarpetas del área de trabajo en las que buscar repositorios Git (0 = solo las carpetas del área de trabajo).",
   "config.repositoryScanIgnoredFolders.description": "Nombres de carpetas o rutas relativas al área de trabajo que se omiten al buscar repositorios Git anidados.",
   "config.branchNameModels.description": "Prefijos de nombre de rama sugeridos al crear una rama nueva (p. ej., \"feature/\", \"bugfix/\", \"revert-\"). Se guardan normalizados con un \"*\" final (p. ej., \"feature/*\"); las entradas que ya contienen un comodín (p. ej., \"feature/**\") se conservan tal cual.",

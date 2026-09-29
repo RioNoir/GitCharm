@@ -1317,5 +1317,10 @@
   "Customized/State of an AI prompt: the user replaced the built-in one": "已自訂",
   "Default/State of an AI prompt: the built-in one is used": "預設",
   "{0} did not answer within {1} seconds": "{0} 未在 {1} 秒內回應",
-  "{0} exited with code {1}": "{0} 已結束，代碼為 {1}"
+  "{0} exited with code {1}": "{0} 已結束，代碼為 {1}",
+  "Uncommitted Changes ({0})": "未提交的變更 ({0})",
+  "Show in Commit Panel": "在提交面板中顯示",
+  "Uncommitted Changes": "未提交的變更",
+  "Showing the first {0} commits. Older commits are past the Git Log limit.": "顯示前 {0} 個提交。更早的提交超出了 Git 記錄的限制。",
+  "Change Limit": "變更限制"
 }

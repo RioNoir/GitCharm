@@ -79,6 +79,7 @@
   "color.statusBarDirtyForeground.description": "Textfarbe der Statusleiste, wenn es nicht committete Änderungen gibt",
   "config.section.basicSettings.title": "Grundeinstellungen",
   "config.graphMaxCommits.description": "Maximale Anzahl an Commits, die im Git-Log-Graph geladen werden. Ist diese Anzahl erreicht, werden beim Scrollen keine weiteren nachgeladen.",
+  "config.showUncommittedChangesInLog.description": "Oben im Git-Log-Graph eine Zeile mit den nicht committeten Änderungen (gestagte, nicht gestagte und nicht verfolgte Dateien) anzeigen",
   "config.repositoryScanMaxDepth.description": "Maximale Tiefe der Unterordner des Arbeitsbereichs, die nach Git-Repositorys durchsucht werden (0 = nur Arbeitsbereichsordner).",
   "config.repositoryScanIgnoredFolders.description": "Ordnernamen oder arbeitsbereichsrelative Pfade, die bei der Suche nach verschachtelten Git-Repositorys übersprungen werden.",
   "config.branchNameModels.description": "Vorgeschlagene Präfixe für Branch-Namen beim Erstellen eines neuen Branches (z. B. \"feature/\", \"bugfix/\", \"revert-\"). Werden normalisiert mit abschließendem \"*\" gespeichert (z. B. \"feature/*\"); Einträge, die bereits einen Platzhalter enthalten (z. B. \"feature/**\"), bleiben unverändert.",
