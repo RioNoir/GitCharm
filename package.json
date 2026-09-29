@@ -1656,7 +1656,7 @@
     "react-dom": "^19.3.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
-    "vite": "^8.3.0",
+    "vite": "^8.3.1",
     "zustand": "^5.0.15"
   },
   "optionalDependencies": {
