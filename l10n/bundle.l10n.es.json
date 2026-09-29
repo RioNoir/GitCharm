@@ -537,6 +537,8 @@
   "[{0}]: Uncommitted changes": "[{0}]: Cambios sin commit",
   "Choose how to handle local changes before switching to \"{0}\"": "Elige cómo gestionar los cambios locales antes de cambiar a \"{0}\"",
   "Branch name cannot be empty": "El nombre de la rama no puede estar vacío",
+  "Branch name needs to match regex: {0}": "El nombre de la rama debe coincidir con la expresión regular: {0}",
+  "The new branch will be \"{0}\"": "La nueva rama será \"{0}\"",
   "Enter the new branch name": "Introduce el nombre de la nueva rama",
   "Use this branch name": "Usar este nombre de rama",
   "Show Log": "Mostrar registro",

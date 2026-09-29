@@ -660,6 +660,8 @@
   "[{0}]: Uncommitted changes": "[{0}]: Uncommitted changes",
   "Choose how to handle local changes before switching to \"{0}\"": "Choose how to handle local changes before switching to \"{0}\"",
   "Branch name cannot be empty": "Branch name cannot be empty",
+  "Branch name needs to match regex: {0}": "Branch name needs to match regex: {0}",
+  "The new branch will be \"{0}\"": "The new branch will be \"{0}\"",
   "Enter the new branch name": "Enter the new branch name",
   "Use this branch name": "Use this branch name",
   "Show Log": "Show Log",
