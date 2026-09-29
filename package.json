@@ -1624,7 +1624,7 @@
     "icons:build": "fantasticon --config scripts/icon-font.config.cjs"
   },
   "dependencies": {
-    "@simple-git/argv-parser": "^1.1.1",
+    "@simple-git/argv-parser": "^2.0.1",
     "@tiptap/extension-link": "^3.31.3",
     "@tiptap/extension-mention": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
