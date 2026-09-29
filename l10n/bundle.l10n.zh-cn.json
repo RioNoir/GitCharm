@@ -537,6 +537,8 @@
   "[{0}]: Uncommitted changes": "[{0}]：未提交的更改",
   "Choose how to handle local changes before switching to \"{0}\"": "选择切换到“{0}”之前如何处理本地更改",
   "Branch name cannot be empty": "分支名称不能为空",
+  "Branch name needs to match regex: {0}": "分支名称必须匹配正则表达式: {0}",
+  "The new branch will be \"{0}\"": "新分支将为“{0}”",
   "Enter the new branch name": "输入新分支名称",
   "Use this branch name": "使用此分支名称",
   "Show Log": "显示日志",

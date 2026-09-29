@@ -10,7 +10,7 @@ import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger
 import { plural } from '../utils/plural';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
-import { promptBranchName } from '../utils/branchNamePrompt';
+import { promptBranchName, sanitizeBranchName, validateBranchNameInput } from '../utils/branchNamePrompt';
 import { pickRefQuickPick } from '../utils/refPicker';
 
 /** Whether the "gitcharm.showLastCommitInBranchMenu" setting is enabled (off by default). */
@@ -2052,11 +2052,12 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
 
-    const newName = await vscode.window.showInputBox({
+    const input = await vscode.window.showInputBox({
       title: vscode.l10n.t("Rename branch '{0}' in {1}", oldName, meta.name),
       value: oldName,
-      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
+      validateInput: validateBranchNameInput,
     });
+    const newName = input === undefined ? undefined : sanitizeBranchName(input);
     if (!newName || newName === oldName) return;
 
     const oldUpstream = await repo.getBranchUpstream(oldName).catch(() => null);
@@ -2359,11 +2360,12 @@ export class BranchStatusBar implements vscode.Disposable {
   }
 
   private async renameBranchAllRepos(oldName: string, metas: RepoMeta[]): Promise<void> {
-    const newName = await vscode.window.showInputBox({
+    const input = await vscode.window.showInputBox({
       title: metas.length === 1 ? vscode.l10n.t("Rename branch '{0}'", oldName) : vscode.l10n.t("Rename branch '{0}' in all repositories", oldName),
       value: oldName,
-      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
+      validateInput: validateBranchNameInput,
     });
+    const newName = input === undefined ? undefined : sanitizeBranchName(input);
     if (!newName || newName === oldName) return;
 
     await vscode.window.withProgress(

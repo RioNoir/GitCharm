@@ -18,6 +18,7 @@ import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { compareFileWithRef, compareFolderWithRef } from './CompareWithCommand';
 import { pickRefQuickPick } from '../utils/refPicker';
+import { sanitizeBranchName, validateBranchNameInput } from '../utils/branchNamePrompt';
 import type { GitProfileService } from '../git/GitProfileService';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import { formatGitError, showGitError, getRawErrorDetail, isPushRejected } from '../utils/gitErrorUtils';
@@ -2485,9 +2486,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             prompt: vscode.l10n.t('New branch name'),
             placeHolder: vscode.l10n.t('e.g. feature/my-feature'),
             title: vscode.l10n.t('New Worktree — New Branch Name'),
+            validateInput: validateBranchNameInput,
           });
-          if (!input?.trim()) return;
-          newBranchName = input.trim();
+          if (input === undefined) return;
+          newBranchName = sanitizeBranchName(input);
           baseBranchName = newBranchName;
         }
 

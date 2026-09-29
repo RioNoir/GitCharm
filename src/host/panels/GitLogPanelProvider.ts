@@ -17,7 +17,7 @@ import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger
 import { plural } from '../utils/plural';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
-import { promptBranchName } from '../utils/branchNamePrompt';
+import { promptBranchName, sanitizeBranchName, validateBranchNameInput } from '../utils/branchNamePrompt';
 import { pickLocalDefaultBranch } from '../git/compareRange';
 import {
   getGitLogDefaultLayout,
@@ -1405,13 +1405,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_RENAME_BRANCH_MULTI': {
         const repoCount = msg.repoIds.length;
-        const newName = await vscode.window.showInputBox({
+        const input = await vscode.window.showInputBox({
           title: repoCount === 1
             ? vscode.l10n.t('Rename branch \'{0}\'', msg.oldName)
             : vscode.l10n.t('Rename branch \'{0}\' in {1} repos', msg.oldName, repoCount),
           value: msg.oldName,
-          validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
+          validateInput: validateBranchNameInput,
         });
+        const newName = input === undefined ? undefined : sanitizeBranchName(input);
         if (!newName || newName === msg.oldName) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
