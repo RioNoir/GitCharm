@@ -79,6 +79,7 @@
   "color.statusBarDirtyForeground.description": "Status bar text color when there are uncommitted changes",
   "config.section.basicSettings.title": "Basic Settings",
   "config.graphMaxCommits.description": "Maximum commits to load in the Git Log graph. Scrolling stops paging in more once this many are loaded.",
+  "config.showUncommittedChangesInLog.description": "Show a row for uncommitted changes (staged, unstaged and untracked files) at the top of the Git Log graph",
   "config.repositoryScanMaxDepth.description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders).",
   "config.repositoryScanIgnoredFolders.description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories.",
   "config.branchNameModels.description": "Branch name prefixes suggested when creating a new branch (e.g. \"feature/\", \"bugfix/\", \"revert-\"). Stored normalized with a trailing \"*\" (e.g. \"feature/*\"); entries already containing a wildcard (e.g. \"feature/**\") are kept as-is.",

@@ -8,6 +8,7 @@ import { CommitList } from './components/CommitList';
 import { CommitDetail } from './components/CommitDetail';
 import { CommitFiltersBar, RepoTabs, compareLabels } from './components/CommitFiltersBar';
 import { assignLanes } from './utils/graphLayout';
+import { insertWorkingTreeRows, workingTreeRow } from './utils/workingTree';
 import { mergeCommitLists } from '../../host/utils/mergeCommitLists';
 import type { GraphLayout } from './utils/graphLayout';
 import { ResizeHandle } from '../shared/ResizeHandle';
@@ -159,7 +160,7 @@ function App() {
           const match = msg.requestId === activeRequestIdRef.current;
           if (!match) break;
           loadingInFlightRef.current = false;
-          store.appendCommits(msg.commits, msg.isLast);
+          store.appendCommits(msg.commits, msg.isLast, msg.limitReached ? (msg.maxCommits ?? msg.commits.length) : null);
           break;
         }
         case 'LOG_COMMIT_FILES':
@@ -190,6 +191,9 @@ function App() {
           break;
         case 'LOG_STASHES_BATCH':
           store.setStashes(msg.stashCommits, msg.queriedRepoIds);
+          break;
+        case 'LOG_WORKING_TREE_STATUS':
+          store.setWorkingTree(msg.repos);
           break;
         case 'LOG_REMOTES_RESULT':
           break;
@@ -296,6 +300,11 @@ function App() {
       store.setCommitFiles(selectedCommit.stashFiles ?? []);
       return;
     }
+    // So does the working-tree row: its files come with every status update
+    if (selectedCommit.isWorkingTree) {
+      store.setCommitFiles(useLogStore.getState().workingTree[selectedCommit.repoId] ?? []);
+      return;
+    }
     store.setLoadingFiles(true);
     const reqId = generateId();
     pendingRef.current.set(reqId, (msg) => {
@@ -341,42 +350,6 @@ function App() {
     return { title: l10n.t("No commits on {0} that aren't on {1}", target, base) };
   }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos, store.commitFilters.text, store.commitFilters.author, store.commitFilters.dateFrom, store.commitFilters.dateTo]);
 
-  // Merge stashes into the commit list, filtering by branch if a branch filter is active
-  const commitsWithStashes = useMemo(() => {
-    // Stashes loaded before compare mode was turned on stay in the store; don't show them
-    if (store.commitFilters.compare) return store.commits;
-    const branchFilter = store.commitFilters.branch;
-    const visibleStashes = branchFilter
-      ? store.stashes.filter(s => s.stashBranch === branchFilter)
-      : store.stashes;
-    if (visibleStashes.length === 0) return store.commits;
-    // Stashes are unrelated to one another, so sorting them alone is safe; the commits keep
-    // git's topological order, which the graph layout depends on.
-    const stashesNewestFirst = [...visibleStashes].sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
-    return mergeCommitLists([store.commits, stashesNewestFirst]);
-  }, [store.commits, store.stashes, store.commitFilters.branch, store.commitFilters.compare]);
-
-  // assignLanes is expensive — run it off the render path via useEffect + rAF
-  // so scroll events never block the UI thread waiting for layout recalc.
-  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() =>
-    assignLanes(commitsWithStashes, isFiltered)
-  );
-
-  const layoutRafRef = useRef<number | null>(null);
-  const pendingCommitsRef = useRef(commitsWithStashes);
-  const pendingFilteredRef = useRef(isFiltered);
-  pendingCommitsRef.current = commitsWithStashes;
-  pendingFilteredRef.current = isFiltered;
-
-  useEffect(() => {
-    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
-    layoutRafRef.current = requestAnimationFrame(() => {
-      layoutRafRef.current = null;
-      setGraphLayout(assignLanes(pendingCommitsRef.current, pendingFilteredRef.current));
-    });
-    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
-  }, [commitsWithStashes, isFiltered, themeVersion]);
-
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};
     store.branches.forEach(b => { if (b.isHead && !b.isRemote) map[b.repoId] = b.name; });
@@ -395,6 +368,63 @@ function App() {
     });
     return map;
   }, [store.branches]);
+
+  // Merge stashes into the commit list, filtering by branch if a branch filter is active
+  const commitsWithStashes = useMemo(() => {
+    // Stashes loaded before compare mode was turned on stay in the store; don't show them
+    if (store.commitFilters.compare) return store.commits;
+    const branchFilter = store.commitFilters.branch;
+    const visibleStashes = branchFilter
+      ? store.stashes.filter(s => s.stashBranch === branchFilter)
+      : store.stashes;
+    if (visibleStashes.length === 0) return store.commits;
+    // Stashes are unrelated to one another, so sorting them alone is safe; the commits keep
+    // git's topological order, which the graph layout depends on.
+    const stashesNewestFirst = [...visibleStashes].sort((a, b) => new Date(b.committerDate).getTime() - new Date(a.committerDate).getTime());
+    return mergeCommitLists([store.commits, stashesNewestFirst]);
+  }, [store.commits, store.stashes, store.commitFilters.branch, store.commitFilters.compare]);
+
+  // One "Uncommitted Changes" row per repo with changes, on top of its HEAD. It stands for
+  // the checked-out branch's next commit, so views that don't show that branch as it is
+  // leave it out: compare mode, a search or date filter, another branch's filter.
+  const workingTreeRows = useMemo(() => {
+    const f = store.commitFilters;
+    if (f.compare || f.text || f.author || f.dateFrom || f.dateTo) return [];
+    // Until the first batch lands the list must stay empty, so the skeleton keeps showing
+    if (store.commits.length === 0 && store.hasMore) return [];
+    const visibleRepoIds = new Set(store.repos.map(r => r.id));
+    return Object.entries(store.workingTree)
+      .filter(([repoId]) => visibleRepoIds.has(repoId)
+        && (!f.repoId || f.repoId === repoId)
+        && (!f.branch || f.branch === currentBranchByRepo[repoId]))
+      .map(([repoId, files]) => workingTreeRow(repoId, files.length, headHashByRepo[repoId], currentBranchByRepo[repoId], store.activeProfile));
+  }, [store.workingTree, store.commitFilters, store.commits.length, store.hasMore, store.repos, currentBranchByRepo, headHashByRepo, store.activeProfile]);
+
+  const graphCommits = useMemo(
+    () => insertWorkingTreeRows(commitsWithStashes, workingTreeRows),
+    [commitsWithStashes, workingTreeRows],
+  );
+
+  // assignLanes is expensive — run it off the render path via useEffect + rAF
+  // so scroll events never block the UI thread waiting for layout recalc.
+  const [graphLayout, setGraphLayout] = useState<GraphLayout>(() =>
+    assignLanes(graphCommits, isFiltered)
+  );
+
+  const layoutRafRef = useRef<number | null>(null);
+  const pendingCommitsRef = useRef(graphCommits);
+  const pendingFilteredRef = useRef(isFiltered);
+  pendingCommitsRef.current = graphCommits;
+  pendingFilteredRef.current = isFiltered;
+
+  useEffect(() => {
+    if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
+    layoutRafRef.current = requestAnimationFrame(() => {
+      layoutRafRef.current = null;
+      setGraphLayout(assignLanes(pendingCommitsRef.current, pendingFilteredRef.current));
+    });
+    return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
+  }, [graphCommits, isFiltered, themeVersion]);
 
   const selectedRepoColor = rangeEndpoints
     ? repoColors[rangeEndpoints.newer.repoId]
@@ -639,6 +669,7 @@ function App() {
             themeVersion={themeVersion}
             activeProfile={store.activeProfile}
             emptyState={compareEmptyState}
+            commitLimitReached={store.hasMore ? null : store.commitLimitReached}
             hideDate={viewLocation === 'sideBar'}
           />
         </div>

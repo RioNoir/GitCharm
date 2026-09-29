@@ -79,6 +79,7 @@
   "color.statusBarDirtyForeground.description": "存在未提交的更改时的状态栏文本颜色",
   "config.section.basicSettings.title": "基本设置",
   "config.graphMaxCommits.description": "Git 日志图中加载的最大提交数。加载达到此数量后，滚动将不再加载更多。",
+  "config.showUncommittedChangesInLog.description": "在 Git 日志图顶部显示一行未提交的更改（已暂存、未暂存和未跟踪的文件）",
   "config.repositoryScanMaxDepth.description": "扫描 Git 仓库时工作区子文件夹的最大深度（0 = 仅扫描工作区文件夹）。",
   "config.repositoryScanIgnoredFolders.description": "扫描嵌套 Git 仓库时要跳过的文件夹名称或相对于工作区的路径。",
   "config.branchNameModels.description": "创建新分支时建议的分支名称前缀（例如 \"feature/\"、\"bugfix/\"、\"revert-\"）。存储时会规范化为以 \"*\" 结尾（例如 \"feature/*\"）；已包含通配符的条目（例如 \"feature/**\"）保持不变。",

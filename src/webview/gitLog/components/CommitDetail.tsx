@@ -35,9 +35,11 @@ interface FileContextMenuProps {
   onRevealOS: () => void;
   onClose: () => void;
   canApplyCommitChanges: boolean;
+  /** An uncommitted file: there is no revision to compare with or combine. */
+  isWorkingTree?: boolean;
 }
 
-function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onCompareWith, onCherryPickFile, onRevertFile, onRevealExplorer, onRevealOS, onClose, canApplyCommitChanges }: FileContextMenuProps) {
+function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, onFileHistory, onCompareWith, onCherryPickFile, onRevertFile, onRevealExplorer, onRevealOS, onClose, canApplyCommitChanges, isWorkingTree }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -110,8 +112,12 @@ function FileContextMenu({ x, y, onShowDiff, onShowCombinedDiff, onEditSource, o
   return (
     <div ref={menuRef} style={menuStyle} onContextMenu={e => e.preventDefault()}>
       <Item icon="diff" label={l10n.t('Show Diff')} onClick={onShowDiff} />
-      <Item icon="diff-multiple" label={l10n.t('Show Combined Diff')} onClick={onShowCombinedDiff} />
-      <Item icon="git-compare" label={l10n.t('Compare with…')} onClick={onCompareWith} />
+      {!isWorkingTree && (
+        <>
+          <Item icon="diff-multiple" label={l10n.t('Show Combined Diff')} onClick={onShowCombinedDiff} />
+          <Item icon="git-compare" label={l10n.t('Compare with…')} onClick={onCompareWith} />
+        </>
+      )}
       <Item icon="history" label={l10n.t('Show File History')} onClick={onFileHistory} />
       <Item icon="go-to-file" label={l10n.t('Edit Source')} onClick={onEditSource} />
       {canApplyCommitChanges && (
@@ -157,6 +163,9 @@ const STATUS_COLORS: Record<string, string> = {
   D: 'var(--vscode-gitDecoration-deletedResourceForeground)',
   R: 'var(--vscode-gitDecoration-renamedResourceForeground, #73c991)',
   C: 'var(--vscode-gitDecoration-addedResourceForeground)',
+  // Uncommitted files only
+  U: 'var(--vscode-gitDecoration-untrackedResourceForeground)',
+  '!': 'var(--vscode-gitDecoration-conflictingResourceForeground)',
 };
 
 interface FileEntry { path: string; status: string; added?: number; removed?: number; oldPath?: string; }
@@ -166,7 +175,7 @@ function statusColor(status: string): string {
 }
 
 const CHANGED_FILE_STATUS: Record<string, ChangedFile['status']> = {
-  A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added',
+  A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added', U: 'added',
 };
 
 /** Maps the Git Log's single-letter file status (from a raw git diff) to FileTreeView's ChangedFile shape. */
@@ -305,6 +314,29 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     );
   }
 
+  // A stash's refs: its relative name first (the same badge as its row in the log), then the
+  // branch it was made on
+  function stashBadges() {
+    if (!commit?.isStash) return null;
+    const refColor = (commit as CommitNode & { dotColor?: string }).dotColor ?? tagColor();
+    return (
+      <>
+        {commit.stashRef && (
+          <span style={styles.refBadge(refColor)} title={commit.stashRef}>
+            <Codicon name="git-stash" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+            {commit.stashRef}
+          </span>
+        )}
+        {commit.stashBranch && (
+          <span style={styles.refBadge(branchColor(commit.stashBranch, false))}>
+            <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+            {commit.stashBranch}
+          </span>
+        )}
+      </>
+    );
+  }
+
   useEffect(() => {
     const handler = (event: MessageEvent<HostToLogMsg>) => {
       const msg = event.data;
@@ -380,6 +412,16 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
       return;
     }
     if (!commit) return;
+    if (commit.isWorkingTree) {
+      getVsCodeApi().postMessage({
+        type: 'LOG_OPEN_WORKING_TREE_FILE_DIFF',
+        repoId: commit.repoId,
+        filePath: file.path,
+        fileStatus: file.status,
+        oldPath: file.oldPath,
+      } satisfies LogToHostMsg);
+      return;
+    }
     getVsCodeApi().postMessage({
       type: 'LOG_OPEN_FILE_DIFF',
       repoId: commit.repoId,
@@ -498,6 +540,12 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     );
   }
 
+  // The top-right buttons float over the header; the repo row, level with them, keeps clear
+  // of however many are showing
+  const topActionCount = twoColumnLayout ? 0
+    : (onClose ? 1 : 0) + (range ? 0 : 1 + (!hideExtendedDetailButton && !commit.isWorkingTree ? 1 : 0));
+  const topActionsWidth = topActionCount > 0 ? topActionCount * TOP_ACTION_BTN_WIDTH + 4 : 0;
+
   const activeFiles = files;
   const activeLoading = loadingFiles;
   const activeHash = commit?.hash;
@@ -516,11 +564,13 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
               data-top-action-btn=""
               style={styles.topActionBtn}
               title={l10n.t('Open Changes')}
-              onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
+              onClick={() => getVsCodeApi().postMessage(commit.isWorkingTree
+                ? { type: 'LOG_OPEN_WORKING_TREE_CHANGES', repoId: commit.repoId } satisfies LogToHostMsg
+                : { type: 'LOG_OPEN_COMMIT_CHANGES', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
             >
               <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
             </button>
-            {!hideExtendedDetailButton && (
+            {!hideExtendedDetailButton && !commit.isWorkingTree && (
               <button
                 data-top-action-btn=""
                 style={styles.topActionBtn}
@@ -547,7 +597,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         {range ? (
           <>
             {repoName && (
-              <div style={styles.repoRow}>
+              <div style={{ ...styles.repoRow, paddingRight: topActionsWidth }}>
                 <Codicon name="repo" style={styles.repoIcon} />
                 <span style={styles.repoName(effectiveRepoColor)}>{repoName}</span>
               </div>
@@ -566,12 +616,12 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         ) : (
           <>
             {repoName && !twoColumnLayout && (
-              <div style={styles.repoRow}>
+              <div style={{ ...styles.repoRow, paddingRight: topActionsWidth }}>
             <Codicon name="repo" style={styles.repoIcon} />
             <span style={styles.repoName(effectiveRepoColor)}>{repoName}</span>
           </div>
         )}
-        {!twoColumnLayout && (
+        {!twoColumnLayout && !commit.isWorkingTree && (
           <div style={styles.hashRow}>
             <span style={styles.hash}>{commit.shortHash}</span>
             <span style={styles.message}>
@@ -579,7 +629,40 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             </span>
           </div>
         )}
-        {commit.isStash ? (
+        {commit.isWorkingTree ? (
+          <div>
+            <div style={styles.hashRow}>
+              <span style={{ ...styles.message, fontStyle: 'italic' }}>{l10n.t('Uncommitted Changes')}</span>
+            </div>
+            <div style={styles.authorRow}>
+              <AuthorAvatar authorName={activeProfile?.gitName ?? l10n.t('You')} authorEmail={activeProfile?.gitEmail ?? ''} size={32} isYou={!activeProfile} />
+              <div style={styles.meta}>
+                <span>{activeProfile?.gitName ?? l10n.t('You')}</span>
+                {activeProfile?.gitEmail && (
+                  <>
+                    <span style={styles.dot}>·</span>
+                    <span>{activeProfile.gitEmail}</span>
+                  </>
+                )}
+                <span style={styles.dot}>·</span>
+                <span>{formatDateTime(commit.authorDate)}</span>
+              </div>
+            </div>
+            <div style={styles.refsRow}>
+              {commit.workingTreeBranch ? (
+                <span style={styles.refBadge(refColors?.get(`${commit.repoId}:${commit.workingTreeBranch}`) ?? branchColor(commit.workingTreeBranch, false))} title={l10n.t('Local: {0}', commit.workingTreeBranch)}>
+                  <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                  {commit.workingTreeBranch}
+                </span>
+              ) : (
+                <span style={styles.refBadge(headColor(), true)}>
+                  <Codicon name="warning" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
+                  {l10n.t('HEAD (detached)')}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : commit.isStash ? (
           <div>
             {twoColumnLayout && <div style={styles.detailsLabel}>{l10n.t('Author')}</div>}
             <div style={twoColumnLayout ? styles.authorRowTwoColumn : styles.authorRow}>
@@ -603,13 +686,8 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                 </div>
               )}
             </div>
-            {!twoColumnLayout && commit.stashBranch && (
-              <div style={styles.refsRow}>
-                <span style={styles.refBadge(branchColor(commit.stashBranch, false))}>
-                  <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
-                  {commit.stashBranch}
-                </span>
-              </div>
+            {!twoColumnLayout && (
+              <div style={styles.refsRow}>{stashBadges()}</div>
             )}
           </div>
         ) : (
@@ -639,7 +717,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             <div style={styles.detailsLabel}>{l10n.t('Details')}</div>
             <div style={styles.detailsGrid}>
               <span style={styles.detailsKey}>{l10n.t('Hash')}</span>
-              <span style={styles.detailsVal}>{commit.hash}</span>
+              <span style={styles.detailsVal}>{commit.isStash ? (commit.stashHash ?? commit.hash) : commit.hash}</span>
               <span style={styles.detailsKey}>{l10n.t('Author date')}</span>
               <span style={styles.detailsValNormal}>{formatDateTime(commit.authorDate)}</span>
               <span style={styles.detailsKey}>{l10n.t('Commit date')}</span>
@@ -689,17 +767,12 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           );
         })()}
 
-        {twoColumnLayout && (commit.isStash ? !!commit.stashBranch : branchBadges.length > 0) && (() => {
+        {twoColumnLayout && (commit.isStash || branchBadges.length > 0) && (() => {
           if (commit.isStash) {
             return (
               <div>
                 <div style={styles.detailsLabel}>{l10n.t('Branches')}</div>
-                <div style={styles.refsRow}>
-                  <span style={styles.refBadge(branchColor(commit.stashBranch!, false))}>
-                    <Codicon name="git-branch" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
-                    {commit.stashBranch}
-                  </span>
-                </div>
+                <div style={styles.refsRow}>{stashBadges()}</div>
               </div>
             );
           }
@@ -937,7 +1010,8 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           onRevertFile={handleCtxRevertFile}
           onRevealExplorer={handleCtxRevealExplorer}
           onRevealOS={handleCtxRevealOS}
-          canApplyCommitChanges={!commit.isStash}
+          canApplyCommitChanges={!commit.isStash && !commit.isWorkingTree}
+          isWorkingTree={commit.isWorkingTree}
           onClose={() => setCtxMenu(null)}
         />
       )}
@@ -970,6 +1044,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     </div>
   );
 }
+
+// A top action button: a 16px icon, 4px padding each side, 2px gap to the next
+const TOP_ACTION_BTN_WIDTH = 26;
 
 // Fixed row height so the minimal merged-commits list can cap at exactly N rows before scrolling.
 const MERGE_MINIMAL_ROW_HEIGHT = 18;
@@ -1090,12 +1167,18 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
     marginBottom: '2px',
+    minWidth: 0,
   } as React.CSSProperties,
   repoIcon: {
     fontSize: '11px',
     opacity: 0.6,
+    flexShrink: 0,
   } as React.CSSProperties,
   repoName: (color?: string): React.CSSProperties => ({
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
     fontSize: '11px',
     fontWeight: 600,
     color: color ?? 'var(--vscode-foreground)',

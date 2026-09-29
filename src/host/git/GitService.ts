@@ -2009,17 +2009,18 @@ export class GitService {
   // ── Stash operations ──────────────────────────────────────────────────────
 
   async stashList(): Promise<StashEntry[]> {
-    const raw = await this.git.raw(['stash', 'list', '--format=%gd|%ci|%gs']).catch(() => '');
+    const raw = await this.git.raw(['stash', 'list', '--format=%gd|%H|%ci|%gs']).catch(() => '');
     if (!raw.trim()) return [];
 
     const entries: StashEntry[] = [];
     for (const line of raw.trim().split('\n')) {
       if (!line.trim()) continue;
       const parts = line.split('|');
-      if (parts.length < 3) continue;
+      if (parts.length < 4) continue;
       const ref = parts[0].trim();         // stash@{N}
-      const date = parts[1].trim();        // ISO date
-      const subject = parts.slice(2).join('|').trim(); // "On branch: message" or "WIP on branch: message"
+      const hash = parts[1].trim();        // the stash commit
+      const date = parts[2].trim();        // ISO date
+      const subject = parts.slice(3).join('|').trim(); // "On branch: message" or "WIP on branch: message"
 
       const indexMatch = ref.match(/stash@\{(\d+)\}/);
       const index = indexMatch ? parseInt(indexMatch[1], 10) : 0;
@@ -2072,7 +2073,7 @@ export class GitService {
         parentHash = (await this.git.raw(['rev-parse', `${ref}^1`])).trim();
       } catch { /* ignore */ }
 
-      entries.push({ ref, index, message, date, branch, parentHash, files });
+      entries.push({ ref, hash, index, message, date, branch, parentHash, files });
     }
     return entries;
   }

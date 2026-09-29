@@ -61,6 +61,8 @@ export interface CommitNode {
   graphLines?: GraphLine[];
   isStash?: boolean;
   stashRef?: string;    // e.g. "stash@{0}"
+  /** Full hash of the stash commit; `hash` holds the ref (stash@{N}), which shifts as stashes come and go. */
+  stashHash?: string;
   stashBranch?: string; // branch the stash was created on
   stashFiles?: Array<{ path: string; status: string; added?: number; removed?: number }>;
 }
