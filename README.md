@@ -17,7 +17,7 @@
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
-GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), and a 3-way merge editor for conflict resolution.
+GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
 
 It activates automatically when the opened workspace contains a Git repository.
 
@@ -36,9 +36,11 @@ It activates automatically when the opened workspace contains a Git repository.
 - Per-file actions: open, rollback, delete, add to `.gitignore`.
 - Commit selected files only, or all staged changes.
 - **Commit** and **Commit & Push** unified dropdown button; **Amend** and **Amend & Push** via the dropdown.
-- AI commit-message generation with multi-provider support: Anthropic API, OpenAI API, Claude CLI, Codex CLI, Gemini CLI, Gemini API, Ollama, and LM Studio. API keys and models configurable per provider.
+- AI commit-message generation with multi-provider support: VS Code language models (e.g. GitHub Copilot), Anthropic API, OpenAI API, Claude CLI, Codex CLI, Gemini CLI, Gemini API, Ollama, and LM Studio. API keys and models configurable per provider. The message appears as it is written.
+- Every AI prompt can be customized with the `gitcharm.ai.prompts.*` settings; **GitCharm: Customize AI Prompts** starts from the default text or resets a prompt.
 - Commit message pre-filled automatically with `Merge branch 'X' into 'Y'` when merge conflicts are detected.
 - New and modified files are **not** automatically selected — only files that were already selected before the change are preserved.
+- **Sort Changes By** (Name, Path or Status) in the `···` title menu orders the flat list of changes; the tree view always lists folders before files.
 
 #### View Modes
 
@@ -99,8 +101,11 @@ When there is nothing left to commit, the primary button turns into the remote a
 - **Account picker**: connect a new account (GitHub via VS Code's built-in authentication, or a Personal Access Token for GitLab/Bitbucket/Gitea) or switch between already-saved accounts per repository — no more silent auto-selection of a single saved account.
 - **Manage Pull Request Credentials** command: a single account list grouped by provider, with rename and remove actions, and an entry to add a new account.
 - Avatars (GitHub username avatar, or Gravatar when an account email is known) shown next to accounts in the account pickers, falling back to a generic icon when no avatar can be resolved.
+- Checks shown per PR in the list, GitHub-style (e.g. "✓ 3/3").
 - **Create Pull Request**: two-column layout with native branch QuickPickers, a Markdown (TipTap) description editor, and a live commit/file diff preview against the selected branches.
-- **Pull Request detail** panel: description, rich Activity timeline (renames, label changes, close/reopen/merge, base-branch changes, assign/review-request) with a connecting thread line and author avatars, reviewers/assignees/labels, CI checks, changed files with a full diff view, and commits.
+- Markdown editor for descriptions and comments: `@` mentions with autocomplete from the repository's members, tables, H1–H3 headings, and Markdown pasted as plain text keeps its formatting.
+- Generate the title and the description with AI (✨ inside each field); the description follows the repository's pull request template when there is one.
+- **Pull Request detail** panel: description (editable in place), rich Activity timeline (renames, label changes, close/reopen/merge, base-branch changes, assign/review-request) with a connecting thread line and author avatars, reviewers/assignees/labels, CI checks, changed files with a full diff view, and commits.
 - **Comments**: add, edit, hide/delete (with per-provider permission checks), inline Markdown editing, and minimize/unminimize on GitHub; comment-count badge on the Overview tab.
 - **Merge** (with strategy choice) and **Checkout** actions with confirmation, directly from the detail header.
 - **Open Full Detail** opens the same rich detail view as a persistent editor tab, restored automatically across VS Code restarts.
@@ -113,7 +118,7 @@ When there is nothing left to commit, the primary button turns into the remote a
 - **Shelve** with patch-based shelves: create, apply (full or partial), delete, rename, and inspect per-file diffs.
 - Binary-file handling and conflict detection on unshelve.
 - **Native stash** support: list, apply, pop, drop, rename, and file diff preview.
-- Stashes are shown as native nodes directly in the Git Log commit list.
+- Stashes are shown as native nodes directly in the Git Log commit list, with the stash commit's hash and a `stash@{N}` badge.
 - Row selection is maintained when the context menu is open, matching the behavior of other tabs.
 
 <img src="media/screenshots/shelf_stash_push.png" alt="GitCharm commit panel">
@@ -134,20 +139,23 @@ When there is nothing left to commit, the primary button turns into the remote a
 ### 📜 Git Log Panel
 
 - Commit graph with branch visualization.
+- **Uncommitted changes** row on top of each repository's HEAD, updated live: select it to see the changed files against HEAD, click a file for its working-tree diff, or use **Open Changes** for a multi-file diff. Turn it off with `gitcharm.showUncommittedChangesInLog`.
+- **Compare Branches** (⇄ in the title bar) shows only the commits on one branch that aren't on another — by default, what the current branch has that the default branch doesn't yet (`main..HEAD`), per repository.
+- Title bar actions: Fetch and Refresh, Compare Branches, Undock, Hide/Show Filters, Hide/Show Branch Sidebar, and Clear Filters whenever a filter is active. Whether the filters bar and the sidebar are shown is remembered separately for the bottom panel and the side bar.
+- When the list reaches the `gitcharm.graphMaxCommits` limit and older commits exist, a note at the bottom says so and links to the setting. Filters search the whole history, not just the loaded commits.
 - Branch sidebar: local branches, remote branches, tags; single-repo workspaces hide the repository list; sidebar is collapsible.
-- Filters by text, author, branch, date, and repository; filter bar redesigned with compact controls.
+- Filters by text, author, branch, date, and repository.
 - Commit detail with changed-file list and per-file diffs.
 - Smart diff resolution for added, deleted, renamed, copied, merge, and root commits.
 - **Show Combined Diff** context menu entry in the commit file list.
 - **Cherry-Pick Selected Changes** from a file in a commit directly into the current working tree.
 - Close button in the commit detail panel; clicking any commit re-opens it.
 - Bold commit message for the HEAD commit in the list.
-- Author name shown in commit rows when panel width > 500 px.
+- Author name shown in commit rows when the panel is wider than 550 px.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
 - Author avatars in commit rows and commit detail: resolves GitHub noreply emails to GitHub avatars, other emails to Gravatar, with a colored-initials fallback. Initials correctly handle names with parenthesized suffixes (e.g. "Name Surname (Tag)").
-- **Fetch and Refresh** button in the filters bar fetches all remotes before refreshing the log.
 - **Explain with AI** and **Open Full Detail** context menu actions; AI actions hidden when AI is disabled.
-- Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, and create new branch.
+- Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, create a new branch, and **New Branch from "…"** (created in every repository that has that branch).
 - **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
 - Tag context menu: checkout, merge into current, push to remote, and delete (local, remote, or both).
 - Commit context menu: **New Tag…** when the commit has no tags; **Manage Tags…** (QuickPick with merge/delete actions) when it does.
@@ -169,6 +177,7 @@ When there is nothing left to commit, the primary button turns into the remote a
 - **Tags section** in the per-repository menu: checkout, merge, push to remote, and delete tags; delete dialog offers three options (local, remote, or both).
 - **Per-repository sub-menu** with full remote management: add, rename, change URL, and remove remotes.
 - Tracks the active editor to reflect the correct repository in multi-repo workspaces.
+- New branch names follow VS Code's own rules: spaces and characters git rejects are replaced with `git.branchWhitespaceChar` (`-` by default), `git.branchValidationRegex` is checked, and the input shows the name that will be used. Suggested prefixes come from `gitcharm.branchNameModels`.
 
 
 ### 👤 Git Profiles
@@ -212,15 +221,14 @@ When there is nothing left to commit, the primary button turns into the remote a
 - Create new worktrees and prune stale ones directly from the tab.
 - Primary worktree clearly labeled with a **primary** badge.
 
-### ⚔️ Merge Editor
+### ⚔️ Conflict Resolution
 
-- 3-way conflict editor for files containing Git conflict markers.
-- Side-by-side conflict panes with editable result.
-- Conflict navigation, save, and automatic staging on completion.
+- Conflicted files open in VS Code's built-in 3-way merge editor, from the Commit Panel or with **GitCharm: Open Merge Editor**.
+- The commit message is pre-filled with `Merge branch 'X' into 'Y'`, and the GitCharm sidebar opens when a merge conflict is resolved (`gitcharm.openCommitPanelOnConflictResolved`).
 
 ## 📋 Requirements
 
-- Visual Studio Code `1.85.0` or newer.
+- Visual Studio Code `1.93.0` or newer.
 - Git installed and available in the workspace.
 - Node.js `18` or newer and npm for development or packaging.
 
@@ -241,7 +249,7 @@ npm run package
 Then install the generated `.vsix`:
 
 ```bash
-code --install-extension gitcharm-0.3.5.vsix
+code --install-extension gitcharm-<version>.vsix
 ```
 
 ### Development Host
@@ -280,27 +288,30 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 
 | Command | Description |
 |:--|:--|
-| `GitCharm: Focus Git Log` | Focuses the Git Log panel. |
-| `GitCharm: Fetch All` | Fetches all remotes across all repositories. |
-| `GitCharm: Pull` | Pulls all repositories (prompts for merge or rebase strategy). |
-| `GitCharm: Push` | Pushes all repositories. |
-| `GitCharm: Sync All` | Pulls then pushes all repositories; stops if any pull fails. |
+| `GitCharm: Focus Git Log` | Focuses the Git Log wherever it is set to open. |
+| `GitCharm: Commit` | Commits the selected changes. |
+| `GitCharm: Fetch All Remotes` | Fetches all remotes across all repositories. |
+| `GitCharm: Pull All (Update Project)` | Pulls all repositories (prompts for merge or rebase strategy). |
+| `GitCharm: Push All` | Pushes all repositories. |
+| `GitCharm: Sync All (Pull + Push)` | Pulls then pushes all repositories; stops if any pull fails. |
 | `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Git Log panel. |
-| `GitCharm: Open Merge Editor` | Opens the merge editor for the active file when conflict markers are present. |
 | `GitCharm: Branch Menu` | Opens the Status Bar branch menu. |
-| `GitCharm: Settings` | Opens GitCharm settings. |
+| `GitCharm: Check for Orphaned Branches` | Fetches, then lists local branches whose remote branch was deleted. |
+| `GitCharm: Open Merge Editor` | Opens VS Code's merge editor for the active conflicted file. |
+| `GitCharm: Show File History` | Shows the Git history of the active file. |
+| `GitCharm: Compare with...` | Diffs a file or folder against a chosen branch, tag, or commit. |
 | `GitCharm: Manage Hidden Repositories` | Reopens repositories previously hidden from the Commit Panel and Log Panel. |
 | `GitCharm: Manage Git Profiles` | Opens the Git profile manager. |
 | `GitCharm: Switch Git Profile` | Switches the active Git profile for the current workspace. |
-| `GitCharm: Open Git Annotations` | Shows inline blame annotations in the active editor. |
-| `GitCharm: Close Git Annotations` | Hides inline blame annotations in the active editor. |
+| `GitCharm: Open Git Annotations` / `Close Git Annotations` / `Toggle Git Annotations` | Shows or hides inline blame annotations in the active editor. |
 | `GitCharm: Undock` | Opens a QuickPick to undock the Git Log (with or without the Commit Panel) into an editor tab or a new window. |
-| `GitCharm: Set Default Git Log Location` | Opens a QuickPick to choose — and persist — where the Git Log opens: bottom panel, editor tab, or a new window. |
-| `GitCharm: Select AI Provider` | Opens a QuickPick to choose and configure the AI provider and model. |
-| `GitCharm: Generate Commit Message` | Generates an AI commit message from the current staged diff. |
-| `GitCharm: Explain Commit` | Opens the commit detail panel with an AI-generated explanation of the selected commit. |
+| `GitCharm: Set Default Log Location` | Opens a QuickPick to choose — and persist — where the Git Log opens: bottom panel, editor tab, or a new window. |
+| `GitCharm: Add Worktree` / `Prune Worktrees` | Creates a worktree, or removes stale worktree entries. |
+| `GitCharm: Select AI Model` | Opens a QuickPick to choose the AI provider and model. |
+| `GitCharm: Customize AI Prompts` | Edits or resets the prompts used by the AI features. |
 | `GitCharm: Manage Pull Request Credentials` | Opens the Pull Request account manager (add, rename, remove accounts). |
 | `GitCharm: Refresh Pull Requests` | Refreshes the Pull Requests tab, bypassing the cache. |
+| `GitCharm: Show Output Log` | Opens the GitCharm output log, useful when reporting a bug. |
 
 ## ⌨️ Keybindings
 
@@ -313,32 +324,42 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 
 | Setting | Default | Description |
 |:--|:--|:--|
-| `gitcharm.graphMaxCommits` | `1000` | Maximum number of commits loaded into the Git Log graph. |
+| `gitcharm.graphMaxCommits` | `1000` | Maximum number of commits loaded into the Git Log graph (100–10000). |
+| `gitcharm.showUncommittedChangesInLog` | `true` | Show a row for uncommitted changes on top of the Git Log graph. |
 | `gitcharm.fetchOnStartup` | `true` | Fetches all remotes once when GitCharm activates. |
+| `gitcharm.notifyOnIncomingCommits` | `true` | Notify on startup when there are incoming commits to pull. |
+| `gitcharm.notifyOnUnpushedCommits` | `true` | Notify on startup when there are unpushed commits. |
+| `gitcharm.notifyOnOrphanBranches` | `true` | Notify after a fetch when local branches have lost their remote branch. |
 | `gitcharm.projectColors` | `{}` | Maps workspace folder/repository names to hex colors for multi-repo views. |
 | `gitcharm.repositoryScanMaxDepth` | `1` | Maximum depth of workspace subfolders to scan for Git repositories. `0` only checks workspace folders. |
 | `gitcharm.repositoryScanIgnoredFolders` | `["node_modules"]` | Folder names or workspace-relative paths skipped while scanning for nested Git repositories. |
+| `gitcharm.branchNameModels` | `[]` | Branch name prefixes suggested when creating a branch (e.g. `feature/`, `bugfix/`). |
+| `gitcharm.showLastCommitInBranchMenu` | `false` | Show each branch's and tag's last commit in the branch and tag menus. |
 | `gitcharm.autoRefreshInterval` | `0` | Auto-refresh interval in seconds. `0` disables interval refresh and uses file watchers only. |
 | `gitcharm.gitLogDefaultLocation` | `"panel"` | Where `GitCharm: Focus Git Log` opens the Log: `panel`, `editorTab`, or `newWindow`. Anything but `panel` also hides the Log view from the bottom panel. |
 | `gitcharm.gitLogDefaultLayout` | `"logAndCommit"` | What the Log shows outside the bottom panel: `logAndCommit` or `logOnly`. Ignored when the location is `panel`. |
 | `gitcharm.changesViewMode` | `"simplified"` | How to display changed files: `simplified`, `changelists`, or `vscode`. Chosen via QuickPick on first install. |
+| `gitcharm.defaultCommitAction` | `"commit"` | Main action of the commit button: `commit` or `commitAndPush`. |
+| `gitcharm.defaultSaveAction` | `"stash"` | Main action of the Save button: `stash` or `shelve`. |
+| `gitcharm.promptAddUntrackedToGit` | `true` | Offer to add new untracked files to Git. |
+| `gitcharm.openCommitPanelOnConflictResolved` | `true` | Open the GitCharm sidebar when a merge conflict is resolved. |
+| `gitcharm.suppressDivergedBranchWarning` | `false` | Suppress the "Branches have diverged" warning in the Git Menu and status bar. |
 | `gitcharm.gitAnnotations.enabled` | `true` | Enable inline Git blame annotations in the editor. |
 | `gitcharm.gitGhostText.enabled` | `true` | Enable inline Git ghost text in the editor. |
 | `gitcharm.avatars.enabled` | `false` | Show author avatars. **Privacy:** when enabled, a hash of each commit author's email is sent to gravatar.com (or GitHub for noreply addresses). Leave disabled for private or company repositories. |
-| `gitcharm.gitProfiles` | `[]` | Named Git identity profiles (name, email) managed by GitCharm. |
-| `gitcharm.activeGitProfileId` | `""` | ID of the currently active Git profile for this workspace. |
-| `gitcharm.suppressDivergedWarning` | `false` | Suppress the "diverged" warning in the status bar when local and remote have diverged. |
-| `gitcharm.ai.enabled` | `false` | Enable AI-powered features (commit message generation, commit explanation). |
-| `gitcharm.ai.provider` | `"copilot"` | AI provider: `copilot`, `anthropic`, `openai`, `claude-cli`, `codex-cli`, `gemini-cli`, `gemini-api`, `ollama`, or `lmstudio`. |
-| `gitcharm.ai.model` | `""` | Model identifier for the selected provider (leave empty to use the provider default). |
+| `gitcharm.ai.enabled` | `true` | Enable AI-powered features (commit messages, pull request title and description, explanations). |
+| `gitcharm.ai.provider` | `"vscode-lm"` | AI provider: `vscode-lm`, `claude-api`, `openai-api`, `gemini-api`, `claude-cli`, `codex-cli`, `gemini-cli`, `ollama`, or `lmstudio`. |
 | `gitcharm.ai.language` | `""` | Language for AI-generated text (e.g. `en`, `it`). Defaults to English when empty. |
-| `gitcharm.ai.anthropicApiKey` | `""` | API key for the Anthropic provider. |
-| `gitcharm.ai.openaiApiKey` | `""` | API key for the OpenAI provider. |
-| `gitcharm.ai.geminiApiKey` | `""` | API key for the Gemini API provider. |
+| `gitcharm.ai.maxDiffChars` | `8000` | Maximum characters of diff sent to the AI model. |
+| `gitcharm.ai.*` | | Per-provider API keys, models, CLI paths and local server URLs (e.g. `gitcharm.ai.claudeApiKey`, `gitcharm.ai.ollamaUrl`). **GitCharm: Select AI Model** picks the provider and model. |
+| `gitcharm.ai.prompts.*` | `""` | Custom instructions for each AI feature (`commitMessage`, `pullRequestTitle`, `pullRequestDescription`, `explainCommit`, `explainPullRequest`). Empty uses the default prompt. |
 | `gitcharm.pullRequests.hostProviderOverrides` | `{}` | Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. `{ "git.mycompany.com": "gitea" }`. Valid values: `github`, `gitlab`, `bitbucket`, `gitea`. |
 | `gitcharm.pullRequests.defaultTargetBranch` | `""` | Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master). |
 | `gitcharm.pullRequests.defaultMergeStrategy` | `"merge"` | Default strategy pre-selected on the "Merge pull request" button in the Pull Request detail panel: `merge`, `squash`, `rebase`, or `fastForward`. Falls back to the first strategy the forge/provider supports if this one isn't available for a given PR. |
 | `gitcharm.pullRequests.defaultCheckoutAction` | `"pr"` | Default action for the main "Checkout" button in the Pull Request detail panel: `pr` (Checkout Pull Request) or `branch` (Checkout Branch). The other option is still available from its dropdown. |
+| `gitcharm.resetViewLocationsOnStartup` | `false` | Run VS Code's **Reset View Locations** on startup, to clear stale GitCharm badge placement. |
+
+Git profiles are stored by GitCharm itself (not in settings) and managed with **GitCharm: Manage Git Profiles**.
 
 Example:
 
@@ -398,8 +419,7 @@ Translations are welcome — see [Localization](CONTRIBUTING.md#localization).
 
 - GitCharm is designed for Git workspaces and multi-root workspaces where each folder may be its own repository.
 - Destructive operations (rollback, delete, branch delete, reset, stash drop, shelve drop, commit undo) ask for confirmation.
-- AI commit-message generation requires an available VS Code language model such as GitHub Copilot.
-- The merge editor works on files that contain Git conflict markers.
+- AI features need a configured provider: a VS Code language model such as GitHub Copilot (the default), an API key, a CLI on `PATH`, or a local Ollama/LM Studio server.
 - Git Annotations require the file to be tracked in a Git repository with at least one commit.
 
 ## 🤝 Contributing

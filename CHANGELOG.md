@@ -2,6 +2,22 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.6.2
+
+### ✨ New Features
+- The Git Log shows your **uncommitted changes** as a row on top of each repository's HEAD: "Uncommitted Changes (N)" with a hollow dot and a dashed line down to HEAD, updated as you edit, stage and save. Its detail lists the changed files against HEAD (untracked files as `U`, conflicts as `!`) with the author, date and checked-out branch; clicking a file opens its HEAD ↔ working tree diff, and **Open Changes** (also on double-click and in the row's context menu, next to **Show in Commit Panel**) opens them all in one multi-file diff. The row is hidden in compare mode, while a text, author or date filter is active, or when filtering by another branch. It can be turned off with the new `gitcharm.showUncommittedChangesInLog` setting (supersedes [#58](https://github.com/RioNoir/GitCharm/pull/58) by [@gaganyadav80](https://github.com/gaganyadav80))
+- When the Git Log stops at the `gitcharm.graphMaxCommits` limit while the repository has older commits, a line at the bottom of the list now says so, with a **Change Limit** button that opens the setting. Before, the list just stopped as if history ended there
+- New branch names now replace spaces the way VS Code's own Create Branch does: `git.branchWhitespaceChar` (a `-` by default) replaces spaces and other characters git rejects, and `git.branchValidationRegex` is checked too. The input box shows the name that will be used. This applies to New Branch, Rename Branch (branch menu and Git Log) and the branch of New Worktree, closes [#86](https://github.com/RioNoir/GitCharm/issues/86)
+
+### 🐛 Bug Fixes
+- Git Log stashes: the hash column and the detail now show the stash commit's own short hash, with `stash@{N}` as the first badge in the detail. **Copy Revision Number** and the Full Detail's "Hash" give the full stash commit hash instead of `stash@{N}`, which shifts as stashes are added and dropped. Stashes use the stash icon instead of the archive icon, in the badges and on the Full Detail tab
+- Git Log rows line up again: the hash column is always 8 characters wide, and dates use equal-width digits in a right-aligned column
+- In the Git Log's commit detail, a long repository name ends in "…" instead of running under the buttons at the top right
+
+### 🔧 Other
+- The Commit panel's activity bar icon is larger, matching the height of the Explorer and Source Control icons
+- Updated vite to 8.3.1 (development only)
+
 ## v0.6.1
 
 ### ✨ New Features
