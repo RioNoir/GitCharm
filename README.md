@@ -5,7 +5,8 @@
 <h1 align="center">GitCharm</h1>
 
 <p align="center">
-  JetBrains-like Git management for VS Code.
+  Your whole Git workflow in one place.<br>
+  <sub>Inspired by IntelliJ/JetBrains IDEs</sub>
 </p>
 
 <p align="center">
@@ -17,7 +18,7 @@
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
-GitCharm brings a JetBrains-like Git workflow to Visual Studio Code: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
+GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
 
 It activates automatically when the opened workspace contains a Git repository.
 

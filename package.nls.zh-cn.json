@@ -1,5 +1,5 @@
 {
-  "extension.description": "JetBrains 风格的 VS Code Git 管理工具 — 提交面板、多仓库、搁置区、储藏、拉取请求、带图形的 Git 日志等。",
+  "extension.description": "在一个地方完成整个 Git 工作流 — 在每个仓库中提交、搁置、储藏、同步并评审拉取请求 (GitHub, GitLab, Bitbucket, Gitea)，Git 日志始终跟得上。灵感来自 IntelliJ/JetBrains IDE。",
   "submenu.commitPanel.fileView.label": "文件视图",
   "submenu.commitPanel.sortRepos.label": "仓库排序方式",
   "submenu.commitPanel.sortChanges.label": "更改排序方式",

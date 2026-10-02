@@ -1,5 +1,5 @@
 {
-  "extension.description": "Gestión de Git al estilo JetBrains para VS Code — panel Commit, multirrepositorio, Shelf, Stash, pull requests, Git Log con grafo y mucho más.",
+  "extension.description": "Todo tu flujo de Git en un solo lugar — commit, Shelf, Stash, sincronización y revisión de pull requests (GitHub, GitLab, Bitbucket, Gitea) en cada repositorio, con un Git Log que no se queda atrás. Inspirado en los IDE de IntelliJ/JetBrains.",
   "submenu.commitPanel.fileView.label": "Vista de archivos",
   "submenu.commitPanel.sortRepos.label": "Ordenar repositorios por",
   "submenu.commitPanel.sortChanges.label": "Ordenar cambios por",

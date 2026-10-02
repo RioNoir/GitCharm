@@ -2,6 +2,40 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.7.0 (pre-release)
+
+### ✨ New Features
+- Select several commits in the Git Log — with Ctrl/Cmd+click, Shift+click, Shift+Up/Down or Shift+drag, also across repositories and with stashes — to see the **combined changes** they introduce, folded per file as IntelliJ does: renames are followed, a file that ends as it started is left out, and unselected commits in between don't count. Each file's diff spans from before the first selected commit touching it to the last one. Across several repositories the files are grouped per repository; with two commits of one repository, **Combined** / **Snapshots** tabs switch to the diff between the two snapshots. **View Combined Diff** (context menu, Open Changes) opens them all in one multi-file diff ([#91](https://github.com/RioNoir/GitCharm/issues/91) by [@ripopov](https://github.com/ripopov))
+- Merged commits in a commit's detail open their full detail on click
+- The Commit Panel's **Push** tab becomes **Sync**, for remote operations. It lists only the repositories out of sync with their remote — commits to push, a branch to publish, or commits to pull — with an empty state when everything is up to date, and a repository opens by default only when it has commits to push. Hovering a repository shows **Fetch**, **Pull…** (merge or rebase) and **Push** / **Publish Branch**. The footer acts on the selected repositories: **Sync** when any of them is behind, **Push** when there's only pushing to do, **Fetch** otherwise (**Fetch All** with nothing selected), with Sync, Push, Pull (Merge), Pull (Rebase), Fetch and Force Push in its menu. When only one repository is listed, there's no checkbox and the footer acts on it directly ([#92](https://github.com/RioNoir/GitCharm/issues/92) by [@vugi99](https://github.com/vugi99))
+- **Shelf** and **Stash** list only the repositories that have shelves or stashes. Each repository header collapses, starts closed, and shows its count on the right; the only repository listed is always open
+- Empty Shelf, Stash and Sync tabs show their icon and a centered message, with a short hint on how to create shelves and stashes, or what the Sync tab will list
+- In the Changelists and VS Code views of the Commit tab, repositories without changes move from "Changes" to an **Unchanged** section at the bottom, collapsed by default when it holds more than 5 repositories
+- In a workspace with more than 5 Git submodules, they're no longer shown until you ask: a notification offers **Show Submodules** or **Keep Hidden**, and the new **GitCharm: Show Submodules** / **Hide Submodules** commands switch it later, per workspace ([#90](https://github.com/RioNoir/GitCharm/issues/90) by [@ripopov](https://github.com/ripopov))
+- New `gitcharm.submoduleMaxDepth` setting (default 5): how deeply nested submodules are shown as repositories; `1` only direct submodules, `0` none ([#90](https://github.com/RioNoir/GitCharm/issues/90))
+- Hovering a branch's or tag's repository dots, in the Git Log sidebar or the branch/tag filter, lists every repository it's in with its color and name. Past 5 repositories a row shows 4 dots and a "+N" count, so the name stays readable ([#90](https://github.com/RioNoir/GitCharm/issues/90))
+- Submodules are marked with the package icon instead of the "SUB" badge in the Commit Panel
+
+### ⚡ Performance
+Large workspaces with many submodules, such as PX4-Autopilot with 44, load and refresh much faster ([#90](https://github.com/RioNoir/GitCharm/issues/90) by [@ripopov](https://github.com/ripopov)):
+- `git status` in a superproject no longer runs a status in every submodule (3–4.5s per call on PX4, about 150ms now). A submodule whose checked-out commit moved is still listed in its superproject
+- A change refreshes only the repositories it touches, plus the superprojects above a submodule and the other worktrees of the same repository, and only one refresh runs at a time
+- Background git commands no longer rewrite `.git/index`, which woke the file watchers into yet another refresh
+- When VS Code opens a repository GitCharm already tracks, as it does with each submodule after startup, only that repository is updated instead of rebuilding them all
+- Branches, tags, stashes, unpushed/incoming commits and the log are cached while a repository's refs are unchanged; the Git Log loads commits alongside branches and tags instead of after them, and reloads once per ref change instead of twice
+- Searching the Git Log by hash prefix looks the commit up directly instead of scanning up to 50,000 commits, and also finds older ones
+
+### 🐛 Bug Fixes
+- The Git Log's repository tabs can be scrolled: with the mouse wheel, and with a visible, draggable scrollbar under them. They no longer snap back while scrolling
+- The branch sidebar stars only main and master across submodules, as IntelliJ does, and pins every starred branch to the top of its section, so main and master lead origin too
+- Submodules no longer trigger the status bar's "branches have diverged" warning
+- A detached HEAD (a submodule, a checked-out tag) no longer counts as a branch to publish in the Sync tab, nor inflates its badge
+- Repository colors no longer repeat past the 8 palette colors: each further repository gets a clearly different one
+- A repository listed alone because the others are filtered out (no changes, nothing shelved…) keeps its color and dot, and the Commit tab keeps the multi-repository layout; the neutral single-repository look is only for a workspace with one repository
+
+### 🔧 Other
+- Shorter labels in the translations: e.g. "Silently Stash this file" no longer adds "without confirmation", and progress messages drop "in progress" before the ellipsis
+
 ## v0.6.2
 
 ### ✨ New Features
