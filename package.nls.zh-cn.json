@@ -82,6 +82,7 @@
   "config.showUncommittedChangesInLog.description": "在 Git 日志图顶部显示一行未提交的更改（已暂存、未暂存和未跟踪的文件）",
   "config.repositoryScanMaxDepth.description": "扫描 Git 仓库时工作区子文件夹的最大深度（0 = 仅扫描工作区文件夹）。",
   "config.repositoryScanIgnoredFolders.description": "扫描嵌套 Git 仓库时要跳过的文件夹名称或相对于工作区的路径。",
+  "config.submoduleMaxDepth.description": "作为仓库显示的 Git 子模块的最大嵌套深度（1 = 仅直接子模块，0 = 不显示）。在包含大量嵌套子模块的大型工作区中调低此值，可减少每次刷新时的 Git 工作量。",
   "config.branchNameModels.description": "创建新分支时建议的分支名称前缀（例如 \"feature/\"、\"bugfix/\"、\"revert-\"）。存储时会规范化为以 \"*\" 结尾（例如 \"feature/*\"）；已包含通配符的条目（例如 \"feature/**\"）保持不变。",
   "config.fetchOnStartup.description": "扩展激活时自动获取所有远程",
   "config.notifyOnIncomingCommits.description": "启动时如果有可拉取的传入提交，则显示通知",

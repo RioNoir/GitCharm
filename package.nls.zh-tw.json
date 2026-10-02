@@ -82,6 +82,7 @@
   "config.showUncommittedChangesInLog.description": "在 Git 記錄圖形頂端顯示一列未提交的變更（已暫存、未暫存和未追蹤的檔案）",
   "config.repositoryScanMaxDepth.description": "掃描 Git 儲存庫時工作區子資料夾的最大深度（0 = 僅掃描工作區資料夾）。",
   "config.repositoryScanIgnoredFolders.description": "掃描巢狀 Git 儲存庫時要略過的資料夾名稱或相對於工作區的路徑。",
+  "config.submoduleMaxDepth.description": "作為儲存庫顯示的 Git 子模組的最大巢狀深度（1 = 僅直接子模組，0 = 不顯示）。在包含大量巢狀子模組的大型工作區中調低此值，可減少每次重新整理時的 Git 工作量。",
   "config.branchNameModels.description": "建立新分支時建議的分支名稱前置詞（例如 \"feature/\"、\"bugfix/\"、\"revert-\"）。儲存時會正規化為以 \"*\" 結尾（例如 \"feature/*\"）；已包含萬用字元的項目（例如 \"feature/**\"）維持不變。",
   "config.fetchOnStartup.description": "擴充功能啟動時自動擷取所有遠端",
   "config.notifyOnIncomingCommits.description": "啟動時若有可拉取的傳入提交，則顯示通知",

@@ -82,6 +82,7 @@
   "config.showUncommittedChangesInLog.description": "Oben im Git-Log-Graph eine Zeile mit den nicht committeten Änderungen (gestagte, nicht gestagte und nicht verfolgte Dateien) anzeigen",
   "config.repositoryScanMaxDepth.description": "Maximale Tiefe der Unterordner des Arbeitsbereichs, die nach Git-Repositorys durchsucht werden (0 = nur Arbeitsbereichsordner).",
   "config.repositoryScanIgnoredFolders.description": "Ordnernamen oder arbeitsbereichsrelative Pfade, die bei der Suche nach verschachtelten Git-Repositorys übersprungen werden.",
+  "config.submoduleMaxDepth.description": "Maximale Verschachtelungstiefe der Git-Submodule, die als Repositorys angezeigt werden (1 = nur direkte Submodule, 0 = keine). In großen Arbeitsbereichen mit vielen verschachtelten Submodulen verringern, um die Git-Arbeit bei jeder Aktualisierung zu reduzieren.",
   "config.branchNameModels.description": "Vorgeschlagene Präfixe für Branch-Namen beim Erstellen eines neuen Branches (z. B. \"feature/\", \"bugfix/\", \"revert-\"). Werden normalisiert mit abschließendem \"*\" gespeichert (z. B. \"feature/*\"); Einträge, die bereits einen Platzhalter enthalten (z. B. \"feature/**\"), bleiben unverändert.",
   "config.fetchOnStartup.description": "Beim Aktivieren der Erweiterung automatisch alle Remotes fetchen",
   "config.notifyOnIncomingCommits.description": "Beim Start eine Benachrichtigung anzeigen, wenn eingehende Commits zum Pullen verfügbar sind",

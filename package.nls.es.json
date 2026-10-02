@@ -82,6 +82,7 @@
   "config.showUncommittedChangesInLog.description": "Mostrar en la parte superior del grafo de Git Log una fila con los cambios sin confirmar (archivos preparados, sin preparar y sin seguimiento)",
   "config.repositoryScanMaxDepth.description": "Profundidad máxima de subcarpetas del área de trabajo en las que buscar repositorios Git (0 = solo las carpetas del área de trabajo).",
   "config.repositoryScanIgnoredFolders.description": "Nombres de carpetas o rutas relativas al área de trabajo que se omiten al buscar repositorios Git anidados.",
+  "config.submoduleMaxDepth.description": "Profundidad máxima de anidamiento de los submódulos de Git que se muestran como repositorios (1 = solo submódulos directos, 0 = ninguno). Redúcela en áreas de trabajo grandes con muchos submódulos anidados para reducir el trabajo de Git en cada actualización.",
   "config.branchNameModels.description": "Prefijos de nombre de rama sugeridos al crear una rama nueva (p. ej., \"feature/\", \"bugfix/\", \"revert-\"). Se guardan normalizados con un \"*\" final (p. ej., \"feature/*\"); las entradas que ya contienen un comodín (p. ej., \"feature/**\") se conservan tal cual.",
   "config.fetchOnStartup.description": "Hacer fetch automáticamente de todos los remotos al activarse la extensión",
   "config.notifyOnIncomingCommits.description": "Mostrar una notificación al iniciar cuando haya commits entrantes disponibles para hacer pull",

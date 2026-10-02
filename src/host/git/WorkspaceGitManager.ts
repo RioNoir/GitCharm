@@ -11,7 +11,7 @@ import { PROJECT_COLORS } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
 import { mergeCommitLists } from '../utils/mergeCommitLists';
 
-const MAX_SUBMODULE_DEPTH = 5;
+const DEFAULT_SUBMODULE_MAX_DEPTH = 5;
 /**
  * Debounce for ref changes that affect the commit graph (HEAD, refs, reflog).
  * Deliberately short: a single git operation writes a handful of these files
@@ -136,6 +136,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
         if (
           e.affectsConfiguration('gitcharm.repositoryScanMaxDepth') ||
           e.affectsConfiguration('gitcharm.repositoryScanIgnoredFolders') ||
+          e.affectsConfiguration('gitcharm.submoduleMaxDepth') ||
           e.affectsConfiguration('gitcharm.projectColors')
         ) {
           this.scheduleReinitialize();
@@ -353,6 +354,17 @@ export class WorkspaceGitManager implements vscode.Disposable {
     return Math.min(10, Math.max(0, Math.floor(value)));
   }
 
+  private getSubmoduleMaxDepth(): number {
+    const value = vscode.workspace
+      .getConfiguration('gitcharm')
+      .get<number>('submoduleMaxDepth', DEFAULT_SUBMODULE_MAX_DEPTH);
+
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return DEFAULT_SUBMODULE_MAX_DEPTH;
+    }
+    return Math.min(10, Math.max(0, Math.floor(value)));
+  }
+
   private getRepositoryScanIgnoredFolders(): string[] {
     const value = vscode.workspace
       .getConfiguration('gitcharm')
@@ -525,7 +537,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     colorIdx: { value: number },
     customColors: Record<string, string>,
   ): void {
-    if (depth > MAX_SUBMODULE_DEPTH) return;
+    if (depth > this.getSubmoduleMaxDepth()) return;
 
     const gitmodulesPath = path.join(parentPath, '.gitmodules');
     if (!fs.existsSync(gitmodulesPath)) return;

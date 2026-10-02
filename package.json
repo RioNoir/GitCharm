@@ -1199,6 +1199,14 @@
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
           },
+          "gitcharm.submoduleMaxDepth": {
+            "order": 72,
+            "type": "number",
+            "default": 5,
+            "minimum": 0,
+            "maximum": 10,
+            "description": "%config.submoduleMaxDepth.description%"
+          },
           "gitcharm.branchNameModels": {
             "order": 75,
             "type": "array",
