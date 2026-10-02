@@ -44,34 +44,52 @@ function stripRemotePrefix(name: string): string {
 
 interface MergedBranch {
   baseName: string;
+  /** Starred and pinned to the top of its section. */
   isPrimary: boolean;
+  /** The remote's default branch in one of its repos — a remote one can't be deleted from here. */
+  isDefault: boolean;
   isHead: boolean;
   instances: BranchInfo[];
   repoIds: string[];
 }
 
 /**
- * `defaultBranchByRepo` maps repoId → the remote's actual default branch name (from
- * RepoMeta.defaultBranch), the source of truth for "primary" when known. A branch merged
- * across repos with disagreeing defaults (different remotes) is primary if it matches in any
- * of them. Falls back to the naming heuristic for a repo whose default couldn't be resolved.
+ * How the sidebar tells primary branches: `defaultBranchByRepo` maps repoId → the remote's
+ * actual default branch name (RepoMeta.defaultBranch), and `starByDefault` the repos whose
+ * default earns a star. A branch merged across repos with disagreeing defaults (different
+ * remotes) is primary if it matches in any of them. A repo without a known default falls back
+ * to the naming heuristic (main, master, release…); one whose default doesn't earn a star
+ * stars only main and master.
  */
-function buildMergedBranches(branches: BranchInfo[], defaultBranchByRepo: Map<string, string | undefined>): MergedBranch[] {
+/** What stars a branch of a submodule whose own default doesn't count — IntelliJ's favorites. */
+const SUBMODULE_PRIMARY_BRANCHES = new Set(['main', 'master']);
+
+interface PrimaryRule {
+  defaultBranchByRepo: Map<string, string | undefined>;
+  starByDefault: (repoId: string) => boolean;
+}
+
+function buildMergedBranches(branches: BranchInfo[], rule: PrimaryRule): MergedBranch[] {
   const map = new Map<string, MergedBranch>();
   for (const b of branches) {
     const baseName = b.isRemote ? stripRemotePrefix(b.name) : b.name;
-    const actualDefault = defaultBranchByRepo.get(b.repoId);
-    const isPrimaryHere = actualDefault ? baseName === actualDefault : isPrimaryBranch(baseName);
+    const actualDefault = rule.defaultBranchByRepo.get(b.repoId);
+    const isDefaultHere = actualDefault ? baseName === actualDefault : isPrimaryBranch(baseName);
+    const isPrimaryHere = !rule.starByDefault(b.repoId)
+      ? SUBMODULE_PRIMARY_BRANCHES.has(baseName.toLowerCase())
+      : actualDefault ? isDefaultHere : isPrimaryBranch(baseName);
     const existing = map.get(baseName);
     if (existing) {
       existing.instances.push(b);
       if (!existing.repoIds.includes(b.repoId)) existing.repoIds.push(b.repoId);
       if (b.isHead) existing.isHead = true;
       if (isPrimaryHere) existing.isPrimary = true;
+      if (isDefaultHere) existing.isDefault = true;
     } else {
       map.set(baseName, {
         baseName,
         isPrimary: isPrimaryHere,
+        isDefault: isDefaultHere,
         isHead: b.isHead,
         instances: [b],
         repoIds: [b.repoId],
@@ -89,16 +107,16 @@ function sortMerged(list: MergedBranch[]): MergedBranch[] {
   });
 }
 
-// Splits out the current branch and the primary branch (e.g. "main") — pinned to the top of
-// their section, current first — from the rest, which the tree view sorts alphabetically by
+// Splits out the current branch and the primary branches (e.g. "main", "master") — pinned to
+// the top of their section, current first — from the rest, which the tree view sorts alphabetically by
 // name alongside folders instead of head-first. A branch namespaced under a folder (e.g.
 // "feature/log-improvements") is never pinned even when current: pulling it out of the tree
 // would make its folder vanish and show the full slash-joined path in its place, which reads
 // as the branch disappearing rather than being promoted.
 function splitPinned(list: MergedBranch[]): { pinned: MergedBranch[]; rest: MergedBranch[] } {
   const head = list.find(m => m.isHead && !m.baseName.includes('/'));
-  const primary = list.find(m => m.isPrimary && m !== head && !m.baseName.includes('/'));
-  const pinned = [head, primary].filter((m): m is MergedBranch => !!m);
+  const primaries = list.filter(m => m.isPrimary && m !== head && !m.baseName.includes('/'));
+  const pinned = [...(head ? [head] : []), ...primaries];
   const pinnedSet = new Set(pinned);
   return { pinned, rest: list.filter(m => !pinnedSet.has(m)) };
 }
@@ -202,10 +220,17 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   onCheckout, onNewBranch, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
 }, ref) {
-  const defaultBranchByRepo = useMemo(
-    () => new Map(repos.map(r => [r.id, r.defaultBranch])),
-    [repos]
-  );
+  // A submodule's own default branch (develop, px4, rolling…) only earns a star when the
+  // sidebar shows that submodule alone: across a workspace with dozens of submodules it would
+  // star most branches, where IntelliJ stars main and master — which still are, in every
+  // submodule. Delete protection keeps following every repo's actual default.
+  const primaryRule = useMemo<PrimaryRule>(() => {
+    const submoduleIds = new Set(repos.filter(r => r.isSubmodule).map(r => r.id));
+    return {
+      defaultBranchByRepo: new Map(repos.map(r => [r.id, r.defaultBranch])),
+      starByDefault: repoId => !submoduleIds.has(repoId) || repoId === activeRepoId,
+    };
+  }, [repos, activeRepoId]);
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
   const [tagContextMenu, setTagContextMenu] = useState<{ mergedTag: MergedTag; x: number; y: number } | null>(null);
@@ -251,7 +276,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   // expanded would re-collapse the moment the filter made it briefly disappear from the tree.
   const knownFolderKeysRef = useRef<Set<SectionKey>>(new Set());
   useEffect(() => {
-    const allLocal = sortMerged(buildMergedBranches(branches.filter(b => !b.isRemote && b.name !== 'HEAD'), defaultBranchByRepo));
+    const allLocal = sortMerged(buildMergedBranches(branches.filter(b => !b.isRemote && b.name !== 'HEAD'), primaryRule));
     const localKeys = collectFolderPaths(buildBranchTree(splitPinned(allLocal).rest, m => m.baseName)).map(p => `folder:local:${p}`);
     const remoteByName = new Map<string, BranchInfo[]>();
     for (const b of branches.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD')) {
@@ -261,7 +286,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     }
     const remoteKeys = Array.from(remoteByName.entries()).flatMap(([name, bs]) => {
       const sectionKey = `remote:${name}`;
-      const allMerged = sortMerged(buildMergedBranches(bs, defaultBranchByRepo));
+      const allMerged = sortMerged(buildMergedBranches(bs, primaryRule));
       return collectFolderPaths(buildBranchTree(splitPinned(allMerged).rest, m => m.baseName)).map(p => `folder:${sectionKey}:${p}`);
     });
     const allMergedTags = buildMergedTags(tags);
@@ -281,14 +306,14 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     } else {
       knownFolderKeysRef.current = new Set(allKeys);
     }
-  }, [branches, tags, defaultBranchByRepo]);
+  }, [branches, tags, primaryRule]);
 
   const filtered = filter
     ? branches.filter(b => b.name.toLowerCase().includes(filter.toLowerCase()))
     : branches;
 
   // Exclude detached HEAD pseudo-branch from Local list — it shows up as a tag row instead
-  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD'), defaultBranchByRepo));
+  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD'), primaryRule));
   const localFolderPaths = collectFolderPaths(buildBranchTree(splitPinned(localMerged).rest, m => m.baseName))
     .map(p => `folder:local:${p}`);
 
@@ -303,7 +328,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const remoteGroups: { name: string; merged: MergedBranch[]; folderPaths: string[] }[] = Array.from(remoteGroupsMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, bs]) => {
-      const merged = sortMerged(buildMergedBranches(bs, defaultBranchByRepo));
+      const merged = sortMerged(buildMergedBranches(bs, primaryRule));
       const sectionKey = `remote:${name}`;
       const folderPaths = collectFolderPaths(buildBranchTree(splitPinned(merged).rest, m => m.baseName))
         .map(p => `folder:${sectionKey}:${p}`);
@@ -485,7 +510,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             merged={contextMenu.merged}
             x={contextMenu.x}
             y={contextMenu.y}
-            canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isPrimary)}
+            canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isDefault)}
             onClose={() => setContextMenu(null)}
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onNewBranch={() => {
