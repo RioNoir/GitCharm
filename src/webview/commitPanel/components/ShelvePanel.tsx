@@ -17,6 +17,8 @@ interface Props {
   repoColor: string;
   multiRepo: boolean;
   singleRepo?: boolean;
+  /** The workspace's only repo: the header drops the repo's color for the neutral look. */
+  plainHeader?: boolean;
   worktreeBranch?: string;
   mainRepoName?: string;
   shelves: ShelveEntry[];
@@ -203,7 +205,7 @@ const rowStyle = {
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo = false, worktreeBranch, mainRepoName, shelves, loading, error, viewMode, onUnshelve, onUnshelveFile, onDrop, onRename, onRequestList, onOpenFileDiff, isLast = false }: Props) {
+export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo = false, plainHeader = false, worktreeBranch, mainRepoName, shelves, loading, error, viewMode, onUnshelve, onUnshelveFile, onDrop, onRename, onRequestList, onOpenFileDiff, isLast = false }: Props) {
   useEffect(() => { onRequestList(repoId); }, [repoId]);
 
   // Every repo's section starts collapsed, but the only repo's is always open — closing it
@@ -220,6 +222,7 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
           repoName={worktreeBranch ? mainRepoName ?? repoName : repoName}
           repoColor={repoColor}
           singleRepo={singleRepo}
+          plain={plainHeader}
           worktreeBranch={worktreeBranch}
           expanded={!sectionCollapsed}
           onToggle={() => toggleSectionExpanded(sectionKey)}

@@ -13,6 +13,8 @@ import * as l10n from '@vscode/l10n';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface Props {
+  /** The workspace has several repos (some filtered out): a lone listed one keeps its color and dot. */
+  showRepoColor?: boolean;
   repos: RepoStatus[];
   repoMetas: RepoMeta[];
   selectedFile: { repoId: string; path: string } | null;
@@ -329,6 +331,7 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
 // ── Main VscodeView ───────────────────────────────────────────────────────
 
 export function VscodeView({
+  showRepoColor = false,
   repos, repoMetas, selectedFile, ctxFile, viewMode,
   isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
@@ -375,6 +378,7 @@ export function VscodeView({
           submodulePath={singleMeta?.submodulePath}
           isWorktree={singleMeta?.isWorktree}
           mainWorktreePath={singleMeta?.mainWorktreePath}
+          showRepoColor={showRepoColor}
           onBranchClick={onBranchClick}
           onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid, true)}
           onOpenAllChanges={onOpenAllChanges ?? (() => {})}

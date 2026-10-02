@@ -35,6 +35,8 @@ interface Props {
   onViewCombinedDiff: (repoId: string, hashes: string[]) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
+  /** The workspace's only repo: neutral repo headers (repo icon, no color). Otherwise each keeps its color and dot, even as the only one listed. */
+  plainHeaders?: boolean;
 }
 
 // ── Split dropdown button (Sync / Push / Fetch + the other remote operations) ──
@@ -362,7 +364,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, isLast }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, plain = false, isLast }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -387,6 +389,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
   singleRepo?: boolean;
+  plain?: boolean;
   /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
   isLast?: boolean;
 }) {
@@ -535,7 +538,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
     <div style={{ ...styles.repoRoot, ...(expanded && !isLast ? {} : { borderBottom: 'none' }) }}>
       {/* Repo header */}
       <div
-        style={styles.repoHeader(repoColor, singleRepo)}
+        style={styles.repoHeader(repoColor, plain)}
         onMouseEnter={() => setHeaderHovered(true)}
         onMouseLeave={() => setHeaderHovered(false)}
       >
@@ -552,7 +555,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
         )}
         <div style={styles.headerMain} onClick={singleRepo ? undefined : toggleExpanded}>
           {!singleRepo && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />}
-          {singleRepo
+          {plain
             ? <Codicon name="repo" style={{ fontSize: '13px', opacity: 0.7, flexShrink: 0 }} />
             : <span style={styles.dot(repoColor)} />
           }
@@ -689,7 +692,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onPull, onFetch, onSync, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onPull, onFetch, onSync, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, plainHeaders = false }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const { isPushSelected, setPushSelection } = useCommitStore();
@@ -797,6 +800,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
       onBranchClick={onBranchClick}
       aiEnabled={aiEnabled}
       singleRepo={opts.single}
+      plain={plainHeaders}
       isLast={opts.isLast}
     />
   );

@@ -17,6 +17,8 @@ interface Props {
   repoColor: string;
   multiRepo: boolean;
   singleRepo?: boolean;
+  /** The workspace's only repo: the header drops the repo's color for the neutral look. */
+  plainHeader?: boolean;
   worktreeBranch?: string;
   mainRepoName?: string;
   stashes: StashEntry[];
@@ -211,7 +213,7 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
 // ── Public component ──────────────────────────────────────────────────────────
 
 export function StashTab({
-  repoId, repoName, repoColor, multiRepo, singleRepo = false,
+  repoId, repoName, repoColor, multiRepo, singleRepo = false, plainHeader = false,
   worktreeBranch, mainRepoName,
   stashes, loading, error, viewMode,
   onApply, onPop, onDrop, onRename, onRequestList: _onRequestList, onOpenFileDiff,
@@ -231,6 +233,7 @@ export function StashTab({
           repoName={worktreeBranch ? mainRepoName ?? repoName : repoName}
           repoColor={repoColor}
           singleRepo={singleRepo}
+          plain={plainHeader}
           worktreeBranch={worktreeBranch}
           expanded={!sectionCollapsed}
           onToggle={() => toggleSectionExpanded(sectionKey)}
