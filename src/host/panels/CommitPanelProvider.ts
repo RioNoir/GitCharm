@@ -1019,16 +1019,57 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_PULL_REPO': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('pull', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
-        try {
-          const output = await repo.pull();
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
-          logInfo('pull', `Pulled ${msg.repoId}`);
-          const pullStatus = await this.manager.getAllStatusesFresh();
-          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: pullStatus });
-        } catch (e: unknown) {
-          logError('pull', formatGitError(e), getRawErrorDetail(e));
-          this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+        const repoName = this.manager.getRepoMetas().find(m => m.id === msg.repoId)?.name ?? msg.repoId;
+        let rebase = msg.rebase;
+        if (rebase === undefined) {
+          const pick = await vscode.window.showQuickPick(
+            [
+              { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes')}`, rebase: false },
+              { label: `$(repo-forked) ${vscode.l10n.t('Rebase onto incoming changes')}`, rebase: true },
+            ],
+            { title: vscode.l10n.t('Pull — {0}', repoName) },
+          );
+          if (!pick) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
+          rebase = pick.rebase;
         }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('[{0}]: Pulling…', repoName), cancellable: false },
+          async () => {
+            try {
+              const output = rebase ? await repo.pullRebase() : await repo.pull();
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
+              logInfo('pull', `Pulled ${msg.repoId}${rebase ? ' (rebase)' : ''}`);
+              this.logProvider?.refresh();
+            } catch (e: unknown) {
+              logError('pull', formatGitError(e), getRawErrorDetail(e));
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+            }
+          },
+        );
+        const pullStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: pullStatus });
+        break;
+      }
+
+      case 'COMMIT_FETCH_REPO': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) { logWarn('fetch', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
+        const repoName = this.manager.getRepoMetas().find(m => m.id === msg.repoId)?.name ?? msg.repoId;
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('[{0}]: Fetching…', repoName), cancellable: false },
+          async () => {
+            try {
+              await repo.fetchAll();
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
+              logInfo('fetch', `Fetched ${msg.repoId}`);
+            } catch (e: unknown) {
+              logError('fetch', formatGitError(e), getRawErrorDetail(e));
+              this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: formatGitError(e) });
+            }
+          },
+        );
+        const fetchStatus = await this.manager.getAllStatusesFresh();
+        this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status: fetchStatus });
         break;
       }
 
@@ -2033,7 +2074,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_VIEW_COMBINED_DIFF': {
         const { openCombinedDiffPanel } = await import('./CombinedDiffPanel');
-        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.repoId, msg.hashes);
+        await openCombinedDiffPanel(this.extensionUri, this.manager, [{ repoId: msg.repoId, hashes: msg.hashes }]);
         break;
       }
 

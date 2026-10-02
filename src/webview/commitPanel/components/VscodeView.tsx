@@ -6,6 +6,7 @@ import type { IconThemeData } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { SingleRepoHeader } from './ProjectGroup';
+import { unchangedSectionState } from './unchangedSection';
 import { branchColor, tagColor } from '../../shared/branchColors';
 import { GenericFileTree } from '../../shared/GenericFileTree';
 import * as l10n from '@vscode/l10n';
@@ -13,6 +14,11 @@ import * as l10n from '@vscode/l10n';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface Props {
+  /**
+   * The workspace has a single repo. Only then the single-repo layout (one top header, no
+   * repo groups): a single repo left by "Hide without changes" keeps the multi-repo one.
+   */
+  workspaceSingleRepo?: boolean;
   repos: RepoStatus[];
   repoMetas: RepoMeta[];
   selectedFile: { repoId: string; path: string } | null;
@@ -110,9 +116,11 @@ interface RepoSubGroupProps {
   mainWorktreePath?: string;
   onMultiSelect?: (file: FileStatus) => void;
   multiSelectedFiles?: FileStatus[];
+  /** A repo listed under "Unchanged": just its header — no chevron, nothing to expand. */
+  headerOnly?: boolean;
 }
 
-function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, isLast = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles }: RepoSubGroupProps) {
+function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, isLast = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles, headerOnly = false }: RepoSubGroupProps) {
   const repoId = repoStatus.repoId;
   const changeSortMode = useCommitStore(s => s.viewAndSort.changeSortMode);
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
@@ -173,14 +181,19 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               style={{ margin: '0 0 0 8px', flexShrink: 0, accentColor: 'var(--vscode-button-background)', cursor: isEmpty ? 'default' : 'pointer', ...(isEmpty ? { opacity: 0.3, pointerEvents: 'none' } : {}) }}
             />
           )}
-          <div style={repoHeaderMainStyle} onClick={() => toggleCollapsed(collapseKey)}>
-            <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />
+          <div
+            style={headerOnly ? { ...repoHeaderMainStyle, cursor: 'default' } : repoHeaderMainStyle}
+            onClick={headerOnly ? undefined : () => toggleCollapsed(collapseKey)}
+          >
+            {headerOnly
+              ? <span style={{ width: '12px', flexShrink: 0 }} />
+              : <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />}
             <span style={repoDotStyle(repoColor)} />
             <span style={repoNameStyle}>
               {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
             </span>
             {isSubmodule && (
-              <span style={submoduleBadgeStyle} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>{l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}</span>
+              <Codicon name="package" style={submoduleIconStyle} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')} />
             )}
             <span
               style={branchBadgeStyle(branchClr, branchHovered)}
@@ -217,7 +230,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
           )}
         </div>
       )}
-      {!collapsed && (
+      {!headerOnly && !collapsed && (
         <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
           {isEmpty ? (
             <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>{l10n.t('No changes')}</div>
@@ -278,7 +291,8 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
 interface SectionHeaderProps {
   title: string;
   icon: string;
-  count: number;
+  /** Omitted for a section with nothing to count (e.g. "Unchanged"). */
+  count?: number;
   collapsed: boolean;
   onToggle: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -320,7 +334,7 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
         {onAction && actionIcon && (
           <InlineIconBtn icon={actionIcon} title={actionTitle ?? ''} visible={hovered} onClick={e => { e.stopPropagation(); onAction(); }} />
         )}
-        <span style={sectionCountStyle}>{count}</span>
+        {count !== undefined && <span style={sectionCountStyle}>{count}</span>}
       </div>
     </div>
   );
@@ -329,6 +343,7 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
 // ── Main VscodeView ───────────────────────────────────────────────────────
 
 export function VscodeView({
+  workspaceSingleRepo = false,
   repos, repoMetas, selectedFile, ctxFile, viewMode,
   isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge,
@@ -359,9 +374,23 @@ export function VscodeView({
         : !isCollapsed(`vscode-repo-staged:${lastStagedRepo.repoId}`))
     : false;
 
-  const isSingleRepo = repos.length === 1;
+  const isSingleRepo = workspaceSingleRepo && repos.length === 1;
   const singleRepoStatus = isSingleRepo ? repos[0] : null;
   const singleMeta = singleRepoStatus ? metaMap.get(singleRepoStatus.repoId) : null;
+
+  // With several repos, those without changes go to their own "Unchanged" section at the
+  // bottom instead of each showing an empty group in "Changes".
+  const isUnchanged = (r: RepoStatus) => r.stagedFiles.length === 0 && r.unstagedFiles.length === 0;
+  const unchangedRepos = isSingleRepo ? [] : repos.filter(isUnchanged);
+  const unstagedRepos = repos.filter(r => (r.stagedFiles.length === 0 || r.unstagedFiles.length > 0) && !(unchangedRepos.length > 0 && isUnchanged(r)));
+  const unchanged = unchangedSectionState('vscode-section:unchanged', unchangedRepos.length, isCollapsed);
+  // As for "Changes" under the staged groups: a top border only when the group above is open.
+  const lastUnstagedRepo = unstagedRepos[unstagedRepos.length - 1];
+  const lastUnstagedRepoExpanded = lastUnstagedRepo
+    ? (lastUnstagedRepo.unstagedFiles.length === 0
+        ? isCollapsed(`vscode-repo-unstaged:${lastUnstagedRepo.repoId}`)
+        : !isCollapsed(`vscode-repo-unstaged:${lastUnstagedRepo.repoId}`))
+    : false;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
@@ -464,7 +493,6 @@ export function VscodeView({
         topBorder={!stagedCollapsed && totalStaged > 0 && lastStagedRepoExpanded}
       />
       {!unstagedCollapsed && (() => {
-        const unstagedRepos = repos.filter(r => r.stagedFiles.length === 0 || r.unstagedFiles.length > 0);
         return unstagedRepos.map((r, idx) => {
           const meta = metaMap.get(r.repoId);
           return (
@@ -508,6 +536,59 @@ export function VscodeView({
           );
         });
       })()}
+
+      {/* ── Unchanged ── */}
+      {unchangedRepos.length > 0 && (
+        <SectionHeader
+          title={l10n.t({ message: 'Unchanged', comment: ['Commit panel section: repositories with no changes'] })}
+          icon="circle-slash"
+          collapsed={unchanged.collapsed}
+          onToggle={() => toggleCollapsed(unchanged.key)}
+          onContextMenu={_e => {/* no-op */}}
+          topBorder={!unstagedCollapsed && lastUnstagedRepoExpanded}
+        />
+      )}
+      {unchangedRepos.length > 0 && !unchanged.collapsed && unchangedRepos.map((r, idx) => {
+        const meta = metaMap.get(r.repoId);
+        return (
+          <VscodeRepoGroup
+            key={r.repoId}
+            headerOnly
+            isFirst={idx === 0}
+            isLast={idx === unchangedRepos.length - 1}
+            repoStatus={r}
+            repoName={meta?.name ?? r.repoId.split('/').pop() ?? r.repoId}
+            repoColor={meta?.color ?? '#4ec9b0'}
+            staged={false}
+            files={[]}
+            viewMode={viewMode}
+            selectedFile={selectedFile}
+            ctxFile={ctxFile}
+            iconTheme={iconTheme}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            hasExpandedDirs={hasExpandedDirs}
+            setDirsCollapsed={setDirsCollapsed}
+            activeFolderPath={activeFolderPath}
+            onSelectFile={onSelectFile}
+            onContextMenu={(e, file) => onContextMenu(e, file, false)}
+            onFolderContextMenu={(e, rid, fp, fs) => onFolderContextMenu(e, rid, fp, fs, false)}
+            onOpenFile={onOpenFile}
+            onRollback={onRollback}
+            onResolveMerge={onResolveMerge}
+            onStageFiles={paths => onStageFiles(r.repoId, paths)}
+            onUnstageFiles={paths => onUnstageFiles(r.repoId, paths)}
+            onRepoContextMenu={e => onRepoContextMenu(e, r.repoId, false)}
+            onBranchClick={onBranchClick}
+            onOpenChanges={() => onOpenUnstagedChanges(r.repoId)}
+            singleRepo={false}
+            isSubmodule={meta?.isSubmodule}
+            submodulePath={meta?.submodulePath}
+            isWorktree={meta?.isWorktree}
+            mainWorktreePath={meta?.mainWorktreePath}
+          />
+        );
+      })}
 
       <div style={{ flex: 1, minHeight: '40px' }} />
     </div>
@@ -622,8 +703,9 @@ const repoActionsStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '0', flexShrink: 0, paddingRight: '8px',
 };
 
-const submoduleBadgeStyle: React.CSSProperties = {
-  fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.04em',
-  color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)',
-  borderRadius: '3px', padding: '1px 4px', flexShrink: 0, opacity: 0.75,
+const submoduleIconStyle: React.CSSProperties = {
+  fontSize: '14px',
+  flexShrink: 0,
+  opacity: 0.75,
+  color: 'var(--vscode-foreground)',
 };

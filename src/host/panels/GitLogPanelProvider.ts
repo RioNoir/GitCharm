@@ -350,18 +350,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // the underlying file-event burst, so delaying it again only adds lag. The
     // branch query runs in parallel rather than being awaited first, so a slow
     // `git branch` can't hold up the commit list.
-    const onGraphOrBranchChange = () => {
+    const onGraphOrReposChange = () => {
       this.broadcast({ type: 'LOG_REFRESH' });
       void this.pushInitData();
     };
+    // A branch change arrives once the VS Code Git API has caught up — after the ref
+    // watcher already reloaded the commits (the manager raises a graph change itself for
+    // a repo it can't watch). Only the branch data, partly read from that API (e.g. a
+    // detached HEAD's tag), still needs refreshing, not every repo's log again.
+    const onBranchChange = () => { void this.pushInitData(); };
 
     // Register manager listeners here so they fire even when the panel has never been opened.
     // this.post() silently drops messages when the webview is not yet resolved — that's fine,
     // because resolveWebviewView performs an explicit initial sync when the panel first opens.
     this.managerListeners.push(
-      this.manager.onGraphChange(onGraphOrBranchChange),
-      this.manager.onBranchChange(onGraphOrBranchChange),
-      this.manager.onReposChange(onGraphOrBranchChange),
+      this.manager.onGraphChange(onGraphOrReposChange),
+      this.manager.onBranchChange(onBranchChange),
+      this.manager.onReposChange(onGraphOrReposChange),
       this.manager.onStatusChange(status => this.broadcast({ type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(status) })),
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('gitcharm.showUncommittedChangesInLog')) void this.pushWorkingTreeStatus();
@@ -385,7 +390,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   private async pushWorkingTreeStatus(origin?: ReplyTarget): Promise<void> {
-    const msg: HostToLogMsg = { type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(await this.manager.getAllStatuses()) };
+    const msg: HostToLogMsg = { type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(await this.manager.getLatestStatuses()) };
     if (origin) this.postTo(origin, msg); else this.broadcast(msg);
   }
 
@@ -733,21 +738,26 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const iconWebview = origin === 'undocked'
           ? this.undockedPanel?.webview
           : this.view?.webview;
-        const [repos, branches, iconTheme] = await Promise.all([
-          this.getVisibleReposWithDefaultBranch(),
+        // Repos, branches and tags go out alongside the log rather than before it: waiting
+        // for every repo's branches first added their time to the commits'. A later page
+        // only appends commits, so it skips them — they can't have changed by paging.
+        const reposPromise = this.getVisibleReposWithDefaultBranch();
+        const initDataSent = msg.skip > 0 ? Promise.resolve() : Promise.all([
+          reposPromise,
           this.getFilteredBranches(),
           iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
-        ]);
-        post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
+        ]).then(([repos, branches, iconTheme]) => {
+          post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
 
-        // Send tags for all repos
-        for (const meta of repos) {
-          const repo = this.manager.getRepo(meta.id);
-          if (!repo) continue;
-          repo.getTags().then(rawTags => {
-            post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
-          }).catch(() => {});
-        }
+          // Send tags for all repos
+          for (const meta of repos) {
+            const repo = this.manager.getRepo(meta.id);
+            if (!repo) continue;
+            repo.getTags().then(rawTags => {
+              post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
+            }).catch(() => {});
+          }
+        });
 
         const logRepoIds = msg.repoIds.length > 0
           ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
@@ -759,7 +769,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         let compareByRepo: Record<string, CompareRange> | undefined;
         if (msg.compare) {
           const { base, target } = msg.compare;
-          const metaById = new Map(repos.map(m => [m.id, m]));
+          const metaById = new Map((await reposPromise).map(m => [m.id, m]));
           const resolved = await Promise.all(logRepoIds.map(async (repoId): Promise<[string, CompareRange] | null> => {
             const repo = this.manager.getRepo(repoId);
             if (!repo) return null;
@@ -782,6 +792,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             compareByRepo,
           })
           : [];
+        // The webview colors commits by their repo, so the repos must reach it first.
+        await initDataSent.catch(() => {});
         const limitReached = reachesCeiling && fetched.length > limit;
         const commits = limitReached ? fetched.slice(0, limit) : fetched;
         // Last batch when git ran out of commits, or when the ceiling is reached — either
@@ -862,17 +874,26 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
 
       case 'LOG_REQUEST_RANGE_FILES': {
-        const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: [], error: 'Repo not found' }); return; }
         try {
-          const [files, orderedHashes] = await Promise.all([
-            repo.getFilesBetween(msg.hashes),
-            repo.getCombinedFilesOrder(msg.hashes),
-          ]);
-          post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files, orderedHashes });
+          const results = await Promise.all(msg.groups.map(async group => {
+            const repo = this.manager.getRepo(group.repoId);
+            if (!repo) throw new Error(`Repo not found: ${group.repoId}`);
+            if (msg.mode === 'combined') return { repoId: group.repoId, ...await repo.getCombinedChanges(group.hashes) };
+            const [files, orderedHashes] = await Promise.all([
+              repo.getFilesBetween(group.hashes),
+              repo.getCombinedFilesOrder(group.hashes),
+            ]);
+            return { repoId: group.repoId, files, orderedHashes };
+          }));
+          post({
+            type: 'LOG_RANGE_FILES_RESULT',
+            requestId: msg.requestId,
+            files: results.flatMap(r => r.files.map(f => ({ ...f, repoId: r.repoId }))),
+            orderedHashes: Object.fromEntries(results.map(r => [r.repoId, r.orderedHashes])),
+          });
         } catch (e: unknown) {
           logError('rangeFiles', formatGitError(e), getRawErrorDetail(e));
-          post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: [], error: formatGitError(e) });
+          post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: {}, error: formatGitError(e) });
         }
         break;
       }
@@ -916,7 +937,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_OPEN_RANGE_FILE_DIFF': {
         const { openRangeFileDiff } = await import('./CombinedDiffPanel');
-        await openRangeFileDiff(this.manager, msg.repoId, msg.hashes, msg.filePath, msg.fileStatus, msg.oldPath);
+        await openRangeFileDiff(this.manager, msg.repoId, msg.hashes, msg.filePath, msg.fileStatus, msg.oldPath, msg.baseRef, msg.headRef);
         break;
       }
 
@@ -2239,7 +2260,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_VIEW_COMBINED_DIFF': {
         const { openCombinedDiffPanel } = await import('./CombinedDiffPanel');
-        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.repoId, msg.hashes);
+        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.groups);
         break;
       }
 

@@ -3,10 +3,15 @@ import type { ChangelistData, FileStatus, RepoMeta, RepoStatus } from '../../sha
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../../shared/types';
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
-import { ChangelistGroup } from './ChangelistGroup';
+import { ChangelistGroup, UnchangedReposGroup } from './ChangelistGroup';
 import { SingleRepoHeader } from './ProjectGroup';
 
 interface Props {
+  /**
+   * The workspace has a single repo. Only then the single-repo layout (one top header, no
+   * repo groups): a single repo left by "Hide without changes" keeps the multi-repo one.
+   */
+  workspaceSingleRepo?: boolean;
   changelists: ChangelistData[];
   repos: RepoStatus[];
   repoMetas: RepoMeta[];
@@ -37,6 +42,7 @@ interface Props {
 }
 
 export function ChangelistView({
+  workspaceSingleRepo = false,
   changelists, repos, repoMetas,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
@@ -53,8 +59,12 @@ export function ChangelistView({
   }
 
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
-  const singleRepo = repos.length === 1;
+  const singleRepo = workspaceSingleRepo && repos.length === 1;
   const multiRepo = repos.length >= 1;
+  // With several repos, those without changes go to their own "Unchanged" section at the
+  // bottom instead of each showing an empty group in "Changes".
+  const isUnchanged = (r: RepoStatus) => r.stagedFiles.length === 0 && r.unstagedFiles.length === 0;
+  const unchangedRepos = singleRepo ? [] : repos.filter(isUnchanged);
 
   // For each changelist, compute which files (from the live git status) belong to it
   const changelistFiles = new Map<string, Map<string, FileStatus[]>>(); // clId → repoId → files
@@ -108,7 +118,8 @@ export function ChangelistView({
       return Array.from(clMap.values()).some(files => files.length > 0);
     })
     .map(cl => cl.id);
-  const lastVisibleChangelistId = visibleChangelistIds[visibleChangelistIds.length - 1];
+  // The "Unchanged" section, when shown, is what comes last.
+  const lastVisibleChangelistId = unchangedRepos.length > 0 ? undefined : visibleChangelistIds[visibleChangelistIds.length - 1];
 
   return (
     <div
@@ -171,6 +182,7 @@ export function ChangelistView({
 
         const allRepoGroups = !singleRepo && cl.id === CHANGELIST_DEFAULT_ID
           ? repos
+              .filter(r => !isUnchanged(r))
               .filter(r => !reposInOtherChangelists.has(r.repoId) || (clMap.get(r.repoId)?.length ?? 0) > 0)
               .map(r => buildGroup(r.repoId, clMap.get(r.repoId) ?? []))
           : repoGroups;
@@ -213,6 +225,42 @@ export function ChangelistView({
           />
         );
       })}
+      {unchangedRepos.length > 0 && (
+        <UnchangedReposGroup
+          repoGroups={unchangedRepos.map(r => {
+            const meta = metaMap.get(r.repoId);
+            return {
+              repoId: r.repoId,
+              repoName: meta?.name ?? r.repoId.split('/').pop() ?? r.repoId,
+              repoColor: meta?.color ?? '#4ec9b0',
+              repoStatus: r,
+              files: [],
+              isSubmodule: meta?.isSubmodule,
+              submodulePath: meta?.submodulePath,
+              isWorktree: meta?.isWorktree,
+              mainWorktreePath: meta?.mainWorktreePath,
+            };
+          })}
+          selectedFile={selectedFile}
+          viewMode={viewMode}
+          isFileSelected={isFileSelected}
+          isCollapsed={isCollapsed}
+          toggleCollapsed={toggleCollapsed}
+          hasExpandedDirs={hasExpandedDirs}
+          setDirsCollapsed={setDirsCollapsed}
+          onToggleFile={onToggleFile}
+          onSetFiles={onSetFiles}
+          onSelectFile={onSelectFile}
+          onContextMenu={onContextMenu}
+          onFolderContextMenu={onFolderContextMenu}
+          onOpenFile={onOpenFile}
+          onRollback={onRollback}
+          onResolveMerge={onResolveMerge}
+          onRepoContextMenu={onRepoContextMenu}
+          onOpenChanges={onOpenChanges}
+          onBranchClick={onBranchClick}
+        />
+      )}
       {/* Spacer to ensure the empty area below also captures right-click */}
       <div style={{ flex: 1, minHeight: '40px' }} onContextMenu={e => { e.preventDefault(); onHeaderContextMenu(e, 'empty'); }} />
     </div>

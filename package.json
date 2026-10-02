@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "%extension.description%",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -157,6 +157,16 @@
       {
         "command": "gitcharm.showOutputLog",
         "title": "%command.showOutputLog.title%",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.showSubmodules",
+        "title": "%command.showSubmodules.title%",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.hideSubmodules",
+        "title": "%command.hideSubmodules.title%",
         "category": "GitCharm"
       },
       {
@@ -838,6 +848,14 @@
           "command": "gitcharm.openLog"
         },
         {
+          "command": "gitcharm.showSubmodules",
+          "when": "gitcharm.hasHiddenSubmodules"
+        },
+        {
+          "command": "gitcharm.hideSubmodules",
+          "when": "gitcharm.hasShownSubmodules"
+        },
+        {
           "command": "gitcharm.showBranchMenu"
         },
         {
@@ -1198,6 +1216,14 @@
               "type": "string"
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
+          },
+          "gitcharm.submoduleMaxDepth": {
+            "order": 72,
+            "type": "number",
+            "default": 5,
+            "minimum": 0,
+            "maximum": 10,
+            "description": "%config.submoduleMaxDepth.description%"
           },
           "gitcharm.branchNameModels": {
             "order": 75,

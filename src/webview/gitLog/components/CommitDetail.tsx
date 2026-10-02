@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import type { CommitNode, RepoMeta, MergeParentCommit } from '../../shared/types';
 import { getVsCodeApi } from '../../shared/vscodeApi';
-import type { LogToHostMsg, HostToLogMsg, IconThemeData } from '../../../host/types/messages';
+import type { LogToHostMsg, HostToLogMsg, IconThemeData, CommitSelectionMode } from '../../../host/types/messages';
+import { commitRevision, selectionGroups } from '../utils/commitSelection';
+import type { CommitSelection } from '../utils/commitSelection';
 import { Codicon } from '../../shared/Codicon';
 import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import { formatDateTime } from '../../shared/dateUtils';
@@ -136,11 +138,16 @@ interface Props {
   commit: CommitNode | null;
   /** Full (multi-line) commit message body — only used in twoColumnLayout mode's expanded "Commit message" section. Falls back to `commit.message` (subject only) when omitted. */
   fullMessage?: string;
-  range?: { older: CommitNode; newer: CommitNode };
-  files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>;
-  selectedFile: { path: string; status: string } | null;
+  /** Several commits picked together: shows what they change instead of `commit`'s details. */
+  selection?: CommitSelection;
+  /** Set when the selection can switch between its combined changes and a snapshot diff. */
+  onSelectionModeChange?: (mode: CommitSelectionMode) => void;
+  files: FileEntry[];
+  selectedFile: { path: string; status: string; repoId?: string } | null;
   loadingFiles: boolean;
   repoColor?: string;
+  /** Colors of the repos, to tell apart the file groups of a selection spanning several. */
+  repoColors?: Record<string, string>;
   repos: RepoMeta[];
   iconTheme?: IconThemeData | null;
   onSelectFile: (file: { path: string; status: string }) => void;
@@ -168,7 +175,8 @@ const STATUS_COLORS: Record<string, string> = {
   '!': 'var(--vscode-gitDecoration-conflictingResourceForeground)',
 };
 
-interface FileEntry { path: string; status: string; added?: number; removed?: number; oldPath?: string; }
+/** A changed file — of one commit, or of a selection (then with its repo and, combined, the revisions it spans). */
+interface FileEntry { path: string; status: string; added?: number; removed?: number; oldPath?: string; repoId?: string; baseRef?: string; headRef?: string; }
 
 function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? 'var(--vscode-foreground)';
@@ -211,9 +219,31 @@ function RefBadgeIcon({ group }: { group: RefGroup }) {
   return <Codicon name="git-branch" style={s} />;
 }
 
+/** A row listing a commit (of a selection, or merged by a merge commit) — clicking it opens the commit's full detail. */
+function OpenDetailRow({ repoId, hash, style, children }: { repoId: string; hash: string; style: React.CSSProperties; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  const open = () => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId, hash } satisfies LogToHostMsg);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      style={{ ...style, ...styles.openDetailRow(hovered) }}
+      title={l10n.t('Open Full Detail')}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={open}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function CommitDetail({ commit, fullMessage, range, files, selectedFile, loadingFiles, repoColor, repos, iconTheme, onSelectFile, onClose, refColors, activeProfile, hideExtendedDetailButton, twoColumnLayout }: Props) {
+export function CommitDetail({ commit, fullMessage, selection, onSelectionModeChange, files, selectedFile, loadingFiles, repoColor, repoColors, repos, iconTheme, onSelectFile, onClose, refColors, activeProfile, hideExtendedDetailButton, twoColumnLayout }: Props) {
+  // Most of the pane is about one commit; a selection only reuses the file list
+  const range = !!selection;
   // Same id/rule as CommitList.tsx's injection — that component isn't always mounted alongside
   // this one (e.g. the standalone "Full Detail" panel), so this component injects its own copy
   // of the [data-top-action-btn] hover rule its own toolbar buttons rely on. The shared id makes
@@ -263,12 +293,26 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
   const [descendantBranches, setDescendantBranches] = useState<{ local: string[]; remote: string[]; tags: string[] }>({ local: [], remote: [], tags: [] });
   const [loadingDescendants, setLoadingDescendants] = useState(false);
   const [descendantsExpanded, setDescendantsExpanded] = useState(false);
+  // Repo groups of a multi-repo selection's file list the user folded away
+  const [collapsedRepoGroups, setCollapsedRepoGroups] = useState<Set<string>>(new Set());
+  const toggleRepoGroup = (repoId: string) => {
+    setCollapsedRepoGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(repoId)) next.delete(repoId); else next.add(repoId);
+      return next;
+    });
+  };
 
+  // Repos of the selection, in the order their files are grouped
+  const selectionRepoIds = useMemo(
+    () => selection ? [...new Set(selection.commits.map(c => c.repoId))] : [],
+    [selection],
+  );
+  const multiRepoSelection = selectionRepoIds.length > 1;
   const repoName = useMemo(() => {
-    const activeCommit = range?.newer ?? commit;
-    if (!activeCommit) return null;
-    return repos.find(r => r.id === activeCommit.repoId)?.name ?? null;
-  }, [commit, range, repos]);
+    if (!commit || multiRepoSelection) return null;
+    return repos.find(r => r.id === commit.repoId)?.name ?? null;
+  }, [commit, multiRepoSelection, repos]);
   // A repo color only helps tell repos apart — with a single repo in the workspace
   // there's nothing to distinguish it from, so the name stays in the plain foreground color.
   const effectiveRepoColor = repos.length > 1 ? repoColor : undefined;
@@ -400,14 +444,18 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
 
   function openVscodeDiff(file: FileEntry, hash?: string, combined?: boolean) {
     onSelectFile(file);
-    if (range) {
+    if (selection) {
+      const repoId = file.repoId ?? commit?.repoId;
+      if (!repoId) return;
       getVsCodeApi().postMessage({
         type: 'LOG_OPEN_RANGE_FILE_DIFF',
-        repoId: range.newer.repoId,
-        hashes: [range.older.hash, range.newer.hash],
+        repoId,
+        hashes: selection.commits.filter(c => c.repoId === repoId).map(commitRevision),
         filePath: file.path,
         fileStatus: file.status,
         oldPath: file.oldPath,
+        baseRef: file.baseRef,
+        headRef: file.headRef,
       } satisfies LogToHostMsg);
       return;
     }
@@ -542,13 +590,33 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
 
   // The top-right buttons float over the header; the repo row, level with them, keeps clear
   // of however many are showing
+  const combined = selection?.mode === 'combined';
   const topActionCount = twoColumnLayout ? 0
-    : (onClose ? 1 : 0) + (range ? 0 : 1 + (!hideExtendedDetailButton && !commit.isWorkingTree ? 1 : 0));
+    : (onClose ? 1 : 0) + (selection ? (combined ? 1 : 0) : 1 + (!hideExtendedDetailButton && !commit.isWorkingTree ? 1 : 0));
   const topActionsWidth = topActionCount > 0 ? topActionCount * TOP_ACTION_BTN_WIDTH + 4 : 0;
 
   const activeFiles = files;
   const activeLoading = loadingFiles;
   const activeHash = commit?.hash;
+
+  // `dirPrefix` keeps apart the expanded folders of each repo of a selection
+  const renderFileTree = (treeFiles: FileEntry[], dirPrefix: string) => (
+    <GenericFileTree<FileEntry>
+      files={treeFiles}
+      viewMode={viewMode}
+      compact
+      basePad={dirPrefix ? REPO_GROUP_BASE_PAD : undefined}
+      iconTheme={iconTheme}
+      statusColor={statusColor}
+      statusLetter={f => f}
+      isDirOpen={dir => isDirOpen(dirPrefix + dir)}
+      toggleDir={dir => toggleDir(dirPrefix + dir)}
+      isFileSelected={f => selectedFile?.path === f.path && (!f.repoId || !selectedFile.repoId || selectedFile.repoId === f.repoId)}
+      isFileContextActive={f => ctxMenu?.file.path === f.path}
+      onOpenFile={f => openVscodeDiff(f, activeHash)}
+      onContextMenuFile={range ? undefined : (e, f) => setCtxMenu({ x: e.clientX, y: e.clientY, file: f })}
+    />
+  );
 
   return (
     <div
@@ -558,6 +626,16 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
     >
       {!twoColumnLayout && (
       <div style={styles.topActions}>
+        {selection && combined && (
+          <button
+            data-top-action-btn=""
+            style={styles.topActionBtn}
+            title={l10n.t('Open Changes')}
+            onClick={() => getVsCodeApi().postMessage({ type: 'LOG_VIEW_COMBINED_DIFF', groups: selectionGroups(selection.commits) } satisfies LogToHostMsg)}
+          >
+            <Codicon name="diff-multiple" style={{ fontSize: '16px' }} />
+          </button>
+        )}
         {!range && (
           <>
             <button
@@ -577,14 +655,14 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                 title={l10n.t('Open extended commit detail')}
                 onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg)}
               >
-                <Codicon name="open-preview" style={{ fontSize: '16px' }} />
+                <Codicon name="open-in-product" style={{ fontSize: '16px' }} />
               </button>
             )}
           </>
         )}
         {onClose && (
           <button data-top-action-btn="" style={styles.topActionBtn} title={l10n.t('Close commit detail')} onClick={onClose}>
-            <Codicon name="layout-sidebar-right" style={{ fontSize: '16px' }} />
+            <Codicon name="right-panel-hide" style={{ fontSize: '16px' }} />
           </button>
         )}
       </div>
@@ -594,7 +672,7 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         className={twoColumnLayout ? 'commit-detail-two-column-header' : undefined}
         style={twoColumnLayout ? styles.headerTwoColumn : styles.header}
       >
-        {range ? (
+        {selection ? (
           <>
             {repoName && (
               <div style={{ ...styles.repoRow, paddingRight: topActionsWidth }}>
@@ -602,16 +680,36 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
                 <span style={styles.repoName(effectiveRepoColor)}>{repoName}</span>
               </div>
             )}
-            <div style={styles.rangeTitle}>
-              <Codicon name="diff-multiple" style={{ fontSize: '14px', opacity: 0.8 }} />
-              <span>{l10n.t('Compare commits')}</span>
+            <div style={{ ...styles.rangeTitle, paddingRight: repoName ? 0 : topActionsWidth }}>
+              <span>{combined ? l10n.t('Combined changes') : l10n.t('Compare commits')}</span>
             </div>
-            <div style={styles.hashRow}>
-              <span style={styles.hash}>{range.older.shortHash}</span>
-              <Codicon name="arrow-right" style={{ fontSize: '11px', opacity: 0.6 }} />
-              <span style={styles.hash}>{range.newer.shortHash}</span>
-            </div>
-            <div style={styles.rangeHint}>{l10n.t('Changes between the selected snapshots')}</div>
+            {combined ? (
+              <>
+                <div style={styles.rangeHint}>
+                  {multiRepoSelection
+                    ? l10n.t('Changes introduced by {0} commits in {1} repositories', selection.commits.length, selectionRepoIds.length)
+                    : l10n.t('Changes introduced by {0} commits', selection.commits.length)}
+                </div>
+                <div style={styles.selectionList}>
+                  {[...selection.commits].reverse().map(c => (
+                    <OpenDetailRow key={`${c.repoId}:${c.hash}`} repoId={c.repoId} hash={c.hash} style={styles.selectionRow}>
+                      {multiRepoSelection && <span style={styles.selectionRepoDot(repoColors?.[c.repoId])} />}
+                      <span style={styles.hash}>{c.isStash ? (c.stashRef ?? c.shortHash) : c.shortHash}</span>
+                      <span style={styles.selectionMessage}>{c.message}</span>
+                    </OpenDetailRow>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={styles.rangeHint}>{l10n.t('Changes between the selected snapshots')}</div>
+                <div style={styles.hashRow}>
+                  <span style={styles.hash}>{selection.commits[0].shortHash}</span>
+                  <Codicon name="arrow-right" style={{ fontSize: '11px', opacity: 0.6 }} />
+                  <span style={styles.hash}>{selection.commits[selection.commits.length - 1].shortHash}</span>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -892,10 +990,10 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
             {!loadingMerge && !twoColumnLayout && mergeCommits.length > 0 && (
               <div style={styles.mergeCommitsListMinimal}>
                 {mergeCommits.map(c => (
-                  <div key={c.hash} style={styles.mergeCommitRowMinimal} title={c.hash}>
+                  <OpenDetailRow key={c.hash} repoId={commit.repoId} hash={c.hash} style={styles.mergeCommitRowMinimal}>
                     <span style={styles.mergeHash}>{c.shortHash}</span>
                     <span style={styles.mergeMessage}>{c.message}</span>
-                  </div>
+                  </OpenDetailRow>
                 ))}
               </div>
             )}
@@ -937,6 +1035,17 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
         </>
         )}
       </div>
+
+      {onSelectionModeChange && (
+        <div style={styles.modeTabs} role="tablist">
+          <button type="button" role="tab" aria-selected={combined} style={styles.modeTab(combined)} onClick={() => onSelectionModeChange('combined')}>
+            {l10n.t('Combined')}
+          </button>
+          <button type="button" role="tab" aria-selected={!combined} style={styles.modeTab(!combined)} onClick={() => onSelectionModeChange('snapshot')}>
+            {l10n.t('Snapshots')}
+          </button>
+        </div>
+      )}
 
       <div
         className={twoColumnLayout ? 'commit-detail-two-column-right' : undefined}
@@ -1023,22 +1132,30 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
           <div style={styles.loading}>{l10n.t('No changed files')}</div>
         )}
 
-        {!activeLoading && activeFiles.length > 0 && (
-          <GenericFileTree<FileEntry>
-            files={activeFiles}
-            viewMode={viewMode}
-            compact
-            iconTheme={iconTheme}
-            statusColor={statusColor}
-            statusLetter={f => f}
-            isDirOpen={isDirOpen}
-            toggleDir={toggleDir}
-            isFileSelected={f => selectedFile?.path === f.path}
-            isFileContextActive={f => ctxMenu?.file.path === f.path}
-            onOpenFile={f => openVscodeDiff(f, activeHash)}
-            onContextMenuFile={range ? undefined : (e, f) => setCtxMenu({ x: e.clientX, y: e.clientY, file: f })}
-          />
-        )}
+        {!activeLoading && activeFiles.length > 0 && (multiRepoSelection
+          ? selectionRepoIds.map(repoId => {
+            const repoFiles = activeFiles.filter(f => f.repoId === repoId);
+            if (repoFiles.length === 0) return null;
+            const collapsed = collapsedRepoGroups.has(repoId);
+            return (
+              <div key={repoId}>
+                <div
+                  data-nav-row=""
+                  tabIndex={-1}
+                  style={styles.fileRepoHeader}
+                  onClick={() => toggleRepoGroup(repoId)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRepoGroup(repoId); } }}
+                >
+                  <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.fileRepoChevron} />
+                  <span style={styles.selectionRepoDot(repoColors?.[repoId])} />
+                  <span style={styles.fileRepoName}>{repos.find(r => r.id === repoId)?.name ?? repoId}</span>
+                  <span style={styles.fileRepoCount}>{plural(repoFiles.length, l10n.t('1 file'), l10n.t('{0} files', repoFiles.length))}</span>
+                </div>
+                {!collapsed && renderFileTree(repoFiles, `${repoId}:`)}
+              </div>
+            );
+          })
+          : renderFileTree(activeFiles, ''))}
       </div>
       </div>
     </div>
@@ -1047,6 +1164,9 @@ export function CommitDetail({ commit, fullMessage, range, files, selectedFile, 
 
 // A top action button: a 16px icon, 4px padding each side, 2px gap to the next
 const TOP_ACTION_BTN_WIDTH = 26;
+
+// Files under a repo header start one level in, past its chevron
+const REPO_GROUP_BASE_PAD = 22;
 
 // Fixed row height so the minimal merged-commits list can cap at exactly N rows before scrolling.
 const MERGE_MINIMAL_ROW_HEIGHT = 18;
@@ -1192,11 +1312,102 @@ const styles = {
     gap: '6px',
     fontSize: '13px',
     fontWeight: 600,
+    fontStyle: 'italic',
     paddingRight: '28px',
   } as React.CSSProperties,
   rangeHint: {
     fontSize: '11px',
     opacity: 0.65,
+  } as React.CSSProperties,
+  // Same look as the Git Log's repository tabs, each tab taking half the width
+  modeTabs: {
+    display: 'flex',
+    borderBottom: '1px solid var(--vscode-panel-border)',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  modeTab: (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '5px 10px',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: active ? '2px solid var(--vscode-focusBorder)' : '2px solid transparent',
+    cursor: 'pointer',
+    fontFamily: 'var(--vscode-font-family)',
+    fontSize: '12px',
+    fontWeight: active ? 600 : 400,
+    whiteSpace: 'nowrap',
+    opacity: active ? 1 : 0.6,
+    color: 'var(--vscode-foreground)',
+  }),
+  // Room for 5 commits before it scrolls
+  selectionList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '3px',
+    maxHeight: '106px',
+    overflowY: 'auto' as const,
+    marginTop: '2px',
+  } as React.CSSProperties,
+  selectionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+    minHeight: '18px',
+    padding: '0 4px',
+    margin: '0 -4px',
+    fontSize: '12px',
+  } as React.CSSProperties,
+  openDetailRow: (hovered: boolean): React.CSSProperties => ({
+    borderRadius: '3px',
+    cursor: 'pointer',
+    outline: 'none',
+    background: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
+  }),
+  selectionRepoDot: (color?: string): React.CSSProperties => ({
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    flexShrink: 0,
+    background: color ?? 'var(--vscode-descriptionForeground)',
+  }),
+  selectionMessage: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+  fileRepoHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minHeight: '22px',
+    padding: '0 8px',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    userSelect: 'none' as const,
+    outline: 'none',
+  } as React.CSSProperties,
+  fileRepoChevron: {
+    fontSize: '12px',
+    opacity: 0.7,
+    flexShrink: 0,
+  } as React.CSSProperties,
+  fileRepoName: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+  fileRepoCount: {
+    fontSize: '11px',
+    fontWeight: 'normal' as const,
+    opacity: 0.5,
+    flexShrink: 0,
   } as React.CSSProperties,
   hashRow: {
     display: 'flex',

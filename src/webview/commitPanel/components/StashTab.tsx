@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { StashEntry } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
+import { RepoSectionHeader } from './RepoSectionHeader';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import type { ViewMode } from '../store/commitStore';
@@ -16,6 +17,8 @@ interface Props {
   repoColor: string;
   multiRepo: boolean;
   singleRepo?: boolean;
+  /** The workspace's only repo: the header drops the repo's color for the neutral look. */
+  plainHeader?: boolean;
   worktreeBranch?: string;
   mainRepoName?: string;
   stashes: StashEntry[];
@@ -209,42 +212,34 @@ function StashRow({ entry, repoId, viewMode, onApply, onPop, onDrop, onRename, o
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-const SECTION_COLLAPSE_THRESHOLD = 5;
-
 export function StashTab({
-  repoId, repoName, repoColor, multiRepo, singleRepo = false,
+  repoId, repoName, repoColor, multiRepo, singleRepo = false, plainHeader = false,
   worktreeBranch, mainRepoName,
   stashes, loading, error, viewMode,
   onApply, onPop, onDrop, onRename, onRequestList: _onRequestList, onOpenFileDiff,
   expandAll = false, isLast = false,
 }: Props) {
-  const { isCollapsed, toggleCollapsed } = useCommitStore();
+  // Every repo's section starts collapsed, but the only repo's is always open — closing it
+  // would leave the tab on nothing. The header shows the count, so a closed section still
+  // tells what's in it.
+  const { isSectionExpanded, toggleSectionExpanded } = useCommitStore();
   const sectionKey = `stash-repo:${repoId}`;
-  const isCollapsible = !singleRepo && stashes.length > SECTION_COLLAPSE_THRESHOLD;
-  const sectionCollapsed = isCollapsible && isCollapsed(sectionKey);
+  const sectionCollapsed = !singleRepo && !isSectionExpanded(sectionKey);
 
   return (
     <div style={{ ...css.root, ...(!sectionCollapsed && !isLast ? {} : { borderBottom: 'none' }) }}>
       {multiRepo && (
-        <div
-          style={{ ...css.repoHeader(repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
-          onClick={isCollapsible ? () => toggleCollapsed(sectionKey) : undefined}
-        >
-          {isCollapsible && (
-            <Codicon name={sectionCollapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
-          )}
-          {singleRepo
-            ? <Codicon name="repo" style={css.repoIcon} />
-            : <span style={css.dot(repoColor)} />
-          }
-          <span style={css.repoName}>{worktreeBranch ? mainRepoName ?? repoName : repoName}</span>
-          {worktreeBranch && (
-            <span style={css.worktreeBadge}>
-              <Codicon name="worktree" style={{ fontSize: '11px', marginRight: '3px', flexShrink: 0 }} />
-              <span style={css.worktreeBadgeText}>{worktreeBranch}</span>
-            </span>
-          )}
-        </div>
+        <RepoSectionHeader
+          repoName={worktreeBranch ? mainRepoName ?? repoName : repoName}
+          repoColor={repoColor}
+          singleRepo={singleRepo}
+          plain={plainHeader}
+          worktreeBranch={worktreeBranch}
+          expanded={!sectionCollapsed}
+          onToggle={() => toggleSectionExpanded(sectionKey)}
+          count={loading ? undefined : stashes.length}
+          countTitle={l10n.t('Stashes')}
+        />
       )}
       {error && (
         <div style={css.errorRow}>
@@ -285,28 +280,6 @@ export type { Props as StashTabProps };
 
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
-  repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: singleRepo
-      ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
-      : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
-    borderBottom: '1px solid var(--vscode-panel-border)',
-    boxSizing: 'border-box', overflow: 'hidden', minWidth: 0,
-    position: 'sticky', top: 0, zIndex: 1,
-  }),
-  dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),
-  repoIcon: { fontSize: '13px', opacity: 0.7, flexShrink: 0 } as React.CSSProperties,
-  repoName: {
-    fontSize: '11px', fontWeight: 'bold' as const, opacity: 0.9, textTransform: 'uppercase' as const, letterSpacing: '0.04em',
-    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flexShrink: 1,
-  } as React.CSSProperties,
-  worktreeBadge: {
-    display: 'flex', alignItems: 'center', fontSize: '11px', fontWeight: 'normal' as const, letterSpacing: '0.02em',
-    opacity: 0.55, minWidth: 0, overflow: 'hidden', flexShrink: 1,
-  } as React.CSSProperties,
-  worktreeBadgeText: {
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0,
-  } as React.CSSProperties,
   errorRow: {
     display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
     color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',

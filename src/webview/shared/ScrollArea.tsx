@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 let scrollbarHideStyleInjected = false;
-function ensureScrollbarHideStyle(): void {
+/** Inject the rule that hides the native scrollbar of `.gitcharm-scroll-viewport` elements. */
+export function ensureScrollbarHideStyle(): void {
   if (scrollbarHideStyleInjected) return;
   scrollbarHideStyleInjected = true;
   const s = document.createElement('style');

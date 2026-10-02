@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { UnpushedCommit } from '../../shared/msgTypes';
 import type { RepoStatus, RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
+import { EmptyTabState } from './EmptyTabState';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 import { ScrollArea } from '../../shared/ScrollArea';
@@ -17,7 +18,11 @@ interface Props {
   onPush: (repoId: string) => void;
   onForcePush: (repoId: string) => void;
   onPushAll: () => void;
-  onSyncAndPush: (repoId: string) => void;
+  /** rebase omitted: the host asks merge or rebase. */
+  onPull: (repoId: string, rebase?: boolean) => void;
+  onFetch: (repoId: string) => void;
+  /** Push, pull or both as each repo needs. */
+  onSync: (repoIds: string[]) => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
   onSquash: (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => void;
@@ -30,9 +35,11 @@ interface Props {
   onViewCombinedDiff: (repoId: string, hashes: string[]) => void;
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
+  /** The workspace's only repo: neutral repo headers (repo icon, no color). Otherwise each keeps its color and dot, even as the only one listed. */
+  plainHeaders?: boolean;
 }
 
-// ── Split dropdown button (Push / Sync & Push) ────────────────────────────────
+// ── Split dropdown button (Sync / Push / Fetch + the other remote operations) ──
 
 interface SplitItem { icon: string; label: string; onSelect: () => void; }
 
@@ -357,10 +364,15 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, isLast }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, plain = false, collapsible = !singleRepo, isLast }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
+  canPush: boolean;
+  canPull: boolean;
+  onPush: (repoId: string) => void;
+  onPull: (repoId: string) => void;
+  onFetch: (repoId: string) => void;
   checked: boolean;
   canCheck: boolean;
   onToggle: (repoId: string) => void;
@@ -377,12 +389,14 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   onBranchClick: (repoId: string) => void;
   aiEnabled: boolean;
   singleRepo?: boolean;
+  plain?: boolean;
+  /** False for the only repo listed: always open, no chevron — there'd be nothing else to show. */
+  collapsible?: boolean;
   /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
   isLast?: boolean;
 }) {
-  const { isCollapsed, toggleCollapsed } = useCommitStore();
+  const { isCollapsed, toggleCollapsed, isSectionExpanded, toggleSectionExpanded } = useCommitStore();
   const collapseKey = `push-repo:${repoStatus.repoId}`;
-  const expanded = !isCollapsed(collapseKey);
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<CommitCtxMenuState | null>(null);
   const [headerHovered, setHeaderHovered] = useState(false);
@@ -403,6 +417,13 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
   const hasUpstream = !!repoStatus.branch.upstream;
   const commitCount = hasUpstream ? ahead : (unpushed?.commits?.length ?? 0);
   const commits = unpushed?.commits ?? [];
+  // Open by default only when there are commits to show — a branch to publish with nothing
+  // new on it, or a repo with only commits to pull (those are in the Git Log), starts
+  // closed. Each default keeps its own record of the user's toggle, so a repo gaining
+  // commits opens again.
+  const expandedByDefault = singleRepo || commitCount > 0;
+  const expanded = !collapsible || (expandedByDefault ? !isCollapsed(collapseKey) : isSectionExpanded(collapseKey));
+  const toggleExpanded = () => (expandedByDefault ? toggleCollapsed(collapseKey) : toggleSectionExpanded(collapseKey));
 
   const handleCommitClick = (e: React.MouseEvent, hash: string) => {
     if (e.ctrlKey || e.metaKey) {
@@ -519,7 +540,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
     <div style={{ ...styles.repoRoot, ...(expanded && !isLast ? {} : { borderBottom: 'none' }) }}>
       {/* Repo header */}
       <div
-        style={styles.repoHeader(repoColor, singleRepo)}
+        style={styles.repoHeader(repoColor, plain)}
         onMouseEnter={() => setHeaderHovered(true)}
         onMouseLeave={() => setHeaderHovered(false)}
       >
@@ -531,12 +552,12 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             onChange={() => onToggle(repoStatus.repoId)}
             onClick={e => e.stopPropagation()}
             style={{ ...styles.checkbox, opacity: canCheck ? 1 : 0.35, cursor: canCheck ? 'pointer' : 'default' }}
-            title={!canCheck ? l10n.t('Nothing to push') : checked ? l10n.t('Exclude from push') : l10n.t('Include in push')}
+            title={!canCheck ? l10n.t('Nothing to sync') : checked ? l10n.t('Exclude from sync') : l10n.t('Include in sync')}
           />
         )}
-        <div style={styles.headerMain} onClick={singleRepo ? undefined : () => toggleCollapsed(collapseKey)}>
-          {!singleRepo && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />}
-          {singleRepo
+        <div style={{ ...styles.headerMain(!singleRepo && collapsible), cursor: collapsible ? 'pointer' : 'default' }} onClick={collapsible ? toggleExpanded : undefined}>
+          {collapsible && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />}
+          {plain
             ? <Codicon name="repo" style={{ fontSize: '13px', opacity: 0.7, flexShrink: 0 }} />
             : <span style={styles.dot(repoColor)} />
           }
@@ -552,6 +573,13 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
             <span style={styles.branchName}>{branchLabel}</span>
           </span>
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+            <InlineIconBtn visible={headerHovered} icon="repo-fetch" title={l10n.t('Fetch')} onClick={e => { e.stopPropagation(); onFetch(repoStatus.repoId); }} />
+            {canPull && (
+              <InlineIconBtn visible={headerHovered} icon="repo-pull" title={l10n.t('Pull…')} onClick={e => { e.stopPropagation(); onPull(repoStatus.repoId); }} />
+            )}
+            {canPush && (
+              <InlineIconBtn visible={headerHovered} icon="repo-push" title={hasUpstream ? l10n.t('Push') : l10n.t('Publish Branch')} onClick={e => { e.stopPropagation(); onPush(repoStatus.repoId); }} />
+            )}
             {commits.length >= 2 && (
               <InlineIconBtn
                 visible={headerHovered}
@@ -566,7 +594,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
                 {commitCount}
               </span>
             )}
-            {behind > 0 && commitCount === 0 && (
+            {behind > 0 && (
               <span style={styles.behindBadge}>
                 <Codicon name="arrow-down" style={{ fontSize: '10px', marginRight: '2px' }} />
                 {behind}
@@ -590,47 +618,54 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
               <Codicon name="check" style={{ marginRight: '6px', opacity: 0.6 }} />
               {l10n.t('Up to date')}
             </div>
-          ) : hasUpstream && ahead === 0 && behind > 0 ? (
-            <div style={styles.behindRow}>
-              <Codicon name="arrow-down" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
-              <span>
-                {plural(behind, l10n.t('1 commit to pull from {0}', repoStatus.branch.upstream ?? ''), l10n.t('{0} commits to pull from {1}', behind, repoStatus.branch.upstream ?? ''))}
-              </span>
-            </div>
-          ) : unpushed?.loading ? (
-            <div style={styles.emptyRow}>{l10n.t('Loading commits…')}</div>
-          ) : unpushed?.error ? (
-            <div style={styles.errorRow}>
-              <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
-              {unpushed.error}
-            </div>
-          ) : commits.length > 0 ? (
-            <div style={styles.commitList}>
-              {commits.map((c, i) => (
-                <div key={c.hash} data-commit-row="true">
-                  <CommitRow
-                    commit={c}
-                    repoId={repoStatus.repoId}
-                    isHead={i === 0}
-                    isSelected={multiSelectHashes.has(c.hash)}
-                    suppressBorder={!isLast && i === commits.length - 1}
-                    onOpenInLog={onOpenInLog}
-                    onUndoCommit={onUndoCommit}
-                    onOpenChanges={onOpenChanges}
-                    onClick={e => handleCommitClick(e, c.hash)}
-                    onContextMenu={e => handleCommitContextMenu(e, c, i === 0)}
-                  />
+          ) : (<>
+            {/* Outgoing: commits to push, or the branch to publish */}
+            {(ahead > 0 || !hasUpstream) && (
+              unpushed?.loading && commits.length === 0 ? (
+                <div style={styles.emptyRow}>{l10n.t('Loading commits…')}</div>
+              ) : unpushed?.error ? (
+                <div style={styles.errorRow}>
+                  <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
+                  {unpushed.error}
                 </div>
-              ))}
-            </div>
-          ) : !hasUpstream ? (
-            <div style={styles.unpublishedRow}>
-              <Codicon name="cloud-upload" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
-              <span>{l10n.t('Local branch — not published to any remote yet')}</span>
-            </div>
-          ) : (
-            <div style={styles.emptyRow}>{l10n.t('No commits found')}</div>
-          )}
+              ) : commits.length > 0 ? (
+                <div style={styles.commitList}>
+                  {commits.map((c, i) => (
+                    <div key={c.hash} data-commit-row="true">
+                      <CommitRow
+                        commit={c}
+                        repoId={repoStatus.repoId}
+                        isHead={i === 0}
+                        isSelected={multiSelectHashes.has(c.hash)}
+                        suppressBorder={!isLast && behind === 0 && i === commits.length - 1}
+                        onOpenInLog={onOpenInLog}
+                        onUndoCommit={onUndoCommit}
+                        onOpenChanges={onOpenChanges}
+                        onClick={e => handleCommitClick(e, c.hash)}
+                        onContextMenu={e => handleCommitContextMenu(e, c, i === 0)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : !hasUpstream ? (
+                <div style={styles.unpublishedRow}>
+                  <Codicon name="cloud-upload" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
+                  <span>{l10n.t('Local branch — not published to any remote yet')}</span>
+                </div>
+              ) : (
+                <div style={styles.emptyRow}>{l10n.t('No commits found')}</div>
+              )
+            )}
+            {/* Commits to pull: just how many — the Git Log lists them */}
+            {behind > 0 && (
+              <div style={styles.behindRow}>
+                <Codicon name="arrow-down" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />
+                <span>
+                  {plural(behind, l10n.t('1 commit to pull from {0}', repoStatus.branch.upstream ?? ''), l10n.t('{0} commits to pull from {1}', behind, repoStatus.branch.upstream ?? ''))}
+                </span>
+              </div>
+            )}
+          </>)}
         </div>
       )}
 
@@ -659,24 +694,31 @@ function RepoSection({ repoStatus, repoMeta, unpushed, checked, canCheck, onTogg
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onSyncAndPush, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onPull, onFetch, onSync, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, plainHeaders = false }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const { isPushSelected, setPushSelection } = useCommitStore();
   const checked = new Set(repos.filter(r => isPushSelected(r.repoId)).map(r => r.repoId));
 
+  // A detached HEAD (a submodule, a checked-out tag) has no upstream, but no branch to
+  // publish or pull into either.
+  const isDetached = (r: RepoStatus) => !!(r.isDetachedHead || r.branch.detachedHash || r.branch.detachedTag);
+  // Push its commits, or publish its branch.
   const canPushRepo = (r: RepoStatus) => {
+    if (isDetached(r)) return false;
     const ahead = r.branch.aheadBehind?.ahead ?? 0;
-    const hasUpstream = !!r.branch.upstream;
-    return (hasUpstream && ahead > 0) || !hasUpstream;
+    return !r.branch.upstream || ahead > 0;
   };
-
+  const canPullRepo = (r: RepoStatus) => !!r.branch.upstream && !isDetached(r);
   const isBehindRepo = (r: RepoStatus) => (r.branch.aheadBehind?.behind ?? 0) > 0;
+  // Listed: the repos out of sync with their remote — something to push or publish, or
+  // commits to pull — so the one or two that matter don't drown among the up-to-date ones.
+  const isListedRepo = (r: RepoStatus) => canPushRepo(r) || isBehindRepo(r);
 
-  // Auto-deselect repos that no longer have commits to push
+  // Auto-deselect repos that got back in sync
   useEffect(() => {
     for (const r of repos) {
-      if (isPushSelected(r.repoId) && !canPushRepo(r)) setPushSelection(r.repoId, false);
+      if (isPushSelected(r.repoId) && !isListedRepo(r)) setPushSelection(r.repoId, false);
     }
   }, [repos, unpushedMap]);
 
@@ -693,109 +735,121 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
     return l10n.t('Push');
   };
 
-  // Single repo: push directly, no checkbox needed
+  /**
+   * The footer's split button for `targets`. Its main action is Sync when any of them is
+   * behind (the host pulls and pushes as each needs), Push when there's only pushing to do,
+   * and Fetch otherwise — checking the remote is then all there is to do. With nothing
+   * selected it fetches every repo. The menu has the other operations that apply.
+   */
+  const renderActions = (targets: RepoStatus[]) => {
+    const pushable = targets.filter(canPushRepo);
+    const pullable = targets.filter(canPullRepo);
+    const fetchTargets = targets.length > 0 ? targets : repos;
+    const sync = () => onSync(targets.filter(isListedRepo).map(r => r.repoId));
+    const push = () => pushable.forEach(r => onPush(r.repoId));
+    const fetch = () => fetchTargets.forEach(r => onFetch(r.repoId));
+    const fetchLabel = targets.length === 0 && repos.length > 1 ? l10n.t('Fetch All') : l10n.t('Fetch');
+    const main = targets.some(isBehindRepo)
+      ? { kind: 'sync', label: l10n.t('Sync'), icon: 'sync', action: sync }
+      : pushable.length > 0
+        ? { kind: 'push', label: pushButtonLabel(pushable), icon: 'cloud-upload', action: push }
+        : { kind: 'fetch', label: fetchLabel, icon: 'repo-fetch', action: fetch };
+    const items: SplitItem[] = [
+      ...(main.kind !== 'sync' && pushable.length > 0 ? [{ icon: 'sync', label: l10n.t('Sync'), onSelect: sync }] : []),
+      ...(main.kind !== 'push' && pushable.length > 0 ? [{ icon: 'repo-push', label: pushButtonLabel(pushable), onSelect: push }] : []),
+      ...(pullable.length > 0 ? [
+        { icon: 'git-merge', label: l10n.t('Pull (Merge)'), onSelect: () => pullable.forEach(r => onPull(r.repoId, false)) },
+        { icon: 'repo-forked', label: l10n.t('Pull (Rebase)'), onSelect: () => pullable.forEach(r => onPull(r.repoId, true)) },
+      ] : []),
+      ...(main.kind !== 'fetch' ? [{ icon: 'repo-fetch', label: fetchLabel, onSelect: fetch }] : []),
+      ...(pushable.length > 0 ? [{ icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => pushable.forEach(r => onForcePush(r.repoId)) }] : []),
+    ];
+    return (
+      <PushDropdownButton
+        enabled
+        mainLabel={main.label}
+        mainIcon={main.icon}
+        onMainClick={main.action}
+        items={items}
+      />
+    );
+  };
+
+  const renderSection = (repoStatus: RepoStatus, opts: { single: boolean; isLast: boolean; collapsible: boolean }) => (
+    <RepoSection
+      key={repoStatus.repoId}
+      repoStatus={repoStatus}
+      repoMeta={metaMap.get(repoStatus.repoId)}
+      unpushed={unpushedMap[repoStatus.repoId]}
+      canPush={canPushRepo(repoStatus)}
+      canPull={canPullRepo(repoStatus)}
+      onPush={onPush}
+      onPull={repoId => onPull(repoId)}
+      onFetch={onFetch}
+      checked={!opts.single && checked.has(repoStatus.repoId)}
+      canCheck={!opts.single && isListedRepo(repoStatus)}
+      onToggle={toggleRepo}
+      onOpenInLog={onOpenInLog}
+      onUndoCommit={onUndoCommit}
+      onSquash={onSquash}
+      onDropCommits={onDropCommits}
+      onRevertCommits={onRevertCommits}
+      onEditCommitMsg={onEditCommitMsg}
+      onOpenDetail={onOpenDetail}
+      onOpenChanges={onOpenChanges}
+      onExplainCommit={onExplainCommit}
+      onViewCombinedDiff={onViewCombinedDiff}
+      onBranchClick={onBranchClick}
+      aiEnabled={aiEnabled}
+      singleRepo={opts.single}
+      plain={plainHeaders}
+      collapsible={opts.collapsible}
+      isLast={opts.isLast}
+    />
+  );
+
+  // Single repo: no checkbox, the footer acts on it directly
   if (isSingleRepo) {
     const solo = repos[0];
-    const canPush = canPushRepo(solo);
-    const needsSync = canPush && isBehindRepo(solo);
-    const mainLabel = needsSync ? l10n.t('Sync & Push') : pushButtonLabel([solo]);
-    const mainIcon = needsSync ? 'sync' : 'cloud-upload';
-    const mainAction = needsSync ? () => onSyncAndPush(solo.repoId) : () => onPush(solo.repoId);
-    const dropItems: SplitItem[] = needsSync
-      ? [
-          { icon: 'repo-push', label: pushButtonLabel([solo]), onSelect: () => onPush(solo.repoId) },
-          { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => onForcePush(solo.repoId) },
-        ]
-      : [
-          { icon: 'sync', label: l10n.t('Sync & Push'), onSelect: () => onSyncAndPush(solo.repoId) },
-          { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => onForcePush(solo.repoId) },
-        ];
+    // As with several repos, a repo in sync with its remote leaves the tab on its empty state.
     return (
       <div style={css.root}>
-        <ScrollArea style={css.list}>
-          <RepoSection
-            key={solo.repoId}
-            repoStatus={solo}
-            repoMeta={metaMap.get(solo.repoId)}
-            unpushed={unpushedMap[solo.repoId]}
-            checked={false}
-            canCheck={false}
-            onToggle={() => {}}
-            onOpenInLog={onOpenInLog}
-            onUndoCommit={onUndoCommit}
-            onSquash={onSquash}
-            onDropCommits={onDropCommits}
-            onRevertCommits={onRevertCommits}
-            onEditCommitMsg={onEditCommitMsg}
-            onOpenDetail={onOpenDetail}
-            onOpenChanges={onOpenChanges}
-            onExplainCommit={onExplainCommit}
-            onViewCombinedDiff={onViewCombinedDiff}
-            onBranchClick={onBranchClick}
-            aiEnabled={aiEnabled}
-            singleRepo
-            isLast
-          />
-        </ScrollArea>
+        {!isListedRepo(solo) ? (
+          <EmptyTabState icon="cloud" message={l10n.t('The repository is up to date')} hint={l10n.t('There are no commits to push or to pull, and no branch to publish. When the repository gets out of sync with its remote, it shows up here.')} />
+        ) : (
+          <ScrollArea style={css.list}>
+            {renderSection(solo, { single: true, isLast: true, collapsible: false })}
+          </ScrollArea>
+        )}
         <div style={css.footer}>
-          <PushDropdownButton
-            enabled={canPush}
-            mainLabel={mainLabel}
-            mainIcon={mainIcon}
-            onMainClick={mainAction}
-            items={dropItems}
-          />
+          {renderActions([solo])}
         </div>
       </div>
     );
   }
 
+  const listedRepos = repos.filter(isListedRepo);
+  // A single repo to act on is handled as in a single-repo workspace: no checkbox to tick
+  // first, the footer acts on it directly.
+  const loneRepo = listedRepos.length === 1 ? listedRepos[0] : null;
   const checkedRepos = repos.filter(r => checked.has(r.repoId));
-  const pushableChecked = checkedRepos.filter(canPushRepo);
-  const canPush = pushableChecked.length > 0;
-
-  const handlePush = () => {
-    if (!canPush) return;
-    if (pushableChecked.length === 1) {
-      onPush(pushableChecked[0].repoId);
-    } else {
-      pushableChecked.forEach(r => onPush(r.repoId));
-    }
-  };
 
   return (
     <div style={css.root}>
       {/* Scrollable repo list */}
-      <ScrollArea style={css.list}>
-        {repos.map((repoStatus, i) => (
-          <RepoSection
-            key={repoStatus.repoId}
-            repoStatus={repoStatus}
-            repoMeta={metaMap.get(repoStatus.repoId)}
-            unpushed={unpushedMap[repoStatus.repoId]}
-            checked={checked.has(repoStatus.repoId)}
-            canCheck={canPushRepo(repoStatus)}
-            onToggle={toggleRepo}
-            onOpenInLog={onOpenInLog}
-            onUndoCommit={onUndoCommit}
-            onSquash={onSquash}
-            onDropCommits={onDropCommits}
-            onRevertCommits={onRevertCommits}
-            onEditCommitMsg={onEditCommitMsg}
-            onOpenDetail={onOpenDetail}
-            onOpenChanges={onOpenChanges}
-            onExplainCommit={onExplainCommit}
-            onViewCombinedDiff={onViewCombinedDiff}
-            onBranchClick={onBranchClick}
-            aiEnabled={aiEnabled}
-            isLast={i === repos.length - 1}
-          />
-        ))}
-      </ScrollArea>
+      {listedRepos.length === 0 ? (
+        <EmptyTabState icon="cloud" message={l10n.t('All repositories are up to date')} hint={l10n.t('No repository has commits to push or to pull, nor a branch to publish. Repositories out of sync with their remote show up here.')} />
+      ) : (
+        <ScrollArea style={css.list}>
+          {loneRepo
+            ? renderSection(loneRepo, { single: true, isLast: true, collapsible: false })
+            : listedRepos.map((repoStatus, i) => renderSection(repoStatus, { single: false, isLast: i === listedRepos.length - 1, collapsible: true }))}
+        </ScrollArea>
+      )}
 
       {/* Anchored footer */}
       <div style={css.footer}>
-        {checkedRepos.length > 0 && (
+        {!loneRepo && checkedRepos.length > 0 && (
           <div style={css.pills}>
             {checkedRepos.map(r => {
               const meta = metaMap.get(r.repoId);
@@ -808,6 +862,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
                 ? `${meta?.mainWorktreePath?.split('/').pop() ?? rawName} (${wtBranch})`
                 : rawName;
               const ahead = r.branch.aheadBehind?.ahead ?? 0;
+              const behind = r.branch.aheadBehind?.behind ?? 0;
               return (
                 <span key={r.repoId} style={css.pill(color)}>
                   <button style={css.pillRemove(color)} title={l10n.t('Remove {0}', displayName)} onClick={() => toggleRepo(r.repoId)}>
@@ -820,37 +875,18 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
                       {ahead}
                     </span>
                   )}
+                  {behind > 0 && (
+                    <span style={css.pillCount}>
+                      <Codicon name="arrow-down" style={{ fontSize: '8px', marginRight: '1px' }} />
+                      {behind}
+                    </span>
+                  )}
                 </span>
               );
             })}
           </div>
         )}
-        {(() => {
-          const anyBehind = pushableChecked.some(isBehindRepo);
-          const mainLabel = anyBehind ? l10n.t('Sync & Push') : pushButtonLabel(pushableChecked);
-          const mainIcon = anyBehind ? 'sync' : 'cloud-upload';
-          const mainAction = anyBehind
-            ? () => pushableChecked.forEach(r => onSyncAndPush(r.repoId))
-            : handlePush;
-          const dropItems: SplitItem[] = anyBehind
-            ? [
-                { icon: 'repo-push', label: pushButtonLabel(pushableChecked), onSelect: handlePush },
-                { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
-              ]
-            : [
-                { icon: 'sync', label: l10n.t('Sync & Push'), onSelect: () => pushableChecked.forEach(r => onSyncAndPush(r.repoId)) },
-                { icon: 'repo-force-push', label: l10n.t('Force Push'), onSelect: () => pushableChecked.forEach(r => onForcePush(r.repoId)) },
-              ];
-          return (
-            <PushDropdownButton
-              enabled={canPush}
-              mainLabel={mainLabel}
-              mainIcon={mainIcon}
-              onMainClick={mainAction}
-              items={dropItems}
-            />
-          );
-        })()}
+        {renderActions(loneRepo ? [loneRepo] : checkedRepos)}
       </div>
     </div>
   );
@@ -893,7 +929,7 @@ const styles = {
   repoRoot: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center',
-    padding: '0 8px', height: '26px',
+    height: '26px',
     background: singleRepo
       ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
       : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
@@ -901,14 +937,18 @@ const styles = {
     boxSizing: 'border-box',
     position: 'sticky', top: 0, zIndex: 1,
   }),
+  // Spacing as in the Changes tab's repo headers (ProjectGroup), so the tabs line up.
   checkbox: {
-    margin: '0 2px 0 0', flexShrink: 0,
+    margin: '0 0 0 6px', flexShrink: 0,
     accentColor: 'var(--vscode-button-background)',
   } as React.CSSProperties,
-  headerMain: {
-    display: 'flex', alignItems: 'center', gap: '6px',
+  // 4px after the checkbox when a chevron follows it; with no chevron (the only repo listed,
+  // or no checkbox either) 8px, so the dot doesn't sit against the checkbox or the edge.
+  headerMain: (tightLeft: boolean): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', gap: '4px',
+    padding: `3px 8px 3px ${tightLeft ? 4 : 8}px`,
     flex: 1, minWidth: 0, cursor: 'pointer',
-  } as React.CSSProperties,
+  }),
   dot: (color: string): React.CSSProperties => ({
     width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
   }),

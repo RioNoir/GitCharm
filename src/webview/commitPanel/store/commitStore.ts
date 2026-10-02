@@ -19,6 +19,9 @@ export interface CommitState {
   seenFiles: Record<string, Set<string>>;
   // collapsed state for repo headers and tree dirs (key = repoId or dirPath)
   collapsedKeys: Set<string>;
+  // Repo sections that start collapsed (Shelf, Stash, Push) and the user opened. Apart from
+  // collapsedKeys, whose expandAll/collapseAll belong to the Changes tree.
+  expandedSections: Set<string>;
   selectedFile: { repoId: string; path: string } | null;
   currentDiff: FileDiff | null;
   loadingDiff: boolean;
@@ -62,6 +65,8 @@ export interface CommitState {
   getSelectedRepos: () => string[];
   isCollapsed: (key: string) => boolean;
   toggleCollapsed: (key: string) => void;
+  isSectionExpanded: (key: string) => boolean;
+  toggleSectionExpanded: (key: string) => void;
   hasExpandedDirs: (dirKeys: string[]) => boolean;
   setDirsCollapsed: (dirKeys: string[], collapsed: boolean) => void;
   expandAll: () => void;
@@ -98,6 +103,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   pushSelections: {},
   seenFiles: {},
   collapsedKeys: new Set(),
+  expandedSections: new Set(),
   selectedFile: null,
   currentDiff: null,
   loadingDiff: false,
@@ -266,6 +272,12 @@ export const useCommitStore = create<CommitState>((set, get) => ({
     const next = new Set(s.collapsedKeys);
     if (next.has(key)) next.delete(key); else next.add(key);
     return { collapsedKeys: next };
+  }),
+  isSectionExpanded: (key) => get().expandedSections.has(key),
+  toggleSectionExpanded: (key) => set(s => {
+    const next = new Set(s.expandedSections);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return { expandedSections: next };
   }),
   hasExpandedDirs: (dirKeys) => {
     const collapsedKeys = get().collapsedKeys;
