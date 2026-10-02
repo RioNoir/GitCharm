@@ -280,7 +280,7 @@ function RepoSubGroup({
               {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
             </span>
             {isSubmodule && (
-              <span style={styles.submoduleBadge} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>{l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}</span>
+              <Codicon name="package" style={styles.submoduleIcon} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')} />
             )}
             {repoStatus && (
               <span
@@ -540,16 +540,10 @@ const styles = {
     flexShrink: 0,
     opacity: hasSelected ? 0.8 : 0.35,
   }),
-  submoduleBadge: {
-    fontSize: '9px',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    color: 'var(--vscode-badge-foreground)',
-    background: 'var(--vscode-badge-background)',
-    borderRadius: '3px',
-    padding: '1px 4px',
+  submoduleIcon: {
+    fontSize: '14px',
     flexShrink: 0,
     opacity: 0.75,
+    color: 'var(--vscode-foreground)',
   } as React.CSSProperties,
 };

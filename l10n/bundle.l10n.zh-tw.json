@@ -337,7 +337,6 @@
   "Include this repository in the commit": "將此儲存庫納入提交",
   "Submodule: {0}": "子模組：{0}",
   "Submodule": "子模組",
-  "SUB/Short badge for a git submodule": "子模組",
   "Tag: {0} (detached HEAD)": "標籤：{0}（分離的 HEAD）",
   "Detached HEAD at {0}": "分離的 HEAD 位於 {0}",
   "Collapse": "摺疊",

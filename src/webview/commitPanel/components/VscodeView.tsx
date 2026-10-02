@@ -180,7 +180,7 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
             </span>
             {isSubmodule && (
-              <span style={submoduleBadgeStyle} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>{l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}</span>
+              <Codicon name="package" style={submoduleIconStyle} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')} />
             )}
             <span
               style={branchBadgeStyle(branchClr, branchHovered)}
@@ -622,8 +622,9 @@ const repoActionsStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '0', flexShrink: 0, paddingRight: '8px',
 };
 
-const submoduleBadgeStyle: React.CSSProperties = {
-  fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.04em',
-  color: 'var(--vscode-badge-foreground)', background: 'var(--vscode-badge-background)',
-  borderRadius: '3px', padding: '1px 4px', flexShrink: 0, opacity: 0.75,
+const submoduleIconStyle: React.CSSProperties = {
+  fontSize: '14px',
+  flexShrink: 0,
+  opacity: 0.75,
+  color: 'var(--vscode-foreground)',
 };

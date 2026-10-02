@@ -337,7 +337,6 @@
   "Include this repository in the commit": "Inclure ce dépôt dans le commit",
   "Submodule: {0}": "Sous-module : {0}",
   "Submodule": "Sous-module",
-  "SUB/Short badge for a git submodule": "SUB",
   "Tag: {0} (detached HEAD)": "Tag : {0} (HEAD détaché)",
   "Detached HEAD at {0}": "HEAD détaché sur {0}",
   "Collapse": "Réduire",

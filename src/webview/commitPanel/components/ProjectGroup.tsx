@@ -120,9 +120,7 @@ export function ProjectGroup({
             {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
           </span>
           {isSubmodule && (
-            <span style={styles.submoduleBadge} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>
-              {l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}
-            </span>
+            <Codicon name="package" style={styles.submoduleIcon} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')} />
           )}
           <span
             style={styles.branchBadge(branchClr, branchHovered)}
@@ -221,9 +219,7 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
           {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
         </span>
         {isSubmodule && (
-          <span style={styles.submoduleBadge} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')}>
-            {l10n.t({ message: 'SUB', comment: ['Short badge for a git submodule'] })}
-          </span>
+          <Codicon name="package" style={styles.submoduleIcon} title={submodulePath ? l10n.t('Submodule: {0}', submodulePath) : l10n.t('Submodule')} />
         )}
         <span
           style={styles.branchBadge(branchClr)}
@@ -302,17 +298,11 @@ const styles = {
     flexShrink: 10,
     minWidth: '20px',
   } as React.CSSProperties,
-  submoduleBadge: {
-    fontSize: '9px',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    color: 'var(--vscode-badge-foreground)',
-    background: 'var(--vscode-badge-background)',
-    borderRadius: '3px',
-    padding: '1px 4px',
+  submoduleIcon: {
+    fontSize: '14px',
     flexShrink: 0,
     opacity: 0.75,
+    color: 'var(--vscode-foreground)',
   } as React.CSSProperties,
   /** `hovered` mirrors the Log panel's "selected row" badge look — solid background instead of the usual 20%-tint. */
   branchBadge: (color: string, hovered = false): React.CSSProperties => ({
