@@ -829,6 +829,9 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
   }
 
   const listedRepos = repos.filter(isListedRepo);
+  // A single repo to act on is handled as in a single-repo workspace: no checkbox to tick
+  // first, the footer acts on it directly.
+  const loneRepo = listedRepos.length === 1 ? listedRepos[0] : null;
   const checkedRepos = repos.filter(r => checked.has(r.repoId));
 
   return (
@@ -838,13 +841,15 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
         <EmptyTabState icon="cloud" message={l10n.t('All repositories are up to date')} hint={l10n.t('No repository has commits to push or to pull, nor a branch to publish. Repositories out of sync with their remote show up here.')} />
       ) : (
         <ScrollArea style={css.list}>
-          {listedRepos.map((repoStatus, i) => renderSection(repoStatus, { single: false, isLast: i === listedRepos.length - 1, collapsible: listedRepos.length > 1 }))}
+          {loneRepo
+            ? renderSection(loneRepo, { single: true, isLast: true, collapsible: false })
+            : listedRepos.map((repoStatus, i) => renderSection(repoStatus, { single: false, isLast: i === listedRepos.length - 1, collapsible: true }))}
         </ScrollArea>
       )}
 
       {/* Anchored footer */}
       <div style={css.footer}>
-        {checkedRepos.length > 0 && (
+        {!loneRepo && checkedRepos.length > 0 && (
           <div style={css.pills}>
             {checkedRepos.map(r => {
               const meta = metaMap.get(r.repoId);
@@ -881,7 +886,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
             })}
           </div>
         )}
-        {renderActions(checkedRepos)}
+        {renderActions(loneRepo ? [loneRepo] : checkedRepos)}
       </div>
     </div>
   );
