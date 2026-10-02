@@ -30,7 +30,13 @@ export function createGit(baseDir?: string, options: Partial<SimpleGitOptions> =
     ...(baseDir !== undefined ? { baseDir } : {}),
     // By default git prints non-ASCII paths quoted and octal-escaped ("\350\257\264.txt"),
     // which breaks every path we parse from status/diff/log output for CJK or accented names.
-    config: ['core.quotePath=false', ...(options.config ?? [])],
+    //
+    // diff.ignoreSubmodules=dirty: `git status` in a superproject otherwise runs a status in
+    // every submodule, recursively, to report ones with uncommitted changes — 45 git
+    // processes and seconds per call in a repo with 44 submodules, against ~150ms without.
+    // A submodule whose checked-out commit moved is still reported; its uncommitted changes
+    // show in its own entry, as GitCharm lists every submodule as a repository.
+    config: ['core.quotePath=false', 'diff.ignoreSubmodules=dirty', ...(options.config ?? [])],
     unsafe: { ...INHERITED_ENV_ALLOWANCES, ...options.unsafe },
   });
   return git.env(GIT_ENV);

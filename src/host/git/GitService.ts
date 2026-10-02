@@ -375,7 +375,8 @@ export class GitService {
         detachedFullHash,
       };
     }
-    const status = await this.git.status();
+    // Only the branch line is used: skip the untracked-file scan, the costly part of a status.
+    const status = await this.git.status(['--untracked-files=no']);
     const isDetached = status.detached;
     const branchName = await this.resolveHeadName(status.current ?? undefined);
     const detachedTag = isDetached ? await this.getDetachedTag() : undefined;
