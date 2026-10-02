@@ -148,8 +148,15 @@ export class BranchStatusBar implements vscode.Disposable {
       .map(r => r.value)
       .filter(Boolean) as BranchInfo[];
 
-    // Use effective name: detachedTag, detachedHash, or branch name
-    const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
+    // Use effective name: detachedTag, detachedHash, or branch name. Submodules don't count:
+    // they sit on the commit their superproject pins, usually a detached HEAD of their own,
+    // so with any submodule shown the branches would always read as diverged.
+    const submoduleIds = new Set(metas.filter(m => m.isSubmodule).map(m => m.id));
+    const projectBranches = statusResult.repos
+      .filter(r => nonWorktreeIds.has(r.repoId) && !submoduleIds.has(r.repoId))
+      .map(r => r.branch);
+    const namedBranches = projectBranches.length > 0 ? projectBranches : branches;
+    const effectiveNames = [...new Set(namedBranches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
     this.branchesDiverged = effectiveNames.length > 1;
     this.totalBehind = branches.reduce((sum, b) => sum + (b.aheadBehind?.behind ?? 0), 0);
     this.totalAhead = branches.reduce((sum, b) => sum + (b.aheadBehind?.ahead ?? 0), 0);
