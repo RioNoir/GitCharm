@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { dateLocale } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 import { ensureScrollbarHideStyle } from '../../shared/ScrollArea';
+import { RepoDots, type RepoDotInfo } from '../../shared/RepoDots';
 
 interface Props {
   filters: CommitFilters;
@@ -252,7 +253,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
-  const repoColorMap = Object.fromEntries(repos.map(r => [r.id, r.color]));
+  const repoMap: Record<string, RepoDotInfo> = Object.fromEntries(repos.map(r => [r.id, { name: r.name, color: r.color }]));
   const multiRepo = repos.length > 1;
 
   const q = query.toLowerCase();
@@ -328,11 +329,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
                 <Codicon name={isRemote ? 'cloud' : 'git-branch'} style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
                 <span style={styles.dropdownItemLabel}>{name}</span>
                 {multiRepo && (
-                  <span style={styles.dotGroup}>
-                    {repoIds.map(id => (
-                      <span key={id} style={styles.repoDotSmall(repoColorMap[id] ?? '#888')} />
-                    ))}
-                  </span>
+                  <RepoDots repoIds={repoIds} repos={repoMap} />
                 )}
                 {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, flexShrink: 0 }} />}
               </div>
@@ -349,11 +346,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
                 <Codicon name={isRemote ? 'cloud' : 'git-branch'} style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
                 <span style={styles.dropdownItemLabel}>{name}</span>
                 {multiRepo && (
-                  <span style={styles.dotGroup}>
-                    {repoIds.map(id => (
-                      <span key={id} style={styles.repoDotSmall(repoColorMap[id] ?? '#888')} />
-                    ))}
-                  </span>
+                  <RepoDots repoIds={repoIds} repos={repoMap} />
                 )}
                 {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, flexShrink: 0 }} />}
               </div>
@@ -370,11 +363,7 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
                 <Codicon name="tag" style={{ fontSize: '12px', opacity: 0.55, flexShrink: 0 }} />
                 <span style={styles.dropdownItemLabel}>{name}</span>
                 {multiRepo && (
-                  <span style={styles.dotGroup}>
-                    {repoIds.map(id => (
-                      <span key={id} style={styles.repoDotSmall(repoColorMap[id] ?? '#888')} />
-                    ))}
-                  </span>
+                  <RepoDots repoIds={repoIds} repos={repoMap} />
                 )}
                 {value === name && <Codicon name="check" style={{ fontSize: '11px', opacity: 0.8, flexShrink: 0 }} />}
               </div>
@@ -445,14 +434,19 @@ export function RepoTabs({ value, repos, onChange }: {
     return () => el.removeEventListener('wheel', onWheel);
   }, [hasTabs]);
 
+  // The store hands over a new `repos` array on every LOG_INIT_DATA — each page of commits,
+  // each ref change — even when the repos are the same. Key on their ids instead, or the
+  // effects below re-run mid-scroll and snap the strip back to the selected tab.
+  const repoIdsKey = repos.map(repo => repo.id).join('\n');
+
   // Keep the selected tab in view, e.g. after picking it with a shortcut or from the sidebar.
   useEffect(() => {
     tabsRef.current
       ?.querySelector<HTMLElement>('[aria-selected="true"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [value, repos]);
+  }, [value, repoIdsKey]);
 
-  const thumb = useHorizontalThumb(tabsRef, hasTabs, repos);
+  const thumb = useHorizontalThumb(tabsRef, hasTabs, repoIdsKey);
 
   if (!hasTabs) return null;
 
@@ -1064,19 +1058,6 @@ const styles = {
     borderRadius: '50%',
     flexShrink: 0,
     display: 'inline-block',
-  } as React.CSSProperties,
-  repoDotSmall: (color: string): React.CSSProperties => ({
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    background: color,
-    flexShrink: 0,
-  }),
-  dotGroup: {
-    display: 'flex',
-    gap: '2px',
-    alignItems: 'center',
-    flexShrink: 0,
   } as React.CSSProperties,
   compareGroup: {
     display: 'flex',

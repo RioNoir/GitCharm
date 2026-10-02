@@ -7,6 +7,7 @@ import { Codicon } from '../../shared/Codicon';
 import { focusOnHover, handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import * as l10n from '@vscode/l10n';
 import { isImeComposing } from '../../shared/ime';
+import { RepoDots, type RepoDotInfo } from '../../shared/RepoDots';
 
 interface Props {
   repos: RepoMeta[];
@@ -318,7 +319,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const tagFolderPaths = collectFolderPaths(buildBranchTree(mergedTags, mt => mt.name))
     .map(p => `folder:tags:${p}`);
 
-  const repoColorMap = Object.fromEntries(repos.map(r => [r.id, r.color]));
+  const repoMap: Record<string, RepoDotInfo> = Object.fromEntries(repos.map(r => [r.id, { name: r.name, color: r.color }]));
   const multiRepo = repos.length > 1;
 
   function primaryInstance(merged: MergedBranch): BranchInfo {
@@ -375,7 +376,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
           keyPrefix="folder:local"
           collapsed={collapsed}
           onToggleFolder={toggle}
-          repoColorMap={repoColorMap}
+          repoMap={repoMap}
           multiRepo={multiRepo}
           selectedBranchFilter={selectedBranchFilter}
           contextMenu={contextMenu}
@@ -416,7 +417,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
                 keyPrefix={`folder:${sectionKey}`}
                 collapsed={collapsed}
                 onToggleFolder={toggle}
-                repoColorMap={repoColorMap}
+                repoMap={repoMap}
                 multiRepo={multiRepo}
                 selectedBranchFilter={selectedBranchFilter}
                 contextMenu={contextMenu}
@@ -457,7 +458,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               keyPrefix="folder:tags"
               collapsed={collapsed}
               onToggleFolder={toggle}
-              repoColorMap={repoColorMap}
+              repoMap={repoMap}
               multiRepo={multiRepo}
               activeDetachedTags={activeDetachedTags}
               tagContextMenu={tagContextMenu}
@@ -521,30 +522,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   );
 });
 
-/** Past this many repos a row shows MAX_REPO_DOTS - 1 dots and a "+N" count instead of one dot each. */
-const MAX_REPO_DOTS = 5;
-
-/**
- * One dot per repo that has the branch, folder or tag. Capped: the dots never shrink, so
- * a name shared by dozens of repos (submodules all on `main`) would otherwise push the
- * name itself out of the row.
- */
-function RepoDots({ repoIds, repoColorMap }: { repoIds: string[]; repoColorMap: Record<string, string> }) {
-  const capped = repoIds.length > MAX_REPO_DOTS;
-  const shown = capped ? repoIds.slice(0, MAX_REPO_DOTS - 1) : repoIds;
-  return (
-    <span style={styles.dotGroup} title={capped ? l10n.t('In {0} repositories', repoIds.length) : undefined}>
-      {shown.map(id => (
-        <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-      ))}
-      {capped && <span style={styles.dotOverflow}>+{repoIds.length - shown.length}</span>}
-    </span>
-  );
-}
-
-function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick, depth = 0, displayName }: {
+function BranchRow({ merged, repoMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick, depth = 0, displayName }: {
   merged: MergedBranch;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   isFilterSelected: boolean;
   isCtxActive: boolean;
@@ -601,7 +581,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
       <span style={styles.branchName(isHead, isPrimary, primaryColor)} title={baseName}>{displayName ?? baseName}</span>
 
       {multiRepo && (
-        <RepoDots repoIds={repoIds} repoColorMap={repoColorMap} />
+        <RepoDots repoIds={repoIds} repos={repoMap} />
       )}
 
       {merged.instances[0].aheadBehind && (merged.instances[0].aheadBehind.ahead > 0 || merged.instances[0].aheadBehind.behind > 0) && (
@@ -673,14 +653,14 @@ function SectionHeader({ icon, label, count, sectionKey, collapsed, onToggleSect
 // branches merged into one alphabetical-by-name list.
 function BranchList({
   merged, keyPrefix, collapsed, onToggleFolder,
-  repoColorMap, multiRepo, selectedBranchFilter, contextMenu, setContextMenu,
+  repoMap, multiRepo, selectedBranchFilter, contextMenu, setContextMenu,
   primaryInstance, focusInstance, onBranchFocus, onBranchFilterSelect, forceExpanded,
 }: {
   merged: MergedBranch[];
   keyPrefix: string;
   collapsed: Set<SectionKey>;
   onToggleFolder: (key: SectionKey) => void;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   selectedBranchFilter: string;
   contextMenu: { merged: MergedBranch; x: number; y: number } | null;
@@ -699,7 +679,7 @@ function BranchList({
       merged={m}
       depth={depth}
       displayName={m.baseName.split('/').pop()}
-      repoColorMap={repoColorMap}
+      repoMap={repoMap}
       multiRepo={multiRepo}
       isFilterSelected={selectedBranchFilter === primaryInstance(m).name}
       isCtxActive={contextMenu?.merged.baseName === m.baseName}
@@ -729,7 +709,7 @@ function BranchList({
         getLeafName={m => m.baseName.split('/').pop() ?? m.baseName}
         getRepoIds={m => m.repoIds}
         getAheadBehind={m => m.instances[0].aheadBehind}
-        repoColorMap={repoColorMap}
+        repoMap={repoMap}
         multiRepo={multiRepo}
         forceExpanded={forceExpanded}
       />
@@ -741,13 +721,13 @@ function BranchList({
 // merged into one alphabetical-by-name list at each level.
 function TagList({
   mergedTags, keyPrefix, collapsed, onToggleFolder,
-  repoColorMap, multiRepo, activeDetachedTags, tagContextMenu, setTagContextMenu, forceExpanded,
+  repoMap, multiRepo, activeDetachedTags, tagContextMenu, setTagContextMenu, forceExpanded,
 }: {
   mergedTags: MergedTag[];
   keyPrefix: string;
   collapsed: Set<SectionKey>;
   onToggleFolder: (key: SectionKey) => void;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   activeDetachedTags: Set<string>;
   tagContextMenu: { mergedTag: MergedTag; x: number; y: number } | null;
@@ -760,7 +740,7 @@ function TagList({
       mergedTag={mt}
       depth={depth}
       displayName={mt.name.split('/').pop()}
-      repoColorMap={repoColorMap}
+      repoMap={repoMap}
       multiRepo={multiRepo}
       isActive={activeDetachedTags.has(mt.name)}
       isCtxActive={tagContextMenu?.mergedTag.name === mt.name}
@@ -782,21 +762,21 @@ function TagList({
       renderLeaf={renderLeaf}
       getLeafName={mt => mt.name.split('/').pop() ?? mt.name}
       getRepoIds={mt => mt.repoIds}
-      repoColorMap={repoColorMap}
+      repoMap={repoMap}
       multiRepo={multiRepo}
       forceExpanded={forceExpanded}
     />
   );
 }
 
-function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoColorMap, multiRepo, aheadBehind }: {
+function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoMap, multiRepo, aheadBehind }: {
   name: string;
   fullPath: string;
   depth: number;
   collapsed: boolean;
   onToggle: () => void;
   repoIds: string[];
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   aheadBehind?: { ahead: number; behind: number };
 }) {
@@ -818,7 +798,7 @@ function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoCo
       <Codicon name={collapsed ? 'folder' : 'folder-opened'} style={styles.branchIcon(false, false, primaryBranchColor())} />
       <span style={styles.folderName} title={fullPath}>{name}</span>
       {multiRepo && (
-        <RepoDots repoIds={repoIds} repoColorMap={repoColorMap} />
+        <RepoDots repoIds={repoIds} repos={repoMap} />
       )}
       {aheadBehind && (aheadBehind.ahead > 0 || aheadBehind.behind > 0) && (
         <span style={styles.aheadBehind} title={l10n.t('{0} to push, {1} to pull (total for branches in this folder)', aheadBehind.ahead, aheadBehind.behind)}>
@@ -834,7 +814,7 @@ function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoCo
 // into one alphabetically-sorted-by-name list (like a typical file explorer), each level
 // indented by `depth`. Pinned branches (current / main) are handled by the caller, which
 // omits them from the tree entirely and renders them above it instead.
-function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, renderLeaf, getLeafName, getRepoIds, getAheadBehind, repoColorMap, multiRepo, forceExpanded }: {
+function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, renderLeaf, getLeafName, getRepoIds, getAheadBehind, repoMap, multiRepo, forceExpanded }: {
   node: BranchTreeFolder<T>;
   depth: number;
   keyPrefix: string;
@@ -844,7 +824,7 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
   getLeafName: (leaf: T) => string;
   getRepoIds: (leaf: T) => string[];
   getAheadBehind?: (leaf: T) => { ahead: number; behind: number } | undefined;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   // While searching, folders holding a match must stay visible regardless of their saved
   // collapsed state — the user is looking for a result, not browsing the tree.
@@ -874,7 +854,7 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
               collapsed={isCollapsed}
               onToggle={() => onToggleFolder(key)}
               repoIds={collectRepoIds(folder, getRepoIds)}
-              repoColorMap={repoColorMap}
+              repoMap={repoMap}
               multiRepo={multiRepo}
               aheadBehind={getAheadBehind ? collectAheadBehind(folder, getAheadBehind) : undefined}
             />
@@ -889,7 +869,7 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
                 getLeafName={getLeafName}
                 getRepoIds={getRepoIds}
                 getAheadBehind={getAheadBehind}
-                repoColorMap={repoColorMap}
+                repoMap={repoMap}
                 multiRepo={multiRepo}
                 forceExpanded={forceExpanded}
               />
@@ -901,9 +881,9 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
   );
 }
 
-function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onContextMenu, depth = 0, displayName }: {
+function TagRow({ mergedTag, repoMap, multiRepo, isActive, isCtxActive, onContextMenu, depth = 0, displayName }: {
   mergedTag: MergedTag;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   isActive: boolean;
   isCtxActive: boolean;
@@ -931,7 +911,7 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
       <Codicon name="tag" style={styles.branchIcon(false, isActive, primaryColor)} />
       <span style={styles.branchName(isActive, false, primaryColor)} title={mergedTag.name}>{displayName ?? mergedTag.name}</span>
       {multiRepo && (
-        <RepoDots repoIds={mergedTag.repoIds} repoColorMap={repoColorMap} />
+        <RepoDots repoIds={mergedTag.repoIds} repos={repoMap} />
       )}
     </div>
   );
@@ -1130,13 +1110,6 @@ const styles = {
     height: '100%',
     boxSizing: 'border-box' as const,
   },
-  repoDot: (color: string): React.CSSProperties => ({
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    background: color,
-    flexShrink: 0,
-  }),
   iconBtn: {
     background: 'transparent',
     border: 'none',
@@ -1255,18 +1228,6 @@ const styles = {
     fontWeight: isHead ? 'bold' : 'normal',
     color: isHead ? primaryColor : undefined,
   }),
-  dotGroup: {
-    display: 'flex',
-    gap: '2px',
-    alignItems: 'center',
-    flexShrink: 0,
-  } as React.CSSProperties,
-  dotOverflow: {
-    fontSize: '10px',
-    opacity: 0.65,
-    marginLeft: '1px',
-    whiteSpace: 'nowrap',
-  } as React.CSSProperties,
   aheadBehind: {
     display: 'flex',
     gap: '2px',
