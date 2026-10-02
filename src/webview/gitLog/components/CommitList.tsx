@@ -10,6 +10,7 @@ import type { RefGroup } from '../utils/refs';
 import { Codicon } from '../../shared/Codicon';
 import { getVsCodeApi } from '../../shared/vscodeApi';
 import type { LogToHostMsg } from '../../../host/types/messages';
+import { selectionGroups } from '../utils/commitSelection';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { formatDateTime, formatDateOnly, formatDateCompact } from '../../shared/dateUtils';
 import * as l10n from '@vscode/l10n';
@@ -173,6 +174,13 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
+// Shift+dragging within this many px of the list's top/bottom edge scrolls it, this many px a frame
+const DRAG_SCROLL_EDGE = 24;
+const DRAG_SCROLL_STEP = 8;
+
+/** Identifies a row across repos — the same hash can show up in several. */
+const commitKey = (c: { hash: string; repoId: string }) => `${c.hash}:${c.repoId}`;
+
 export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, hideDate, commitLimitReached }: Props) {
   const { commits, segments, refColors } = layout;
 
@@ -237,6 +245,68 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     [commits, multiSelectHashes],
   );
   useEffect(() => onMultiSelectionChange?.(multiSelectedCommits), [multiSelectedCommits, onMultiSelectionChange]);
+  // Where a Shift range starts: the last commit picked on its own or with Ctrl/Cmd
+  const anchorKeyRef = useRef<string | null>(selectedHash);
+  // The moving end of a Shift+Up/Down range
+  const rangeEndKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    anchorKeyRef.current = selectedHash;
+    rangeEndKeyRef.current = null;
+  }, [selectedHash]);
+
+  // Selects every commit between the anchor and row `targetIndex` — `additive` (Ctrl/Cmd held)
+  // keeps what is already selected. Commits and stashes alike join; the working-tree rows never do.
+  const selectRange = useCallback((targetIndex: number, additive: boolean) => {
+    const target = commits[targetIndex];
+    if (!target) return;
+    const anchorIndex = anchorKeyRef.current ? commits.findIndex(c => commitKey(c) === anchorKeyRef.current) : -1;
+    const from = anchorIndex >= 0 ? anchorIndex : targetIndex;
+    rangeEndKeyRef.current = commitKey(target);
+    setMultiSelectHashes(prev => {
+      const next = new Set(additive ? prev : []);
+      for (let i = Math.min(from, targetIndex); i <= Math.max(from, targetIndex); i++) {
+        if (!commits[i].isWorkingTree) next.add(commitKey(commits[i]));
+      }
+      // A range of one row is just that row: leave it to the single selection
+      return next.size > 1 || additive ? next : new Set();
+    });
+  }, [commits]);
+
+  // Shift+drag: the range follows the pointer — scrolling with the wheel, or by holding it past
+  // the top/bottom edge — until the button is released
+  const dragSelectRef = useRef<{ additive: boolean; clientY: number; lastIndex: number } | null>(null);
+  const selectRangeRef = useRef(selectRange);
+  selectRangeRef.current = selectRange;
+  const commitCountRef = useRef(commits.length);
+  commitCountRef.current = commits.length;
+  const startDragSelect = useCallback((index: number, additive: boolean, clientY: number) => {
+    dragSelectRef.current = { additive, clientY, lastIndex: index };
+    selectRangeRef.current(index, additive);
+    const onMove = (e: MouseEvent) => { if (dragSelectRef.current) dragSelectRef.current.clientY = e.clientY; };
+    const onUp = () => {
+      dragSelectRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    const tick = () => {
+      const drag = dragSelectRef.current;
+      const el = parentRef.current;
+      if (!drag || !el) return;
+      const rect = el.getBoundingClientRect();
+      if (drag.clientY < rect.top + DRAG_SCROLL_EDGE) el.scrollTop -= DRAG_SCROLL_STEP;
+      else if (drag.clientY > rect.bottom - DRAG_SCROLL_EDGE) el.scrollTop += DRAG_SCROLL_STEP;
+      const y = Math.min(Math.max(drag.clientY, rect.top), rect.bottom - 1);
+      const rowIndex = Math.min(commitCountRef.current - 1, Math.max(0, Math.floor((y - rect.top + el.scrollTop) / ROW_HEIGHT)));
+      if (rowIndex !== drag.lastIndex) {
+        drag.lastIndex = rowIndex;
+        selectRangeRef.current(rowIndex, drag.additive);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, []);
 
   const [containerWidth, setContainerWidth] = useState<number>(9999);
   const containerRoRef = useRef<ResizeObserver | null>(null);
@@ -436,8 +506,34 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   // the single writer of the store's selectedCommit. Scrolls the new row into view only when
   // it isn't already visible, so repeated presses inside the viewport don't fight the user's
   // own scroll position.
+  const scrollRowIntoView = useCallback((index: number) => {
+    const el = parentRef.current;
+    if (!el) return;
+    const rowTop = index * ROW_HEIGHT;
+    const rowBottom = rowTop + ROW_HEIGHT;
+    if (rowTop < el.scrollTop) {
+      suppressHoverBriefly();
+      scrollToIndexExact(index, 0);
+    } else if (rowBottom > el.scrollTop + el.clientHeight) {
+      suppressHoverBriefly();
+      scrollToIndexExact(index, el.clientHeight - ROW_HEIGHT);
+    }
+  }, [scrollToIndexExact]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (commits.length === 0) return;
+    // Shift+Up/Down grows or shrinks a range from the selected commit
+    if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      const endKey = rangeEndKeyRef.current ?? anchorKeyRef.current;
+      const endIndex = endKey ? commits.findIndex(c => commitKey(c) === endKey) : -1;
+      if (endIndex < 0) return;
+      e.preventDefault();
+      const nextIndex = e.key === 'ArrowDown' ? Math.min(commits.length - 1, endIndex + 1) : Math.max(0, endIndex - 1);
+      if (nextIndex === endIndex) return;
+      scrollRowIntoView(nextIndex);
+      selectRange(nextIndex, false);
+      return;
+    }
     const currentIndex = selectedHash ? commits.findIndex(c => `${c.hash}:${c.repoId}` === selectedHash) : -1;
     // With nothing selected yet, start from the row the mouse is hovering — the first
     // Up/Down press lands on that row itself rather than jumping past it.
@@ -475,22 +571,10 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     e.preventDefault();
     if (nextIndex === null || nextIndex === currentIndex) return;
 
-    const el = parentRef.current;
-    if (el) {
-      const rowTop = nextIndex * ROW_HEIGHT;
-      const rowBottom = rowTop + ROW_HEIGHT;
-      if (rowTop < el.scrollTop) {
-        suppressHoverBriefly();
-        scrollToIndexExact(nextIndex, 0);
-      } else if (rowBottom > el.scrollTop + el.clientHeight) {
-        suppressHoverBriefly();
-        scrollToIndexExact(nextIndex, el.clientHeight - ROW_HEIGHT);
-      }
-    }
-
+    scrollRowIntoView(nextIndex);
     setMultiSelectHashes(new Set());
     onSelect(commits[nextIndex]);
-  }, [commits, selectedHash, hoveredIndex, onSelect, scrollToIndexExact]);
+  }, [commits, selectedHash, hoveredIndex, onSelect, scrollRowIntoView, selectRange]);
 
   useLayoutEffect(() => {
     const el = dateMeasureRef.current;
@@ -622,35 +706,44 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   if (!popoverHoveredRef.current) setPopover(null);
                 }, 120);
               }}
+              // Shift+click/drag picks a range of commits, not a run of text
+              onMouseDown={(e) => {
+                if (!e.shiftKey) return;
+                e.preventDefault();
+                if (e.button === 0 && !commit.isWorkingTree) startDragSelect(vrow.index, e.ctrlKey || e.metaKey, e.clientY);
+              }}
               onClick={(e) => {
                 // Row divs aren't focusable themselves, and a click doesn't bubble focus to
                 // an ancestor tabIndex on its own — grab it explicitly so arrow-key nav works
                 // immediately after clicking a commit, not just after clicking empty space.
                 parentRef.current?.focus();
-                // The working-tree row can't be part of a multi-selection: it has no revision to compare
-                if ((e.ctrlKey || e.metaKey) && !commit.isWorkingTree) {
-                  setMultiSelectHashes(prev => {
-                    const next = new Set(prev);
-                    const key = `${commit.hash}:${commit.repoId}`;
-                    // If starting a new multi-select, auto-include the currently single-selected commit
-                    if (next.size === 0 && selectedHash && selectedHash !== key) {
-                      // Find selected commit to check stash type and repo compatibility
-                      const selectedCommit = commits.find(c => `${c.hash}:${c.repoId}` === selectedHash);
-                      if (selectedCommit?.isWorkingTree) return prev;
-                      if (selectedCommit && selectedCommit.isStash !== commit.isStash) return prev;
-                      if (selectedCommit && selectedCommit.repoId !== commit.repoId) return prev;
-                      next.add(selectedHash);
-                    }
-                    // Block mixing stashes and commits, or commits from different repos
-                    if (next.size > 0) {
-                      const existingCommit = commits.find(c => next.has(`${c.hash}:${c.repoId}`));
-                      const existingIsStash = existingCommit?.isStash ?? false;
-                      if (existingIsStash !== !!commit.isStash) return prev;
-                      if (existingCommit && existingCommit.repoId !== commit.repoId) return prev;
-                    }
-                    if (next.has(key)) next.delete(key); else next.add(key);
-                    return next;
-                  });
+                const extending = e.shiftKey || e.ctrlKey || e.metaKey;
+                // The working-tree row can't be part of a multi-selection: it has no revision to compare.
+                // Ctrl/Shift-clicking it leaves a multi-selection alone rather than throwing it away.
+                if (extending && commit.isWorkingTree && multiSelectHashes.size > 0) return;
+                if (e.shiftKey && !commit.isWorkingTree) {
+                  if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+                  selectRange(vrow.index, e.ctrlKey || e.metaKey);
+                } else if ((e.ctrlKey || e.metaKey) && !commit.isWorkingTree) {
+                  const key = commitKey(commit);
+                  anchorKeyRef.current = key;
+                  rangeEndKeyRef.current = null;
+                  const next = new Set(multiSelectHashes);
+                  // Starting a multi-selection takes the single-selected commit along — commits,
+                  // stashes and repos all mix; the working-tree row stays out
+                  if (next.size === 0 && selectedHash && selectedHash !== key) {
+                    const selectedCommit = commits.find(c => commitKey(c) === selectedHash);
+                    if (selectedCommit && !selectedCommit.isWorkingTree) next.add(selectedHash);
+                  }
+                  if (next.has(key)) next.delete(key); else next.add(key);
+                  if (next.size > 1) {
+                    setMultiSelectHashes(next);
+                  } else {
+                    // Down to one commit: that is a single selection, shown as such
+                    setMultiSelectHashes(new Set());
+                    const only = commits.find(c => next.has(commitKey(c)));
+                    if (only && commitKey(only) !== selectedHash) onSelect(only);
+                  }
                 } else {
                   setMultiSelectHashes(new Set());
                   // Defer: a double-click fires this same onClick twice before onDoubleClick
@@ -800,7 +893,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                     title={l10n.t('Open Commit Detail')}
                     onClick={e => { e.stopPropagation(); getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg); }}
                   >
-                    <Codicon name="open-preview" style={{ fontSize: '16px', lineHeight: 1 }} />
+                    <Codicon name="open-in-product" style={{ fontSize: '16px', lineHeight: 1 }} />
                   </button>
                   <button
                     data-log-action-btn=""
@@ -1282,6 +1375,30 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
 
   const hasStashInMulti = isMulti && multiSelected.some(c => c.isStash);
 
+  // Viewing the selection together works for any mix — commits, stashes, several repos
+  const viewCombinedDiffItem = (
+    <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_VIEW_COMBINED_DIFF', groups: selectionGroups(multiSelected) })}>
+      <Codicon name="diff-multiple" style={ctxStyles.icon} />
+      <span>{l10n.t('View Combined Diff')}</span>
+    </div>
+  );
+
+  // Several repos: every action other than viewing works on one repo
+  if (multiSelected.length > 1 && !isMulti) {
+    return (
+      <>
+        <div style={ctxStyles.backdrop} onClick={onClose} />
+        <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top, menuPos.maxHeight)}>
+          <div style={ctxStyles.header}>
+            {l10n.t('{0} commits selected in {1} repositories', multiSelected.length, new Set(multiSelected.map(c => c.repoId)).size)}
+          </div>
+          <div style={ctxStyles.separator} />
+          {viewCombinedDiffItem}
+        </div>
+      </>
+    );
+  }
+
   if (isMulti) {
     return (
       <>
@@ -1289,12 +1406,9 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
         <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top, menuPos.maxHeight)}>
           <div style={ctxStyles.header}>{plural(multiSelected.length, l10n.t('1 commit selected'), l10n.t('{0} commits selected', multiSelected.length))}</div>
           <div style={ctxStyles.separator} />
+          {viewCombinedDiffItem}
           {!hasStashInMulti && (
             <>
-              <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_VIEW_COMBINED_DIFF', repoId, hashes: multiSelected.map(c => c.hash) })}>
-                <Codicon name="diff-multiple" style={ctxStyles.icon} />
-                <span>{l10n.t('View Combined Diff')}</span>
-              </div>
               <div style={ctxStyles.separator} />
               <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_CREATE_PATCH_MULTI', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}>
                 <Codicon name="diff" style={ctxStyles.icon} />
@@ -1332,9 +1446,12 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
             </>
           )}
           {hasStashInMulti && (
-            <div style={{ ...ctxStyles.header, opacity: 0.45, fontSize: '11px' }}>
-              {l10n.t('Mixed selection — no actions available')}
-            </div>
+            <>
+              <div style={ctxStyles.separator} />
+              <div style={{ ...ctxStyles.header, opacity: 0.45, fontSize: '11px' }}>
+                {l10n.t("Other actions don't apply to stashes")}
+              </div>
+            </>
           )}
         </div>
       </>
@@ -1364,7 +1481,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
             })
           }
         >
-          <Codicon name="open-preview" style={ctxStyles.icon} />
+          <Codicon name="open-in-product" style={ctxStyles.icon} />
           <span>{l10n.t('Open Full Detail')}</span>
         </div>
         <div
