@@ -521,6 +521,27 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   );
 });
 
+/** Past this many repos a row shows MAX_REPO_DOTS - 1 dots and a "+N" count instead of one dot each. */
+const MAX_REPO_DOTS = 5;
+
+/**
+ * One dot per repo that has the branch, folder or tag. Capped: the dots never shrink, so
+ * a name shared by dozens of repos (submodules all on `main`) would otherwise push the
+ * name itself out of the row.
+ */
+function RepoDots({ repoIds, repoColorMap }: { repoIds: string[]; repoColorMap: Record<string, string> }) {
+  const capped = repoIds.length > MAX_REPO_DOTS;
+  const shown = capped ? repoIds.slice(0, MAX_REPO_DOTS - 1) : repoIds;
+  return (
+    <span style={styles.dotGroup} title={capped ? l10n.t('In {0} repositories', repoIds.length) : undefined}>
+      {shown.map(id => (
+        <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
+      ))}
+      {capped && <span style={styles.dotOverflow}>+{repoIds.length - shown.length}</span>}
+    </span>
+  );
+}
+
 function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick, depth = 0, displayName }: {
   merged: MergedBranch;
   repoColorMap: Record<string, string>;
@@ -580,11 +601,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
       <span style={styles.branchName(isHead, isPrimary, primaryColor)} title={baseName}>{displayName ?? baseName}</span>
 
       {multiRepo && (
-        <span style={styles.dotGroup}>
-          {repoIds.map(id => (
-            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-          ))}
-        </span>
+        <RepoDots repoIds={repoIds} repoColorMap={repoColorMap} />
       )}
 
       {merged.instances[0].aheadBehind && (merged.instances[0].aheadBehind.ahead > 0 || merged.instances[0].aheadBehind.behind > 0) && (
@@ -801,11 +818,7 @@ function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoCo
       <Codicon name={collapsed ? 'folder' : 'folder-opened'} style={styles.branchIcon(false, false, primaryBranchColor())} />
       <span style={styles.folderName} title={fullPath}>{name}</span>
       {multiRepo && (
-        <span style={styles.dotGroup}>
-          {repoIds.map(id => (
-            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-          ))}
-        </span>
+        <RepoDots repoIds={repoIds} repoColorMap={repoColorMap} />
       )}
       {aheadBehind && (aheadBehind.ahead > 0 || aheadBehind.behind > 0) && (
         <span style={styles.aheadBehind} title={l10n.t('{0} to push, {1} to pull (total for branches in this folder)', aheadBehind.ahead, aheadBehind.behind)}>
@@ -918,11 +931,7 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
       <Codicon name="tag" style={styles.branchIcon(false, isActive, primaryColor)} />
       <span style={styles.branchName(isActive, false, primaryColor)} title={mergedTag.name}>{displayName ?? mergedTag.name}</span>
       {multiRepo && (
-        <span style={styles.dotGroup}>
-          {mergedTag.repoIds.map(id => (
-            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-          ))}
-        </span>
+        <RepoDots repoIds={mergedTag.repoIds} repoColorMap={repoColorMap} />
       )}
     </div>
   );
@@ -1251,6 +1260,12 @@ const styles = {
     gap: '2px',
     alignItems: 'center',
     flexShrink: 0,
+  } as React.CSSProperties,
+  dotOverflow: {
+    fontSize: '10px',
+    opacity: 0.65,
+    marginLeft: '1px',
+    whiteSpace: 'nowrap',
   } as React.CSSProperties,
   aheadBehind: {
     display: 'flex',

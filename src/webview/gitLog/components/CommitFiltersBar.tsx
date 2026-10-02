@@ -426,10 +426,35 @@ export function RepoTabs({ value, repos, onChange }: {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [value, onChange, repos]);
 
-  if (repos.length <= 1) return null;
+  // With many repos (submodules) the tabs overflow. A mouse wheel only scrolls vertically,
+  // which this strip can't, so turn it into horizontal scrolling — as VS Code's editor tabs
+  // do. Native listener: React's wheel handlers are passive and can't preventDefault.
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const hasTabs = repos.length > 1;
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    function onWheel(event: WheelEvent) {
+      if (!el || event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      if (el.scrollWidth <= el.clientWidth) return;
+      event.preventDefault();
+      el.scrollLeft += event.deltaY;
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [hasTabs]);
+
+  // Keep the selected tab in view, e.g. after picking it with a shortcut or from the sidebar.
+  useEffect(() => {
+    tabsRef.current
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [value, repos]);
+
+  if (!hasTabs) return null;
 
   return (
-    <div style={styles.repoTabs} role="tablist" aria-label={l10n.t('Repositories')}>
+    <div ref={tabsRef} style={styles.repoTabs} role="tablist" aria-label={l10n.t('Repositories')}>
       <button
         type="button"
         role="tab"
@@ -754,6 +779,8 @@ const styles = {
     gap: '2px',
     overflowX: 'auto' as const,
     overflowY: 'hidden' as const,
+    scrollbarWidth: 'thin' as const,
+    scrollbarColor: 'var(--vscode-scrollbarSlider-background) transparent',
     borderBottom: '1px solid var(--vscode-panel-border)',
     background: 'var(--vscode-sideBar-background)',
     flexShrink: 0,
