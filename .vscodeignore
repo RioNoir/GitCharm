@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+.idea/**
 src/**
 node_modules/**
 .gitignore
@@ -10,12 +11,24 @@ esbuild.mjs
 build-webview.mjs
 test-build.mjs
 vite.config.ts
+MEMORY.md
+.claude/**
+.github/**
+.ai/**
+scripts/**
+*.vsix
+dist/**
+
+# The host is a single esbuild bundle: drop any leftover tsc output (per-file .js/.d.ts/.map)
+out/host/**
+!out/host/extension.js
+
+# Source maps and TypeScript sources/declarations — must stay after any "!" re-include,
+# since the last matching pattern wins
 **/*.map
 **/*.ts
 **/*.tsx
-!out/**
-MEMORY.md
-.claude/
-.github/
-.ai/
-scripts/**
+
+# README/CHANGELOG images: vsce rewrites relative links to GitHub URLs, so they aren't needed in the package
+media/screenshots/**
+media/banners/*.png

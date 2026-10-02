@@ -18,6 +18,8 @@ interface RepoWorktrees {
 
 interface Props {
   repos: RepoWorktrees[];
+  /** The workspace's only repo: neutral repo headers (repo icon, no color). Otherwise each keeps its color and dot, even as the only one listed. */
+  plainHeaders?: boolean;
   loading: boolean;
   error: string | null;
   multiRepo: boolean;
@@ -153,10 +155,11 @@ function WorktreeRow({ entry, repoId, suppressBorder = false, onDelete, onLock, 
 
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
-function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, onLock, onUnlock, onPrune, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate }: {
+function RepoSection({ repo, multiRepo, singleRepo, plain = false, isLast = false, onDelete, onLock, onUnlock, onPrune, onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate }: {
   repo: RepoWorktrees;
   multiRepo: boolean;
   singleRepo?: boolean;
+  plain?: boolean;
   isLast?: boolean;
   onDelete: Props['onDelete'];
   onLock: Props['onLock'];
@@ -179,13 +182,13 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, on
     <div style={{ ...css.repoSection, ...(!sectionCollapsed && !isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : {}) }}>
       {multiRepo && (
         <div
-          style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
+          style={{ ...css.repoHeader(repo.repoColor, plain), cursor: isCollapsible ? 'pointer' : 'default' }}
           onClick={isCollapsible ? () => toggleCollapsed(sectionKey) : undefined}
         >
           {isCollapsible && (
             <Codicon name={sectionCollapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
           )}
-          {singleRepo
+          {plain
             ? <Codicon name="repo" style={css.repoIcon} />
             : <span style={css.dot(repo.repoColor)} />
           }
@@ -244,7 +247,7 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, onDelete, on
 // ── Public component ──────────────────────────────────────────────────────────
 
 export function WorktreePanel({
-  repos, loading, error, multiRepo,
+  repos, loading, error, multiRepo, plainHeaders = false,
   onDelete, onLock, onUnlock, onPrune,
   onOpenInExplorer, onOpenInNewWindow, onOpenInOS, onAddToWorkspace, onRequestCreate,
 }: Props) {
@@ -269,6 +272,7 @@ export function WorktreePanel({
             repo={repo}
             multiRepo={multiRepo}
             singleRepo={repos.length === 1}
+            plain={plainHeaders}
             isLast={idx === repos.length - 1}
             onDelete={onDelete}
             onLock={onLock}

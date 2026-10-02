@@ -43,6 +43,9 @@ export function registerCommands(
       showLogChannel();
     }),
 
+    vscode.commands.registerCommand('gitcharm.showSubmodules', () => manager?.setSubmodulesShown(true)),
+    vscode.commands.registerCommand('gitcharm.hideSubmodules', () => manager?.setSubmodulesShown(false)),
+
     vscode.commands.registerCommand('gitcharm.refreshCommitPanel', async () => {
       if (!manager) return;
       await manager.reinitializeAndRefresh();
@@ -82,6 +85,27 @@ export function registerCommands(
     }),
     vscode.commands.registerCommand('gitcharm.sortReposByPathChecked', () => {
       commitPanel.setRepoSortMode('path');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortChangesByName', () => {
+      commitPanel.setChangeSortMode('name');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortChangesByNameChecked', () => {
+      commitPanel.setChangeSortMode('name');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortChangesByPath', () => {
+      commitPanel.setChangeSortMode('path');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortChangesByPathChecked', () => {
+      commitPanel.setChangeSortMode('path');
+    }),
+
+    vscode.commands.registerCommand('gitcharm.sortChangesByStatus', () => {
+      commitPanel.setChangeSortMode('status');
+    }),
+    vscode.commands.registerCommand('gitcharm.sortChangesByStatusChecked', () => {
+      commitPanel.setChangeSortMode('status');
     }),
 
     vscode.commands.registerCommand('gitcharm.showReposWithoutChanges', () => {

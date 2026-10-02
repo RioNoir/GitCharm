@@ -105,6 +105,7 @@ async function setupPanel(
   let refs: string[] = [];
   let fullMessage = '';
   let stashBranch: string | undefined;
+  let stashHash: string | undefined;
   let stashFiles: Array<{ path: string; status: string; added?: number; removed?: number }> | undefined;
 
   try {
@@ -121,6 +122,7 @@ async function setupPanel(
       fullMessage = commitInfo.message;
       files = stash.files;
       stashBranch = stash.branch;
+      stashHash = stash.hash || undefined;
       stashFiles = stash.files;
     } else {
       // getCommitNode reuses GitService's batch-log parser (%D decoration token) to get real
@@ -154,7 +156,7 @@ async function setupPanel(
       ? vscode.l10n.t('Stash {0}', commitInfo.shortHash)
       : vscode.l10n.t('Commit {0}', commitInfo.shortHash);
   }
-  panel.iconPath = panelIcon(extensionUri, isStash ? 'archive' : 'git-commit');
+  panel.iconPath = panelIcon(extensionUri, isStash ? 'git-stash' : 'git-commit');
 
   // Re-applied here (not just at createWebviewPanel time) so a panel restored via
   // registerWebviewPanelSerializer also gets the icon theme extension roots.
@@ -204,7 +206,7 @@ async function setupPanel(
       committerDate: commitInfo.committerDate,
       parents: commitInfo.parents,
       refs,
-      ...(isStash ? { isStash: true as const, stashRef: hash, stashBranch, stashFiles } : {}),
+      ...(isStash ? { isStash: true as const, stashRef: hash, stashHash, stashBranch, stashFiles } : {}),
     },
     fullMessage,
     files,

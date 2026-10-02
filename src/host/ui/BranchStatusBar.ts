@@ -10,7 +10,7 @@ import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger
 import { plural } from '../utils/plural';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
-import { promptBranchName } from '../utils/branchNamePrompt';
+import { promptBranchName, sanitizeBranchName, validateBranchNameInput } from '../utils/branchNamePrompt';
 import { pickRefQuickPick } from '../utils/refPicker';
 
 /** Whether the "gitcharm.showLastCommitInBranchMenu" setting is enabled (off by default). */
@@ -148,8 +148,15 @@ export class BranchStatusBar implements vscode.Disposable {
       .map(r => r.value)
       .filter(Boolean) as BranchInfo[];
 
-    // Use effective name: detachedTag, detachedHash, or branch name
-    const effectiveNames = [...new Set(branches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
+    // Use effective name: detachedTag, detachedHash, or branch name. Submodules don't count:
+    // they sit on the commit their superproject pins, usually a detached HEAD of their own,
+    // so with any submodule shown the branches would always read as diverged.
+    const submoduleIds = new Set(metas.filter(m => m.isSubmodule).map(m => m.id));
+    const projectBranches = statusResult.repos
+      .filter(r => nonWorktreeIds.has(r.repoId) && !submoduleIds.has(r.repoId))
+      .map(r => r.branch);
+    const namedBranches = projectBranches.length > 0 ? projectBranches : branches;
+    const effectiveNames = [...new Set(namedBranches.map(b => b.detachedTag ?? b.detachedHash ?? b.name))];
     this.branchesDiverged = effectiveNames.length > 1;
     this.totalBehind = branches.reduce((sum, b) => sum + (b.aheadBehind?.behind ?? 0), 0);
     this.totalAhead = branches.reduce((sum, b) => sum + (b.aheadBehind?.ahead ?? 0), 0);
@@ -361,12 +368,12 @@ export class BranchStatusBar implements vscode.Disposable {
       },
       { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
       {
-        label: `$(git-commit) ${vscode.l10n.t({ message: 'Commit', comment: ['Git menu item that opens the Commit panel'] })}`,
+        label: `$(gitcharm-commit) ${vscode.l10n.t({ message: 'Commit', comment: ['Git menu item that opens the Commit panel'] })}`,
         description: vscode.l10n.t('Open Commit panel'),
         action: () => this.commitPanelReveal(),
       },
       {
-        label: `$(history) ${vscode.l10n.t({ message: 'Log', comment: ['Git menu item that opens the Log panel (commit history)'] })}`,
+        label: `$(gitcharm-log) ${vscode.l10n.t({ message: 'Log', comment: ['Git menu item that opens the Log panel (commit history)'] })}`,
         description: vscode.l10n.t('Open Log panel'),
         action: async () => { await vscode.commands.executeCommand('gitcharm.openLog'); },
       },
@@ -2052,11 +2059,12 @@ export class BranchStatusBar implements vscode.Disposable {
     const repo = this.manager.getRepo(meta.id);
     if (!repo) return;
 
-    const newName = await vscode.window.showInputBox({
+    const input = await vscode.window.showInputBox({
       title: vscode.l10n.t("Rename branch '{0}' in {1}", oldName, meta.name),
       value: oldName,
-      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
+      validateInput: validateBranchNameInput,
     });
+    const newName = input === undefined ? undefined : sanitizeBranchName(input);
     if (!newName || newName === oldName) return;
 
     const oldUpstream = await repo.getBranchUpstream(oldName).catch(() => null);
@@ -2241,7 +2249,8 @@ export class BranchStatusBar implements vscode.Disposable {
 
   // ── Multi-repo branch actions ────────────────────────────────────────────
 
-  private async newBranchFrom(fromBranch: string, metas: RepoMeta[]): Promise<void> {
+  /** Prompt for a name, then create a branch from `fromBranch` in each repo (optionally checking it out). Also used by the Git Log. */
+  async newBranchFrom(fromBranch: string, metas: RepoMeta[]): Promise<void> {
     const branchName = await promptBranchName({
       title: vscode.l10n.t("New Branch from '{0}'", fromBranch),
       prompt: vscode.l10n.t('Enter the new branch name'),
@@ -2358,11 +2367,12 @@ export class BranchStatusBar implements vscode.Disposable {
   }
 
   private async renameBranchAllRepos(oldName: string, metas: RepoMeta[]): Promise<void> {
-    const newName = await vscode.window.showInputBox({
+    const input = await vscode.window.showInputBox({
       title: metas.length === 1 ? vscode.l10n.t("Rename branch '{0}'", oldName) : vscode.l10n.t("Rename branch '{0}' in all repositories", oldName),
       value: oldName,
-      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
+      validateInput: validateBranchNameInput,
     });
+    const newName = input === undefined ? undefined : sanitizeBranchName(input);
     if (!newName || newName === oldName) return;
 
     await vscode.window.withProgress(

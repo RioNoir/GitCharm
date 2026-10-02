@@ -70,8 +70,14 @@ export interface CommitNode {
   incoming?: boolean;
   isStash?: boolean;
   stashRef?: string;
+  /** Full hash of the stash commit; `hash` holds the ref (stash@{N}), which shifts as stashes come and go. */
+  stashHash?: string;
   stashBranch?: string;
   stashFiles?: Array<{ path: string; status: string; added?: number; removed?: number }>;
+  /** Synthetic row for a repo's uncommitted changes, drawn on top of its HEAD commit. */
+  isWorkingTree?: boolean;
+  /** The branch checked out in the working tree; unset on a detached HEAD. */
+  workingTreeBranch?: string;
 }
 
 export type GitFileStatus =

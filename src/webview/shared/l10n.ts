@@ -2,13 +2,19 @@ import * as l10n from '@vscode/l10n';
 
 // Injected by getWebviewHtml(): the host's vscode.l10n.bundle (undefined when VS Code runs
 // in English or no translation exists for its language) and vscode.env.language.
-declare const window: Window & { __L10N__?: { bundle?: Record<string, string>; locale: string } };
+declare const window: Window & { __L10N__?: { bundle?: Record<string, string>; locale: string; dateLocale?: string } };
 
 const injected = window.__L10N__;
 if (injected?.bundle) l10n.config({ contents: injected.bundle });
 
 /** VS Code's display language (e.g. "en", "it", "pt-br"), for Intl formatters. */
 export const locale: string = injected?.locale ?? 'en';
+
+/**
+ * The OS regional format (e.g. "it-IT" even when VS Code runs in English), for absolute
+ * dates and times. Text such as relative times keeps using `locale`.
+ */
+export const dateLocale: string = injected?.dateLocale ?? locale;
 
 /**
  * Picks the singular message for exactly 1, the plural one otherwise. Both variants must be

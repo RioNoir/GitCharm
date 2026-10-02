@@ -2,6 +2,83 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.6.2
+
+### ✨ New Features
+- The Git Log shows your **uncommitted changes** as a row on top of each repository's HEAD: "Uncommitted Changes (N)" with a hollow dot and a dashed line down to HEAD, updated as you edit, stage and save. Its detail lists the changed files against HEAD (untracked files as `U`, conflicts as `!`) with the author, date and checked-out branch; clicking a file opens its HEAD ↔ working tree diff, and **Open Changes** (also on double-click and in the row's context menu, next to **Show in Commit Panel**) opens them all in one multi-file diff. The row is hidden in compare mode, while a text, author or date filter is active, or when filtering by another branch. It can be turned off with the new `gitcharm.showUncommittedChangesInLog` setting (supersedes [#58](https://github.com/RioNoir/GitCharm/pull/58) by [@gaganyadav80](https://github.com/gaganyadav80))
+- When the Git Log stops at the `gitcharm.graphMaxCommits` limit while the repository has older commits, a line at the bottom of the list now says so, with a **Change Limit** button that opens the setting. Before, the list just stopped as if history ended there
+- New branch names now replace spaces the way VS Code's own Create Branch does: `git.branchWhitespaceChar` (a `-` by default) replaces spaces and other characters git rejects, and `git.branchValidationRegex` is checked too. The input box shows the name that will be used. This applies to New Branch, Rename Branch (branch menu and Git Log) and the branch of New Worktree, closes [#86](https://github.com/RioNoir/GitCharm/issues/86)
+
+### 🐛 Bug Fixes
+- Git Log stashes: the hash column and the detail now show the stash commit's own short hash, with `stash@{N}` as the first badge in the detail. **Copy Revision Number** and the Full Detail's "Hash" give the full stash commit hash instead of `stash@{N}`, which shifts as stashes are added and dropped. Stashes use the stash icon instead of the archive icon, in the badges and on the Full Detail tab
+- Git Log rows line up again: the hash column is always 8 characters wide, and dates use equal-width digits in a right-aligned column
+- In the Git Log's commit detail, a long repository name ends in "…" instead of running under the buttons at the top right
+
+### 🔧 Other
+- The Commit panel's activity bar icon is larger, matching the height of the Explorer and Source Control icons
+- Updated vite to 8.3.1 (development only)
+
+## v0.6.1
+
+### ✨ New Features
+- Git Log compare mode: the new **Compare Branches** action (⇄) in the Git Log title bar shows only the commits on one branch that aren't on another — by default, commits on the current branch that aren't on the repo's default branch yet (`main..HEAD`), resolved per repo in multi-repo workspaces. The filters bar then shows the two branches to compare ([#83](https://github.com/RioNoir/GitCharm/pull/83) by [@DragosMocrii](https://github.com/DragosMocrii), closes [#52](https://github.com/RioNoir/GitCharm/issues/52))
+- New **Sort Changes By** option (Name, Path or Status) in the Commit Panel's "..." menu, below Sort Repository By. It orders the flat list of changes (default: Name); the tree view always sorts by path, with folders before files, so the option is disabled there
+- Right-clicking a branch in the Git Log sidebar now offers **New Branch from "…"**: enter a name, choose whether to check it out, and it's created in every repo that has that branch ([#85](https://github.com/RioNoir/GitCharm/issues/85))
+- New GitCharm icons: the Commit and Git Log panels (the logo's diamond with its branch, and a diamond-shaped history icon), the Focus Git Log action, the Commit and Log entries of the branch menu, and the compare mode toggle. They follow the theme colour like VS Code's own icons. The Changes tab now uses the branch-changes icon
+
+### 🐛 Bug Fixes
+- Dates now follow the operating system's regional format instead of VS Code's display language (e.g. `28/09/2026` with VS Code in English on an Italian region). This covers the Git Log, commit details, stash/shelf/push lists, pull request views, blame annotations and File History, and the date range picker's first day of the week. Relative times ("3 days ago") still follow the display language
+- The Changes tree in the Commit Panel now lists folders before files, alphabetically, instead of in git's order
+
+### 🔧 Other
+- The Git Log filters bar no longer has its own clear button: **Clear Filters** in the title bar now shows whenever a filter is active
+- The extension package is much smaller (about 1.7 MB instead of 6 MB): README screenshots, source maps, leftover build output and IDE files are no longer bundled, and the extension icon was resized, closes [#84](https://github.com/RioNoir/GitCharm/issues/84) by [@ripopov](https://github.com/ripopov)
+
+## v0.6.0
+
+Release bringing everything from the v0.5.0 and v0.5.1 pre-releases.
+
+### ✨ New Features
+- GitCharm is now localized: German, French, Spanish, Italian, Simplified Chinese and Traditional Chinese translations of every command, setting and UI string, following VS Code's display language. Short labels made only of git terms (Commit, Stash, Shelve, Checkout…) stay in English in the European languages, as developers use them there
+- Pull request editor (create form, description and comments):
+  - Markdown pasted as plain text (e.g. copied from a `.md` file in VS Code) now keeps its formatting instead of showing literal `**`, `#` and `-`
+  - `@` mentions with autocomplete from the repository's members. Mentions are highlighted in descriptions and comments, and Bitbucket's `@{account_id}` mentions show the person's name
+  - Tables: insert one from the toolbar, add or remove rows and columns, and they're saved as standard Markdown tables
+  - H1, H2 and H3 heading buttons; existing `####`–`######` headings are no longer turned into plain text when editing
+- The pull request description can now be edited in place from the detail panel
+- The Pull Requests list shows each PR's checks GitHub-style (e.g. "✓ 3/3") for GitHub, GitLab, Gitea and Bitbucket
+- Generate a pull request's title and description with AI, each from its own ✨ button inside the field, just like the commit message. The description follows the repository's pull request template when there is one
+- AI-generated text now appears as it's written: in the commit message, the pull request title and description, and the AI Explain panel
+- Every AI prompt can be customized with the new `gitcharm.ai.prompts.*` settings (commit message, pull request title and description, commit and pull request explanations). An empty setting uses the default prompt, and the new **GitCharm: Customize AI Prompts** command starts you from the default text or resets a prompt
+- Git Log view title bar: Fetch and Refresh, Undock, Hide/Show Filters and Hide/Show Branch Sidebar are now title bar actions, also in the undocked panel. Clear Filters appears when the filters bar is hidden while a filter is active, and the "…" menu gets Refresh Log, Set Default Log Location and Manage Hidden Repositories
+- The Git Log remembers whether the filters bar and the branch sidebar are shown, separately for the bottom panel and the side bar. In a side bar both start hidden and the commit list leaves out the date, for a more compact layout
+- The sidebar's merged commits list shows the total in its title and scrolls after 4 rows
+
+### 🐛 Bug Fixes
+- Fixed the commit detail, pull request detail, Create Pull Request and AI Explain tabs staying on "Loading…" forever in Cursor
+- Fixed the Git Log freezing on an empty panel or the loading skeleton when a commit is dated before its parent (clock skew, or rebased/cherry-picked commits keeping older dates)
+- The Git Log now shows an error, with a pointer to the GitCharm output log, instead of spinning forever when it fails to load
+- The undocked Git Log now has everything the docked one has: branches and tags filtered by the selected repository, the two-commit range diff, the active profile and the no-repository screen
+- Fixed commit stats and dirty-checkout/conflict detection not working with a localized git: git's output is now always parsed in English
+- Fixed non-ASCII (e.g. accented or CJK) file names being parsed wrong from git's output
+- Confirming a Chinese/Japanese/Korean IME composition with Enter or Escape no longer submits, closes or clears inputs
+- Fixed Bitbucket pull requests showing "changed the title" on almost every timeline entry; the timeline now shows real title, state and reviewer changes
+- Fixed the Codex CLI provider never receiving the prompt
+- Fixed CLI AI providers (Claude, Codex, Gemini) not being found when their folder is added to PATH in `~/.zshrc`/`~/.bashrc` and VS Code doesn't inherit it
+- The extension now activates as soon as a GitCharm view or the Focus Git Log command is opened
+- Fixed the error message for a missing VS Code language model pointing to a non-existent command, and the pull summary counting changed files as "changes"
+
+### 🔧 Other
+- Author avatars are now off by default: resolving one sends a hash of the author's email to gravatar.com, which could leak a private repo's email addresses. A one-time prompt lets you turn them back on via the new **Avatars: Enabled** setting ([#76](https://github.com/RioNoir/GitCharm/pull/76) by [@gaganyadav80](https://github.com/gaganyadav80)). Initials avatars now use the same colour for an author across the Git Log and the pull request views, and are centred consistently
+- **GitCharm: Open Merge Editor** now opens VS Code's built-in merge editor, like every other conflict flow; the Monaco-based editor, which loaded Monaco from a CDN at runtime, is removed
+- AI generation with the Claude CLI provider is about twice as fast, and AI Explain on large pull requests prepares its prompt faster
+- Commit Panel polish: the Stash/Shelve button is hidden when there are no changes, the collapsed tab dropdown is wider and shows counts as badges, flat file lists start further left, and repository pills are capped at 165px with the full name in a tooltip
+- Secondary buttons (Cancel, Compare, Close…) now look like the Commit Panel's Stash button in every view, hover included
+- Pull request views: source → target branches truncate with an ellipsis keeping the target visible, the timeline no longer repeats label and assignee events that change nothing, the merge button now reads "Merge PR" and the detail's tab icons are slightly larger
+- Webview tab icons show on older VS Code versions too
+- Updated dependencies (React 19, TypeScript 6, ESLint 10, Vite 8 and more) and GitHub Actions; the CI now typechecks the extension host code
+- New pre-release channel: odd minor versions (0.5.x, 0.7.x…) are published to the VS Code Marketplace and Open VSX as pre-releases, even minor versions (0.6.x…) as releases
+
 ## v0.5.1 (pre-release)
 
 ### ✨ New Features

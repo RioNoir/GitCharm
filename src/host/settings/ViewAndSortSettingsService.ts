@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
 import {
+  CHANGE_SORT_MODES,
+  DEFAULT_CHANGE_SORT_MODE,
   DEFAULT_REPO_SORT_MODE,
   DEFAULT_VIEW_AND_SORT_SETTINGS,
   REPO_SORT_MODES,
+  type ChangeSortMode,
   type RepoSortMode,
   type ViewAndSortSettings,
   type ViewAndSortUserPrefs,
@@ -17,6 +20,10 @@ const LEGACY_HIDE_REPOS_KEY = 'gitcharm.showOnlyChangedRepos';
 
 function isRepoSortMode(value: unknown): value is RepoSortMode {
   return typeof value === 'string' && (REPO_SORT_MODES as readonly string[]).includes(value);
+}
+
+function isChangeSortMode(value: unknown): value is ChangeSortMode {
+  return typeof value === 'string' && (CHANGE_SORT_MODES as readonly string[]).includes(value);
 }
 
 function isFileViewMode(value: unknown): value is 'flat' | 'tree' {
@@ -45,6 +52,7 @@ export class ViewAndSortSettingsService {
       fileViewMode: isFileViewMode(legacyFileViewMode) ? legacyFileViewMode : DEFAULT_VIEW_AND_SORT_SETTINGS.fileViewMode,
       hideReposWithoutChanges: typeof legacyHideReposWithoutChanges === 'boolean' ? legacyHideReposWithoutChanges : DEFAULT_VIEW_AND_SORT_SETTINGS.hideReposWithoutChanges,
       repoSortMode: DEFAULT_REPO_SORT_MODE,
+      changeSortMode: DEFAULT_CHANGE_SORT_MODE,
     };
     await this.globalState.update(GLOBAL_KEY, migrated);
   }
@@ -57,6 +65,7 @@ export class ViewAndSortSettingsService {
       fileViewMode: isFileViewMode(stored.fileViewMode) ? stored.fileViewMode : DEFAULT_VIEW_AND_SORT_SETTINGS.fileViewMode,
       hideReposWithoutChanges: typeof stored.hideReposWithoutChanges === 'boolean' ? stored.hideReposWithoutChanges : DEFAULT_VIEW_AND_SORT_SETTINGS.hideReposWithoutChanges,
       repoSortMode: isRepoSortMode(stored.repoSortMode) ? stored.repoSortMode : DEFAULT_REPO_SORT_MODE,
+      changeSortMode: isChangeSortMode(stored.changeSortMode) ? stored.changeSortMode : DEFAULT_CHANGE_SORT_MODE,
       hiddenRepoIds: isStringArray(hiddenRepoIdsRaw) ? hiddenRepoIdsRaw : [],
     };
   }
@@ -67,6 +76,7 @@ export class ViewAndSortSettingsService {
       fileViewMode: partial.fileViewMode ?? current.fileViewMode,
       hideReposWithoutChanges: partial.hideReposWithoutChanges ?? current.hideReposWithoutChanges,
       repoSortMode: partial.repoSortMode ?? current.repoSortMode,
+      changeSortMode: partial.changeSortMode ?? current.changeSortMode,
     };
     await this.globalState?.update(GLOBAL_KEY, next);
     return this.getAll();

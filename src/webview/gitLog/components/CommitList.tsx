@@ -37,8 +37,12 @@ interface Props {
   aiEnabled?: boolean;
   themeVersion?: number;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
+  /** Replaces the default "No commits yet" message, e.g. for an empty compare range. */
+  emptyState?: { title: string; subtitle?: string };
   /** Leave the date column out whatever the width (the hover popover still shows it). */
   hideDate?: boolean;
+  /** Set when the list stops at gitcharm.graphMaxCommits though git has more: that number. */
+  commitLimitReached?: number | null;
 }
 
 interface RepoBlock {
@@ -169,7 +173,7 @@ const ANCHOR_PROBE = 32;
 
 const SKELETON_MIN_MS = 400;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, hideDate }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, hideDate, commitLimitReached }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -236,6 +240,18 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
 
   const [containerWidth, setContainerWidth] = useState<number>(9999);
   const containerRoRef = useRef<ResizeObserver | null>(null);
+
+  // The date column is as wide as the widest date the current format can produce, so dates
+  // line up on every row. Digits are tabular, so only the parts
+  // whose length varies (a 1- or 2-digit hour, AM/PM) need sampling.
+  const dateFormat = containerWidth > 550 ? formatDateTime : containerWidth > 380 ? formatDateOnly : formatDateCompact;
+  const dateSamples = useMemo(() => {
+    const samples = new Set<string>();
+    for (const hour of [0, 9, 12, 21]) samples.add(dateFormat(new Date(2026, 11, 28, hour, 58).toISOString()));
+    return [...samples];
+  }, [dateFormat]);
+  const dateMeasureRef = useRef<HTMLDivElement>(null);
+  const [dateWidth, setDateWidth] = useState<number | undefined>(undefined);
 
   const repoMeta = useMemo(() => {
     const map: Record<string, RepoMeta> = {};
@@ -476,16 +492,27 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
     onSelect(commits[nextIndex]);
   }, [commits, selectedHash, hoveredIndex, onSelect, scrollToIndexExact]);
 
+  useLayoutEffect(() => {
+    const el = dateMeasureRef.current;
+    if (!el) return;
+    let max = 0;
+    for (const child of Array.from(el.children)) max = Math.max(max, (child as HTMLElement).offsetWidth);
+    if (max > 0) setDateWidth(Math.ceil(max));
+  }, [dateSamples, showSkeleton, commits.length === 0]);
+
   if (showSkeleton) {
     return <CommitSkeleton />;
   }
 
   if (commits.length === 0 && !storeHasMore) {
+    const emptySubtitle = emptyState ? emptyState.subtitle : l10n.t('Make your first commit to see the history here');
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', height: '100%', gap: '8px', fontFamily: 'var(--vscode-font-family)', userSelect: 'none' }}>
-        <Codicon name="git-commit" style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
-        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>{l10n.t('No commits yet')}</span>
-        <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{l10n.t('Make your first commit to see the history here')}</span>
+        <Codicon name={emptyState ? 'git-compare' : 'git-commit'} style={{ fontSize: '32px', opacity: 0.3, color: 'var(--vscode-foreground)' }} />
+        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vscode-foreground)', opacity: 0.6 }}>{emptyState?.title ?? l10n.t('No commits yet')}</span>
+        {emptySubtitle && (
+          <span style={{ fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4 }}>{emptySubtitle}</span>
+        )}
       </div>
     );
   }
@@ -501,6 +528,9 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
       onClick={() => { setContextMenu(null); setPopover(null); }}
     >
       <style>{BG_ANIM_STYLE}</style>
+      <div ref={dateMeasureRef} style={styles.dateMeasure} aria-hidden>
+        {dateSamples.map(d => <span key={d} style={{ ...styles.date, marginLeft: 0, display: 'inline-block', overflow: 'visible' }}>{d}</span>)}
+      </div>
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
 
         {/* Repo label strips — inset by BLOCK_GAP/2 top and bottom (except at the very
@@ -573,6 +603,8 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 // Don't restart the open-timer if popover for this commit is already showing
                 if (popover?.commit.hash === commit.hash) return;
                 setPopover(null);
+                // The popover summarises a commit; the working-tree row's detail pane already says it all
+                if (commit.isWorkingTree) return;
                 const rowEl = e.currentTarget as HTMLElement;
                 const mouseX = e.clientX;
                 hoverTimerRef.current = setTimeout(() => {
@@ -595,7 +627,8 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 // an ancestor tabIndex on its own — grab it explicitly so arrow-key nav works
                 // immediately after clicking a commit, not just after clicking empty space.
                 parentRef.current?.focus();
-                if (e.ctrlKey || e.metaKey) {
+                // The working-tree row can't be part of a multi-selection: it has no revision to compare
+                if ((e.ctrlKey || e.metaKey) && !commit.isWorkingTree) {
                   setMultiSelectHashes(prev => {
                     const next = new Set(prev);
                     const key = `${commit.hash}:${commit.repoId}`;
@@ -603,6 +636,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                     if (next.size === 0 && selectedHash && selectedHash !== key) {
                       // Find selected commit to check stash type and repo compatibility
                       const selectedCommit = commits.find(c => `${c.hash}:${c.repoId}` === selectedHash);
+                      if (selectedCommit?.isWorkingTree) return prev;
                       if (selectedCommit && selectedCommit.isStash !== commit.isStash) return prev;
                       if (selectedCommit && selectedCommit.repoId !== commit.repoId) return prev;
                       next.add(selectedHash);
@@ -633,7 +667,9 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               onDoubleClick={e => {
                 e.stopPropagation();
                 if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
-                getVsCodeApi().postMessage({ type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg);
+                getVsCodeApi().postMessage(commit.isWorkingTree
+                  ? { type: 'LOG_OPEN_WORKING_TREE_CHANGES', repoId: commit.repoId } satisfies LogToHostMsg
+                  : { type: 'LOG_OPEN_EXTENDED_DETAIL', repoId: commit.repoId, hash: commit.hash } satisfies LogToHostMsg);
               }}
               onContextMenu={e => {
                 e.preventDefault();
@@ -737,14 +773,26 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               <div style={styles.info}>
                 {commit.isStash && (
                   <span style={{ ...styles.refBadge(commit.dotColor, false, false, isSelected), marginRight: '4px' }}>
-                    <Codicon name="archive" style={{ fontSize: '10px', flexShrink: 0, lineHeight: 1 }} />
+                    <Codicon name="git-stash" style={{ fontSize: '10px', flexShrink: 0, lineHeight: 1 }} />
                     <span style={styles.refBadgeLabel}>{commit.stashRef}</span>
                   </span>
                 )}
-                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}) }}>{commit.message.split('\n')[0]}</span>
+                <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}), ...(commit.isWorkingTree ? { fontStyle: 'italic', opacity: 0.5 } : {}) }}>{commit.message.split('\n')[0]}</span>
               </div>
 
-              {hoveredIndex === vrow.index && (
+              {hoveredIndex === vrow.index && commit.isWorkingTree && (
+                <div style={styles.inlineActions}>
+                  <button
+                    data-log-action-btn=""
+                    style={styles.inlineActionBtn}
+                    title={l10n.t('Open Changes')}
+                    onClick={e => { e.stopPropagation(); getVsCodeApi().postMessage({ type: 'LOG_OPEN_WORKING_TREE_CHANGES', repoId: commit.repoId } satisfies LogToHostMsg); }}
+                  >
+                    <Codicon name="diff-multiple" style={{ fontSize: '16px', lineHeight: 1 }} />
+                  </button>
+                </div>
+              )}
+              {hoveredIndex === vrow.index && !commit.isWorkingTree && (
                 <div style={styles.inlineActions}>
                   <button
                     data-log-action-btn=""
@@ -771,21 +819,38 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title={l10n.t('Not pushed')} />
               )}
               <div style={containerWidth > 550 ? styles.metaWithAuthor : styles.meta}>
-                <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={commit.isStash && !activeProfile} />
+                <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={(commit.isStash || commit.isWorkingTree) && !activeProfile} />
                 {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName)}</span>}
               </div>
               {!hideDate && containerWidth > 330 && (
-                <span style={styles.date}>
-                  {containerWidth > 550 ? formatDateTime(commit.authorDate) : containerWidth > 380 ? formatDateOnly(commit.authorDate) : formatDateCompact(commit.authorDate)}
+                <span style={{ ...styles.date, minWidth: dateWidth }}>
+                  {dateFormat(commit.authorDate)}
                 </span>
               )}
               {containerWidth > 550 && (
-                <span style={styles.shortHash} title={commit.hash}>{commit.shortHash}</span>
+                <span style={styles.shortHash} title={commit.isWorkingTree ? undefined : commit.hash}>{commit.shortHash}</span>
               )}
             </div>
           );
         })}
       </div>
+
+      {/* Under the last row: the list stopped at the configured ceiling, not at the end of history */}
+      {commitLimitReached != null && (
+        <div style={styles.limitFooter} onClick={e => e.stopPropagation()}>
+          <Codicon name="info" style={{ fontSize: '12px', flexShrink: 0 }} />
+          <span style={styles.limitFooterText}>
+            {l10n.t('Showing the first {0} commits. Older commits are past the Git Log limit.', commitLimitReached)}
+          </span>
+          <button
+            data-log-action-btn=""
+            style={styles.limitFooterBtn}
+            onClick={() => getVsCodeApi().postMessage({ type: 'LOG_OPEN_MAX_COMMITS_SETTING' } satisfies LogToHostMsg)}
+          >
+            {l10n.t('Change Limit')}
+          </button>
+        </div>
+      )}
 
       {popover && (
         <CommitPopover
@@ -1183,8 +1248,27 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   }
 
   function copyHash() {
-    navigator.clipboard.writeText(commit.hash).catch(() => {});
+    // A stash's hash is its ref; the revision number is the stash commit's own hash
+    navigator.clipboard.writeText(commit.isStash ? (commit.stashHash ?? commit.hash) : commit.hash).catch(() => {});
     onClose();
+  }
+
+  if (commit.isWorkingTree) {
+    return (
+      <>
+        <div style={ctxStyles.backdrop} onClick={onClose} />
+        <div ref={menuRef} style={ctxStyles.menu(menuPos.left, menuPos.top, menuPos.maxHeight)}>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_OPEN_WORKING_TREE_CHANGES', repoId: commit.repoId })}>
+            <Codicon name="diff-multiple" style={ctxStyles.icon} />
+            <span>{l10n.t('Open Changes')}</span>
+          </div>
+          <div data-ctx-item="" style={ctxStyles.item} onClick={() => send({ type: 'LOG_SHOW_IN_COMMIT_PANEL' })}>
+            <Codicon name="git-commit" style={ctxStyles.icon} />
+            <span>{l10n.t('Show in Commit Panel')}</span>
+          </div>
+        </div>
+      </>
+    );
   }
 
   // Build index map once for sorting (higher index = older commit in log)
@@ -2046,6 +2130,21 @@ const styles = {
     fontSize: '11px',
     opacity: 0.65,
     marginLeft: '8px',
+    // Equal-width digits and a measured minimum width (see dateWidth): every row's date
+    // takes the same room, right-aligned. A minimum, never a fixed width, so a measurement
+    // that comes out short can't clip the date
+    fontVariantNumeric: 'tabular-nums',
+    textAlign: 'right' as const,
+  },
+  dateMeasure: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    visibility: 'hidden' as const,
+    pointerEvents: 'none' as const,
+    whiteSpace: 'nowrap' as const,
+    height: 0,
+    overflow: 'visible',
   },
   shortHash: {
     fontFamily: 'var(--vscode-editor-font-family, monospace)',
@@ -2053,6 +2152,39 @@ const styles = {
     opacity: 0.55,
     flexShrink: 0,
     marginLeft: '8px',
+    // A fixed 8-character column, so the date and author line up across rows whatever
+    // the row shows there (a hash git had to lengthen, the working-tree row's "*")
+    width: '8ch',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+  } as React.CSSProperties,
+  limitFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minHeight: ROW_HEIGHT,
+    padding: '4px 12px',
+    boxSizing: 'border-box' as const,
+    fontSize: '11px',
+    color: 'var(--vscode-descriptionForeground)',
+    borderTop: '1px solid var(--vscode-panel-border)',
+  } as React.CSSProperties,
+  limitFooterText: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+  limitFooterBtn: {
+    flexShrink: 0,
+    background: 'transparent',
+    border: 'none',
+    borderRadius: '3px',
+    padding: '1px 6px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontFamily: 'inherit',
+    color: 'var(--vscode-textLink-foreground)',
   } as React.CSSProperties,
   inlineActions: {
     display: 'flex',

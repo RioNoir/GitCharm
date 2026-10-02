@@ -18,6 +18,8 @@ function useSkeletonStyle() {
 
 interface Props {
   repos: RepoPullRequests[];
+  /** The workspace's only repo: neutral repo headers (repo icon, no color). Otherwise each keeps its color and dot, even as the only one listed. */
+  plainHeaders?: boolean;
   loading: boolean;
   loadingMore: Record<string, boolean>;
   multiRepo: boolean;
@@ -193,10 +195,11 @@ function RepoSkeleton() {
   );
 }
 
-function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
+function RepoSection({ repo, multiRepo, singleRepo, plain = false, isLast = false, expanded, loadingMore, onToggleExpanded, onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch }: {
   repo: RepoPullRequests;
   multiRepo: boolean;
   singleRepo?: boolean;
+  plain?: boolean;
   isLast?: boolean;
   expanded: boolean;
   loadingMore: boolean;
@@ -216,13 +219,13 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
   return (
     <div style={{ ...css.repoSection, ...(isExpanded && !isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : {}) }}>
       <div
-        style={{ ...css.repoHeader(repo.repoColor, singleRepo), cursor: isCollapsible ? 'pointer' : 'default' }}
+        style={{ ...css.repoHeader(repo.repoColor, plain), cursor: isCollapsible ? 'pointer' : 'default' }}
         onClick={isCollapsible ? () => onToggleExpanded(repo.repoId) : undefined}
       >
         {isCollapsible && (
           <Codicon name={isExpanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.6, flexShrink: 0 }} />
         )}
-        {singleRepo
+        {plain
           ? <Codicon name="repo" style={css.repoIcon} />
           : <span style={css.dot(repo.repoColor)} />
         }
@@ -304,7 +307,7 @@ function RepoSection({ repo, multiRepo, singleRepo, isLast = false, expanded, lo
 }
 
 export function PullRequestPanel({
-  repos, loading, loadingMore, multiRepo, expandedRepoIds, onToggleExpanded,
+  repos, loading, loadingMore, multiRepo, plainHeaders = false, expandedRepoIds, onToggleExpanded,
   onOpenInBrowser, onOpenDetail, onOpenAccountPicker, onRequestCreate, onRefresh, onSetHostOverride, onOpenFilters, onOpenSearch,
 }: Props) {
   useSkeletonStyle();
@@ -319,6 +322,7 @@ export function PullRequestPanel({
             repo={repo}
             multiRepo={multiRepo}
             singleRepo={repos.length === 1}
+            plain={plainHeaders}
             isLast={idx === repos.length - 1}
             expanded={expandedRepoIds.has(repo.repoId)}
             loadingMore={!!loadingMore[repo.repoId]}

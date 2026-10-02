@@ -2,11 +2,12 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation } from '../types/messages';
-import type { BranchInfo, RepoMeta } from '../types/git';
+import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus } from '../types/messages';
+import type { BranchInfo, FileStatus, GitFileStatus, RepoMeta, WorkspaceStatus } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
+import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import type { GitProfileService } from '../git/GitProfileService';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
@@ -16,7 +17,8 @@ import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger
 import { plural } from '../utils/plural';
 import { offerRenameBranchRemoteSync } from '../utils/renameBranchRemoteSync';
 import { handleDirtyCheckout } from '../utils/dirtyCheckoutHandler';
-import { promptBranchName } from '../utils/branchNamePrompt';
+import { promptBranchName, sanitizeBranchName, validateBranchNameInput } from '../utils/branchNamePrompt';
+import { pickLocalDefaultBranch } from '../git/compareRange';
 import {
   getGitLogDefaultLayout,
   getGitLogDefaultLocation,
@@ -125,6 +127,10 @@ const FILTERS_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
   sidebar: 'gitcharm.logFiltersActive',
   undocked: 'gitcharm.undockedLogFiltersActive',
 };
+const COMPARE_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
+  sidebar: 'gitcharm.logCompareActive',
+  undocked: 'gitcharm.undockedLogCompareActive',
+};
 
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
@@ -133,6 +139,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private disposables: vscode.Disposable[] = [];
   private readonly managerListeners: vscode.Disposable[] = [];
   private commitPanel?: CommitPanelProvider;
+  private branchStatusBar?: BranchStatusBar;
   private undockedPanel?: UndockedPanelProvider;
   private hiddenRepoIds: string[] = [];
   private defaultBranchCache = new Map<string, string | undefined>();
@@ -152,6 +159,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   setCommitPanel(provider: CommitPanelProvider): void {
     this.commitPanel = provider;
+  }
+
+  setBranchStatusBar(bar: BranchStatusBar): void {
+    this.branchStatusBar = bar;
   }
 
   setUndockedPanel(provider: UndockedPanelProvider): void {
@@ -206,9 +217,21 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
   }
 
-  /** Clear the text/author/branch/date filters of the Git Log the user is looking at. */
+  /** Clear the text/author/branch/date filters (and the compared branches) of the Git Log the user is looking at. */
   clearFilters(): void {
     const msg: HostToLogMsg = { type: 'LOG_CLEAR_FILTERS' };
+    if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
+    else this.post(msg);
+  }
+
+  /** Turn compare mode on or off in the Git Log the user is looking at. */
+  async setCompareMode(active: boolean): Promise<void> {
+    // The compare controls live in the filters bar, so entering compare mode reveals it
+    if (active) {
+      const location = this.undockedPanel?.isActive() ? 'panel' : this.dockedLocation;
+      if (this.getLayoutPrefs()[location].filtersHidden) await this.setLayoutPref('filtersHidden', false);
+    }
+    const msg: HostToLogMsg = { type: 'LOG_SET_COMPARE_MODE', active };
     if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
     else this.post(msg);
   }
@@ -327,18 +350,27 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // the underlying file-event burst, so delaying it again only adds lag. The
     // branch query runs in parallel rather than being awaited first, so a slow
     // `git branch` can't hold up the commit list.
-    const onGraphOrBranchChange = () => {
+    const onGraphOrReposChange = () => {
       this.broadcast({ type: 'LOG_REFRESH' });
       void this.pushInitData();
     };
+    // A branch change arrives once the VS Code Git API has caught up — after the ref
+    // watcher already reloaded the commits (the manager raises a graph change itself for
+    // a repo it can't watch). Only the branch data, partly read from that API (e.g. a
+    // detached HEAD's tag), still needs refreshing, not every repo's log again.
+    const onBranchChange = () => { void this.pushInitData(); };
 
     // Register manager listeners here so they fire even when the panel has never been opened.
     // this.post() silently drops messages when the webview is not yet resolved — that's fine,
     // because resolveWebviewView performs an explicit initial sync when the panel first opens.
     this.managerListeners.push(
-      this.manager.onGraphChange(onGraphOrBranchChange),
-      this.manager.onBranchChange(onGraphOrBranchChange),
-      this.manager.onReposChange(onGraphOrBranchChange)
+      this.manager.onGraphChange(onGraphOrReposChange),
+      this.manager.onBranchChange(onBranchChange),
+      this.manager.onReposChange(onGraphOrReposChange),
+      this.manager.onStatusChange(status => this.broadcast({ type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(status) })),
+      vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('gitcharm.showUncommittedChangesInLog')) void this.pushWorkingTreeStatus();
+      })
     );
 
     this.profileService?.onProfileChange(async () => {
@@ -346,6 +378,20 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       this.broadcast({ type: 'LOG_REFRESH' });
       void this.pushInitData();
     });
+  }
+
+  /** The log's working-tree rows: the uncommitted changes of every repo the log can show. */
+  private toWorkingTreeStatus(status: WorkspaceStatus): LogWorkingTreeStatus[] {
+    if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('showUncommittedChangesInLog', true)) return [];
+    const logRepoIds = new Set(this.getNonWorktreeRepos().map(m => m.id));
+    return status.repos
+      .filter(r => logRepoIds.has(r.repoId))
+      .map(r => ({ repoId: r.repoId, files: mergeWorkingTreeFiles(r.stagedFiles, r.unstagedFiles) }));
+  }
+
+  private async pushWorkingTreeStatus(origin?: ReplyTarget): Promise<void> {
+    const msg: HostToLogMsg = { type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(await this.manager.getLatestStatuses()) };
+    if (origin) this.postTo(origin, msg); else this.broadcast(msg);
   }
 
   private async refreshActiveProfile(): Promise<void> {
@@ -692,38 +738,68 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const iconWebview = origin === 'undocked'
           ? this.undockedPanel?.webview
           : this.view?.webview;
-        const [repos, branches, iconTheme] = await Promise.all([
-          this.getVisibleReposWithDefaultBranch(),
+        // Repos, branches and tags go out alongside the log rather than before it: waiting
+        // for every repo's branches first added their time to the commits'. A later page
+        // only appends commits, so it skips them — they can't have changed by paging.
+        const reposPromise = this.getVisibleReposWithDefaultBranch();
+        const initDataSent = msg.skip > 0 ? Promise.resolve() : Promise.all([
+          reposPromise,
           this.getFilteredBranches(),
           iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
-        ]);
-        post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
+        ]).then(([repos, branches, iconTheme]) => {
+          post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
 
-        // Send tags for all repos
-        for (const meta of repos) {
-          const repo = this.manager.getRepo(meta.id);
-          if (!repo) continue;
-          repo.getTags().then(rawTags => {
-            post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
-          }).catch(() => {});
-        }
+          // Send tags for all repos
+          for (const meta of repos) {
+            const repo = this.manager.getRepo(meta.id);
+            if (!repo) continue;
+            repo.getTags().then(rawTags => {
+              post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
+            }).catch(() => {});
+          }
+        });
 
         const logRepoIds = msg.repoIds.length > 0
           ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
           : this.getVisibleRepos().map(r => r.id);
-        const commits = limit > 0
-          ? await this.manager.getInterleavedLog(logRepoIds, limit, msg.skip, {
+
+        // Compare mode: resolve each repo's own range. An empty base means that repo's
+        // local default branch, so a multi-repo log compares each repo against its own
+        // main/master; a repo where no base resolves is left out of the map.
+        let compareByRepo: Record<string, CompareRange> | undefined;
+        if (msg.compare) {
+          const { base, target } = msg.compare;
+          const metaById = new Map((await reposPromise).map(m => [m.id, m]));
+          const resolved = await Promise.all(logRepoIds.map(async (repoId): Promise<[string, CompareRange] | null> => {
+            const repo = this.manager.getRepo(repoId);
+            if (!repo) return null;
+            const repoBase = base || await pickLocalDefaultBranch(metaById.get(repoId)?.defaultBranch, name => repo.localBranchExists(name));
+            return repoBase ? [repoId, { base: repoBase, target: target || 'HEAD' }] : null;
+          }));
+          compareByRepo = Object.fromEntries(resolved.filter((e): e is [string, CompareRange] => e !== null));
+        }
+
+        // A request that reaches the ceiling asks for one commit more, which tells a list that
+        // stops at the ceiling apart from a history that just ends there
+        const reachesCeiling = limit > 0 && msg.skip + limit >= maxCommits;
+        const fetched = limit > 0
+          ? await this.manager.getInterleavedLog(logRepoIds, reachesCeiling ? limit + 1 : limit, msg.skip, {
             filterText: msg.filterText,
             filterAuthor: msg.filterAuthor,
             filterBranch: msg.filterBranch,
             filterDateFrom: msg.filterDateFrom,
             filterDateTo: msg.filterDateTo,
+            compareByRepo,
           })
           : [];
+        // The webview colors commits by their repo, so the repos must reach it first.
+        await initDataSent.catch(() => {});
+        const limitReached = reachesCeiling && fetched.length > limit;
+        const commits = limitReached ? fetched.slice(0, limit) : fetched;
         // Last batch when git ran out of commits, or when the ceiling is reached — either
         // way there is nothing further to page in, and the client stops asking.
         const isLast = commits.length < limit || msg.skip + commits.length >= maxCommits;
-        post({ type: 'LOG_COMMITS_BATCH', commits, isLast, batchIndex: 0, requestId: msg.requestId });
+        post({ type: 'LOG_COMMITS_BATCH', commits, isLast, batchIndex: 0, requestId: msg.requestId, limitReached, maxCommits });
 
         // A freshly opened undocked panel is only ready once it has asked for commits.
         if (msg.skip === 0 && origin === 'undocked' && this.pendingUndocked) {
@@ -741,8 +817,10 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           }, 150);
         }
 
-        // Send stashes only on first load (not on pagination)
-        if (msg.skip === 0) {
+        if (msg.skip === 0) void this.pushWorkingTreeStatus(origin).catch(() => {});
+
+        // Stashes belong to neither side of a compare range, so a compare view has none
+        if (msg.skip === 0 && !msg.compare) {
           Promise.all(logRepoIds.map(async (repoId) => {
             const repo = this.manager.getRepo(repoId);
             if (!repo) return [];
@@ -750,7 +828,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
               const stashes = await repo.stashList();
               return stashes.map(s => ({
                 hash: s.ref,
-                shortHash: s.ref,
+                // The ref is already in the row's stash badge; the hash column shows the stash commit
+                shortHash: s.hash.slice(0, 8) || s.ref,
                 repoId,
                 message: s.message || `WIP on ${s.branch}`,
                 authorName: '',
@@ -761,6 +840,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
                 refs: [],
                 isStash: true as const,
                 stashRef: s.ref,
+                stashHash: s.hash || undefined,
                 stashBranch: s.branch,
                 stashFiles: s.files,
               }));
@@ -1347,15 +1427,31 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_NEW_BRANCH_FROM': {
+        // Same flow as the branch menu's "New Branch from…": name, checkout?, then every repo.
+        const metas = this.getNonWorktreeRepos().filter(m => msg.repoIds.includes(m.id));
+        if (!this.branchStatusBar || metas.length === 0) break;
+        await this.branchStatusBar.newBranchFrom(msg.fromBranch, metas);
+        await Promise.all(metas.map(async meta => {
+          const repo = this.manager.getRepo(meta.id);
+          if (!repo) return;
+          const [branches, current] = await Promise.all([repo.getBranches(), repo.getCurrentBranch()]);
+          post({ type: 'LOG_REFS_UPDATE', repoId: meta.id, branches: mergeCurrentIntoBranches(branches, current) });
+        }));
+        post({ type: 'LOG_REFRESH' });
+        break;
+      }
+
       case 'LOG_RENAME_BRANCH_MULTI': {
         const repoCount = msg.repoIds.length;
-        const newName = await vscode.window.showInputBox({
+        const input = await vscode.window.showInputBox({
           title: repoCount === 1
             ? vscode.l10n.t('Rename branch \'{0}\'', msg.oldName)
             : vscode.l10n.t('Rename branch \'{0}\' in {1} repos', msg.oldName, repoCount),
           value: msg.oldName,
-          validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Branch name cannot be empty')),
+          validateInput: validateBranchNameInput,
         });
+        const newName = input === undefined ? undefined : sanitizeBranchName(input);
         if (!newName || newName === msg.oldName) {
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
           return;
@@ -2249,6 +2345,50 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_OPEN_WORKING_TREE_FILE_DIFF': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        try {
+          const fileUri = vscode.Uri.file(path.join(repo.rootPath, msg.filePath));
+          // A conflicted file opens as itself, so VS Code offers its conflict resolution
+          if (msg.fileStatus === '!') {
+            await vscode.commands.executeCommand('vscode.open', fileUri, { preview: true });
+            break;
+          }
+          const [left, right] = workingTreeDiffUris(repo.rootPath, { path: msg.filePath, status: msg.fileStatus, oldPath: msg.oldPath });
+          await vscode.commands.executeCommand('vscode.diff', left, right, vscode.l10n.t('{0} (Working Tree)', path.basename(msg.filePath)), { preview: true });
+        } catch (e: unknown) {
+          showGitError('openDiff', e);
+        }
+        break;
+      }
+
+      case 'LOG_OPEN_WORKING_TREE_CHANGES': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) break;
+        try {
+          const status = await repo.getStatus();
+          const files = mergeWorkingTreeFiles(status.stagedFiles, status.unstagedFiles);
+          if (files.length === 0) break;
+          const resources = files.map(f => {
+            const [original, modified] = workingTreeDiffUris(repo.rootPath, f);
+            return [vscode.Uri.file(path.join(repo.rootPath, f.path)), original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
+          });
+          await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('Uncommitted Changes'), resources);
+        } catch (e: unknown) {
+          showGitError('openDiff', e);
+        }
+        break;
+      }
+
+      case 'LOG_OPEN_MAX_COMMITS_SETTING':
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'gitcharm.graphMaxCommits');
+        break;
+
+      case 'LOG_SHOW_IN_COMMIT_PANEL':
+        await vscode.commands.executeCommand('gitcharm.commitPanel.focus');
+        break;
+
       case 'LOG_EXPLAIN_COMMIT': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
         await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true }, this.profileService);
@@ -2307,6 +2447,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_FILTERS_ACTIVE': {
         await vscode.commands.executeCommand('setContext', FILTERS_ACTIVE_CONTEXT[origin], msg.active);
+        break;
+      }
+
+      case 'LOG_COMPARE_ACTIVE': {
+        await vscode.commands.executeCommand('setContext', COMPARE_ACTIVE_CONTEXT[origin], msg.active);
         break;
       }
     }
@@ -2447,6 +2592,51 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
 // git empty tree SHA — represents an empty file for added/deleted diffs
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+const WORKING_TREE_STATUS_LETTER: Record<GitFileStatus, string> = {
+  modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C',
+  untracked: 'U', conflicted: '!', submodule: 'M',
+};
+
+/**
+ * Staged and unstaged changes folded into one list against HEAD, as the log's
+ * working-tree row shows them: a file changed on both sides is listed once, with
+ * the status that describes it relative to HEAD.
+ */
+export function mergeWorkingTreeFiles(staged: FileStatus[], unstaged: FileStatus[]): LogWorkingTreeStatus['files'] {
+  const byPath = new Map<string, LogWorkingTreeStatus['files'][number]>();
+  for (const f of staged) {
+    byPath.set(f.path, { path: f.path, status: WORKING_TREE_STATUS_LETTER[f.status], oldPath: f.oldPath, staged: true, unstaged: false });
+  }
+  for (const f of unstaged) {
+    const letter = WORKING_TREE_STATUS_LETTER[f.status];
+    const existing = byPath.get(f.path);
+    if (!existing) {
+      byPath.set(f.path, { path: f.path, status: letter, oldPath: f.oldPath, staged: false, unstaged: true });
+      continue;
+    }
+    existing.unstaged = true;
+    // Added to the index, then deleted from disk: nothing left to compare with HEAD
+    if (existing.status === 'A' && letter === 'D') byPath.delete(f.path);
+    else if (letter === '!' || letter === 'D') existing.status = letter;
+  }
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** Left and right sides of an uncommitted file's diff: HEAD against the file on disk. */
+function workingTreeDiffUris(rootPath: string, f: { path: string; status: string; oldPath?: string }): [vscode.Uri, vscode.Uri] {
+  const gitUri = (ref: string, filePath: string): vscode.Uri => {
+    const fileUri = vscode.Uri.file(path.join(rootPath, filePath));
+    return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
+  };
+  const onDisk = vscode.Uri.file(path.join(rootPath, f.path));
+  switch (f.status) {
+    case 'A': case 'C': case 'U': return [gitUri(EMPTY_TREE, f.path), onDisk];
+    case 'D': return [gitUri('HEAD', f.path), gitUri(EMPTY_TREE, f.path)];
+    case 'R': return [gitUri('HEAD', f.oldPath ?? f.path), onDisk];
+    default: return [gitUri('HEAD', f.path), onDisk];
+  }
+}
 
 export async function openSmartDiff(
   repo: import('../git/GitService').GitService,

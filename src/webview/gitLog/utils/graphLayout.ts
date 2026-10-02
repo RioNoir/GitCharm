@@ -30,6 +30,8 @@ export interface Segment {
   color: string;
   lockedFirst: boolean;
   branchId: number;
+  /** The link from a working-tree row down to HEAD: the changes aren't committed yet. */
+  dashed?: boolean;
 }
 
 export interface GraphLayout {
@@ -306,7 +308,8 @@ export function assignLanes(commits: CommitNode[], _isFiltered = false): GraphLa
     let refName: string | null = null;
     let repoId = '';
     for (let vi = 0; vi < n; vi++) {
-      if (vertices[vi].getBranch() === branch) {
+      // A working-tree row carries no refs: the branch takes its colour from HEAD below it
+      if (vertices[vi].getBranch() === branch && !commits[vi].isWorkingTree) {
         refName = primaryRefName(commits[vi].refs);
         repoId = commits[vi].repoId;
         break;
@@ -332,10 +335,24 @@ export function assignLanes(commits: CommitNode[], _isFiltered = false): GraphLa
   const segments: Segment[] = [];
   let totalCols = 1;
 
+  // A working-tree row always starts its branch (nothing descends from it). The rows from
+  // it down to HEAD are the uncommitted link, drawn dashed; HEAD not loaded means the link
+  // runs off the bottom of the list.
+  const dashedRows = new Map<number, { from: number; to: number }>();
+  for (let vi = 0; vi < n; vi++) {
+    if (!commits[vi].isWorkingTree) continue;
+    const branch = vertices[vi].getBranch();
+    const bi = branch ? branches.indexOf(branch) : -1;
+    if (bi >= 0) dashedRows.set(bi, { from: vi, to: hashIndex.get(commits[vi].parents[0] ?? '') ?? Infinity });
+  }
+
   for (let bi = 0; bi < branches.length; bi++) {
     const color = branchColors[bi];
     const lines = branches[bi].lines;
     if (lines.length === 0) continue;
+    const dashedRange = dashedRows.get(bi);
+    const isDashed = (l: { p1: { y: number }; p2: { y: number } }) =>
+      !!dashedRange && l.p1.y >= dashedRange.from && l.p2.y <= dashedRange.to;
 
     // Merge consecutive straight segments (same x, no bend needed)
     let cur = lines[0];
@@ -345,18 +362,19 @@ export function assignLanes(commits: CommitNode[], _isFiltered = false): GraphLa
         cur.p1.x === cur.p2.x &&   // cur is straight
         next.p1.x === next.p2.x && // next is straight
         cur.p1.x === next.p1.x &&  // same column
-        cur.p2.y === next.p1.y;    // consecutive rows
+        cur.p2.y === next.p1.y &&  // consecutive rows
+        isDashed(cur) === isDashed(next); // the dashed link stops at HEAD
       if (canMerge) {
         cur = { p1: cur.p1, p2: next.p2, lockedFirst: false };
       } else {
-        const s: Segment = { p1x: cur.p1.x, p1y: cur.p1.y, p2x: cur.p2.x, p2y: cur.p2.y, color, lockedFirst: cur.lockedFirst, branchId: bi };
+        const s: Segment = { p1x: cur.p1.x, p1y: cur.p1.y, p2x: cur.p2.x, p2y: cur.p2.y, color, lockedFirst: cur.lockedFirst, branchId: bi, ...(isDashed(cur) ? { dashed: true } : {}) };
         segments.push(s);
         if (cur.p1.x + 1 > totalCols) totalCols = cur.p1.x + 1;
         if (cur.p2.x + 1 > totalCols) totalCols = cur.p2.x + 1;
         cur = next;
       }
     }
-    const s: Segment = { p1x: cur.p1.x, p1y: cur.p1.y, p2x: cur.p2.x, p2y: cur.p2.y, color, lockedFirst: cur.lockedFirst, branchId: bi };
+    const s: Segment = { p1x: cur.p1.x, p1y: cur.p1.y, p2x: cur.p2.x, p2y: cur.p2.y, color, lockedFirst: cur.lockedFirst, branchId: bi, ...(isDashed(cur) ? { dashed: true } : {}) };
     segments.push(s);
     if (cur.p1.x + 1 > totalCols) totalCols = cur.p1.x + 1;
     if (cur.p2.x + 1 > totalCols) totalCols = cur.p2.x + 1;

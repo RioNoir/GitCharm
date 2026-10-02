@@ -23,6 +23,22 @@ export type {
   PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
 };
 
+/** A Git Log compare filter: commits reachable from `target` but not from `base`. Empty strings mean the defaults (HEAD / the repo's default branch). */
+export interface CompareRange {
+  base: string;
+  target: string;
+}
+
+/**
+ * A repo's uncommitted changes for the Git Log's working-tree row. Statuses are the
+ * log's single letters (M/A/D/R/C), plus U for untracked and ! for conflicted; a file
+ * both staged and unstaged is listed once.
+ */
+export interface LogWorkingTreeStatus {
+  repoId: string;
+  files: Array<{ path: string; status: string; oldPath?: string; staged: boolean; unstaged: boolean }>;
+}
+
 export interface MergeParentCommit {
   hash: string;
   shortHash: string;
@@ -53,6 +69,7 @@ export interface ShelveEntry {
 
 export interface StashEntry {
   ref: string;         // e.g. "stash@{0}"
+  hash: string;        // full hash of the stash commit
   index: number;       // 0, 1, 2...
   message: string;     // description
   date: string;        // ISO date
@@ -132,7 +149,9 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean }
   | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'abort' }
   | { type: 'COMMIT_PULL_ALL' }
-  | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string }
+  // rebase: omitted, the user picks merge or rebase, as in the branch menu's Pull…
+  | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string; rebase?: boolean }
+  | { type: 'COMMIT_FETCH_REPO'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_REMOTES'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_LAST_COMMIT_MESSAGE'; requestId: string; repoId: string }
   | { type: 'OPEN_PROFILES_MENU' }
@@ -268,7 +287,9 @@ export type HostToLogMsg =
   | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation }
   | { type: 'LOG_LAYOUT_PREFS'; layout: LogLayoutByLocation }
   | { type: 'LOG_CLEAR_FILTERS' }
-  | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string }
+  | { type: 'LOG_SET_COMPARE_MODE'; active: boolean }
+  /** `limitReached`: the list stops at gitcharm.graphMaxCommits (`maxCommits`) though git has more. */
+  | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string; limitReached?: boolean; maxCommits?: number }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
   | { type: 'LOG_RANGE_FILES_RESULT'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; orderedHashes: string[]; error?: string }
@@ -285,13 +306,15 @@ export type HostToLogMsg =
   | { type: 'LOG_COMMIT_BODY_RESULT'; requestId: string; hasBody: boolean }
   | { type: 'LOG_FILTER_BY_REPO'; repoId: string | null; branch?: string | null }
   | { type: 'LOG_STASHES_BATCH'; stashCommits: CommitNode[]; queriedRepoIds: string[] }
+  /** Uncommitted changes of every repo in the log, replacing the previous report. Empty when the setting is off. */
+  | { type: 'LOG_WORKING_TREE_STATUS'; repos: LogWorkingTreeStatus[] }
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
   | { type: 'LOG_DESELECT_FILE'; filePath: string };
 
 // ─── Git Log: WebView → Host ─────────────────────────────────────────────────
 
 export type LogToHostMsg =
-  | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string }
+  | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string; parents?: string[] }
   | { type: 'LOG_REQUEST_RANGE_FILES'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
@@ -311,6 +334,7 @@ export type LogToHostMsg =
   | { type: 'LOG_DELETE_BRANCH'; requestId: string; repoId: string; branchName: string; force: boolean }
   | { type: 'LOG_DELETE_BRANCH_MULTI'; requestId: string; repoIds: string[]; branchName: string }
   | { type: 'LOG_RENAME_BRANCH_MULTI'; requestId: string; repoIds: string[]; oldName: string }
+  | { type: 'LOG_NEW_BRANCH_FROM'; repoIds: string[]; fromBranch: string }
   | { type: 'LOG_FETCH_REPO'; requestId: string; repoId: string }
   | { type: 'LOG_GET_REMOTES'; requestId: string; repoId: string }
   | { type: 'LOG_CHERRY_PICK'; requestId: string; repoId: string; hash: string }
@@ -352,11 +376,18 @@ export type LogToHostMsg =
   | { type: 'LOG_CLONE_REPO' }
   | { type: 'LOG_OPEN_EXTENDED_DETAIL'; repoId: string; hash: string }
   | { type: 'LOG_OPEN_COMMIT_CHANGES'; repoId: string; hash: string }
+  /** Diff of one uncommitted file, HEAD ↔ working tree. */
+  | { type: 'LOG_OPEN_WORKING_TREE_FILE_DIFF'; repoId: string; filePath: string; fileStatus: string; oldPath?: string }
+  /** Multi-file diff of every uncommitted change, HEAD ↔ working tree. */
+  | { type: 'LOG_OPEN_WORKING_TREE_CHANGES'; repoId: string }
+  | { type: 'LOG_SHOW_IN_COMMIT_PANEL' }
+  | { type: 'LOG_OPEN_MAX_COMMITS_SETTING' }
   | { type: 'LOG_EXPLAIN_COMMIT'; repoId: string; hash: string }
   | { type: 'LOG_STASH_POP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_FILTERS_ACTIVE'; active: boolean }
+  | { type: 'LOG_COMPARE_ACTIVE'; active: boolean }
   | { type: 'LOG_VIEW_LOCATION'; location: LogViewLocation }
   | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }

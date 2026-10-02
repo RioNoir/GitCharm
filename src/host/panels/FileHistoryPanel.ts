@@ -6,6 +6,7 @@ import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import { showGitError } from '../utils/gitErrorUtils';
 import { logWarn } from '../utils/Logger';
 import { plural } from '../utils/plural';
+import { getSystemLocale } from '../utils/systemLocale';
 import { panelIcon } from '../utils/panelIcon';
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -181,6 +182,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     yesterday: capitalize(rtf.format(-1, 'day')),
     daysAgo,
     showInLog: vscode.l10n.t('Show in Git Log'),
+    dateLocale: getSystemLocale(),
   };
   return `<!DOCTYPE html>
 <html lang="${escHtml(vscode.env.language)}">
@@ -325,7 +327,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
         if (days === 0) return STRINGS.today;
         if (days === 1) return STRINGS.yesterday;
         if (days < 7 && days > 1) return STRINGS.daysAgo[days];
-        return d.toLocaleDateString(document.documentElement.lang || undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        return d.toLocaleDateString(STRINGS.dateLocale, { year: 'numeric', month: 'short', day: 'numeric' });
       } catch { return iso; }
     }
 

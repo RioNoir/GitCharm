@@ -2,7 +2,7 @@
   "name": "gitcharm",
   "displayName": "GitCharm",
   "description": "%extension.description%",
-  "version": "0.5.1",
+  "version": "0.6.2",
   "publisher": "RioNoir",
   "license": "GPL-3.0-only",
   "repository": {
@@ -55,6 +55,36 @@
   "main": "./out/host/extension.js",
   "l10n": "./l10n",
   "contributes": {
+    "icons": {
+      "gitcharm-compare-mode": {
+        "description": "GitCharm: Git Log compare mode (off)",
+        "default": {
+          "fontPath": "media/icon-font/gitcharm-icons.woff",
+          "fontCharacter": "\\E000"
+        }
+      },
+      "gitcharm-compare-mode-active": {
+        "description": "GitCharm: Git Log compare mode (on)",
+        "default": {
+          "fontPath": "media/icon-font/gitcharm-icons.woff",
+          "fontCharacter": "\\E001"
+        }
+      },
+      "gitcharm-log": {
+        "description": "GitCharm: Git Log",
+        "default": {
+          "fontPath": "media/icon-font/gitcharm-icons.woff",
+          "fontCharacter": "\\E002"
+        }
+      },
+      "gitcharm-commit": {
+        "description": "GitCharm: Commit panel",
+        "default": {
+          "fontPath": "media/icon-font/gitcharm-icons.woff",
+          "fontCharacter": "\\E003"
+        }
+      }
+    },
     "submenus": [
       {
         "id": "gitcharm/explorer",
@@ -69,6 +99,10 @@
         "label": "%submenu.commitPanel.sortRepos.label%"
       },
       {
+        "id": "gitcharm/commitPanel.sortChanges",
+        "label": "%submenu.commitPanel.sortChanges.label%"
+      },
+      {
         "id": "gitcharm/commitPanel.reposWithoutChanges",
         "label": "%submenu.commitPanel.reposWithoutChanges.label%"
       }
@@ -78,14 +112,14 @@
         {
           "id": "gitcharm-commit",
           "title": "GitCharm",
-          "icon": "media/icons/git-commit.svg"
+          "icon": "media/icons/gitcharm-commit.svg"
         }
       ],
       "panel": [
         {
           "id": "gitcharm-log",
           "title": "%viewsContainer.gitcharm-log.title%",
-          "icon": "media/icons/git-merge.svg"
+          "icon": "media/icons/gitcharm-log.svg"
         }
       ]
     },
@@ -118,11 +152,21 @@
         "command": "gitcharm.openLog",
         "title": "%command.openLog.title%",
         "category": "GitCharm",
-        "icon": "$(history)"
+        "icon": "$(gitcharm-log)"
       },
       {
         "command": "gitcharm.showOutputLog",
         "title": "%command.showOutputLog.title%",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.showSubmodules",
+        "title": "%command.showSubmodules.title%",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.hideSubmodules",
+        "title": "%command.hideSubmodules.title%",
         "category": "GitCharm"
       },
       {
@@ -224,6 +268,42 @@
         "command": "gitcharm.sortReposByPathChecked",
         "title": "%command.sortReposByPathChecked.title%",
         "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.sortChangesByName",
+        "title": "%command.sortChangesByName.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByNameChecked",
+        "title": "%command.sortChangesByNameChecked.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByPath",
+        "title": "%command.sortChangesByPath.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByPathChecked",
+        "title": "%command.sortChangesByPathChecked.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByStatus",
+        "title": "%command.sortChangesByStatus.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
+      },
+      {
+        "command": "gitcharm.sortChangesByStatusChecked",
+        "title": "%command.sortChangesByStatusChecked.title%",
+        "category": "GitCharm",
+        "enablement": "gitcharm.fileViewMode == 'flat'"
       },
       {
         "command": "gitcharm.showReposWithoutChanges",
@@ -400,6 +480,18 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "gitcharm.log.compare",
+        "title": "%command.logCompare.title%",
+        "category": "GitCharm",
+        "icon": "$(gitcharm-compare-mode)"
+      },
+      {
+        "command": "gitcharm.log.exitCompare",
+        "title": "%command.logExitCompare.title%",
+        "category": "GitCharm",
+        "icon": "$(gitcharm-compare-mode-active)"
+      },
+      {
         "command": "gitcharm.log.hideBranchSidebar",
         "title": "%command.logHideBranchSidebar.title%",
         "category": "GitCharm",
@@ -495,14 +587,19 @@
           "group": "2_viewSort@2"
         },
         {
-          "submenu": "gitcharm/commitPanel.reposWithoutChanges",
+          "submenu": "gitcharm/commitPanel.sortChanges",
           "when": "view == gitcharm.commitPanel",
           "group": "2_viewSort@3"
         },
         {
-          "command": "gitcharm.manageHiddenRepos",
+          "submenu": "gitcharm/commitPanel.reposWithoutChanges",
           "when": "view == gitcharm.commitPanel",
           "group": "2_viewSort@4"
+        },
+        {
+          "command": "gitcharm.manageHiddenRepos",
+          "when": "view == gitcharm.commitPanel",
+          "group": "2_viewSort@5"
         },
         {
           "command": "gitcharm.log.fetchAndRefresh",
@@ -510,34 +607,44 @@
           "group": "navigation@1"
         },
         {
-          "command": "gitcharm.log.clearFilters",
-          "when": "view == gitcharm.gitLog && gitcharm.logFiltersHidden && gitcharm.logFiltersActive",
+          "command": "gitcharm.log.compare",
+          "when": "view == gitcharm.gitLog && !gitcharm.logCompareActive",
           "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.log.exitCompare",
+          "when": "view == gitcharm.gitLog && gitcharm.logCompareActive",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.log.clearFilters",
+          "when": "view == gitcharm.gitLog && gitcharm.logFiltersActive",
+          "group": "navigation@3"
         },
         {
           "command": "gitcharm.log.hideFilters",
           "when": "view == gitcharm.gitLog && !gitcharm.logFiltersHidden",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "gitcharm.log.showFilters",
           "when": "view == gitcharm.gitLog && gitcharm.logFiltersHidden",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "gitcharm.log.hideBranchSidebar",
           "when": "view == gitcharm.gitLog && !gitcharm.logSidebarHidden",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "gitcharm.log.showBranchSidebar",
           "when": "view == gitcharm.gitLog && gitcharm.logSidebarHidden",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "gitcharm.undock",
           "when": "view == gitcharm.gitLog",
-          "group": "navigation@5"
+          "group": "navigation@6"
         },
         {
           "command": "gitcharm.log.refresh",
@@ -609,6 +716,38 @@
           "group": "navigation@3"
         }
       ],
+      "gitcharm/commitPanel.sortChanges": [
+        {
+          "command": "gitcharm.sortChangesByName",
+          "when": "!(gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'name')",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.sortChangesByNameChecked",
+          "when": "gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'name'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitcharm.sortChangesByPath",
+          "when": "!(gitcharm.fileViewMode != 'flat' || gitcharm.changeSortMode == 'path')",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.sortChangesByPathChecked",
+          "when": "gitcharm.fileViewMode != 'flat' || gitcharm.changeSortMode == 'path'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatus",
+          "when": "!(gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'status')",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatusChecked",
+          "when": "gitcharm.fileViewMode == 'flat' && gitcharm.changeSortMode == 'status'",
+          "group": "navigation@3"
+        }
+      ],
       "gitcharm/commitPanel.reposWithoutChanges": [
         {
           "command": "gitcharm.showReposWithoutChanges",
@@ -658,34 +797,44 @@
           "group": "navigation@5"
         },
         {
-          "command": "gitcharm.log.clearFilters",
-          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogFiltersHidden && gitcharm.undockedLogFiltersActive",
+          "command": "gitcharm.log.compare",
+          "when": "activeWebviewPanelId == gitcharm.undocked && !gitcharm.undockedLogCompareActive",
           "group": "navigation@6"
+        },
+        {
+          "command": "gitcharm.log.exitCompare",
+          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogCompareActive",
+          "group": "navigation@6"
+        },
+        {
+          "command": "gitcharm.log.clearFilters",
+          "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogFiltersActive",
+          "group": "navigation@7"
         },
         {
           "command": "gitcharm.log.hideFilters",
           "when": "activeWebviewPanelId == gitcharm.undocked && !gitcharm.undockedLogFiltersHidden",
-          "group": "navigation@7"
+          "group": "navigation@8"
         },
         {
           "command": "gitcharm.log.showFilters",
           "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogFiltersHidden",
-          "group": "navigation@7"
+          "group": "navigation@8"
         },
         {
           "command": "gitcharm.log.hideBranchSidebar",
           "when": "activeWebviewPanelId == gitcharm.undocked && !gitcharm.undockedLogSidebarHidden",
-          "group": "navigation@8"
+          "group": "navigation@9"
         },
         {
           "command": "gitcharm.log.showBranchSidebar",
           "when": "activeWebviewPanelId == gitcharm.undocked && gitcharm.undockedLogSidebarHidden",
-          "group": "navigation@8"
+          "group": "navigation@9"
         },
         {
           "command": "gitcharm.openSettings",
           "when": "activeWebviewPanelId == gitcharm.undocked",
-          "group": "navigation@9"
+          "group": "navigation@10"
         }
       ],
       "scm/sourceControl": [
@@ -697,6 +846,14 @@
       "commandPalette": [
         {
           "command": "gitcharm.openLog"
+        },
+        {
+          "command": "gitcharm.showSubmodules",
+          "when": "gitcharm.hasHiddenSubmodules"
+        },
+        {
+          "command": "gitcharm.hideSubmodules",
+          "when": "gitcharm.hasShownSubmodules"
         },
         {
           "command": "gitcharm.showBranchMenu"
@@ -736,6 +893,30 @@
         },
         {
           "command": "gitcharm.setFileViewTreeChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByName",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByNameChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByPath",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByPathChecked",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatus",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.sortChangesByStatusChecked",
           "when": "false"
         },
         {
@@ -807,6 +988,14 @@
         },
         {
           "command": "gitcharm.log.clearFilters"
+        },
+        {
+          "command": "gitcharm.log.compare",
+          "when": "!gitcharm.logCompareActive"
+        },
+        {
+          "command": "gitcharm.log.exitCompare",
+          "when": "gitcharm.logCompareActive"
         },
         {
           "command": "gitcharm.log.hideFilters",
@@ -1003,6 +1192,12 @@
             "maximum": 10000,
             "description": "%config.graphMaxCommits.description%"
           },
+          "gitcharm.showUncommittedChangesInLog": {
+            "order": 81,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.showUncommittedChangesInLog.description%"
+          },
           "gitcharm.repositoryScanMaxDepth": {
             "order": 60,
             "type": "number",
@@ -1021,6 +1216,14 @@
               "type": "string"
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
+          },
+          "gitcharm.submoduleMaxDepth": {
+            "order": 72,
+            "type": "number",
+            "default": 5,
+            "minimum": 0,
+            "maximum": 10,
+            "description": "%config.submoduleMaxDepth.description%"
           },
           "gitcharm.branchNameModels": {
             "order": 75,
@@ -1443,7 +1646,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.host.json",
     "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json",
     "l10n:export": "vscode-l10n-dev export --outDir ./l10n ./src",
-    "l10n:check": "node scripts/l10n-check.mjs"
+    "l10n:check": "node scripts/l10n-check.mjs",
+    "icons:build": "fantasticon --config scripts/icon-font.config.cjs"
   },
   "dependencies": {
     "@simple-git/argv-parser": "^1.1.1",
@@ -1477,13 +1681,14 @@
     "concurrently": "^10.0.5",
     "esbuild": "^0.28.1",
     "eslint": "^10.11.0",
+    "fantasticon": "^4.1.0",
     "globals": "^17.0.0",
     "material-icon-theme": "^5.34.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
-    "vite": "^8.3.0",
+    "vite": "^8.3.1",
     "zustand": "^5.0.15"
   },
   "optionalDependencies": {
