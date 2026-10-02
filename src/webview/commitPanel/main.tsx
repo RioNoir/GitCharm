@@ -904,7 +904,9 @@ function App() {
   const metaMap = new Map(store.repoMetas.map(m => [m.id, m]));
   const multiRepo = repos.length >= 1;
   const changesMultiRepo = changesRepos.length >= 1;
-  const changesSingleRepo = changesRepos.length === 1;
+  // The neutral repo-header look (repo icon, no color) is for a workspace with one repo; a
+  // single repo left after a filter (no changes, nothing shelved…) keeps its color and dot.
+  const workspaceSingleRepo = allRepos.length === 1;
 
   // Shelf and Stash list only the repos that have entries (or an error to show), so each tab
   // needs every repo's list — not only those of the panels on screen, which used to load
@@ -1532,6 +1534,7 @@ function App() {
             ) : store.changesViewMode === 'vscode' ? (
               <VscodeView
                 repos={changesRepos}
+                showRepoColor={!workspaceSingleRepo}
                 repoMetas={store.repoMetas}
                 selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                 ctxFile={ctxFile}
@@ -1593,6 +1596,7 @@ function App() {
               <ChangelistView
                 changelists={store.changelists}
                 repos={changesRepos}
+                showRepoColor={!workspaceSingleRepo}
                 repoMetas={store.repoMetas}
                 selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                 viewMode={store.viewAndSort.fileViewMode}
@@ -1680,7 +1684,7 @@ function App() {
                       repoName={repoName}
                       repoColor={repoColor}
                       multiRepo={changesMultiRepo}
-                      singleRepo={changesSingleRepo}
+                      singleRepo={workspaceSingleRepo}
                       isSubmodule={meta?.isSubmodule}
                       submodulePath={meta?.submodulePath}
                       isWorktree={meta?.isWorktree}
@@ -1863,6 +1867,7 @@ function App() {
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
                   singleRepo={shelfRepos.length === 1}
+                  plainHeader={workspaceSingleRepo}
                   shelves={shelveMap[repoId] ?? []}
                   loading={shelveLoading[repoId] ?? false}
                   error={shelveError[repoId] ?? null}
@@ -1906,6 +1911,7 @@ function App() {
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
                   singleRepo={stashRepos.length === 1}
+                  plainHeader={workspaceSingleRepo}
                   stashes={stashesOf(repoStatus)}
                   loading={stashLoading[repoId] ?? false}
                   error={stashError[repoId] ?? null}
@@ -1929,6 +1935,7 @@ function App() {
           <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0 }}>
             <PushTab
               repos={repos}
+              plainHeaders={workspaceSingleRepo}
               repoMetas={store.repoMetas}
               unpushedMap={unpushedMap}
               onPush={doPush}
@@ -1958,6 +1965,7 @@ function App() {
           <ScrollArea style={css.repoList}>
             <WorktreePanel
               repos={worktreeRepos}
+              plainHeaders={workspaceSingleRepo}
               loading={worktreeLoading}
               error={worktreeError}
               multiRepo={multiRepo}
@@ -1991,6 +1999,7 @@ function App() {
           >
             <PullRequestPanel
               repos={pullRequestRepos}
+              plainHeaders={workspaceSingleRepo}
               loading={pullRequestLoading}
               loadingMore={pullRequestLoadingMore}
               multiRepo={multiRepo}

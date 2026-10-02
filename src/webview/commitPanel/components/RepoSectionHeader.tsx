@@ -5,12 +5,16 @@ import { Codicon } from '../../shared/Codicon';
  * The header of a repository's section in the Shelf and Stash tabs: a chevron that
  * collapses the section, the repo's dot (or icon when it's the only repo), its name, the
  * worktree branch when it is one, and on the right how many entries it holds. The only
- * repo listed can't be collapsed — there'd be nothing left in the tab.
+ * repo listed can't be collapsed — there'd be nothing left in the tab. The neutral look
+ * (repo icon, no color) is for a workspace with a single repo, not merely a single one listed.
  */
-export function RepoSectionHeader({ repoName, repoColor, singleRepo, worktreeBranch, expanded, onToggle, count, countTitle }: {
+export function RepoSectionHeader({ repoName, repoColor, singleRepo, plain, worktreeBranch, expanded, onToggle, count, countTitle }: {
   repoName: string;
   repoColor: string;
+  /** The only repo listed: always open, no chevron. */
   singleRepo: boolean;
+  /** The workspace's only repo: repo icon and neutral background instead of its color and dot. */
+  plain: boolean;
   worktreeBranch?: string;
   expanded: boolean;
   onToggle: () => void;
@@ -21,7 +25,7 @@ export function RepoSectionHeader({ repoName, repoColor, singleRepo, worktreeBra
   const collapsible = !singleRepo;
   return (
     <div
-      style={css.header(repoColor, singleRepo)}
+      style={css.header(repoColor, plain, collapsible)}
       {...(collapsible ? {
         onClick: onToggle,
         role: 'button',
@@ -31,7 +35,7 @@ export function RepoSectionHeader({ repoName, repoColor, singleRepo, worktreeBra
       } : {})}
     >
       {collapsible && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={css.chevron} />}
-      {singleRepo
+      {plain
         ? <Codicon name="repo" style={css.repoIcon} />
         : <span style={css.dot(repoColor)} />
       }
@@ -50,15 +54,15 @@ export function RepoSectionHeader({ repoName, repoColor, singleRepo, worktreeBra
 }
 
 const css = {
-  header: (color: string, singleRepo: boolean): React.CSSProperties => ({
+  header: (color: string, plain: boolean, collapsible: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', minHeight: '26px',
-    background: singleRepo
+    background: plain
       ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
       : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
     borderBottom: '1px solid var(--vscode-panel-border)',
     boxSizing: 'border-box', overflow: 'hidden', minWidth: 0,
     position: 'sticky', top: 0, zIndex: 1,
-    cursor: singleRepo ? 'default' : 'pointer', userSelect: 'none', outline: 'none',
+    cursor: collapsible ? 'pointer' : 'default', userSelect: 'none', outline: 'none',
   }),
   chevron: { fontSize: '12px', opacity: 0.6, flexShrink: 0 } as React.CSSProperties,
   dot: (color: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }),

@@ -7,6 +7,8 @@ import { ChangelistGroup } from './ChangelistGroup';
 import { SingleRepoHeader } from './ProjectGroup';
 
 interface Props {
+  /** The workspace has several repos (some filtered out): a lone listed one keeps its color and dot. */
+  showRepoColor?: boolean;
   changelists: ChangelistData[];
   repos: RepoStatus[];
   repoMetas: RepoMeta[];
@@ -37,6 +39,7 @@ interface Props {
 }
 
 export function ChangelistView({
+  showRepoColor = false,
   changelists, repos, repoMetas,
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
@@ -124,6 +127,7 @@ export function ChangelistView({
           submodulePath={singleMeta?.submodulePath}
           isWorktree={singleMeta?.isWorktree}
           mainWorktreePath={singleMeta?.mainWorktreePath}
+          showRepoColor={showRepoColor}
           onBranchClick={onBranchClick}
           onRepoContextMenu={(e, rid) => onRepoContextMenu(e, rid)}
           onOpenAllChanges={() => {}}
