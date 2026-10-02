@@ -364,7 +364,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, plain = false, isLast }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, plain = false, collapsible = !singleRepo, isLast }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -390,6 +390,8 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   aiEnabled: boolean;
   singleRepo?: boolean;
   plain?: boolean;
+  /** False for the only repo listed: always open, no chevron — there'd be nothing else to show. */
+  collapsible?: boolean;
   /** Suppresses the section's bottom border when it's the last repo section in the list — avoids a dangling border with nothing below to visually merge into. */
   isLast?: boolean;
 }) {
@@ -420,7 +422,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   // closed. Each default keeps its own record of the user's toggle, so a repo gaining
   // commits opens again.
   const expandedByDefault = singleRepo || commitCount > 0;
-  const expanded = expandedByDefault ? !isCollapsed(collapseKey) : isSectionExpanded(collapseKey);
+  const expanded = !collapsible || (expandedByDefault ? !isCollapsed(collapseKey) : isSectionExpanded(collapseKey));
   const toggleExpanded = () => (expandedByDefault ? toggleCollapsed(collapseKey) : toggleSectionExpanded(collapseKey));
 
   const handleCommitClick = (e: React.MouseEvent, hash: string) => {
@@ -553,8 +555,8 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
             title={!canCheck ? l10n.t('Nothing to sync') : checked ? l10n.t('Exclude from sync') : l10n.t('Include in sync')}
           />
         )}
-        <div style={styles.headerMain} onClick={singleRepo ? undefined : toggleExpanded}>
-          {!singleRepo && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '11px', opacity: 0.65, flexShrink: 0 }} />}
+        <div style={{ ...styles.headerMain(!singleRepo && collapsible), cursor: collapsible ? 'pointer' : 'default' }} onClick={collapsible ? toggleExpanded : undefined}>
+          {collapsible && <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />}
           {plain
             ? <Codicon name="repo" style={{ fontSize: '13px', opacity: 0.7, flexShrink: 0 }} />
             : <span style={styles.dot(repoColor)} />
@@ -773,7 +775,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
     );
   };
 
-  const renderSection = (repoStatus: RepoStatus, opts: { single: boolean; isLast: boolean }) => (
+  const renderSection = (repoStatus: RepoStatus, opts: { single: boolean; isLast: boolean; collapsible: boolean }) => (
     <RepoSection
       key={repoStatus.repoId}
       repoStatus={repoStatus}
@@ -801,6 +803,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
       aiEnabled={aiEnabled}
       singleRepo={opts.single}
       plain={plainHeaders}
+      collapsible={opts.collapsible}
       isLast={opts.isLast}
     />
   );
@@ -815,7 +818,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
           <EmptyTabState icon="cloud" message={l10n.t('The repository is up to date')} hint={l10n.t('There are no commits to push or to pull, and no branch to publish. When the repository gets out of sync with its remote, it shows up here.')} />
         ) : (
           <ScrollArea style={css.list}>
-            {renderSection(solo, { single: true, isLast: true })}
+            {renderSection(solo, { single: true, isLast: true, collapsible: false })}
           </ScrollArea>
         )}
         <div style={css.footer}>
@@ -835,7 +838,7 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
         <EmptyTabState icon="cloud" message={l10n.t('All repositories are up to date')} hint={l10n.t('No repository has commits to push or to pull, nor a branch to publish. Repositories out of sync with their remote show up here.')} />
       ) : (
         <ScrollArea style={css.list}>
-          {listedRepos.map((repoStatus, i) => renderSection(repoStatus, { single: false, isLast: i === listedRepos.length - 1 }))}
+          {listedRepos.map((repoStatus, i) => renderSection(repoStatus, { single: false, isLast: i === listedRepos.length - 1, collapsible: listedRepos.length > 1 }))}
         </ScrollArea>
       )}
 
@@ -921,7 +924,7 @@ const styles = {
   repoRoot: { borderBottom: '1px solid var(--vscode-panel-border)' } as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center',
-    padding: '0 8px', height: '26px',
+    height: '26px',
     background: singleRepo
       ? 'color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-sideBar-background))'
       : `color-mix(in srgb, ${color} 8%, var(--vscode-sideBar-background))`,
@@ -929,14 +932,18 @@ const styles = {
     boxSizing: 'border-box',
     position: 'sticky', top: 0, zIndex: 1,
   }),
+  // Spacing as in the Changes tab's repo headers (ProjectGroup), so the tabs line up.
   checkbox: {
-    margin: '0 2px 0 0', flexShrink: 0,
+    margin: '0 0 0 6px', flexShrink: 0,
     accentColor: 'var(--vscode-button-background)',
   } as React.CSSProperties,
-  headerMain: {
-    display: 'flex', alignItems: 'center', gap: '6px',
+  // 4px after the checkbox when a chevron follows it; with no chevron (the only repo listed,
+  // or no checkbox either) 8px, so the dot doesn't sit against the checkbox or the edge.
+  headerMain: (tightLeft: boolean): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', gap: '4px',
+    padding: `3px 8px 3px ${tightLeft ? 4 : 8}px`,
     flex: 1, minWidth: 0, cursor: 'pointer',
-  } as React.CSSProperties,
+  }),
   dot: (color: string): React.CSSProperties => ({
     width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
   }),
