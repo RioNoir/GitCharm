@@ -68,7 +68,7 @@ On first install, a QuickPick lets you choose your preferred view mode. You can 
 
 #### Adaptive commit button
 
-When there is nothing left to commit, the primary button turns into the remote action the branch actually needs — no switching to the Push tab:
+When there is nothing left to commit, the primary button turns into the remote action the branch actually needs — no switching to the Sync tab:
 
 | Branch state | Button |
 |:--|:--|
@@ -78,16 +78,19 @@ When there is nothing left to commit, the primary button turns into the remote a
 
 **Sync Changes** pushes, pulls, or does both, depending on what the branch needs. When your branch and the remote have diverged — after an amend, rebase, or squash — a QuickPick asks how to reconcile: **Pull, then Push**, **Pull (Rebase), then Push**, or **Force Push** (`--force-with-lease`). If the local history looks rewritten, the force option is listed first. The same prompt appears if a push is rejected because the remote moved. The dropdown always exposes **Push**, **Pull**, and **Force Push** directly.
 
-### 🚀 Push Tab
+### ☁️ Sync Tab
 
-- Lists unpushed commits for every repository, including branches without an upstream tracking branch.
-- Commit count badge on the tab label, auto-updated after each commit, undo, or push.
+The remote side of every repository: what to push and what to pull.
+
+- Lists only the repositories out of sync with their remote — commits to push, a branch to publish, or commits to pull — with an empty state when everything is up to date. Repositories with commits to push open by default, the others start collapsed.
+- Commits to push, including branches without an upstream tracking branch; for commits to pull, how many (the Git Log lists them).
+- Commit count badge on the tab label: commits to push plus commits to pull, auto-updated after each commit, undo, push, pull, or fetch.
 - File count badge on the Changes tab label showing the total number of modified files.
-- Branch info header with sync state: "Up to date", "N commits to pull from `<upstream>`", or "Local branch — not published" with matching badges (↑ ahead, ↓ behind, Unpublished).
+- Branch info header with matching badges (↑ ahead, ↓ behind, Unpublished) and, on hover, **Fetch**, **Pull…** (merge or rebase), and **Push** / **Publish Branch** for that repository.
 - Per-commit stats showing files changed, additions, and deletions.
-- Push button adapts to context: when the repo is both ahead and behind, it becomes a **Sync & Push** split-button; the dropdown exposes **Push** and **Force Push** options.
-- Push button label adapts to context: "Push", "Publish Branch", "Publish Branches", or "Push & Publish" for mixed upstream/no-upstream selections.
-- **Undo** the HEAD commit (with confirmation) directly from the push list.
+- The footer acts on the selected repositories: **Sync** when any of them is behind (pull and push as each needs, asking how to reconcile a diverged branch), **Push** when there is only pushing to do, **Fetch** otherwise — or **Fetch All** with nothing selected. Its dropdown has **Sync**, **Push**, **Pull (Merge)**, **Pull (Rebase)**, **Fetch**, and **Force Push**.
+- Push label adapts to context: "Push", "Publish Branch", "Publish Branches", or "Push & Publish" for mixed upstream/no-upstream selections.
+- **Undo** the HEAD commit (with confirmation) directly from the list of commits to push.
 - **Explain with AI** context menu action on commits: opens the detail panel with an auto-generated explanation of the changes.
 - **Open Full Detail** context menu action on commits.
 - Click any row to jump to that commit in the Git Log panel.

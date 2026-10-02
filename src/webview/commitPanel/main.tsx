@@ -12,6 +12,7 @@ import { UnifiedCommitForm } from './components/UnifiedCommitForm';
 import type { SyncAction } from './syncState';
 import { ContextMenu, type ContextMenuEntry } from './components/ContextMenu';
 import { ShelvePanel } from './components/ShelvePanel';
+import { EmptyTabState } from './components/EmptyTabState';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
@@ -21,7 +22,7 @@ import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
 import { handleTreeNavKeyDown } from '../shared/keyboardNav';
 import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary } from '../shared/msgTypes';
-import type { FileStatus } from '../shared/types';
+import type { FileStatus, RepoStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
 import { sortRepos } from './repoSort';
@@ -902,9 +903,31 @@ function App() {
   const changesRepos = hideReposWithoutChanges ? changedRepos : repos;
   const metaMap = new Map(store.repoMetas.map(m => [m.id, m]));
   const multiRepo = repos.length >= 1;
-  const singleRepo = repos.length === 1;
   const changesMultiRepo = changesRepos.length >= 1;
   const changesSingleRepo = changesRepos.length === 1;
+
+  // Shelf and Stash list only the repos that have entries (or an error to show), so each tab
+  // needs every repo's list — not only those of the panels on screen, which used to load
+  // their own on mount. Repos that turn out empty are left out, and the tab says so when none
+  // remain. The only repo listed is shown as the single one: open, with the repo icon.
+  const repoIdsKey = repos.map(r => r.repoId).join('\n');
+  useEffect(() => {
+    if (activeTab === 'shelf') repos.forEach(r => { if (!(r.repoId in shelveMap) && !shelveLoading[r.repoId]) requestShelveList(r.repoId); });
+    if (activeTab === 'stash') repos.forEach(r => { if (!(r.repoId in stashMap) && !stashLoading[r.repoId]) requestStashList(r.repoId); });
+  }, [activeTab, repoIdsKey]);
+  const worktreeBranchOf = (repoStatus: RepoStatus) => metaMap.get(repoStatus.repoId)?.isWorktree
+    ? (repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name)
+    : undefined;
+  const stashesOf = (repoStatus: RepoStatus) => {
+    const worktreeBranch = worktreeBranchOf(repoStatus);
+    return (stashMap[repoStatus.repoId] ?? []).filter(s => !worktreeBranch || s.branch === worktreeBranch);
+  };
+  // The name the first tab goes by in the current view mode, for the Shelf/Stash hints that point to it.
+  const changesTabName = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode')
+    ? l10n.t({ message: 'Commit', comment: ['Tab title: the tab with the commit form and changed files'] })
+    : l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
+  const shelfRepos = repos.filter(r => (shelveMap[r.repoId]?.length ?? 0) > 0 || !!shelveError[r.repoId]);
+  const stashRepos = repos.filter(r => stashesOf(r).length > 0 || !!stashError[r.repoId]);
 
   // Keep unpushed-commit counts fresh for repos without upstream so the Push tab badge
   // shows the correct number even before the tab is opened. Upstream repos are live via aheadBehind.ahead.
@@ -1177,12 +1200,18 @@ function App() {
     }
   };
 
-  const doSyncAndPush = (repoId: string) => {
-    send({ type: 'COMMIT_SYNC_AND_PUSH_REPO', requestId: generateId(), repoId, rebase: false });
+  // rebase omitted: the host asks merge or rebase.
+  const doPull = (repoId: string, rebase?: boolean) => {
+    send({ type: 'COMMIT_PULL_REPO', requestId: generateId(), repoId, rebase });
   };
 
-  const doPull = (repoId: string) => {
-    send({ type: 'COMMIT_PULL_REPO', requestId: generateId(), repoId });
+  const doFetch = (repoId: string) => {
+    send({ type: 'COMMIT_FETCH_REPO', requestId: generateId(), repoId } satisfies CommitToHostMsg);
+  };
+
+  // Push, pull or both as each repo needs; the host asks how to reconcile a diverged branch.
+  const doSyncRepos = (repoIds: string[]) => {
+    send({ type: 'COMMIT_SYNC_REPOS', requestId: generateId(), repoIds } satisfies CommitToHostMsg);
   };
 
   // Commit-tab publish/sync button. Publish and the explicit dropdown entries map straight
@@ -1195,7 +1224,7 @@ function App() {
         repoIds.forEach(doPush);
         break;
       case 'pull':
-        repoIds.forEach(doPull);
+        repoIds.forEach(id => doPull(id, false));
         break;
       case 'sync':
         send({ type: 'COMMIT_SYNC_REPOS', requestId: generateId(), repoIds } satisfies CommitToHostMsg);
@@ -1348,8 +1377,12 @@ function App() {
     <div style={css.app} onContextMenu={e => e.preventDefault()}>
       {/* ── Tab bar ── */}
       {(() => {
-        const totalToPush = repos.reduce((sum, r) => {
-          if (r.branch.upstream) return sum + (r.branch.aheadBehind?.ahead ?? 0);
+        // Commits out of sync: to push (or the branch to publish, counted as at least one) plus
+        // to pull. A detached HEAD has no upstream but nothing to publish either.
+        const totalOutOfSync = repos.reduce((sum, r) => {
+          const behind = r.branch.aheadBehind?.behind ?? 0;
+          if (r.branch.upstream) return sum + (r.branch.aheadBehind?.ahead ?? 0) + behind;
+          if (r.isDetachedHead || r.branch.detachedHash || r.branch.detachedTag) return sum;
           return sum + Math.max(1, unpushedMap[r.repoId]?.commits?.length ?? 0);
         }, 0);
         const totalChanges = repos.reduce((sum, r) => {
@@ -1364,9 +1397,9 @@ function App() {
           ? l10n.t({ message: 'Commit', comment: ['Tab title: the tab with the commit form and changed files'] })
           : l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
         const tabMeta = (tab: TabId) => ({
-          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : l10n.t({ message: 'Push', comment: ['Tab title: commits not pushed yet'] }),
-          iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud-upload',
-          badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalToPush : tab === 'pullrequests' ? totalPullRequests : 0,
+          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
+          iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud',
+          badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests : 0,
         });
         const selectTab = (tab: TabId) => {
           setActiveTab(tab);
@@ -1770,7 +1803,7 @@ function App() {
             onPushAll={doPushAll}
             syncRepoStatuses={repos}
             onSyncAction={doSyncAction}
-            onPullRepos={ids => ids.forEach(doPull)}
+            onPullRepos={ids => ids.forEach(id => doPull(id, false))}
             onPushRepos={ids => ids.forEach(doPush)}
             onForcePushRepos={ids => ids.forEach(doForcePush)}
             aiEnabled={store.aiEnabled}
@@ -1807,15 +1840,18 @@ function App() {
 
         {activeTab === 'shelf' && (
           /* Shelf tab */
+          shelfRepos.length === 0 ? (
+            repos.some(r => shelveLoading[r.repoId])
+              ? <EmptyTabState icon="archive" message={l10n.t('Loading…')} loading />
+              : <EmptyTabState icon="archive" message={l10n.t('No shelved changes')} hint={l10n.t('Shelving sets changes aside as a patch kept by GitCharm, outside the repository, to apply again later. In the {0} tab, select the files, write a message and choose Shelve Changes from the button next to Commit.', changesTabName)} />
+          ) : (
           <ScrollArea style={css.repoList}>
-            {repos.map((repoStatus, i) => {
+            {shelfRepos.map((repoStatus, i) => {
               const repoId = repoStatus.repoId;
               const meta = metaMap.get(repoId);
               const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
               const repoColor = meta?.color ?? '#4ec9b0';
-              const worktreeBranch = meta?.isWorktree
-                ? (repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name)
-                : undefined;
+              const worktreeBranch = worktreeBranchOf(repoStatus);
               const mainRepoName = meta?.mainWorktreePath?.split('/').pop();
               return (
                 <ShelvePanel
@@ -1826,7 +1862,7 @@ function App() {
                   worktreeBranch={worktreeBranch}
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
-                  singleRepo={singleRepo}
+                  singleRepo={shelfRepos.length === 1}
                   shelves={shelveMap[repoId] ?? []}
                   loading={shelveLoading[repoId] ?? false}
                   error={shelveError[repoId] ?? null}
@@ -1837,24 +1873,28 @@ function App() {
                   onRename={handleRenameShelve}
                   onRequestList={requestShelveList}
                   onOpenFileDiff={handleOpenFileDiff}
-                  isLast={i === repos.length - 1}
+                  isLast={i === shelfRepos.length - 1}
                 />
               );
             })}
           </ScrollArea>
+          )
         )}
 
         {activeTab === 'stash' && (
           /* Stash tab */
+          stashRepos.length === 0 ? (
+            repos.some(r => stashLoading[r.repoId])
+              ? <EmptyTabState icon="git-stash" message={l10n.t('Loading…')} loading />
+              : <EmptyTabState icon="git-stash" message={l10n.t('No stashes')} hint={l10n.t('A stash saves uncommitted changes in Git and clears them from the working tree. In the {0} tab, select the files, write a message and choose Stash Changes from the button next to Commit.', changesTabName)} />
+          ) : (
           <ScrollArea style={css.repoList}>
-            {repos.map((repoStatus, i) => {
+            {stashRepos.map((repoStatus, i) => {
               const repoId = repoStatus.repoId;
               const meta = metaMap.get(repoId);
               const repoName = meta?.name ?? repoId.split('/').pop() ?? repoId;
               const repoColor = meta?.color ?? '#4ec9b0';
-              const worktreeBranch = meta?.isWorktree
-                ? (repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name)
-                : undefined;
+              const worktreeBranch = worktreeBranchOf(repoStatus);
               const mainRepoName = meta?.mainWorktreePath?.split('/').pop();
               return (
                 <StashTab
@@ -1865,8 +1905,8 @@ function App() {
                   worktreeBranch={worktreeBranch}
                   mainRepoName={mainRepoName}
                   multiRepo={multiRepo}
-                  singleRepo={singleRepo}
-                  stashes={(stashMap[repoId] ?? []).filter(s => !worktreeBranch || s.branch === worktreeBranch)}
+                  singleRepo={stashRepos.length === 1}
+                  stashes={stashesOf(repoStatus)}
                   loading={stashLoading[repoId] ?? false}
                   error={stashError[repoId] ?? null}
                   viewMode={store.viewAndSort.fileViewMode}
@@ -1876,11 +1916,12 @@ function App() {
                   onRename={handleRenameStash}
                   onRequestList={requestStashList}
                   onOpenFileDiff={handleStashShowFileDiff}
-                  isLast={i === repos.length - 1}
+                  isLast={i === stashRepos.length - 1}
                 />
               );
             })}
           </ScrollArea>
+          )
         )}
 
         {activeTab === 'push' && (
@@ -1893,7 +1934,9 @@ function App() {
               onPush={doPush}
               onForcePush={doForcePush}
               onPushAll={doPushAll}
-              onSyncAndPush={doSyncAndPush}
+              onPull={doPull}
+              onFetch={doFetch}
+              onSync={doSyncRepos}
               onOpenInLog={doOpenInLog}
               onUndoCommit={doUndoCommit}
               onSquash={doSquash}

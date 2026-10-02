@@ -149,7 +149,9 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean }
   | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'abort' }
   | { type: 'COMMIT_PULL_ALL' }
-  | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string }
+  // rebase: omitted, the user picks merge or rebase, as in the branch menu's Pull…
+  | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string; rebase?: boolean }
+  | { type: 'COMMIT_FETCH_REPO'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_REMOTES'; requestId: string; repoId: string }
   | { type: 'COMMIT_GET_LAST_COMMIT_MESSAGE'; requestId: string; repoId: string }
   | { type: 'OPEN_PROFILES_MENU' }
