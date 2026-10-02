@@ -9,6 +9,7 @@ import { OpenChangesBtn } from '../../shared/OpenChangesBtn';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { branchColor, tagColor } from '../../shared/branchColors';
 import * as l10n from '@vscode/l10n';
+import { unchangedSectionState } from './unchangedSection';
 
 export interface RepoFileGroup {
   repoId: string;
@@ -172,6 +173,68 @@ export function ChangelistGroup({
   );
 }
 
+// ── "Unchanged" group ─────────────────────────────────────────────────────────
+
+/**
+ * The repos with no changes, listed at the bottom under their own changelist-style header
+ * instead of each taking an empty "No changes" group in "Changes".
+ */
+export function UnchangedReposGroup({ repoGroups, isCollapsed, toggleCollapsed, onRepoContextMenu, onBranchClick, ...rest }: {
+  repoGroups: RepoFileGroup[];
+  isCollapsed: (key: string) => boolean;
+  toggleCollapsed: (key: string) => void;
+  onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
+  onBranchClick: (repoId: string) => void;
+} & Pick<Props, 'selectedFile' | 'viewMode' | 'isFileSelected' | 'hasExpandedDirs' | 'setDirsCollapsed' | 'onToggleFile' | 'onSetFiles' | 'onSelectFile' | 'onContextMenu' | 'onFolderContextMenu' | 'onOpenFile' | 'onRollback' | 'onResolveMerge' | 'onOpenChanges'>) {
+  const { key, collapsed } = unchangedSectionState('cl-section:unchanged', repoGroups.length, isCollapsed);
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        {/* Disabled, like an empty changelist's: nothing to select, but the header lines up with the others */}
+        <input
+          type="checkbox"
+          checked={false}
+          disabled
+          onChange={() => {}}
+          style={{ ...styles.clCheckbox, opacity: 0.3, cursor: 'default', pointerEvents: 'none' }}
+        />
+        <div style={styles.headerMain} onClick={() => toggleCollapsed(key)}>
+          <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
+          <Codicon name="circle-slash" style={{ ...styles.clIcon, opacity: 0.6 }} />
+          <span style={styles.clName}>{l10n.t({ message: 'Unchanged', comment: ['Commit panel section: repositories with no changes'] })}</span>
+        </div>
+      </div>
+      {!collapsed && (
+        <div style={styles.body}>
+          {repoGroups.map((group, idx) => (
+            <RepoSubGroup
+              key={group.repoId}
+              {...rest}
+              headerOnly
+              isFirst={idx === 0}
+              isLast={idx === repoGroups.length - 1}
+              repoId={group.repoId}
+              repoName={group.repoName}
+              repoColor={group.repoColor}
+              repoStatus={group.repoStatus}
+              files={[]}
+              multiRepo
+              isSubmodule={group.isSubmodule}
+              submodulePath={group.submodulePath}
+              isWorktree={group.isWorktree}
+              mainWorktreePath={group.mainWorktreePath}
+              isCollapsed={isCollapsed}
+              toggleCollapsed={toggleCollapsed}
+              onRepoContextMenu={onRepoContextMenu}
+              onBranchClick={onBranchClick}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Repo sub-group inside a changelist ────────────────────────────────────────
 
 interface RepoSubGroupProps {
@@ -212,6 +275,8 @@ interface RepoSubGroupProps {
   /** Suppresses the sub-group's bottom border when it's the last repo sub-group in the last visible changelist — avoids a dangling border with nothing below to visually merge into. */
   isLast?: boolean;
   defaultCollapsed?: boolean;
+  /** A repo listed under "Unchanged": just its header, always closed — nothing to expand. */
+  headerOnly?: boolean;
   onMultiSelect?: (file: FileStatus) => void;
   multiSelectedFiles?: FileStatus[];
 }
@@ -221,7 +286,7 @@ function RepoSubGroup({
   selectedFile, viewMode,
   isFileSelected, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed,
   onToggleFile, onSetFiles, onSelectFile, onContextMenu, onFolderContextMenu,
-  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, isLast = false, defaultCollapsed = false,
+  onOpenFile, onRollback, onResolveMerge, onRepoContextMenu, onOpenChanges, onBranchClick, iconTheme, activeFolderPath, changelistId, ctxFile, isFirst = false, isLast = false, defaultCollapsed = false, headerOnly = false,
   onMultiSelect, multiSelectedFiles,
 }: RepoSubGroupProps) {
   const collapseKey = `cl-repo:${changelistId ?? ''}:${repoId}`;
@@ -273,8 +338,12 @@ function RepoSubGroup({
             title={totalFiles > 0 ? l10n.t('Select all files in {0}', repoName) : undefined}
             disabled={totalFiles === 0}
           />
-          <div style={styles.repoHeaderMain} onClick={() => toggleCollapsed(collapseKey)}>
-            <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.repoChevron} />
+          <div
+            style={headerOnly ? { ...styles.repoHeaderMain, cursor: 'default' } : styles.repoHeaderMain}
+            onClick={headerOnly ? undefined : () => toggleCollapsed(collapseKey)}
+          >
+            {/* Under "Unchanged" there's nothing to expand: a closed chevron, for the look */}
+            <Codicon name={headerOnly || collapsed ? 'chevron-right' : 'chevron-down'} style={styles.repoChevron} />
             <span style={styles.repoDot(repoColor)} />
             <span style={styles.repoName}>
               {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
@@ -318,7 +387,7 @@ function RepoSubGroup({
           </div>
         </div>
       )}
-      {(!multiRepo || singleRepo || !collapsed) && (
+      {!headerOnly && (!multiRepo || singleRepo || !collapsed) && (
         <div style={!isLast ? { borderBottom: '1px solid var(--vscode-panel-border)' } : undefined}>
           {files.length === 0 ? (
             <div style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--vscode-foreground)', opacity: 0.4, textAlign: 'center' }}>{l10n.t('No changes')}</div>

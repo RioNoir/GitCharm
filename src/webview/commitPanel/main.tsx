@@ -1534,7 +1534,7 @@ function App() {
             ) : store.changesViewMode === 'vscode' ? (
               <VscodeView
                 repos={changesRepos}
-                showRepoColor={!workspaceSingleRepo}
+                workspaceSingleRepo={workspaceSingleRepo}
                 repoMetas={store.repoMetas}
                 selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                 ctxFile={ctxFile}
@@ -1596,7 +1596,7 @@ function App() {
               <ChangelistView
                 changelists={store.changelists}
                 repos={changesRepos}
-                showRepoColor={!workspaceSingleRepo}
+                workspaceSingleRepo={workspaceSingleRepo}
                 repoMetas={store.repoMetas}
                 selectedFile={selectedFile ? { repoId: selectedFile.repoId, path: selectedFile.path } : null}
                 viewMode={store.viewAndSort.fileViewMode}

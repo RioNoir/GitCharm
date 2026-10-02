@@ -1337,5 +1337,6 @@
   "Sync": "Sincronizar",
   "Pull (Merge)": "Pull (Merge)",
   "Pull (Rebase)": "Pull (Rebase)",
-  "Sync/Tab title: remote operations — commits to push and to pull": "Sync"
+  "Sync/Tab title: remote operations — commits to push and to pull": "Sync",
+  "Unchanged/Commit panel section: repositories with no changes": "Sin cambios"
 }

@@ -1337,5 +1337,6 @@
   "Sync": "同步",
   "Pull (Merge)": "拉取（合併）",
   "Pull (Rebase)": "拉取（重定基底）",
-  "Sync/Tab title: remote operations — commits to push and to pull": "同步"
+  "Sync/Tab title: remote operations — commits to push and to pull": "同步",
+  "Unchanged/Commit panel section: repositories with no changes": "無變更"
 }

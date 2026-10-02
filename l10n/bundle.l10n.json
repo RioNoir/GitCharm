@@ -476,6 +476,12 @@
   "Unstage folder": "Unstage folder",
   "Stage folder": "Stage folder",
   "Staged Changes": "Staged Changes",
+  "Unchanged/Commit panel section: repositories with no changes": {
+    "message": "Unchanged",
+    "comment": [
+      "Commit panel section: repositories with no changes"
+    ]
+  },
   "More Actions...": "More Actions...",
   "Push this branch to the remote and start tracking it": "Push this branch to the remote and start tracking it",
   "Sync Changes — {0} commits to pull, {1} to push": "Sync Changes — {0} commits to pull, {1} to push",
