@@ -39,6 +39,32 @@ export interface LogWorkingTreeStatus {
   files: Array<{ path: string; status: string; oldPath?: string; staged: boolean; unstaged: boolean }>;
 }
 
+/** Commits of one repo picked together in the Git Log. */
+export interface CommitSelectionGroup {
+  repoId: string;
+  hashes: string[];
+}
+
+/**
+ * How a multi-commit selection is summed up: `combined` folds the changes each selected commit
+ * introduced, `snapshot` diffs the oldest selected commit against the newest one.
+ */
+export type CommitSelectionMode = 'combined' | 'snapshot';
+
+/** A changed file of a multi-commit selection. */
+export interface RangeFileEntry {
+  repoId: string;
+  path: string;
+  status: string;
+  added?: number;
+  removed?: number;
+  oldPath?: string;
+  /** Combined mode: the revision before the first selected commit touching the file. */
+  baseRef?: string;
+  /** Combined mode: the last selected commit touching the file. */
+  headRef?: string;
+}
+
 export interface MergeParentCommit {
   hash: string;
   shortHash: string;
@@ -290,7 +316,8 @@ export type HostToLogMsg =
   | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string; limitReached?: boolean; maxCommits?: number }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
-  | { type: 'LOG_RANGE_FILES_RESULT'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; orderedHashes: string[]; error?: string }
+  /** `orderedHashes`: the selected hashes of each repo, oldest first. */
+  | { type: 'LOG_RANGE_FILES_RESULT'; requestId: string; files: RangeFileEntry[]; orderedHashes: Record<string, string[]>; error?: string }
   | { type: 'LOG_BRANCH_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string }
   | { type: 'LOG_REFS_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'LOG_TAGS_UPDATE'; repoId: string; tags: TagInfo[] }
@@ -314,10 +341,11 @@ export type HostToLogMsg =
 export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string; parents?: string[] }
-  | { type: 'LOG_REQUEST_RANGE_FILES'; requestId: string; repoId: string; hashes: string[] }
+  | { type: 'LOG_REQUEST_RANGE_FILES'; requestId: string; groups: CommitSelectionGroup[]; mode: CommitSelectionMode }
   | { type: 'LOG_REQUEST_FILE_DIFF'; requestId: string; repoId: string; hash: string; filePath: string }
   | { type: 'LOG_OPEN_FILE_DIFF'; repoId: string; hash: string; filePath: string; fileStatus?: string; oldPath?: string; parents?: string[]; combined?: boolean }
-  | { type: 'LOG_OPEN_RANGE_FILE_DIFF'; repoId: string; hashes: string[]; filePath: string; fileStatus?: string; oldPath?: string }
+  /** With `baseRef`/`headRef` (combined mode) the diff spans exactly those; otherwise the oldest and newest of `hashes`. */
+  | { type: 'LOG_OPEN_RANGE_FILE_DIFF'; repoId: string; hashes: string[]; filePath: string; fileStatus?: string; oldPath?: string; baseRef?: string; headRef?: string }
   | { type: 'LOG_OPEN_FILE'; repoId: string; filePath: string }
   | { type: 'LOG_REVERT_FILE'; requestId: string; repoId: string; hash: string; filePath: string; fileStatus?: string }
   | { type: 'LOG_CHERRY_PICK_FILE'; requestId: string; repoId: string; hash: string; filePath: string; oldPath?: string }
@@ -387,7 +415,7 @@ export type LogToHostMsg =
   | { type: 'LOG_FILTERS_ACTIVE'; active: boolean }
   | { type: 'LOG_COMPARE_ACTIVE'; active: boolean }
   | { type: 'LOG_VIEW_LOCATION'; location: LogViewLocation }
-  | { type: 'LOG_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
+  | { type: 'LOG_VIEW_COMBINED_DIFF'; groups: CommitSelectionGroup[] }
   | { type: 'LOG_COMPARE_COMMIT_WITH'; repoId: string; hash: string }
   | { type: 'LOG_COMPARE_FILE_WITH'; repoId: string; hash: string; filePath: string };
 

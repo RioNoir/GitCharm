@@ -2033,7 +2033,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_VIEW_COMBINED_DIFF': {
         const { openCombinedDiffPanel } = await import('./CombinedDiffPanel');
-        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.repoId, msg.hashes);
+        await openCombinedDiffPanel(this.extensionUri, this.manager, [{ repoId: msg.repoId, hashes: msg.hashes }]);
         break;
       }
 

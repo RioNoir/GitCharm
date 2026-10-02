@@ -15,7 +15,9 @@ import { ResizeHandle } from '../shared/ResizeHandle';
 import { useResize } from '../shared/useResize';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { isEmbedded } from '../shared/embedded';
-import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutByLocation, LogViewLocation } from '../../host/types/messages';
+import { commitRevision, selectionGroups } from './utils/commitSelection';
+import type { CommitSelection } from './utils/commitSelection';
+import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutByLocation, LogViewLocation, CommitSelectionMode, RangeFileEntry } from '../../host/types/messages';
 import type { CommitNode } from '../shared/types';
 
 function generateId() {
@@ -26,6 +28,9 @@ function generateId() {
 // gitcharm.graphMaxCommits, which clamps every request and reports the last batch,
 // so there is nothing to bound here.
 const PAGE_SIZE = 150;
+
+// How long a multi-commit selection has to stay put before its files are asked for
+const RANGE_REQUEST_DEBOUNCE_MS = 150;
 
 // Layout preferences embedded in the HTML, so a hidden filters bar or sidebar never flashes on load.
 const initialLayout: LogLayoutByLocation = (window as Window & { __INITIAL_CONFIG__?: { logLayout?: LogLayoutByLocation } })
@@ -54,8 +59,10 @@ function App() {
   const { filtersHidden, sidebarHidden } = layoutByLocation[viewLocation];
   const [themeVersion, setThemeVersion] = useState(0);
   const [multiSelectedCommits, setMultiSelectedCommits] = useState<CommitNode[]>([]);
-  const [rangeEndpoints, setRangeEndpoints] = useState<{ older: CommitNode; newer: CommitNode } | null>(null);
-  const [rangeFiles, setRangeFiles] = useState<Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>>([]);
+  // The selection shown in the detail pane, its commits oldest first
+  const [commitSelection, setCommitSelection] = useState<CommitSelection | null>(null);
+  const [selectionMode, setSelectionMode] = useState<CommitSelectionMode>('combined');
+  const [rangeFiles, setRangeFiles] = useState<RangeFileEntry[]>([]);
   const [loadingRangeFiles, setLoadingRangeFiles] = useState(false);
   const rangeRequestKeyRef = useRef('');
 
@@ -87,45 +94,57 @@ function App() {
     });
   }, []);
 
-  const selectedRangeKey = multiSelectedCommits.length === 2
-    ? `${multiSelectedCommits[0].repoId}:${multiSelectedCommits.map(c => c.hash).sort().join(':')}`
+  // Comparing snapshots only makes sense between two commits of one repo
+  const canCompareSnapshots = multiSelectedCommits.length === 2 && multiSelectedCommits[0].repoId === multiSelectedCommits[1].repoId;
+  const effectiveMode: CommitSelectionMode = canCompareSnapshots ? selectionMode : 'combined';
+  const selectedRangeKey = multiSelectedCommits.length >= 2
+    ? `${effectiveMode}|${multiSelectedCommits.map(c => `${c.repoId}:${commitRevision(c)}`).sort().join('|')}`
     : '';
   rangeRequestKeyRef.current = selectedRangeKey;
 
   useEffect(() => {
-    if (!selectedRangeKey || multiSelectedCommits.length !== 2) {
-      setRangeEndpoints(null);
+    if (!selectedRangeKey) {
+      setCommitSelection(null);
       setRangeFiles([]);
       setLoadingRangeFiles(false);
       return;
     }
 
-    const selectedByHash = new Map(multiSelectedCommits.map(c => [c.hash, c]));
-    const fallback = [...multiSelectedCommits].sort(
+    const commits = multiSelectedCommits;
+    const byRevision = new Map(commits.map(c => [`${c.repoId}:${commitRevision(c)}`, c]));
+    const byDate = [...commits].sort(
       (a, b) => new Date(a.committerDate).getTime() - new Date(b.committerDate).getTime(),
     );
-    setRangeEndpoints({ older: fallback[0], newer: fallback[1] });
+    setCommitSelection({ commits: byDate, mode: effectiveMode });
     setRangeFiles([]);
     setLoadingRangeFiles(true);
     useLogStore.getState().selectFile(null);
 
-    request<Extract<HostToLogMsg, { type: 'LOG_RANGE_FILES_RESULT' }>>({
-      type: 'LOG_REQUEST_RANGE_FILES',
-      requestId: '',
-      repoId: multiSelectedCommits[0].repoId,
-      hashes: multiSelectedCommits.map(c => c.hash),
-    }).then(msg => {
-      if (rangeRequestKeyRef.current !== selectedRangeKey) return;
-      const ordered = msg.orderedHashes.map(hash => selectedByHash.get(hash)).filter((c): c is CommitNode => !!c);
-      if (ordered.length === 2) setRangeEndpoints({ older: ordered[0], newer: ordered[1] });
-      setRangeFiles(msg.files);
-      setLoadingRangeFiles(false);
-    });
+    // Ctrl/Shift-clicking through the log changes the selection at every click — ask once it settles
+    const timer = setTimeout(() => {
+      request<Extract<HostToLogMsg, { type: 'LOG_RANGE_FILES_RESULT' }>>({
+        type: 'LOG_REQUEST_RANGE_FILES',
+        requestId: '',
+        groups: selectionGroups(commits),
+        mode: effectiveMode,
+      }).then(msg => {
+        if (rangeRequestKeyRef.current !== selectedRangeKey) return;
+        // git's order beats the commit dates, which a rebase can leave out of order
+        const ordered = Object.entries(msg.orderedHashes).flatMap(([repoId, hashes]) =>
+          hashes.map(h => byRevision.get(`${repoId}:${h}`)).filter((c): c is CommitNode => !!c));
+        if (ordered.length === commits.length && Object.keys(msg.orderedHashes).length === 1) {
+          setCommitSelection({ commits: ordered, mode: effectiveMode });
+        }
+        setRangeFiles(msg.files);
+        setLoadingRangeFiles(false);
+      });
+    }, RANGE_REQUEST_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [selectedRangeKey, request]);
 
   const handleMultiSelectionChange = useCallback((commits: CommitNode[]) => {
     setMultiSelectedCommits(commits);
-    if (commits.length === 2) setDetailCollapsed(false);
+    if (commits.length >= 2) setDetailCollapsed(false);
   }, []);
 
   useEffect(() => {
@@ -426,8 +445,9 @@ function App() {
     return () => { if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current); };
   }, [graphCommits, isFiltered, themeVersion]);
 
-  const selectedRepoColor = rangeEndpoints
-    ? repoColors[rangeEndpoints.newer.repoId]
+  const newestSelected = commitSelection?.commits[commitSelection.commits.length - 1];
+  const selectedRepoColor = newestSelected
+    ? repoColors[newestSelected.repoId]
     : store.selectedCommit
       ? repoColors[store.selectedCommit.repoId]
       : undefined;
@@ -519,7 +539,7 @@ function App() {
     [store.tags, activeRepoId]
   );
 
-  const hasSelectedCommit = !!store.selectedCommit || !!rangeEndpoints;
+  const hasSelectedCommit = !!store.selectedCommit || !!commitSelection;
 
   const showNoRepo = store.repos.length === 0 && store.initialized;
   const noRepoOverlay = showNoRepo ? (
@@ -680,12 +700,14 @@ function App() {
         {hasSelectedCommit && !detailCollapsed && (
           <div ref={detailRef} style={detailPane}>
             <CommitDetail
-              commit={rangeEndpoints?.newer ?? store.selectedCommit}
-              range={rangeEndpoints ?? undefined}
-              files={rangeEndpoints ? rangeFiles : store.commitFiles}
+              commit={newestSelected ?? store.selectedCommit}
+              selection={commitSelection ?? undefined}
+              onSelectionModeChange={canCompareSnapshots ? setSelectionMode : undefined}
+              files={commitSelection ? rangeFiles : store.commitFiles}
               selectedFile={store.selectedFile}
-              loadingFiles={rangeEndpoints ? loadingRangeFiles : store.loadingFiles}
+              loadingFiles={commitSelection ? loadingRangeFiles : store.loadingFiles}
               repoColor={selectedRepoColor}
+              repoColors={repoColors}
               repos={store.repos}
               iconTheme={store.iconTheme}
               onSelectFile={store.selectFile}

@@ -862,17 +862,26 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
 
       case 'LOG_REQUEST_RANGE_FILES': {
-        const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) { post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: [], error: 'Repo not found' }); return; }
         try {
-          const [files, orderedHashes] = await Promise.all([
-            repo.getFilesBetween(msg.hashes),
-            repo.getCombinedFilesOrder(msg.hashes),
-          ]);
-          post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files, orderedHashes });
+          const results = await Promise.all(msg.groups.map(async group => {
+            const repo = this.manager.getRepo(group.repoId);
+            if (!repo) throw new Error(`Repo not found: ${group.repoId}`);
+            if (msg.mode === 'combined') return { repoId: group.repoId, ...await repo.getCombinedChanges(group.hashes) };
+            const [files, orderedHashes] = await Promise.all([
+              repo.getFilesBetween(group.hashes),
+              repo.getCombinedFilesOrder(group.hashes),
+            ]);
+            return { repoId: group.repoId, files, orderedHashes };
+          }));
+          post({
+            type: 'LOG_RANGE_FILES_RESULT',
+            requestId: msg.requestId,
+            files: results.flatMap(r => r.files.map(f => ({ ...f, repoId: r.repoId }))),
+            orderedHashes: Object.fromEntries(results.map(r => [r.repoId, r.orderedHashes])),
+          });
         } catch (e: unknown) {
           logError('rangeFiles', formatGitError(e), getRawErrorDetail(e));
-          post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: [], error: formatGitError(e) });
+          post({ type: 'LOG_RANGE_FILES_RESULT', requestId: msg.requestId, files: [], orderedHashes: {}, error: formatGitError(e) });
         }
         break;
       }
@@ -916,7 +925,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_OPEN_RANGE_FILE_DIFF': {
         const { openRangeFileDiff } = await import('./CombinedDiffPanel');
-        await openRangeFileDiff(this.manager, msg.repoId, msg.hashes, msg.filePath, msg.fileStatus, msg.oldPath);
+        await openRangeFileDiff(this.manager, msg.repoId, msg.hashes, msg.filePath, msg.fileStatus, msg.oldPath, msg.baseRef, msg.headRef);
         break;
       }
 
@@ -2239,7 +2248,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_VIEW_COMBINED_DIFF': {
         const { openCombinedDiffPanel } = await import('./CombinedDiffPanel');
-        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.repoId, msg.hashes);
+        await openCombinedDiffPanel(this.extensionUri, this.manager, msg.groups);
         break;
       }
 
