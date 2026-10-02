@@ -571,6 +571,40 @@ export class GitService {
     return this._parseLogOutput(raw);
   }
 
+  /**
+   * Commits whose hash starts with `prefix`, looked up in the object database instead
+   * of walking history, so a commit is found however far back it is. As with the log
+   * itself, only commits the log could show count: reachable from a ref other than the
+   * stash or from HEAD — or, in compare mode, within `compare.base..compare.target`.
+   * `logArgs` (format and author/date filters) are applied to the matches.
+   */
+  private async findCommitsByHashPrefix(prefix: string, logArgs: string[], compare?: CompareRange): Promise<CommitNode[]> {
+    // Every object (commit, tree, blob, tag) with the prefix; empty when none does.
+    const candidates = (await this.git.raw(['rev-parse', `--disambiguate=${prefix}`]).catch(() => ''))
+      .split('\n').map(l => l.trim()).filter(Boolean)
+      // Bounds the command line (Windows caps it at 32K chars). Hundreds of matches
+      // would take a 4-char prefix in a repo of tens of millions of objects.
+      .slice(0, 500);
+    if (candidates.length === 0) return [];
+
+    // git log skips the trees and blobs among them and peels annotated tags to their
+    // commit, which the prefix check then drops.
+    const matches = this._parseLogOutput(
+      await this.git.raw(['log', '--no-walk', ...logArgs, ...candidates]),
+    ).filter(c => c.hash.toLowerCase().startsWith(prefix));
+
+    const isAncestor = (hash: string, of: string) =>
+      this.git.raw(['merge-base', '--is-ancestor', hash, of]).then(() => true, () => false);
+    const isReachable = async (hash: string): Promise<boolean> => {
+      if (compare) return await isAncestor(hash, compare.target) && !await isAncestor(hash, compare.base);
+      const refs = await this.git.raw(['for-each-ref', '--format=%(refname)', '--contains', hash]).catch(() => '');
+      if (refs.split('\n').some(r => r.trim() && r.trim() !== 'refs/stash')) return true;
+      return isAncestor(hash, 'HEAD');
+    };
+    const reachable = await Promise.all(matches.map(c => isReachable(c.hash)));
+    return matches.filter((_, i) => reachable[i]);
+  }
+
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
   async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
     // Compare mode: both refs are checked before anything is passed to git log, so a ref
@@ -591,37 +625,39 @@ export class GitService {
       compareRangeArg = `${base}..${target}`;
     }
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
-    const args: string[] = [
-      'log',
-      // --date-order, not --topo-order: the log renders in committer-date order (see
-      // getInterleavedLog), and asking git for a different order than the one displayed
-      // meant a page's contents depended on where its boundaries fell. Date order is
-      // still topological — a commit never precedes its own parent.
-      '--date-order',
-      // Hash search scans the full history without pagination — result is always a single commit
-      ...(isHashSearch ? ['--max-count=50000'] : [`--max-count=${limit}`, `--skip=${skip}`]),
-      '--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full',
-      '--date=iso-strict', '--abbrev=8',
-    ];
-    if (opts?.filterText && !isHashSearch) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');
-    if (opts?.filterAuthor) args.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
-    if (opts?.filterDateFrom) args.push(`--after=${opts.filterDateFrom}`);
-    if (opts?.filterDateTo) args.push(`--before=${opts.filterDateTo}`);
-    if (compareRangeArg) {
-      // Compare mode replaces the branch filter, and scopes hash search to the range too
-      args.push(compareRangeArg);
-    } else if (isHashSearch) {
-      // Hash search: scan full history, filter by prefix match after fetching
-      args.push('--exclude=refs/stash', '--all');
-    } else if (opts?.filterBranch) {
-      args.push(opts.filterBranch);
+    const format = ['--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full', '--date=iso-strict', '--abbrev=8'];
+    const filterArgs: string[] = [];
+    if (opts?.filterAuthor) filterArgs.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
+    if (opts?.filterDateFrom) filterArgs.push(`--after=${opts.filterDateFrom}`);
+    if (opts?.filterDateTo) filterArgs.push(`--before=${opts.filterDateTo}`);
+
+    let commits: CommitNode[];
+    if (isHashSearch) {
+      // Not paginated: a hash prefix matches a handful of commits at most.
+      commits = await this.findCommitsByHashPrefix(opts!.filterText!.trim().toLowerCase(), [...format, ...filterArgs], opts?.compare);
     } else {
-      args.push('--exclude=refs/stash', '--all');
+      const args: string[] = [
+        'log',
+        // --date-order, not --topo-order: the log renders in committer-date order (see
+        // getInterleavedLog), and asking git for a different order than the one displayed
+        // meant a page's contents depended on where its boundaries fell. Date order is
+        // still topological — a commit never precedes its own parent.
+        '--date-order',
+        `--max-count=${limit}`, `--skip=${skip}`,
+        ...format,
+      ];
+      if (opts?.filterText) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');
+      args.push(...filterArgs);
+      if (compareRangeArg) {
+        // Compare mode replaces the branch filter
+        args.push(compareRangeArg);
+      } else if (opts?.filterBranch) {
+        args.push(opts.filterBranch);
+      } else {
+        args.push('--exclude=refs/stash', '--all');
+      }
+      commits = this._parseLogOutput(await this.git.raw(args));
     }
-    const raw = await this.git.raw(args);
-    const hashPrefix = isHashSearch ? opts!.filterText!.trim().toLowerCase() : null;
-    let commits = this._parseLogOutput(raw);
-    if (hashPrefix) commits = commits.filter(c => c.hash.toLowerCase().startsWith(hashPrefix));
 
     // Mark unpushed commits: hashes ahead of the remote tracking branch.
     // 'all' means there is no upstream — every commit on this branch is local.
