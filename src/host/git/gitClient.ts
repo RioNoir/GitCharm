@@ -9,6 +9,11 @@ const GIT_ENV: Record<string, string> = {
   ...Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)),
   LC_ALL: 'en_US.UTF-8',
   LANG: 'en_US.UTF-8',
+  // Read-only commands like `git status` otherwise rewrite .git/index to refresh its stat
+  // cache. That write is a change event for every index watcher (ours and VS Code's), which
+  // schedules another status run — in a workspace with many submodules, a refresh that keeps
+  // feeding itself. Only optional locks are skipped; commands that modify the repo still lock.
+  GIT_OPTIONAL_LOCKS: '0',
 };
 
 // simple-git vets any env passed via .env() and rejects variables like GIT_SSH_COMMAND or
