@@ -197,14 +197,9 @@ interface SingleRepoHeaderProps {
   onRepoContextMenu: (e: React.MouseEvent, repoId: string) => void;
   onOpenAllChanges: (repoId: string) => void;
   hideOpenChanges?: boolean;
-  /**
-   * The repo's color and dot instead of the neutral look: the only repo listed, while the
-   * workspace has others (e.g. the rest hidden as having no changes).
-   */
-  showRepoColor?: boolean;
 }
 
-export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onBranchClick, onRepoContextMenu, onOpenAllChanges, hideOpenChanges, showRepoColor = false }: SingleRepoHeaderProps) {
+export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onBranchClick, onRepoContextMenu, onOpenAllChanges, hideOpenChanges }: SingleRepoHeaderProps) {
   const repoId = repoStatus.repoId;
   const branchClr = repoStatus.branch.detachedTag
     ? tagColor()
@@ -213,13 +208,13 @@ export function SingleRepoHeader({ repoStatus, repoName, repoColor, isSubmodule,
 
   return (
     <div
-      style={styles.header(repoColor, !showRepoColor)}
+      style={styles.header(repoColor, true)}
       onContextMenu={e => { e.preventDefault(); onRepoContextMenu(e, repoId); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div style={styles.headerMain} onClick={() => onBranchClick(repoId)}>
-        {showRepoColor ? <span style={styles.dot(repoColor)} /> : <Codicon name="repo" style={styles.repoIcon} />}
+        <Codicon name="repo" style={styles.repoIcon} />
         <span style={styles.name}>
           {isWorktree && mainWorktreePath ? mainWorktreePath.split('/').pop() ?? repoName : repoName}
         </span>
