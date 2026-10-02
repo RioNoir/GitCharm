@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SimpleGit } from 'simple-git';
 import { createGit } from './gitClient';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -62,6 +63,91 @@ export class GitService {
 
   constructor(public readonly repoId: string, public readonly rootPath: string) {
     this.git = createGit(rootPath);
+  }
+
+  // ── Ref-keyed cache ───────────────────────────────────────────────────────
+  //
+  // Branches, tags, stashes, unpushed/incoming commits and the log itself depend only on
+  // the repo's refs (plus HEAD and the branch config), yet the Git Log re-read all of them
+  // for every repo on every page and refresh: ~15 git processes per repo, hundreds with a
+  // few dozen submodules. They are kept here instead, valid while refsFingerprint() — one
+  // git process, shared by all the reads of one load — is unchanged. Comparing against
+  // the refs themselves, rather than invalidating on file events, can't serve a stale
+  // value after an operation whose watcher event hasn't arrived yet.
+
+  private refCache = new Map<string, { fingerprint: string; value: Promise<unknown>; createdAt: number }>();
+  private fingerprintInFlight: Promise<string | null> | null = null;
+  private fingerprintPaths: Promise<{ head: string; config: string; stashLog: string } | null> | null = null;
+  /** Bounds the entries kept for log queries, whose keys vary with every filter. */
+  private static readonly REF_CACHE_MAX = 24;
+  /**
+   * Branch and tag rows carry relative dates ("5 minutes ago") that age without any ref
+   * changing; past this an entry is read again. Long enough to cover one burst of loads.
+   */
+  private static readonly REF_CACHE_TTL_MS = 60_000;
+
+  /**
+   * A digest of everything the cached reads depend on: every ref and the object it points
+   * at, HEAD (the branch checked out, or the commit when detached), the config's mtime
+   * (upstreams) and the stash reflog's mtime (dropping a stash below the top leaves
+   * refs/stash as it was). Concurrent callers share one run. Null when it can't be taken,
+   * in which case nothing is cached.
+   */
+  private refsFingerprint(): Promise<string | null> {
+    if (this.fingerprintInFlight) return this.fingerprintInFlight;
+    const run = (async () => {
+      this.fingerprintPaths ??= this.git
+        .raw(['rev-parse', '--path-format=absolute', '--git-path', 'HEAD', '--git-path', 'config', '--git-path', 'logs/refs/stash'])
+        .then(out => {
+          const [head, config, stashLog] = out.trim().split('\n');
+          return head && config && stashLog ? { head, config, stashLog } : null;
+        })
+        .catch(() => null);
+      const paths = await this.fingerprintPaths;
+      if (!paths) return null;
+      const mtime = (file: string) => fs.promises.stat(file).then(st => String(st.mtimeMs), () => '');
+      const [refs, head, config, stashLog] = await Promise.all([
+        this.git.raw(['for-each-ref', '--format=%(objectname) %(refname)']),
+        fs.promises.readFile(paths.head, 'utf8'),
+        mtime(paths.config),
+        mtime(paths.stashLog),
+      ]);
+      return crypto.createHash('sha1').update(`${head}\0${config}\0${stashLog}\0${refs}`).digest('hex');
+    })().catch(() => null);
+    this.fingerprintInFlight = run;
+    void run.finally(() => { if (this.fingerprintInFlight === run) this.fingerprintInFlight = null; });
+    return run;
+  }
+
+  /**
+   * `compute()`, or its result from an earlier call made while the refs were the same.
+   * Concurrent callers share one computation. Each caller gets its own copy, so mutating
+   * a result can't alter the cached one.
+   *
+   * `fingerprint` lets a method making several reads in a row take one fingerprint for all
+   * of them; it must have been taken by that same call, so it can't predate a change the
+   * caller expects to see.
+   */
+  private async cachedByRefs<T>(key: string, compute: () => Promise<T>, fingerprint?: Promise<string | null>): Promise<T> {
+    fingerprint ??= this.refsFingerprint();
+    return this.cachedWith(key, compute, await fingerprint);
+  }
+
+  private async cachedWith<T>(key: string, compute: () => Promise<T>, fingerprint: string | null): Promise<T> {
+    if (fingerprint === null) return compute();
+    let entry = this.refCache.get(key);
+    if (!entry || entry.fingerprint !== fingerprint || Date.now() - entry.createdAt > GitService.REF_CACHE_TTL_MS) {
+      const value = compute();
+      entry = { fingerprint, value, createdAt: Date.now() };
+      this.refCache.delete(key);
+      this.refCache.set(key, entry);
+      if (this.refCache.size > GitService.REF_CACHE_MAX) {
+        this.refCache.delete(this.refCache.keys().next().value!);
+      }
+      // A failure isn't worth keeping: the next call tries again.
+      value.catch(() => { if (this.refCache.get(key)?.value === value) this.refCache.delete(key); });
+    }
+    return structuredClone(await (entry.value as Promise<T>));
   }
 
   setPendingDetachedTag(tagName: string | undefined): void {
@@ -136,7 +222,11 @@ export class GitService {
     }
   }
 
-  private async getFullHash(): Promise<string | undefined> {
+  private async getFullHash(fingerprint?: Promise<string | null>): Promise<string | undefined> {
+    return this.cachedByRefs('headHash', () => this.readFullHash(), fingerprint);
+  }
+
+  private async readFullHash(): Promise<string | undefined> {
     try {
       return (await this.git.raw(['rev-parse', 'HEAD'])).trim() || undefined;
     } catch {
@@ -154,11 +244,15 @@ export class GitService {
     }
   }
 
-  private async getDetachedTag(vsTagName?: string): Promise<string | undefined> {
+  private async getDetachedTag(vsTagName?: string, fingerprint?: Promise<string | null>): Promise<string | undefined> {
     // Highest priority: explicitly set after a tag checkout, before VS Code API updates.
     if (this._pendingDetachedTag) return this._pendingDetachedTag;
     // VS Code API already knows the exact tag name.
     if (vsTagName) return vsTagName;
+    return this.cachedByRefs('detachedTag', () => this.readDetachedTag(), fingerprint);
+  }
+
+  private async readDetachedTag(): Promise<string | undefined> {
     try {
       // git describe --tags --exact-match returns the tag whose ref IS HEAD,
       // which is precise when multiple tags point at the same commit.
@@ -357,8 +451,11 @@ export class GitService {
       }
       // If VS Code API reports a branch (no longer detached), clear pending.
       if (!isDetached) this._pendingDetachedTag = undefined;
-      const detachedTag = isDetached ? await this.getDetachedTag(vsTagName) : undefined;
-      const detachedFullHash = (isDetached && !detachedTag) ? (head?.commit ?? await this.getFullHash()) : undefined;
+      // Taken only if a cached read is needed — on a branch, none is — and shared by them.
+      let fingerprint: Promise<string | null> | undefined;
+      const once = () => (fingerprint ??= this.refsFingerprint());
+      const detachedTag = isDetached ? await this.getDetachedTag(vsTagName, once()) : undefined;
+      const detachedFullHash = (isDetached && !detachedTag) ? (head?.commit ?? await this.getFullHash(once())) : undefined;
       const detachedHash = detachedFullHash ? detachedFullHash.slice(0, 8) : undefined;
       return {
         repoId: this.repoId,
@@ -376,11 +473,16 @@ export class GitService {
       };
     }
     // Only the branch line is used: skip the untracked-file scan, the costly part of a status.
-    const status = await this.git.status(['--untracked-files=no']);
+    // That line depends on refs alone (branch, upstream, ahead/behind), so it is cached.
+    const fingerprint = this.refsFingerprint();
+    const status = await this.cachedByRefs('headStatus', async () => {
+      const { detached, current, tracking, ahead, behind } = await this.git.status(['--untracked-files=no']);
+      return { detached, current, tracking, ahead, behind };
+    }, fingerprint);
     const isDetached = status.detached;
     const branchName = await this.resolveHeadName(status.current ?? undefined);
-    const detachedTag = isDetached ? await this.getDetachedTag() : undefined;
-    const detachedFullHash = (isDetached && !detachedTag) ? await this.getFullHash() : undefined;
+    const detachedTag = isDetached ? await this.getDetachedTag(undefined, fingerprint) : undefined;
+    const detachedFullHash = (isDetached && !detachedTag) ? await this.getFullHash(fingerprint) : undefined;
     const detachedHash = detachedFullHash ? detachedFullHash.slice(0, 8) : undefined;
     return {
       repoId: this.repoId,
@@ -397,6 +499,10 @@ export class GitService {
   }
 
   async getBranches(): Promise<BranchInfo[]> {
+    return this.cachedByRefs('branches', () => this.readBranches());
+  }
+
+  private async readBranches(): Promise<BranchInfo[]> {
     const tipMetadata = new Map<string, {
       hash: string;
       date?: string;
@@ -626,6 +732,8 @@ export class GitService {
       compareRangeArg = `${base}..${target}`;
     }
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
+    // One fingerprint for the log and the unpushed/incoming reads that follow it.
+    const fingerprint = this.refsFingerprint();
     const format = ['--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full', '--date=iso-strict', '--abbrev=8'];
     const filterArgs: string[] = [];
     if (opts?.filterAuthor) filterArgs.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
@@ -657,15 +765,17 @@ export class GitService {
       } else {
         args.push('--exclude=refs/stash', '--all');
       }
-      commits = this._parseLogOutput(await this.git.raw(args));
+      // The same query on unchanged refs gives the same commits: a refresh caused by
+      // another repo, or a page re-requested, doesn't need to run git log again here.
+      commits = this._parseLogOutput(await this.cachedByRefs(`log:${JSON.stringify(args)}`, () => this.git.raw(args), fingerprint));
     }
 
     // Mark unpushed commits: hashes ahead of the remote tracking branch.
     // 'all' means there is no upstream — every commit on this branch is local.
     const worktreeServices = opts?.worktreeServices ?? [];
     const [unpushedHashes, incomingHashes, ...worktreeUnpushedResults] = await Promise.all([
-      this.getUnpushedHashes(),
-      this.getIncomingHashes(),
+      this.getUnpushedHashes(fingerprint),
+      this.getIncomingHashes(fingerprint),
       ...worktreeServices.map(wt => wt.getUnpushedHashes()),
     ]);
     const allUnpushedHashes = new Set<string>();
@@ -689,7 +799,11 @@ export class GitService {
     return commits;
   }
 
-  private async getUnpushedHashes(): Promise<Set<string> | 'all'> {
+  private async getUnpushedHashes(fingerprint?: Promise<string | null>): Promise<Set<string> | 'all'> {
+    return this.cachedByRefs('unpushed', () => this.readUnpushedHashes(), fingerprint);
+  }
+
+  private async readUnpushedHashes(): Promise<Set<string> | 'all'> {
     try {
       const upstreamTracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
       if (upstreamTracking) {
@@ -726,7 +840,15 @@ export class GitService {
     }
   }
 
-  private async getIncomingHashes(): Promise<Set<string>> {
+  // Parameter on its own line: vscode-l10n-dev's extractor misreads a signature that has
+  // both `<string | null>` and a closing `>>` on one line, and drops every string after it.
+  private async getIncomingHashes(
+    fingerprint?: Promise<string | null>,
+  ): Promise<Set<string>> {
+    return this.cachedByRefs('incoming', () => this.readIncomingHashes(), fingerprint);
+  }
+
+  private async readIncomingHashes(): Promise<Set<string>> {
     // Straight from git, not the VS Code Git API's HEAD: the log reloads on ref changes
     // before that API has caught up, and its stale upstream/behind (e.g. those of the
     // branch just checked out from) would leave the incoming commits unmarked.
@@ -1893,6 +2015,17 @@ export class GitService {
     message?: string;
     author?: string;
   }>> {
+    return this.cachedByRefs('tags', () => this.readTags());
+  }
+
+  private async readTags(): Promise<Array<{
+    name: string;
+    hash: string;
+    date: string;
+    dateRelative?: string;
+    message?: string;
+    author?: string;
+  }>> {
     // Use %(refname:strip=2) instead of %(refname:short) to always strip refs/tags/
     // prefix — %(refname:short) may return "tags/<name>" when a branch with the
     // same name exists, which causes display and matching issues.
@@ -2033,6 +2166,10 @@ export class GitService {
   // ── Stash operations ──────────────────────────────────────────────────────
 
   async stashList(): Promise<StashEntry[]> {
+    return this.cachedByRefs('stashes', () => this.readStashList());
+  }
+
+  private async readStashList(): Promise<StashEntry[]> {
     const raw = await this.git.raw(['stash', 'list', '--format=%gd|%H|%ci|%gs']).catch(() => '');
     if (!raw.trim()) return [];
 

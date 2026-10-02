@@ -390,7 +390,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   private async pushWorkingTreeStatus(origin?: ReplyTarget): Promise<void> {
-    const msg: HostToLogMsg = { type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(await this.manager.getAllStatuses()) };
+    const msg: HostToLogMsg = { type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(await this.manager.getLatestStatuses()) };
     if (origin) this.postTo(origin, msg); else this.broadcast(msg);
   }
 
@@ -738,21 +738,26 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const iconWebview = origin === 'undocked'
           ? this.undockedPanel?.webview
           : this.view?.webview;
-        const [repos, branches, iconTheme] = await Promise.all([
-          this.getVisibleReposWithDefaultBranch(),
+        // Repos, branches and tags go out alongside the log rather than before it: waiting
+        // for every repo's branches first added their time to the commits'. A later page
+        // only appends commits, so it skips them — they can't have changed by paging.
+        const reposPromise = this.getVisibleReposWithDefaultBranch();
+        const initDataSent = msg.skip > 0 ? Promise.resolve() : Promise.all([
+          reposPromise,
           this.getFilteredBranches(),
           iconWebview ? loadIconTheme(iconWebview) : Promise.resolve(undefined),
-        ]);
-        post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
+        ]).then(([repos, branches, iconTheme]) => {
+          post({ type: 'LOG_INIT_DATA', repos, branches, iconTheme });
 
-        // Send tags for all repos
-        for (const meta of repos) {
-          const repo = this.manager.getRepo(meta.id);
-          if (!repo) continue;
-          repo.getTags().then(rawTags => {
-            post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
-          }).catch(() => {});
-        }
+          // Send tags for all repos
+          for (const meta of repos) {
+            const repo = this.manager.getRepo(meta.id);
+            if (!repo) continue;
+            repo.getTags().then(rawTags => {
+              post({ type: 'LOG_TAGS_UPDATE', repoId: meta.id, tags: rawTags.map(t => ({ ...t, repoId: meta.id })) });
+            }).catch(() => {});
+          }
+        });
 
         const logRepoIds = msg.repoIds.length > 0
           ? msg.repoIds.filter(id => !this.manager.getRepoMetas().find(m => m.id === id)?.isWorktree && !this.hiddenRepoIds.includes(id))
@@ -764,7 +769,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         let compareByRepo: Record<string, CompareRange> | undefined;
         if (msg.compare) {
           const { base, target } = msg.compare;
-          const metaById = new Map(repos.map(m => [m.id, m]));
+          const metaById = new Map((await reposPromise).map(m => [m.id, m]));
           const resolved = await Promise.all(logRepoIds.map(async (repoId): Promise<[string, CompareRange] | null> => {
             const repo = this.manager.getRepo(repoId);
             if (!repo) return null;
@@ -787,6 +792,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             compareByRepo,
           })
           : [];
+        // The webview colors commits by their repo, so the repos must reach it first.
+        await initDataSent.catch(() => {});
         const limitReached = reachesCeiling && fetched.length > limit;
         const commits = limitReached ? fetched.slice(0, limit) : fetched;
         // Last batch when git ran out of commits, or when the ceiling is reached — either

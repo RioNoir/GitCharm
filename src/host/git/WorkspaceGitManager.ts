@@ -1176,6 +1176,23 @@ export class WorkspaceGitManager implements vscode.Disposable {
     };
   }
 
+  /**
+   * The status of every repo as the last sweep read it, reading only repos it hasn't seen
+   * yet. Sweeps follow every working-tree event, so this is as current as what listeners
+   * were last sent — for views that show the status, like the Git Log's uncommitted row,
+   * and would otherwise run a status in each repo on every load.
+   */
+  async getLatestStatuses(): Promise<WorkspaceStatus> {
+    const missing = new Set(Array.from(this.repos.keys()).filter(id => !this.statusCache.has(id)));
+    if (missing.size === 0) {
+      const repos = Array.from(this.repos.keys())
+        .map(id => this.statusCache.get(id))
+        .filter((st): st is RepoStatus => !!st);
+      return { repos: this.applySubmoduleStatus(repos) };
+    }
+    return this.refreshStatuses(missing);
+  }
+
   /** Like getAllStatuses but forces VSCode's git extension to re-read from disk first. */
   async getAllStatusesFresh(): Promise<WorkspaceStatus> {
     return this.refreshStatuses();
