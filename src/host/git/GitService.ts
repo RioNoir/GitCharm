@@ -14,8 +14,9 @@ import type {
   RepoStatus,
   SubmoduleEntry,
 } from '../types/git';
-import type { CompareRange, StashEntry, UnpushedCommit } from '../types/messages';
+import type { CompareRange, RangeFileEntry, StashEntry, UnpushedCommit } from '../types/messages';
 import { isSafeCompareRef } from './compareRange';
+import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
@@ -1096,6 +1097,25 @@ export class GitService {
 
   async getCombinedFilesOrder(hashes: string[]): Promise<string[]> {
     return this._sortHashesOldestFirst(hashes);
+  }
+
+  /**
+   * The changes the given commits introduce, folded per file — unlike a diff between two
+   * snapshots, commits in between that aren't selected don't count. Each file spans from the
+   * parent of the first selected commit touching it (`baseRef`) to the last one (`headRef`),
+   * following renames; a file that ends up as it started (added then deleted, a change then its
+   * revert) is left out. Merges count with their changes against the first parent. Line stats
+   * add up those of each commit. `orderedHashes`: the commits' full hashes, oldest first.
+   */
+  async getCombinedChanges(hashes: string[]): Promise<{ files: Array<Omit<RangeFileEntry, 'repoId'>>; orderedHashes: string[] }> {
+    if (hashes.length === 0) return { files: [], orderedHashes: [] };
+    // --no-walk prints each given commit once, newest first; \x01 marks where a commit starts
+    const raw = await this.git.raw([
+      'log', '--no-walk', '--diff-merges=first-parent', '--root', '-M',
+      '--raw', '--numstat', '--no-abbrev', '-z', '--format=%x01%H %P', ...hashes,
+    ]);
+    const commits = parseRawLogChanges(raw).reverse();
+    return { files: foldCommitChanges(commits), orderedHashes: commits.map(c => c.hash) };
   }
 
   async getRefVsWorkingTreeFiles(ref: string, folderPath: string): Promise<Array<{ path: string; status: string }>> {
