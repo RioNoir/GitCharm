@@ -5,7 +5,7 @@ import { GitService } from './GitService';
 import type { WorktreeEntry } from './GitService';
 import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { Repository } from './git.d';
-import type { BranchInfo, CommitNode, RepoMeta, WorkspaceStatus } from '../types/git';
+import type { BranchInfo, CommitNode, RepoMeta, RepoStatus, WorkspaceStatus } from '../types/git';
 import type { CompareRange } from '../types/messages';
 import { PROJECT_COLORS } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
@@ -82,6 +82,17 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private orphanBaselineDone = new Set<string>();
   private refreshDebounce: NodeJS.Timeout | null = null;
   private refreshFollowUp: NodeJS.Timeout | null = null;
+  /** Repos whose status the next sweep must re-read; 'all' for every repo. */
+  private pendingRefresh: Set<string> | 'all' | null = null;
+  /** A status sweep is running; requests arriving meanwhile wait for the next one. */
+  private refreshInFlight = false;
+  /**
+   * Last status read per repo, before applySubmoduleStatus. A sweep re-reads only the
+   * repos something happened in and takes the rest from here.
+   */
+  private statusCache = new Map<string, RepoStatus>();
+  /** Bumped by reinitialize(), so a sweep started on the old repo set can't fill the cache. */
+  private repoGeneration = 0;
   private branchDebounce: NodeJS.Timeout | null = null;
   private graphDebounce: NodeJS.Timeout | null = null;
   private lastGraphRefresh = 0;
@@ -104,20 +115,19 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
       // File saved inside a repo → refresh status (immediate + follow-up for slow git index updates)
       vscode.workspace.onDidSaveTextDocument((doc) => {
-        const filePath = doc.uri.fsPath;
-        const inRepo = Array.from(this.repoMetas.values()).some(m => filePath.startsWith(m.rootPath));
-        if (inRepo) {
-          this.scheduleRefresh();
+        const repoIds = this.reposContaining([doc.uri]);
+        if (repoIds.length > 0) {
+          this.scheduleRefresh(repoIds);
           // Schedule a follow-up refresh in case git hasn't updated its index yet
           if (this.refreshFollowUp) clearTimeout(this.refreshFollowUp);
-          this.refreshFollowUp = setTimeout(() => this.scheduleRefresh(), 1200);
+          this.refreshFollowUp = setTimeout(() => this.scheduleRefresh(repoIds), 1200);
         }
       }),
 
       // File-explorer operations (create/delete/rename via VSCode UI or extensions)
-      vscode.workspace.onDidCreateFiles(() => this.scheduleRefresh()),
-      vscode.workspace.onDidDeleteFiles(() => this.scheduleRefresh()),
-      vscode.workspace.onDidRenameFiles(() => this.scheduleRefresh()),
+      vscode.workspace.onDidCreateFiles(e => this.scheduleRefreshFor(e.files)),
+      vscode.workspace.onDidDeleteFiles(e => this.scheduleRefreshFor(e.files)),
+      vscode.workspace.onDidRenameFiles(e => this.scheduleRefreshFor(e.files.flatMap(f => [f.oldUri, f.newUri]))),
 
       // Repository discovery settings affect the repo set, watcher patterns, and colors.
       vscode.workspace.onDidChangeConfiguration((e) => {
@@ -204,6 +214,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.prevHeads.clear();
     this.prevCommits.clear();
     this.prevUntracked.clear();
+    this.statusCache.clear();
+    this.repoGeneration++;
     this.initialStatusDone = false;
 
     const folders = vscode.workspace.workspaceFolders ?? [];
@@ -317,7 +329,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
       this.setupWatcher(meta.rootPath, repoId);
       this.reposListeners.forEach(l => l());
     }
-    this.scheduleRefresh();
+    this.scheduleRefresh([repoId]);
   }
 
   private scheduleReinitialize(): void {
@@ -662,16 +674,16 @@ export class WorkspaceGitManager implements vscode.Disposable {
           // Branch checkout — fire both refresh and branch listeners.
           this.prevHeads.set(repoId, currentHead);
           this.prevCommits.set(repoId, currentCommit);
-          this.scheduleRefresh();
+          this.scheduleRefresh([repoId]);
           this.scheduleBranchRefresh();
         } else if (currentCommit !== prevCommit) {
           // New commit / pull / rebase — branch name unchanged but commit moved.
           // Fire branch listeners so the log panel refreshes.
           this.prevCommits.set(repoId, currentCommit);
-          this.scheduleRefresh();
+          this.scheduleRefresh([repoId]);
           this.scheduleBranchRefresh();
         } else {
-          this.scheduleRefresh();
+          this.scheduleRefresh([repoId]);
         }
       });
       disposables.push(d);
@@ -685,8 +697,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     // Fallback: FileSystemWatcher when vscode.git is unavailable.
     // Watch .git/index (stage changes), .git/HEAD + refs (branch changes),
     // and all working-tree file creates/changes/deletes.
-    const onChanged = () => this.scheduleRefresh();
-    const onBranchChanged = () => { this.scheduleRefresh(); this.scheduleBranchRefresh(); };
+    const onChanged = () => this.scheduleRefresh([repoId]);
+    const onBranchChanged = () => { this.scheduleRefresh([repoId]); this.scheduleBranchRefresh(); };
 
     // .git internals
     const w1 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/index'));
@@ -705,13 +717,119 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.statusWatchers.set(repoId, { disposables });
   }
 
-  private scheduleRefresh(): void {
+  /**
+   * Debounced status sweep. `repoIds` names the repos something happened in; the sweep
+   * re-reads those plus the repos their status depends on (see statusDependents) and reuses
+   * the cached status of the rest. Omitted, every repo is re-read.
+   */
+  private scheduleRefresh(repoIds?: Iterable<string>): void {
+    if (this.pendingRefresh !== 'all') {
+      if (!repoIds) {
+        this.pendingRefresh = 'all';
+      } else {
+        const pending = this.pendingRefresh ?? new Set<string>();
+        for (const id of repoIds) this.statusDependents(id).forEach(d => pending.add(d));
+        this.pendingRefresh = pending;
+      }
+    }
     if (this.refreshDebounce) clearTimeout(this.refreshDebounce);
-    this.refreshDebounce = setTimeout(async () => {
-      const status = await this.getAllStatusesFresh();
+    this.refreshDebounce = setTimeout(() => {
+      this.refreshDebounce = null;
+      void this.runPendingRefresh();
+    }, 300);
+  }
+
+  private scheduleRefreshFor(uris: readonly vscode.Uri[]): void {
+    const repoIds = this.reposContaining(uris);
+    if (repoIds.length > 0) this.scheduleRefresh(repoIds);
+  }
+
+  /** The innermost tracked repo of each uri, without duplicates; uris outside every repo are dropped. */
+  private reposContaining(uris: readonly vscode.Uri[]): string[] {
+    const ids = new Set<string>();
+    for (const uri of uris) {
+      const repo = this.getServiceForFile(uri.fsPath);
+      if (repo) ids.add(repo.repoId);
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * The repos whose status can change along with `repoId`'s: the repo itself, its
+   * superprojects (a submodule moving its HEAD or getting dirty shows up as a modified
+   * gitlink in each one above it), and the other worktrees of the same repository
+   * (they share refs, so a fetch or a commit in one moves the others' ahead/behind).
+   */
+  private statusDependents(repoId: string): string[] {
+    const ids = new Set<string>([repoId]);
+    let meta = this.repoMetas.get(repoId);
+    while (meta?.parentRepoId && !ids.has(meta.parentRepoId)) {
+      ids.add(meta.parentRepoId);
+      meta = this.repoMetas.get(meta.parentRepoId);
+    }
+    const self = this.repoMetas.get(repoId);
+    const mainPath = self?.isWorktree ? self.mainWorktreePath : repoId;
+    if (mainPath) {
+      for (const m of this.repoMetas.values()) {
+        if (m.id === mainPath || (m.isWorktree && m.mainWorktreePath === mainPath)) ids.add(m.id);
+      }
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * Run the pending sweep unless one is already running. Requests that arrive during a
+   * sweep accumulate in pendingRefresh and are served by one follow-up sweep, so a slow
+   * sweep never has another started alongside it, nor delivers its result after a newer one.
+   */
+  private async runPendingRefresh(): Promise<void> {
+    if (this.refreshInFlight || !this.pendingRefresh) return;
+    const pending = this.pendingRefresh;
+    this.pendingRefresh = null;
+    this.refreshInFlight = true;
+    try {
+      const generation = this.repoGeneration;
+      const status = await this.refreshStatuses(pending === 'all' ? undefined : pending);
+      // The repo set changed while the sweep ran; the rebuild schedules its own sweep.
+      if (generation !== this.repoGeneration) return;
       this.detectNewUntrackedFiles(status);
       this.statusListeners.forEach(l => l(status));
-    }, 300);
+    } finally {
+      this.refreshInFlight = false;
+      // Requests left over from the run; ones still debouncing will start it themselves.
+      if (this.pendingRefresh && !this.refreshDebounce) void this.runPendingRefresh();
+    }
+  }
+
+  /**
+   * Re-read the status of the `stale` repos (every repo when omitted) straight from git
+   * and combine it with the cached status of the others. A repo with nothing cached yet
+   * is always read. A repo whose status fails is left out, as before caching.
+   */
+  private async refreshStatuses(stale?: ReadonlySet<string>): Promise<WorkspaceStatus> {
+    const generation = this.repoGeneration;
+    const targets = Array.from(this.repos.values())
+      .filter(r => !stale || stale.has(r.repoId) || !this.statusCache.has(r.repoId));
+    const results = await Promise.allSettled(targets.map(r => r.getStatusFresh()));
+
+    if (generation !== this.repoGeneration) {
+      // Read against a repo set that no longer exists — return it as is, don't cache it.
+      return {
+        repos: this.applySubmoduleStatus(
+          results.filter((r): r is PromiseFulfilledResult<RepoStatus> => r.status === 'fulfilled').map(r => r.value)
+        ),
+      };
+    }
+
+    results.forEach((result, i) => {
+      const repoId = targets[i].repoId;
+      if (result.status === 'fulfilled') this.statusCache.set(repoId, result.value);
+      else this.statusCache.delete(repoId);
+    });
+    const repos = Array.from(this.repos.keys())
+      .map(id => this.statusCache.get(id))
+      .filter((s): s is RepoStatus => !!s);
+    return { repos: this.applySubmoduleStatus(repos) };
   }
 
   reinitializeAndRefresh(): void {
@@ -769,7 +887,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     for (const { repo, relPath } of files) {
       await repo.stageFiles([relPath]).catch(() => {});
     }
-    this.scheduleRefresh();
+    this.scheduleRefresh(files.map(f => f.repo.repoId));
   }
 
   /**
@@ -977,16 +1095,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
   /** Like getAllStatuses but forces VSCode's git extension to re-read from disk first. */
   async getAllStatusesFresh(): Promise<WorkspaceStatus> {
-    const results = await Promise.allSettled(
-      Array.from(this.repos.values()).map(r => r.getStatusFresh())
-    );
-    return {
-      repos: this.applySubmoduleStatus(
-        results
-          .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<GitService['getStatus']>>> => r.status === 'fulfilled')
-          .map(r => r.value)
-      ),
-    };
+    return this.refreshStatuses();
   }
 
   async getAllBranches(): Promise<BranchInfo[]> {
