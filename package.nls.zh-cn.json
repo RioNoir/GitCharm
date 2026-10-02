@@ -8,6 +8,8 @@
   "view.gitLog.name": "Git 日志",
   "command.openLog.title": "聚焦到 Git 日志",
   "command.showOutputLog.title": "显示输出日志",
+  "command.showSubmodules.title": "显示子模块",
+  "command.hideSubmodules.title": "隐藏子模块",
   "command.commit.title": "提交",
   "command.commitAndPush.title": "提交并推送",
   "command.pull.title": "拉取",

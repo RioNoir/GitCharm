@@ -160,6 +160,16 @@
         "category": "GitCharm"
       },
       {
+        "command": "gitcharm.showSubmodules",
+        "title": "%command.showSubmodules.title%",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.hideSubmodules",
+        "title": "%command.hideSubmodules.title%",
+        "category": "GitCharm"
+      },
+      {
         "command": "gitcharm.commit",
         "title": "%command.commit.title%",
         "category": "GitCharm"
@@ -836,6 +846,14 @@
       "commandPalette": [
         {
           "command": "gitcharm.openLog"
+        },
+        {
+          "command": "gitcharm.showSubmodules",
+          "when": "gitcharm.hasHiddenSubmodules"
+        },
+        {
+          "command": "gitcharm.hideSubmodules",
+          "when": "gitcharm.hasShownSubmodules"
         },
         {
           "command": "gitcharm.showBranchMenu"

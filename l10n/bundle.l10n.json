@@ -349,6 +349,7 @@
       "Branch sidebar section header: local branches"
     ]
   },
+  "In {0} repositories": "In {0} repositories",
   "Click to focus branch head · Double-click to filter · Right-click for git actions": "Click to focus branch head · Double-click to filter · Right-click for git actions",
   "Remote branch no longer exists (likely deleted after a merge)": "Remote branch no longer exists (likely deleted after a merge)",
   "Expand all folders": "Expand all folders",
@@ -1367,6 +1368,9 @@
   "{0} (1 commit)": "{0} (1 commit)",
   "{0} ({1} commits)": "{0} ({1} commits)",
   "AI Explain — {0}": "AI Explain — {0}",
+  "Show Submodules": "Show Submodules",
+  "Keep Hidden": "Keep Hidden",
+  "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.": "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.",
   "Do you want to add \"{0}\" to Git?": "Do you want to add \"{0}\" to Git?",
   "Do you want to add {0} new files to Git?": "Do you want to add {0} new files to Git?",
   "Add": "Add",

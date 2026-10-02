@@ -7,11 +7,18 @@ import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { Repository } from './git.d';
 import type { BranchInfo, CommitNode, RepoMeta, RepoStatus, WorkspaceStatus } from '../types/git';
 import type { CompareRange } from '../types/messages';
-import { PROJECT_COLORS } from '../types/workspace';
+import { projectColor } from '../types/workspace';
 import { formatGitError } from '../utils/gitErrorUtils';
 import { mergeCommitLists } from '../utils/mergeCommitLists';
 
 const DEFAULT_SUBMODULE_MAX_DEPTH = 5;
+/**
+ * Above this many submodules they aren't shown until the user asks: each one is a repo
+ * that is watched and queried on every refresh, and dozens of them make the extension
+ * crawl. The choice is kept per workspace under SHOW_SUBMODULES_KEY.
+ */
+const AUTO_SHOW_SUBMODULES_MAX = 5;
+const SHOW_SUBMODULES_KEY = 'gitcharm.showSubmodules';
 /**
  * Debounce for ref changes that affect the commit graph (HEAD, refs, reflog).
  * Deliberately short: a single git operation writes a handful of these files
@@ -43,6 +50,8 @@ const DEFAULT_REPOSITORY_SCAN_MAX_DEPTH = 1;
 const DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS = ['node_modules'];
 
 type StatusListener = (status: WorkspaceStatus) => void;
+/** A submodule found while scanning .gitmodules, registered as a repo only if submodules are shown. */
+interface DiscoveredSubmodule { absPath: string; relPath: string; parentRepoId: string; depth: number }
 type BranchListener = () => void;
 type WorktreeListener = (repoId: string) => void;
 type OrphanListener = (newlyOrphaned: Array<{ repoId: string; branchName: string }>) => void;
@@ -61,6 +70,11 @@ export class WorkspaceGitManager implements vscode.Disposable {
    */
   private statusWatchers = new Map<string, { vsRepo?: Repository; disposables: vscode.Disposable[] }>();
   private reinitDebounce: NodeJS.Timeout | null = null;
+  /** Submodules found by the current reinitialize(), in discovery order. */
+  private discoveredSubmodules: DiscoveredSubmodule[] = [];
+  /** How many discovered submodules are left unregistered because submodules are hidden. */
+  private hiddenSubmoduleCount = 0;
+  private submoduleNoticeShown = false;
   /** Repos whose ref files setupGraphWatcher watches, so their branch changes reach the graph on their own. */
   private graphWatchedRepos = new Set<string>();
   /** Global workspace listeners — created once in constructor, disposed in dispose(). */
@@ -218,6 +232,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.prevCommits.clear();
     this.prevUntracked.clear();
     this.statusCache.clear();
+    this.discoveredSubmodules = [];
     this.repoGeneration++;
     this.initialStatusDone = false;
 
@@ -231,7 +246,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
       const gitDir = path.join(folder.uri.fsPath, '.git');
       if (fs.existsSync(gitDir)) {
         const repoId = folder.uri.fsPath;
-        const color = customColors[folder.name] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+        const color = customColors[folder.name] ?? projectColor(colorIdx.value++);
 
         const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(folder.uri.fsPath);
 
@@ -239,7 +254,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
         this.repoMetas.set(repoId, meta);
         this.repos.set(repoId, new GitService(repoId, folder.uri.fsPath));
         this.setupWatcher(folder.uri.fsPath, repoId);
-        this.discoverSubmodules(folder.uri.fsPath, repoId, 1, colorIdx, customColors);
+        this.discoverSubmodules(folder.uri.fsPath, repoId, 1);
         this.setupRepositoryAuxWatchers(folder.uri.fsPath, repoId);
       }
     });
@@ -256,6 +271,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
     // git.openRepositoryInParentFolders when the workspace root is a subfolder of the repo
     // (so no workspace folder path sits inside it, and the downward scans above never reach it).
     this.registerVscodeDiscoveredRepositories(colorIdx, customColors);
+
+    this.registerSubmodules(colorIdx, customColors);
 
     // Notify listeners that the set of known repos has changed (e.g. submodule added/removed)
     this.reposListeners.forEach(l => l());
@@ -278,7 +295,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
       if (this.repos.has(repoPath)) continue;
       if (!this.containsWorkspaceFolder(repoPath)) continue;
 
-      const color = customColors[path.basename(repoPath)] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+      const color = customColors[path.basename(repoPath)] ?? projectColor(colorIdx.value++);
       const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(repoPath);
 
       const meta: RepoMeta = {
@@ -293,7 +310,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
       this.repoMetas.set(repoPath, meta);
       this.repos.set(repoPath, new GitService(repoPath, repoPath));
       this.setupWatcher(repoPath, repoPath);
-      this.discoverSubmodules(repoPath, repoPath, 1, colorIdx, customColors);
+      this.discoverSubmodules(repoPath, repoPath, 1);
       this.setupRepositoryAuxWatchers(repoPath, repoPath);
     }
   }
@@ -506,12 +523,14 @@ export class WorkspaceGitManager implements vscode.Disposable {
   ): void {
     const normalizedRepoPath = path.normalize(repoPath);
     if (this.repos.has(normalizedRepoPath)) return;
+    // A submodule is registered as one (or left out while submodules are hidden), never as a plain nested repo.
+    if (this.discoveredSubmodules.some(s => s.absPath === normalizedRepoPath)) return;
 
     const relPath = path.relative(workspaceRoot, normalizedRepoPath).split(path.sep).join('/');
     const displayName = relPath && !relPath.startsWith('..') ? relPath : path.basename(normalizedRepoPath);
     const basename = path.basename(normalizedRepoPath);
     const customColor = customColors[displayName] ?? customColors[basename];
-    const color = customColor ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
+    const color = customColor ?? projectColor(colorIdx.value++);
     const { isWorktree, mainWorktreePath } = this.detectLinkedWorktree(normalizedRepoPath);
 
     const meta: RepoMeta = {
@@ -526,17 +545,12 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.repoMetas.set(normalizedRepoPath, meta);
     this.repos.set(normalizedRepoPath, new GitService(normalizedRepoPath, normalizedRepoPath));
     this.setupWatcher(normalizedRepoPath, normalizedRepoPath);
-    this.discoverSubmodules(normalizedRepoPath, normalizedRepoPath, 1, colorIdx, customColors);
+    this.discoverSubmodules(normalizedRepoPath, normalizedRepoPath, 1);
     this.setupRepositoryAuxWatchers(normalizedRepoPath, normalizedRepoPath);
   }
 
-  private discoverSubmodules(
-    parentPath: string,
-    parentRepoId: string,
-    depth: number,
-    colorIdx: { value: number },
-    customColors: Record<string, string>,
-  ): void {
+  /** Collect the submodules under `parentPath` (recursively, up to submoduleMaxDepth) into discoveredSubmodules. */
+  private discoverSubmodules(parentPath: string, parentRepoId: string, depth: number): void {
     if (depth > this.getSubmoduleMaxDepth()) return;
 
     const gitmodulesPath = path.join(parentPath, '.gitmodules');
@@ -558,42 +572,91 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
     for (const subRelPath of subPaths) {
       const subAbsPath = path.join(parentPath, subRelPath);
-      const subGitDir = path.join(subAbsPath, '.git');
 
       // Submodule may be uninitialized — .git may not exist yet
       if (!fs.existsSync(subAbsPath)) continue;
 
       // Avoid double-registering a path that's already a workspace folder
-      if (this.repos.has(subAbsPath)) continue;
+      if (this.repos.has(subAbsPath) || this.discoveredSubmodules.some(s => s.absPath === subAbsPath)) continue;
 
       // Guard against circular references
       if (subAbsPath === parentPath || parentPath.startsWith(subAbsPath + path.sep)) continue;
 
-      const subName = path.basename(subRelPath);
-      // Each submodule gets its own color slot — same as a regular workspace folder.
-      const color = customColors[subName] ?? PROJECT_COLORS[colorIdx.value++ % PROJECT_COLORS.length];
-
-      const meta: RepoMeta = {
-        id: subAbsPath,
-        name: subName,
-        rootPath: subAbsPath,
-        color,
-        isSubmodule: true,
-        parentRepoId,
-        submodulePath: subRelPath,
-        depth,
-      };
-      this.repoMetas.set(subAbsPath, meta);
-      this.repos.set(subAbsPath, new GitService(subAbsPath, subAbsPath));
-
-      // Only set up watcher if the submodule is initialized (has .git)
-      if (fs.existsSync(subGitDir)) {
-        this.setupWatcher(subAbsPath, subAbsPath);
-      }
+      this.discoveredSubmodules.push({ absPath: subAbsPath, relPath: subRelPath, parentRepoId, depth });
 
       // Recurse into nested submodules
-      this.discoverSubmodules(subAbsPath, subAbsPath, depth + 1, colorIdx, customColors);
+      this.discoverSubmodules(subAbsPath, subAbsPath, depth + 1);
     }
+  }
+
+  /**
+   * Register the discovered submodules as repos — or none of them, while submodules are
+   * hidden: by the user's choice for this workspace, or by default when there are more
+   * than AUTO_SHOW_SUBMODULES_MAX, in which case a notification offers to show them.
+   */
+  private registerSubmodules(colorIdx: { value: number }, customColors: Record<string, string>): void {
+    const count = this.discoveredSubmodules.length;
+    const choice = this.context.workspaceState.get<boolean>(SHOW_SUBMODULES_KEY);
+    const shown = choice ?? count <= AUTO_SHOW_SUBMODULES_MAX;
+    this.hiddenSubmoduleCount = shown ? 0 : count;
+    void vscode.commands.executeCommand('setContext', 'gitcharm.hasHiddenSubmodules', !shown && count > 0);
+    void vscode.commands.executeCommand('setContext', 'gitcharm.hasShownSubmodules', shown && count > 0);
+
+    if (!shown) {
+      if (choice === undefined && count > 0 && !this.submoduleNoticeShown) {
+        this.submoduleNoticeShown = true;
+        void this.offerToShowSubmodules(count);
+      }
+      return;
+    }
+
+    for (const sub of this.discoveredSubmodules) {
+      if (this.repos.has(sub.absPath)) continue;
+      const subName = path.basename(sub.relPath);
+      // Each submodule gets its own color slot — same as a regular workspace folder.
+      const color = customColors[subName] ?? projectColor(colorIdx.value++);
+
+      const meta: RepoMeta = {
+        id: sub.absPath,
+        name: subName,
+        rootPath: sub.absPath,
+        color,
+        isSubmodule: true,
+        parentRepoId: sub.parentRepoId,
+        submodulePath: sub.relPath,
+        depth: sub.depth,
+      };
+      this.repoMetas.set(sub.absPath, meta);
+      this.repos.set(sub.absPath, new GitService(sub.absPath, sub.absPath));
+
+      // Only set up watcher if the submodule is initialized (has .git)
+      if (fs.existsSync(path.join(sub.absPath, '.git'))) {
+        this.setupWatcher(sub.absPath, sub.absPath);
+      }
+    }
+  }
+
+  private async offerToShowSubmodules(count: number): Promise<void> {
+    const show = vscode.l10n.t('Show Submodules');
+    const keepHidden = vscode.l10n.t('Keep Hidden');
+    const picked = await vscode.window.showInformationMessage(
+      vscode.l10n.t('This workspace has {0} Git submodules. GitCharm doesn\'t show them, so that it stays fast: each one is a repository to watch and query on every refresh.', count),
+      show,
+      keepHidden,
+    );
+    if (picked === show) await this.setSubmodulesShown(true);
+    else if (picked === keepHidden) await this.context.workspaceState.update(SHOW_SUBMODULES_KEY, false);
+  }
+
+  /** Show or hide the submodules of this workspace, remembering the choice. */
+  async setSubmodulesShown(shown: boolean): Promise<void> {
+    await this.context.workspaceState.update(SHOW_SUBMODULES_KEY, shown);
+    this.reinitializeAndRefresh();
+  }
+
+  /** Submodules of this workspace not shown because submodules are hidden. */
+  getHiddenSubmoduleCount(): number {
+    return this.hiddenSubmoduleCount;
   }
 
   /**
@@ -1054,11 +1117,12 @@ export class WorkspaceGitManager implements vscode.Disposable {
    * instead of 'modified', so the UI can display them with the correct letter.
    */
   private buildSubmodulePaths(): Map<string, Set<string>> {
+    // From every discovered submodule, not only registered ones: a hidden submodule's
+    // gitlink still shows up in its superproject's changes.
     const map = new Map<string, Set<string>>();
-    for (const meta of this.repoMetas.values()) {
-      if (!meta.isSubmodule || !meta.parentRepoId || !meta.submodulePath) continue;
-      if (!map.has(meta.parentRepoId)) map.set(meta.parentRepoId, new Set());
-      map.get(meta.parentRepoId)!.add(meta.submodulePath);
+    for (const sub of this.discoveredSubmodules) {
+      if (!map.has(sub.parentRepoId)) map.set(sub.parentRepoId, new Set());
+      map.get(sub.parentRepoId)!.add(sub.relPath);
     }
     return map;
   }

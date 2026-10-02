@@ -8,6 +8,8 @@
   "view.gitLog.name": "Git Log",
   "command.openLog.title": "Git Log fokussieren",
   "command.showOutputLog.title": "Ausgabe-Log anzeigen",
+  "command.showSubmodules.title": "Submodule anzeigen",
+  "command.hideSubmodules.title": "Submodule ausblenden",
   "command.commit.title": "Commit",
   "command.commitAndPush.title": "Commit & Push",
   "command.pull.title": "Pull",

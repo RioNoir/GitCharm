@@ -333,7 +333,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.projectColors` | `{}` | Maps workspace folder/repository names to hex colors for multi-repo views. |
 | `gitcharm.repositoryScanMaxDepth` | `1` | Maximum depth of workspace subfolders to scan for Git repositories. `0` only checks workspace folders. |
 | `gitcharm.repositoryScanIgnoredFolders` | `["node_modules"]` | Folder names or workspace-relative paths skipped while scanning for nested Git repositories. |
-| `gitcharm.submoduleMaxDepth` | `5` | Maximum nesting depth of Git submodules shown as repositories. `1` only shows direct submodules, `0` none. Lower it in large workspaces with many nested submodules. |
+| `gitcharm.submoduleMaxDepth` | `5` | Maximum nesting depth of Git submodules shown as repositories. `1` only shows direct submodules, `0` none. In a workspace with more than 5 submodules they start hidden: a notification offers to show them, and **GitCharm: Show Submodules** / **Hide Submodules** switch it later, per workspace. |
 | `gitcharm.branchNameModels` | `[]` | Branch name prefixes suggested when creating a branch (e.g. `feature/`, `bugfix/`). |
 | `gitcharm.showLastCommitInBranchMenu` | `false` | Show each branch's and tag's last commit in the branch and tag menus. |
 | `gitcharm.autoRefreshInterval` | `0` | Auto-refresh interval in seconds. `0` disables interval refresh and uses file watchers only. |

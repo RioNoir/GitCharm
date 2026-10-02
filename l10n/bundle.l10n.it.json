@@ -1324,5 +1324,9 @@
   "Show in Commit Panel": "Mostra nel pannello Commit",
   "Uncommitted Changes": "Modifiche non committate",
   "Showing the first {0} commits. Older commits are past the Git Log limit.": "Mostrati i primi {0} commit. I commit più vecchi superano il limite del Git Log.",
-  "Change Limit": "Cambia limite"
+  "Change Limit": "Cambia limite",
+  "In {0} repositories": "In {0} repository",
+  "Show Submodules": "Mostra submodule",
+  "Keep Hidden": "Lascia nascosti",
+  "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.": "Questo workspace ha {0} submodule Git. GitCharm non li mostra per restare veloce: ognuno è un repository da osservare e interrogare a ogni aggiornamento."
 }

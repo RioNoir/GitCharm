@@ -43,6 +43,9 @@ export function registerCommands(
       showLogChannel();
     }),
 
+    vscode.commands.registerCommand('gitcharm.showSubmodules', () => manager?.setSubmodulesShown(true)),
+    vscode.commands.registerCommand('gitcharm.hideSubmodules', () => manager?.setSubmodulesShown(false)),
+
     vscode.commands.registerCommand('gitcharm.refreshCommitPanel', async () => {
       if (!manager) return;
       await manager.reinitializeAndRefresh();
