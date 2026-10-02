@@ -350,18 +350,23 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // the underlying file-event burst, so delaying it again only adds lag. The
     // branch query runs in parallel rather than being awaited first, so a slow
     // `git branch` can't hold up the commit list.
-    const onGraphOrBranchChange = () => {
+    const onGraphOrReposChange = () => {
       this.broadcast({ type: 'LOG_REFRESH' });
       void this.pushInitData();
     };
+    // A branch change arrives once the VS Code Git API has caught up — after the ref
+    // watcher already reloaded the commits (the manager raises a graph change itself for
+    // a repo it can't watch). Only the branch data, partly read from that API (e.g. a
+    // detached HEAD's tag), still needs refreshing, not every repo's log again.
+    const onBranchChange = () => { void this.pushInitData(); };
 
     // Register manager listeners here so they fire even when the panel has never been opened.
     // this.post() silently drops messages when the webview is not yet resolved — that's fine,
     // because resolveWebviewView performs an explicit initial sync when the panel first opens.
     this.managerListeners.push(
-      this.manager.onGraphChange(onGraphOrBranchChange),
-      this.manager.onBranchChange(onGraphOrBranchChange),
-      this.manager.onReposChange(onGraphOrBranchChange),
+      this.manager.onGraphChange(onGraphOrReposChange),
+      this.manager.onBranchChange(onBranchChange),
+      this.manager.onReposChange(onGraphOrReposChange),
       this.manager.onStatusChange(status => this.broadcast({ type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(status) })),
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('gitcharm.showUncommittedChangesInLog')) void this.pushWorkingTreeStatus();

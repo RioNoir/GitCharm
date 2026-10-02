@@ -690,25 +690,12 @@ export class GitService {
   }
 
   private async getIncomingHashes(): Promise<Set<string>> {
-    try {
-      const vsRepo = this.vsRepo();
-      if (vsRepo) {
-        const upstream = vsRepo.state.HEAD?.upstream;
-        if (upstream) {
-          if ((vsRepo.state.HEAD?.behind ?? 0) === 0) return new Set();
-          const upstreamRef = `${upstream.remote}/${upstream.name}`;
-          const raw = await this.git.raw(['log', '--format=%H', `HEAD..${upstreamRef}`]);
-          return new Set(raw.trim().split('\n').filter(Boolean));
-        }
-        return new Set();
-      }
-      const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
-      if (!tracking) return new Set();
-      const raw = await this.git.raw(['log', '--format=%H', `HEAD..${tracking}`]);
-      return new Set(raw.trim().split('\n').filter(Boolean));
-    } catch {
-      return new Set();
-    }
+    // Straight from git, not the VS Code Git API's HEAD: the log reloads on ref changes
+    // before that API has caught up, and its stale upstream/behind (e.g. those of the
+    // branch just checked out from) would leave the incoming commits unmarked.
+    // Without an upstream (or with a detached HEAD) `@{u}` fails, and nothing is incoming.
+    const raw = await this.git.raw(['log', '--format=%H', 'HEAD..@{u}']).catch(() => '');
+    return new Set(raw.trim().split('\n').filter(Boolean));
   }
 
   async getMergeCommits(hash: string, parents: string[]): Promise<import('../types/messages').MergeParentCommit[]> {

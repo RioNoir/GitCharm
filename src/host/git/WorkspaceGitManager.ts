@@ -61,6 +61,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
    */
   private statusWatchers = new Map<string, { vsRepo?: Repository; disposables: vscode.Disposable[] }>();
   private reinitDebounce: NodeJS.Timeout | null = null;
+  /** Repos whose ref files setupGraphWatcher watches, so their branch changes reach the graph on their own. */
+  private graphWatchedRepos = new Set<string>();
   /** Global workspace listeners — created once in constructor, disposed in dispose(). */
   private globalListeners: vscode.Disposable[] = [];
   private statusListeners: StatusListener[] = [];
@@ -621,10 +623,11 @@ export class WorkspaceGitManager implements vscode.Disposable {
    * that to the debounce below. The API listener is still used for working-tree
    * status, where its extra work is the point.
    */
-  private setupGraphWatcher(repoPath: string): void {
+  private setupGraphWatcher(repoPath: string, repoId: string): void {
     const dirs = this.resolveGitDirs(repoPath);
     if (!dirs) return;
     const { gitDir, commonDir } = dirs;
+    this.graphWatchedRepos.add(repoId);
 
     const onGraphChanged = () => this.scheduleGraphRefresh();
     const watch = (base: string, pattern: string) => {
@@ -649,7 +652,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
   private setupWatcher(repoPath: string, repoId: string): void {
     // Fast path for graph-affecting changes, independent of the VS Code Git API.
-    this.setupGraphWatcher(repoPath);
+    this.setupGraphWatcher(repoPath, repoId);
     this.setupStatusWatcher(repoPath, repoId);
   }
 
@@ -675,13 +678,13 @@ export class WorkspaceGitManager implements vscode.Disposable {
           this.prevHeads.set(repoId, currentHead);
           this.prevCommits.set(repoId, currentCommit);
           this.scheduleRefresh([repoId]);
-          this.scheduleBranchRefresh();
+          this.scheduleBranchRefresh(repoId);
         } else if (currentCommit !== prevCommit) {
           // New commit / pull / rebase — branch name unchanged but commit moved.
           // Fire branch listeners so the log panel refreshes.
           this.prevCommits.set(repoId, currentCommit);
           this.scheduleRefresh([repoId]);
-          this.scheduleBranchRefresh();
+          this.scheduleBranchRefresh(repoId);
         } else {
           this.scheduleRefresh([repoId]);
         }
@@ -698,7 +701,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     // Watch .git/index (stage changes), .git/HEAD + refs (branch changes),
     // and all working-tree file creates/changes/deletes.
     const onChanged = () => this.scheduleRefresh([repoId]);
-    const onBranchChanged = () => { this.scheduleRefresh([repoId]); this.scheduleBranchRefresh(); };
+    const onBranchChanged = () => { this.scheduleRefresh([repoId]); this.scheduleBranchRefresh(repoId); };
 
     // .git internals
     const w1 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/index'));
@@ -919,7 +922,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
     });
   }
 
-  private scheduleBranchRefresh(): void {
+  private scheduleBranchRefresh(repoId: string): void {
+    // Graph listeners rely on the ref watcher for commit changes; a repo without one
+    // (its git dir couldn't be resolved) only reports them through here.
+    if (!this.graphWatchedRepos.has(repoId)) this.scheduleGraphRefresh();
     if (this.branchDebounce) clearTimeout(this.branchDebounce);
     this.branchDebounce = setTimeout(() => {
       this.branchListeners.forEach(l => l());
@@ -992,6 +998,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     this.watchers = [];
     this.statusWatchers.forEach(w => w.disposables.forEach(d => d.dispose()));
     this.statusWatchers.clear();
+    this.graphWatchedRepos.clear();
     // A rebuild about to run (or being disposed) supersedes one still pending.
     if (this.reinitDebounce) { clearTimeout(this.reinitDebounce); this.reinitDebounce = null; }
     if (this.refreshDebounce) { clearTimeout(this.refreshDebounce); this.refreshDebounce = null; }
