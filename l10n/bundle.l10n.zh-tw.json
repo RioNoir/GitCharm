@@ -337,7 +337,6 @@
   "Include this repository in the commit": "將此儲存庫納入提交",
   "Submodule: {0}": "子模組：{0}",
   "Submodule": "子模組",
-  "SUB/Short badge for a git submodule": "子模組",
   "Tag: {0} (detached HEAD)": "標籤：{0}（分離的 HEAD）",
   "Detached HEAD at {0}": "分離的 HEAD 位於 {0}",
   "Collapse": "摺疊",
@@ -1324,5 +1323,9 @@
   "Show in Commit Panel": "在提交面板中顯示",
   "Uncommitted Changes": "未提交的變更",
   "Showing the first {0} commits. Older commits are past the Git Log limit.": "顯示前 {0} 個提交。更早的提交超出了 Git 記錄的限制。",
-  "Change Limit": "變更限制"
+  "Change Limit": "變更限制",
+  "In {0} repositories": "位於 {0} 個儲存庫中",
+  "Show Submodules": "顯示子模組",
+  "Keep Hidden": "保持隱藏",
+  "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.": "此工作區包含 {0} 個 Git 子模組。為保持速度，GitCharm 不顯示它們：每個子模組都是一個需要在每次重新整理時監看和查詢的儲存庫。"
 }

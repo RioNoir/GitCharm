@@ -337,7 +337,6 @@
   "Include this repository in the commit": "将此仓库包含在提交中",
   "Submodule: {0}": "子模块：{0}",
   "Submodule": "子模块",
-  "SUB/Short badge for a git submodule": "子模块",
   "Tag: {0} (detached HEAD)": "标签：{0}（分离的 HEAD）",
   "Detached HEAD at {0}": "分离的 HEAD 位于 {0}",
   "Collapse": "折叠",
@@ -1324,5 +1323,9 @@
   "Show in Commit Panel": "在提交面板中显示",
   "Uncommitted Changes": "未提交的更改",
   "Showing the first {0} commits. Older commits are past the Git Log limit.": "显示前 {0} 个提交。更早的提交超出了 Git 日志的限制。",
-  "Change Limit": "更改限制"
+  "Change Limit": "更改限制",
+  "In {0} repositories": "位于 {0} 个仓库中",
+  "Show Submodules": "显示子模块",
+  "Keep Hidden": "保持隐藏",
+  "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.": "此工作区包含 {0} 个 Git 子模块。为保持速度，GitCharm 不显示它们：每个子模块都是一个需要在每次刷新时监视和查询的仓库。"
 }

@@ -7,6 +7,7 @@ import { Codicon } from '../../shared/Codicon';
 import { focusOnHover, handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import * as l10n from '@vscode/l10n';
 import { isImeComposing } from '../../shared/ime';
+import { RepoDots, type RepoDotInfo } from '../../shared/RepoDots';
 
 interface Props {
   repos: RepoMeta[];
@@ -43,34 +44,52 @@ function stripRemotePrefix(name: string): string {
 
 interface MergedBranch {
   baseName: string;
+  /** Starred and pinned to the top of its section. */
   isPrimary: boolean;
+  /** The remote's default branch in one of its repos — a remote one can't be deleted from here. */
+  isDefault: boolean;
   isHead: boolean;
   instances: BranchInfo[];
   repoIds: string[];
 }
 
 /**
- * `defaultBranchByRepo` maps repoId → the remote's actual default branch name (from
- * RepoMeta.defaultBranch), the source of truth for "primary" when known. A branch merged
- * across repos with disagreeing defaults (different remotes) is primary if it matches in any
- * of them. Falls back to the naming heuristic for a repo whose default couldn't be resolved.
+ * How the sidebar tells primary branches: `defaultBranchByRepo` maps repoId → the remote's
+ * actual default branch name (RepoMeta.defaultBranch), and `starByDefault` the repos whose
+ * default earns a star. A branch merged across repos with disagreeing defaults (different
+ * remotes) is primary if it matches in any of them. A repo without a known default falls back
+ * to the naming heuristic (main, master, release…); one whose default doesn't earn a star
+ * stars only main and master.
  */
-function buildMergedBranches(branches: BranchInfo[], defaultBranchByRepo: Map<string, string | undefined>): MergedBranch[] {
+/** What stars a branch of a submodule whose own default doesn't count — IntelliJ's favorites. */
+const SUBMODULE_PRIMARY_BRANCHES = new Set(['main', 'master']);
+
+interface PrimaryRule {
+  defaultBranchByRepo: Map<string, string | undefined>;
+  starByDefault: (repoId: string) => boolean;
+}
+
+function buildMergedBranches(branches: BranchInfo[], rule: PrimaryRule): MergedBranch[] {
   const map = new Map<string, MergedBranch>();
   for (const b of branches) {
     const baseName = b.isRemote ? stripRemotePrefix(b.name) : b.name;
-    const actualDefault = defaultBranchByRepo.get(b.repoId);
-    const isPrimaryHere = actualDefault ? baseName === actualDefault : isPrimaryBranch(baseName);
+    const actualDefault = rule.defaultBranchByRepo.get(b.repoId);
+    const isDefaultHere = actualDefault ? baseName === actualDefault : isPrimaryBranch(baseName);
+    const isPrimaryHere = !rule.starByDefault(b.repoId)
+      ? SUBMODULE_PRIMARY_BRANCHES.has(baseName.toLowerCase())
+      : actualDefault ? isDefaultHere : isPrimaryBranch(baseName);
     const existing = map.get(baseName);
     if (existing) {
       existing.instances.push(b);
       if (!existing.repoIds.includes(b.repoId)) existing.repoIds.push(b.repoId);
       if (b.isHead) existing.isHead = true;
       if (isPrimaryHere) existing.isPrimary = true;
+      if (isDefaultHere) existing.isDefault = true;
     } else {
       map.set(baseName, {
         baseName,
         isPrimary: isPrimaryHere,
+        isDefault: isDefaultHere,
         isHead: b.isHead,
         instances: [b],
         repoIds: [b.repoId],
@@ -88,16 +107,16 @@ function sortMerged(list: MergedBranch[]): MergedBranch[] {
   });
 }
 
-// Splits out the current branch and the primary branch (e.g. "main") — pinned to the top of
-// their section, current first — from the rest, which the tree view sorts alphabetically by
+// Splits out the current branch and the primary branches (e.g. "main", "master") — pinned to
+// the top of their section, current first — from the rest, which the tree view sorts alphabetically by
 // name alongside folders instead of head-first. A branch namespaced under a folder (e.g.
 // "feature/log-improvements") is never pinned even when current: pulling it out of the tree
 // would make its folder vanish and show the full slash-joined path in its place, which reads
 // as the branch disappearing rather than being promoted.
 function splitPinned(list: MergedBranch[]): { pinned: MergedBranch[]; rest: MergedBranch[] } {
   const head = list.find(m => m.isHead && !m.baseName.includes('/'));
-  const primary = list.find(m => m.isPrimary && m !== head && !m.baseName.includes('/'));
-  const pinned = [head, primary].filter((m): m is MergedBranch => !!m);
+  const primaries = list.filter(m => m.isPrimary && m !== head && !m.baseName.includes('/'));
+  const pinned = [...(head ? [head] : []), ...primaries];
   const pinnedSet = new Set(pinned);
   return { pinned, rest: list.filter(m => !pinnedSet.has(m)) };
 }
@@ -201,10 +220,17 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   onCheckout, onNewBranch, onMerge, onRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
 }, ref) {
-  const defaultBranchByRepo = useMemo(
-    () => new Map(repos.map(r => [r.id, r.defaultBranch])),
-    [repos]
-  );
+  // A submodule's own default branch (develop, px4, rolling…) only earns a star when the
+  // sidebar shows that submodule alone: across a workspace with dozens of submodules it would
+  // star most branches, where IntelliJ stars main and master — which still are, in every
+  // submodule. Delete protection keeps following every repo's actual default.
+  const primaryRule = useMemo<PrimaryRule>(() => {
+    const submoduleIds = new Set(repos.filter(r => r.isSubmodule).map(r => r.id));
+    return {
+      defaultBranchByRepo: new Map(repos.map(r => [r.id, r.defaultBranch])),
+      starByDefault: repoId => !submoduleIds.has(repoId) || repoId === activeRepoId,
+    };
+  }, [repos, activeRepoId]);
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
   const [tagContextMenu, setTagContextMenu] = useState<{ mergedTag: MergedTag; x: number; y: number } | null>(null);
@@ -250,7 +276,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   // expanded would re-collapse the moment the filter made it briefly disappear from the tree.
   const knownFolderKeysRef = useRef<Set<SectionKey>>(new Set());
   useEffect(() => {
-    const allLocal = sortMerged(buildMergedBranches(branches.filter(b => !b.isRemote && b.name !== 'HEAD'), defaultBranchByRepo));
+    const allLocal = sortMerged(buildMergedBranches(branches.filter(b => !b.isRemote && b.name !== 'HEAD'), primaryRule));
     const localKeys = collectFolderPaths(buildBranchTree(splitPinned(allLocal).rest, m => m.baseName)).map(p => `folder:local:${p}`);
     const remoteByName = new Map<string, BranchInfo[]>();
     for (const b of branches.filter(b => b.isRemote && stripRemotePrefix(b.name) !== 'HEAD')) {
@@ -260,7 +286,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     }
     const remoteKeys = Array.from(remoteByName.entries()).flatMap(([name, bs]) => {
       const sectionKey = `remote:${name}`;
-      const allMerged = sortMerged(buildMergedBranches(bs, defaultBranchByRepo));
+      const allMerged = sortMerged(buildMergedBranches(bs, primaryRule));
       return collectFolderPaths(buildBranchTree(splitPinned(allMerged).rest, m => m.baseName)).map(p => `folder:${sectionKey}:${p}`);
     });
     const allMergedTags = buildMergedTags(tags);
@@ -280,14 +306,14 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
     } else {
       knownFolderKeysRef.current = new Set(allKeys);
     }
-  }, [branches, tags, defaultBranchByRepo]);
+  }, [branches, tags, primaryRule]);
 
   const filtered = filter
     ? branches.filter(b => b.name.toLowerCase().includes(filter.toLowerCase()))
     : branches;
 
   // Exclude detached HEAD pseudo-branch from Local list — it shows up as a tag row instead
-  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD'), defaultBranchByRepo));
+  const localMerged = sortMerged(buildMergedBranches(filtered.filter(b => !b.isRemote && b.name !== 'HEAD'), primaryRule));
   const localFolderPaths = collectFolderPaths(buildBranchTree(splitPinned(localMerged).rest, m => m.baseName))
     .map(p => `folder:local:${p}`);
 
@@ -302,7 +328,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const remoteGroups: { name: string; merged: MergedBranch[]; folderPaths: string[] }[] = Array.from(remoteGroupsMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, bs]) => {
-      const merged = sortMerged(buildMergedBranches(bs, defaultBranchByRepo));
+      const merged = sortMerged(buildMergedBranches(bs, primaryRule));
       const sectionKey = `remote:${name}`;
       const folderPaths = collectFolderPaths(buildBranchTree(splitPinned(merged).rest, m => m.baseName))
         .map(p => `folder:${sectionKey}:${p}`);
@@ -318,7 +344,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const tagFolderPaths = collectFolderPaths(buildBranchTree(mergedTags, mt => mt.name))
     .map(p => `folder:tags:${p}`);
 
-  const repoColorMap = Object.fromEntries(repos.map(r => [r.id, r.color]));
+  const repoMap: Record<string, RepoDotInfo> = Object.fromEntries(repos.map(r => [r.id, { name: r.name, color: r.color }]));
   const multiRepo = repos.length > 1;
 
   function primaryInstance(merged: MergedBranch): BranchInfo {
@@ -375,7 +401,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
           keyPrefix="folder:local"
           collapsed={collapsed}
           onToggleFolder={toggle}
-          repoColorMap={repoColorMap}
+          repoMap={repoMap}
           multiRepo={multiRepo}
           selectedBranchFilter={selectedBranchFilter}
           contextMenu={contextMenu}
@@ -416,7 +442,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
                 keyPrefix={`folder:${sectionKey}`}
                 collapsed={collapsed}
                 onToggleFolder={toggle}
-                repoColorMap={repoColorMap}
+                repoMap={repoMap}
                 multiRepo={multiRepo}
                 selectedBranchFilter={selectedBranchFilter}
                 contextMenu={contextMenu}
@@ -457,7 +483,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
               keyPrefix="folder:tags"
               collapsed={collapsed}
               onToggleFolder={toggle}
-              repoColorMap={repoColorMap}
+              repoMap={repoMap}
               multiRepo={multiRepo}
               activeDetachedTags={activeDetachedTags}
               tagContextMenu={tagContextMenu}
@@ -484,7 +510,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             merged={contextMenu.merged}
             x={contextMenu.x}
             y={contextMenu.y}
-            canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isPrimary)}
+            canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isDefault)}
             onClose={() => setContextMenu(null)}
             onCheckout={() => { onCheckout(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onNewBranch={() => {
@@ -521,9 +547,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   );
 });
 
-function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick, depth = 0, displayName }: {
+function BranchRow({ merged, repoMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick, depth = 0, displayName }: {
   merged: MergedBranch;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   isFilterSelected: boolean;
   isCtxActive: boolean;
@@ -580,11 +606,7 @@ function BranchRow({ merged, repoColorMap, multiRepo, isFilterSelected, isCtxAct
       <span style={styles.branchName(isHead, isPrimary, primaryColor)} title={baseName}>{displayName ?? baseName}</span>
 
       {multiRepo && (
-        <span style={styles.dotGroup}>
-          {repoIds.map(id => (
-            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-          ))}
-        </span>
+        <RepoDots repoIds={repoIds} repos={repoMap} />
       )}
 
       {merged.instances[0].aheadBehind && (merged.instances[0].aheadBehind.ahead > 0 || merged.instances[0].aheadBehind.behind > 0) && (
@@ -656,14 +678,14 @@ function SectionHeader({ icon, label, count, sectionKey, collapsed, onToggleSect
 // branches merged into one alphabetical-by-name list.
 function BranchList({
   merged, keyPrefix, collapsed, onToggleFolder,
-  repoColorMap, multiRepo, selectedBranchFilter, contextMenu, setContextMenu,
+  repoMap, multiRepo, selectedBranchFilter, contextMenu, setContextMenu,
   primaryInstance, focusInstance, onBranchFocus, onBranchFilterSelect, forceExpanded,
 }: {
   merged: MergedBranch[];
   keyPrefix: string;
   collapsed: Set<SectionKey>;
   onToggleFolder: (key: SectionKey) => void;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   selectedBranchFilter: string;
   contextMenu: { merged: MergedBranch; x: number; y: number } | null;
@@ -682,7 +704,7 @@ function BranchList({
       merged={m}
       depth={depth}
       displayName={m.baseName.split('/').pop()}
-      repoColorMap={repoColorMap}
+      repoMap={repoMap}
       multiRepo={multiRepo}
       isFilterSelected={selectedBranchFilter === primaryInstance(m).name}
       isCtxActive={contextMenu?.merged.baseName === m.baseName}
@@ -712,7 +734,7 @@ function BranchList({
         getLeafName={m => m.baseName.split('/').pop() ?? m.baseName}
         getRepoIds={m => m.repoIds}
         getAheadBehind={m => m.instances[0].aheadBehind}
-        repoColorMap={repoColorMap}
+        repoMap={repoMap}
         multiRepo={multiRepo}
         forceExpanded={forceExpanded}
       />
@@ -724,13 +746,13 @@ function BranchList({
 // merged into one alphabetical-by-name list at each level.
 function TagList({
   mergedTags, keyPrefix, collapsed, onToggleFolder,
-  repoColorMap, multiRepo, activeDetachedTags, tagContextMenu, setTagContextMenu, forceExpanded,
+  repoMap, multiRepo, activeDetachedTags, tagContextMenu, setTagContextMenu, forceExpanded,
 }: {
   mergedTags: MergedTag[];
   keyPrefix: string;
   collapsed: Set<SectionKey>;
   onToggleFolder: (key: SectionKey) => void;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   activeDetachedTags: Set<string>;
   tagContextMenu: { mergedTag: MergedTag; x: number; y: number } | null;
@@ -743,7 +765,7 @@ function TagList({
       mergedTag={mt}
       depth={depth}
       displayName={mt.name.split('/').pop()}
-      repoColorMap={repoColorMap}
+      repoMap={repoMap}
       multiRepo={multiRepo}
       isActive={activeDetachedTags.has(mt.name)}
       isCtxActive={tagContextMenu?.mergedTag.name === mt.name}
@@ -765,21 +787,21 @@ function TagList({
       renderLeaf={renderLeaf}
       getLeafName={mt => mt.name.split('/').pop() ?? mt.name}
       getRepoIds={mt => mt.repoIds}
-      repoColorMap={repoColorMap}
+      repoMap={repoMap}
       multiRepo={multiRepo}
       forceExpanded={forceExpanded}
     />
   );
 }
 
-function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoColorMap, multiRepo, aheadBehind }: {
+function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoMap, multiRepo, aheadBehind }: {
   name: string;
   fullPath: string;
   depth: number;
   collapsed: boolean;
   onToggle: () => void;
   repoIds: string[];
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   aheadBehind?: { ahead: number; behind: number };
 }) {
@@ -801,11 +823,7 @@ function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoCo
       <Codicon name={collapsed ? 'folder' : 'folder-opened'} style={styles.branchIcon(false, false, primaryBranchColor())} />
       <span style={styles.folderName} title={fullPath}>{name}</span>
       {multiRepo && (
-        <span style={styles.dotGroup}>
-          {repoIds.map(id => (
-            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-          ))}
-        </span>
+        <RepoDots repoIds={repoIds} repos={repoMap} />
       )}
       {aheadBehind && (aheadBehind.ahead > 0 || aheadBehind.behind > 0) && (
         <span style={styles.aheadBehind} title={l10n.t('{0} to push, {1} to pull (total for branches in this folder)', aheadBehind.ahead, aheadBehind.behind)}>
@@ -821,7 +839,7 @@ function FolderRow({ name, fullPath, depth, collapsed, onToggle, repoIds, repoCo
 // into one alphabetically-sorted-by-name list (like a typical file explorer), each level
 // indented by `depth`. Pinned branches (current / main) are handled by the caller, which
 // omits them from the tree entirely and renders them above it instead.
-function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, renderLeaf, getLeafName, getRepoIds, getAheadBehind, repoColorMap, multiRepo, forceExpanded }: {
+function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, renderLeaf, getLeafName, getRepoIds, getAheadBehind, repoMap, multiRepo, forceExpanded }: {
   node: BranchTreeFolder<T>;
   depth: number;
   keyPrefix: string;
@@ -831,7 +849,7 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
   getLeafName: (leaf: T) => string;
   getRepoIds: (leaf: T) => string[];
   getAheadBehind?: (leaf: T) => { ahead: number; behind: number } | undefined;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   // While searching, folders holding a match must stay visible regardless of their saved
   // collapsed state — the user is looking for a result, not browsing the tree.
@@ -861,7 +879,7 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
               collapsed={isCollapsed}
               onToggle={() => onToggleFolder(key)}
               repoIds={collectRepoIds(folder, getRepoIds)}
-              repoColorMap={repoColorMap}
+              repoMap={repoMap}
               multiRepo={multiRepo}
               aheadBehind={getAheadBehind ? collectAheadBehind(folder, getAheadBehind) : undefined}
             />
@@ -876,7 +894,7 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
                 getLeafName={getLeafName}
                 getRepoIds={getRepoIds}
                 getAheadBehind={getAheadBehind}
-                repoColorMap={repoColorMap}
+                repoMap={repoMap}
                 multiRepo={multiRepo}
                 forceExpanded={forceExpanded}
               />
@@ -888,9 +906,9 @@ function BranchTree<T>({ node, depth, keyPrefix, collapsedKeys, onToggleFolder, 
   );
 }
 
-function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onContextMenu, depth = 0, displayName }: {
+function TagRow({ mergedTag, repoMap, multiRepo, isActive, isCtxActive, onContextMenu, depth = 0, displayName }: {
   mergedTag: MergedTag;
-  repoColorMap: Record<string, string>;
+  repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   isActive: boolean;
   isCtxActive: boolean;
@@ -918,11 +936,7 @@ function TagRow({ mergedTag, repoColorMap, multiRepo, isActive, isCtxActive, onC
       <Codicon name="tag" style={styles.branchIcon(false, isActive, primaryColor)} />
       <span style={styles.branchName(isActive, false, primaryColor)} title={mergedTag.name}>{displayName ?? mergedTag.name}</span>
       {multiRepo && (
-        <span style={styles.dotGroup}>
-          {mergedTag.repoIds.map(id => (
-            <span key={id} style={styles.repoDot(repoColorMap[id] ?? '#888')} />
-          ))}
-        </span>
+        <RepoDots repoIds={mergedTag.repoIds} repos={repoMap} />
       )}
     </div>
   );
@@ -1121,13 +1135,6 @@ const styles = {
     height: '100%',
     boxSizing: 'border-box' as const,
   },
-  repoDot: (color: string): React.CSSProperties => ({
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    background: color,
-    flexShrink: 0,
-  }),
   iconBtn: {
     background: 'transparent',
     border: 'none',
@@ -1246,12 +1253,6 @@ const styles = {
     fontWeight: isHead ? 'bold' : 'normal',
     color: isHead ? primaryColor : undefined,
   }),
-  dotGroup: {
-    display: 'flex',
-    gap: '2px',
-    alignItems: 'center',
-    flexShrink: 0,
-  } as React.CSSProperties,
   aheadBehind: {
     display: 'flex',
     gap: '2px',

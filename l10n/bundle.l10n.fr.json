@@ -337,7 +337,6 @@
   "Include this repository in the commit": "Inclure ce dépôt dans le commit",
   "Submodule: {0}": "Sous-module : {0}",
   "Submodule": "Sous-module",
-  "SUB/Short badge for a git submodule": "SUB",
   "Tag: {0} (detached HEAD)": "Tag : {0} (HEAD détaché)",
   "Detached HEAD at {0}": "HEAD détaché sur {0}",
   "Collapse": "Réduire",
@@ -1324,5 +1323,9 @@
   "Show in Commit Panel": "Afficher dans le panneau Commit",
   "Uncommitted Changes": "Modifications non commitées",
   "Showing the first {0} commits. Older commits are past the Git Log limit.": "Affichage des {0} premiers commits. Les commits plus anciens dépassent la limite du Git Log.",
-  "Change Limit": "Modifier la limite"
+  "Change Limit": "Modifier la limite",
+  "In {0} repositories": "Dans {0} dépôts",
+  "Show Submodules": "Afficher les sous-modules",
+  "Keep Hidden": "Garder masqués",
+  "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.": "Cet espace de travail contient {0} sous-modules Git. GitCharm ne les affiche pas afin de rester rapide : chacun est un dépôt à surveiller et à interroger à chaque actualisation."
 }

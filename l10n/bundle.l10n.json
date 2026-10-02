@@ -1,5 +1,6 @@
 {
   "just now": "just now",
+  "In {0} repositories": "In {0} repositories",
   "Open all changes": "Open all changes",
   "Loading editor…": "Loading editor…",
   "Heading {0}": "Heading {0}",
@@ -459,12 +460,6 @@
   "Include this repository in the commit": "Include this repository in the commit",
   "Submodule: {0}": "Submodule: {0}",
   "Submodule": "Submodule",
-  "SUB/Short badge for a git submodule": {
-    "message": "SUB",
-    "comment": [
-      "Short badge for a git submodule"
-    ]
-  },
   "Tag: {0} (detached HEAD)": "Tag: {0} (detached HEAD)",
   "Detached HEAD at {0}": "Detached HEAD at {0}",
   "Collapse": "Collapse",
@@ -1367,6 +1362,9 @@
   "{0} (1 commit)": "{0} (1 commit)",
   "{0} ({1} commits)": "{0} ({1} commits)",
   "AI Explain — {0}": "AI Explain — {0}",
+  "Show Submodules": "Show Submodules",
+  "Keep Hidden": "Keep Hidden",
+  "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.": "This workspace has {0} Git submodules. GitCharm doesn't show them, so that it stays fast: each one is a repository to watch and query on every refresh.",
   "Do you want to add \"{0}\" to Git?": "Do you want to add \"{0}\" to Git?",
   "Do you want to add {0} new files to Git?": "Do you want to add {0} new files to Git?",
   "Add": "Add",

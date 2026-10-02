@@ -160,6 +160,16 @@
         "category": "GitCharm"
       },
       {
+        "command": "gitcharm.showSubmodules",
+        "title": "%command.showSubmodules.title%",
+        "category": "GitCharm"
+      },
+      {
+        "command": "gitcharm.hideSubmodules",
+        "title": "%command.hideSubmodules.title%",
+        "category": "GitCharm"
+      },
+      {
         "command": "gitcharm.commit",
         "title": "%command.commit.title%",
         "category": "GitCharm"
@@ -838,6 +848,14 @@
           "command": "gitcharm.openLog"
         },
         {
+          "command": "gitcharm.showSubmodules",
+          "when": "gitcharm.hasHiddenSubmodules"
+        },
+        {
+          "command": "gitcharm.hideSubmodules",
+          "when": "gitcharm.hasShownSubmodules"
+        },
+        {
           "command": "gitcharm.showBranchMenu"
         },
         {
@@ -1198,6 +1216,14 @@
               "type": "string"
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
+          },
+          "gitcharm.submoduleMaxDepth": {
+            "order": 72,
+            "type": "number",
+            "default": 5,
+            "minimum": 0,
+            "maximum": 10,
+            "description": "%config.submoduleMaxDepth.description%"
           },
           "gitcharm.branchNameModels": {
             "order": 75,
