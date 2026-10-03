@@ -1,46 +1,13 @@
 import * as vscode from 'vscode';
+import { modelPrefix, normalizeBranchModels } from '../types/branchModels';
 
 const DEFAULT_BRANCH_NAME_MODELS: string[] = [];
-
-/**
- * Normalizes a user-entered branch model into the stored `*`-suffixed standard,
- * e.g. "feature/" -> "feature/*", "feature" -> "feature/*", "revert-" -> "revert-*".
- * Entries that already contain a wildcard (e.g. "feature/**", "revert-*") are kept as-is.
- */
-export function normalizeBranchModel(raw: string): string | undefined {
-  const pattern = raw.trim().replace(/\\/g, '/');
-  if (!pattern) return undefined;
-  if (pattern.includes('*')) return pattern;
-
-  if (pattern.endsWith('/') || pattern.endsWith('-') || pattern.endsWith('_')) {
-    return `${pattern}*`;
-  }
-  return `${pattern}/*`;
-}
 
 export function getBranchNameModels(): string[] {
   const value = vscode.workspace
     .getConfiguration('gitcharm')
     .get<string[]>('branchNameModels', DEFAULT_BRANCH_NAME_MODELS);
-
-  if (!Array.isArray(value)) return DEFAULT_BRANCH_NAME_MODELS;
-
-  const seen = new Set<string>();
-  const models: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== 'string') continue;
-    const normalized = normalizeBranchModel(entry);
-    if (normalized && !seen.has(normalized)) {
-      seen.add(normalized);
-      models.push(normalized);
-    }
-  }
-  return models.sort((a, b) => a.localeCompare(b));
-}
-
-/** Strips a trailing "*" or "**" from a stored model to get the literal prefix to prepend. */
-function modelPrefix(model: string): string {
-  return model.replace(/\*+$/, '');
+  return normalizeBranchModels(value);
 }
 
 interface BranchNameRules {

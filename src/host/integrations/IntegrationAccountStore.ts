@@ -1,46 +1,60 @@
 import * as vscode from 'vscode';
-import type { ForgeProvider } from './remoteUrlParser';
+import type { IntegrationProvider } from '../types/integrations';
 
 export interface BitbucketCredentials {
   email: string;
   apiToken: string;
 }
 
-export interface PatAccount {
+/**
+ * A token-based account of a cloud integration (GitLab, Bitbucket, Gitea… — GitHub uses VS Code's own
+ * accounts instead). Not tied to a feature: pull requests use these accounts today, issues will tomorrow.
+ */
+export interface IntegrationAccount {
   id: string;
-  provider: ForgeProvider;
+  provider: IntegrationProvider;
   host: string;
   label: string;
 }
 
-const ACCOUNTS_INDEX_KEY = 'gitcharm.pullRequests.patAccounts';
+const ACCOUNTS_INDEX_KEY = 'gitcharm.integrations.accounts';
+/** Where the index lived when accounts belonged to pull requests only; read once, then moved. */
+const LEGACY_ACCOUNTS_INDEX_KEY = 'gitcharm.pullRequests.patAccounts';
 
-export class PatCredentialStore {
+export class IntegrationAccountStore {
+  private readonly changeEmitter = new vscode.EventEmitter<void>();
+  /** Fires when an account is added, renamed or removed. */
+  readonly onDidChange = this.changeEmitter.event;
+
   constructor(
     private readonly secrets: vscode.SecretStorage,
     private readonly globalState: vscode.Memento,
   ) {}
 
-  private key(provider: ForgeProvider, host: string, accountId: string): string {
+  /** Secret key of an account's token. The `pat` prefix predates integrations; kept so existing tokens still resolve. */
+  private key(provider: IntegrationProvider, host: string, accountId: string): string {
     return `gitcharm.pat.${provider}.${host}.${accountId}`;
   }
 
-  private index(): PatAccount[] {
-    return this.globalState.get<PatAccount[]>(ACCOUNTS_INDEX_KEY, []);
+  private index(): IntegrationAccount[] {
+    return this.globalState.get<IntegrationAccount[]>(ACCOUNTS_INDEX_KEY)
+      ?? this.globalState.get<IntegrationAccount[]>(LEGACY_ACCOUNTS_INDEX_KEY, []);
   }
 
-  private async saveIndex(accounts: PatAccount[]): Promise<void> {
+  private async saveIndex(accounts: IntegrationAccount[]): Promise<void> {
     await this.globalState.update(ACCOUNTS_INDEX_KEY, accounts);
+    if (this.globalState.get(LEGACY_ACCOUNTS_INDEX_KEY) !== undefined) await this.globalState.update(LEGACY_ACCOUNTS_INDEX_KEY, undefined);
+    this.changeEmitter.fire();
   }
 
   /** All saved accounts, optionally filtered to a single (provider, host) pair. */
-  listAccounts(provider?: ForgeProvider, host?: string): PatAccount[] {
+  listAccounts(provider?: IntegrationProvider, host?: string): IntegrationAccount[] {
     const accounts = this.index();
     if (!provider) return accounts;
     return accounts.filter(a => a.provider === provider && (!host || a.host === host));
   }
 
-  getAccount(accountId: string): PatAccount | undefined {
+  getAccount(accountId: string): IntegrationAccount | undefined {
     return this.index().find(a => a.id === accountId);
   }
 
@@ -51,7 +65,7 @@ export class PatCredentialStore {
   }
 
   /** Adds a new account (token already validated by the caller) and returns its generated id. */
-  async addAccount(provider: ForgeProvider, host: string, label: string, token: string): Promise<string> {
+  async addAccount(provider: IntegrationProvider, host: string, label: string, token: string): Promise<string> {
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     await this.secrets.store(this.key(provider, host, id), token);
     await this.saveIndex([...this.index(), { id, provider, host, label }]);

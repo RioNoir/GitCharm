@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { parseRemoteUrl, resolveProvider } from './remoteUrlParser';
 import { createProvider } from './PullRequestProviderFactory';
-import type { BitbucketCredentials, PatAccount, PatCredentialStore } from './PatCredentialStore';
+import type { BitbucketCredentials, IntegrationAccount, IntegrationAccountStore } from '../integrations/IntegrationAccountStore';
+import { validateToken, type TokenCredentials } from '../integrations/validateCredentials';
+import type { IntegrationProvider } from '../types/integrations';
 import { logError, logWarn } from '../utils/Logger';
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs, ForgeProvider,
@@ -134,6 +136,9 @@ const REPO_PR_FILTERS_KEY = 'gitcharm.pullRequests.repoFilters';
 const MENTION_CANDIDATES_TTL_MS = 5 * 60 * 1000;
 
 export class PullRequestManager {
+  private readonly bindingsEmitter = new vscode.EventEmitter<void>();
+  /** Fires when a repository is assigned another account, or none. */
+  readonly onDidChangeBindings = this.bindingsEmitter.event;
   private cache = new Map<string, CacheEntry>();
   /** One provider instance per repo, reused across calls so each provider's own in-memory caches (e.g. GitLab's label-color cache, cached username) actually persist instead of being thrown away and re-fetched on every single request. */
   private providerCache = new Map<string, PullRequestProvider>();
@@ -141,7 +146,7 @@ export class PullRequestManager {
 
   constructor(
     private readonly manager: WorkspaceGitManager,
-    private readonly patStore: PatCredentialStore,
+    private readonly patStore: IntegrationAccountStore,
     private readonly workspaceState: vscode.Memento,
   ) {}
 
@@ -179,10 +184,16 @@ export class PullRequestManager {
     if (accountId) bindings[repoId] = accountId;
     else delete bindings[repoId];
     await this.workspaceState.update(REPO_ACCOUNT_BINDING_KEY, bindings);
+    this.bindingsEmitter.fire();
+  }
+
+  /** The account a repo is assigned: a saved account id, `github:<VS Code account id>`, or undefined. */
+  getBinding(repoId: string): string | undefined {
+    return this.bindings()[repoId];
   }
 
   /** Accounts saved for this repo's host, plus the currently-bound one (if any) and whether a choice is required. */
-  async getAccountOptions(repoId: string): Promise<{ host: string; provider: ForgeProvider; accounts: PatAccount[]; boundAccountId?: string } | null> {
+  async getAccountOptions(repoId: string): Promise<{ host: string; provider: ForgeProvider; accounts: IntegrationAccount[]; boundAccountId?: string } | null> {
     const resolved = await this.resolveOrigin(repoId);
     if (!resolved?.provider || resolved.provider.provider === 'unknown' || resolved.provider.provider === 'github') return null;
     const accounts = this.patStore.listAccounts(resolved.provider.provider, resolved.host);
@@ -423,7 +434,7 @@ export class PullRequestManager {
    * binding it to any repo — used by the "Add provider account" credential-management flow, which
    * isn't tied to a repo already open in the workspace. The account can be assigned to repos afterwards.
    */
-  async addAccountStandalone(provider: ForgeProvider, host: string, label: string, credentials: TokenCredentials): Promise<{ ok: boolean; error?: string; accountId?: string }> {
+  async addAccountStandalone(provider: IntegrationProvider, host: string, label: string, credentials: TokenCredentials): Promise<{ ok: boolean; error?: string; accountId?: string }> {
     const valid = await validateToken(provider, host, credentials);
     if (!valid.ok) {
       logWarn('pullrequest-add-account', `Token validation failed for ${host}`, valid.error);
@@ -435,7 +446,7 @@ export class PullRequestManager {
     return { ok: true, accountId };
   }
 
-  listAccounts(): PatAccount[] {
+  listAccounts(): IntegrationAccount[] {
     return this.patStore.listAccounts();
   }
 
@@ -444,7 +455,7 @@ export class PullRequestManager {
   }
 
   /** The account email, when known — only Bitbucket accounts store one (used for avatar resolution). */
-  async getAccountEmail(account: PatAccount): Promise<string | undefined> {
+  async getAccountEmail(account: IntegrationAccount): Promise<string | undefined> {
     if (account.provider !== 'bitbucket') return undefined;
     const creds = await this.patStore.getBitbucketCredentials(account.id);
     return creds?.email;
@@ -797,40 +808,4 @@ export class PullRequestManager {
 /** Strips embedded `user:pass@` credentials from any URL in a git error message before it's logged or shown — `getCheckoutSource` may fetch from a literal credential-embedded URL (e.g. Bitbucket) rather than a named remote, and git's own error text echoes the URL verbatim. */
 export function redactCredentialsInUrls(message: string): string {
   return message.replace(/(https?:\/\/)[^/@\s]+@/g, '$1');
-}
-
-interface TokenCredentials {
-  apiToken: string;
-  email?: string; // required for Bitbucket, which authenticates via Basic auth
-}
-
-async function validateToken(provider: ForgeProvider, host: string, credentials: TokenCredentials): Promise<{ ok: boolean; error?: string }> {
-  try {
-    let url: string;
-    let headers: Record<string, string>;
-    switch (provider) {
-      case 'gitlab':
-        url = `https://${host}/api/v4/user`;
-        headers = { 'PRIVATE-TOKEN': credentials.apiToken };
-        break;
-      case 'gitea':
-        url = `https://${host}/api/v1/user`;
-        headers = { Authorization: `token ${credentials.apiToken}` };
-        break;
-      case 'bitbucket': {
-        if (!credentials.email) return { ok: false, error: vscode.l10n.t('Bitbucket requires an account email') };
-        url = 'https://api.bitbucket.org/2.0/user';
-        const basic = Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString('base64');
-        headers = { Authorization: `Basic ${basic}` };
-        break;
-      }
-      default:
-        return { ok: false, error: vscode.l10n.t('Unsupported provider: {0}', provider) };
-    }
-    const res = await fetch(url, { headers });
-    if (!res.ok) return { ok: false, error: vscode.l10n.t('Token validation failed: HTTP {0} {1}', res.status, res.statusText) };
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
 }

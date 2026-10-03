@@ -28,7 +28,7 @@ import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsServi
 import type { ChangeSortMode, ViewAndSortSettings } from '../types/settings';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
-import type { PatAccount } from '../pullRequests/PatCredentialStore';
+import type { IntegrationAccount } from '../integrations/IntegrationAccountStore';
 import { resolveAvatarIconPath, resolveGitHubUsernameAvatarIconPath } from '../utils/avatarCache';
 import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
 import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
@@ -559,7 +559,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Resolves an avatar for a saved PAT account — only Bitbucket accounts have a known email; other providers fall back to no avatar (codicon shown instead). */
-  private async resolveAccountAvatar(account: PatAccount): Promise<vscode.Uri | undefined> {
+  private async resolveAccountAvatar(account: IntegrationAccount): Promise<vscode.Uri | undefined> {
     if (!this.pullRequestManager) return undefined;
     const email = await this.pullRequestManager.getAccountEmail(account);
     if (!email) return undefined;
@@ -1523,7 +1523,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_OPEN_AI_SETTINGS': {
-        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm gitcharm.ai');
+        await vscode.commands.executeCommand('gitcharm.openSettings', 'ai');
         break;
       }
 

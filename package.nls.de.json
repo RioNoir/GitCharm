@@ -136,6 +136,7 @@
   "config.ai.openaiApiKey.description": "OpenAI API-Schlüssel. Nur verwendet, wenn der Anbieter 'openai-api' ist. Schlüssel erhältlich unter platform.openai.com.",
   "config.ai.openaiModel.description": "OpenAI-Modell-ID (z. B. 'gpt-4o', 'gpt-4o-mini', 'o3'). Nur verwendet, wenn der Anbieter 'openai-api' ist.",
   "config.ai.geminiApiKey.description": "Google Gemini API-Schlüssel. Nur verwendet, wenn der Anbieter 'gemini-api' ist. Schlüssel erhältlich unter aistudio.google.com.",
+  "config.ai.apiKey.deprecationMessage": "Wird jetzt im sicheren Speicher abgelegt. Lege ihn auf der Seite **AI** von **GitCharm: Einstellungen** fest; ein hier eingegebener Schlüssel wird automatisch dorthin verschoben.",
   "config.ai.geminiModel.description": "Gemini-Modell-ID (z. B. 'gemini-2.0-flash', 'gemini-2.5-pro'). Verwendet, wenn der Anbieter 'gemini-api' oder 'gemini-cli' ist.",
   "config.ai.geminiPath.description": "Pfad zur Gemini CLI-Binärdatei. Nur verwendet, wenn der Anbieter 'gemini-cli' ist. Standard: 'gemini' (muss im PATH liegen).",
   "config.ai.codexModel.description": "Zu verwendende Codex-Modell-ID (z. B. 'o3', 'o4-mini'). Nur verwendet, wenn der Anbieter 'codex-cli' ist. Leer lassen, um den Standard der CLI zu verwenden. Mit dem Befehl 'GitCharm: KI-Modell auswählen' interaktiv auswählen.",

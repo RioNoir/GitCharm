@@ -136,6 +136,7 @@
   "config.ai.openaiApiKey.description": "OpenAI API key. Only used when provider is 'openai-api'. Get your key at platform.openai.com.",
   "config.ai.openaiModel.description": "OpenAI model ID (e.g. 'gpt-4o', 'gpt-4o-mini', 'o3'). Only used when provider is 'openai-api'.",
   "config.ai.geminiApiKey.description": "Google Gemini API key. Only used when provider is 'gemini-api'. Get your key at aistudio.google.com.",
+  "config.ai.apiKey.deprecationMessage": "Stored in secure storage now. Set it on the **AI** page of **GitCharm: Settings**; a key entered here is moved there automatically.",
   "config.ai.geminiModel.description": "Gemini model ID (e.g. 'gemini-2.0-flash', 'gemini-2.5-pro'). Used when provider is 'gemini-api' or 'gemini-cli'.",
   "config.ai.geminiPath.description": "Path to the Gemini CLI binary. Only used when provider is 'gemini-cli'. Defaults to 'gemini' (must be on PATH).",
   "config.ai.codexModel.description": "Codex model ID to use (e.g. 'o3', 'o4-mini'). Only used when provider is 'codex-cli'. Leave empty to use the CLI default. Use the 'GitCharm: Select AI Model' command to pick interactively.",

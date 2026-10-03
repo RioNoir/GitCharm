@@ -2391,7 +2391,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
 
       case 'LOG_OPEN_MAX_COMMITS_SETTING':
-        await vscode.commands.executeCommand('workbench.action.openSettings', 'gitcharm.graphMaxCommits');
+        await vscode.commands.executeCommand('gitcharm.openSettings', 'gitLog');
         break;
 
       case 'LOG_SHOW_IN_COMMIT_PANEL':

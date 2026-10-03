@@ -6,13 +6,12 @@ import { FileAnnotationController } from '../ui/FileAnnotationController';
 import { ProfileStatusBar } from '../ui/ProfileStatusBar';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { openFileHistoryPanel } from '../panels/FileHistoryPanel';
+import { SettingsPanel } from '../panels/SettingsPanel';
 import { compareWithCommand } from '../panels/CompareWithCommand';
 import { hasConflictMarkers } from '../git/ConflictParser';
 import { logInfo, logWarn, notifyWithLogAction, showLogChannel } from '../utils/Logger';
 import { plural } from '../utils/plural';
-import type { PullRequestManager } from '../pullRequests/PullRequestManager';
-import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
-import { resolveAvatarIconPath } from '../utils/avatarCache';
+import type { IntegrationsService } from '../integrations/IntegrationsService';
 import { presentOrphanBranches } from '../utils/orphanBranches';
 import type { BranchInfo } from '../types/git';
 
@@ -25,7 +24,7 @@ export function registerCommands(
   profileStatusBar: ProfileStatusBar,
   manager?: WorkspaceGitManager,
   extensionUri?: vscode.Uri,
-  pullRequestManager?: PullRequestManager,
+  integrations?: IntegrationsService,
 ): void {
   context.subscriptions.push(
     // Open the Git Log where the persisted default location says
@@ -270,8 +269,13 @@ export function registerCommands(
       branchStatusBar.updateProject();
     }),
 
-    vscode.commands.registerCommand('gitcharm.openSettings', () => {
-      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm');
+    vscode.commands.registerCommand('gitcharm.openSettings', (section?: string) => {
+      if (!extensionUri || !manager || !integrations) {
+        void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm');
+        return;
+      }
+      // Menu contributions pass their context (a view item, a URI…) as first argument: only a string is a section.
+      SettingsPanel.show(extensionUri, manager, integrations, typeof section === 'string' ? section : undefined);
     }),
 
     vscode.commands.registerCommand('gitcharm.resetViewLocations', async () => {
@@ -407,7 +411,7 @@ export function registerCommands(
         // Start from the built-in text rather than an empty box — editing a prompt is far easier than writing one.
         await config.update(key, DEFAULT_PROMPTS[picked.id], vscode.ConfigurationTarget.Global);
       }
-      await vscode.commands.executeCommand('workbench.action.openSettings', `gitcharm.${key}`);
+      await vscode.commands.executeCommand('gitcharm.openSettings', 'aiPrompts');
     }),
 
     // ── AI provider / model selection ─────────────────────────────────────────
@@ -441,7 +445,7 @@ export function registerCommands(
       if (!pickedProvider) return;
 
       if (pickedProvider.providerId === OPEN_SETTINGS_ID) {
-        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm gitcharm.ai');
+        await vscode.commands.executeCommand('gitcharm.openSettings', 'ai');
         return;
       }
 
@@ -528,8 +532,8 @@ export function registerCommands(
         vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'Ollama', chosenModel));
 
       } else if (pickedProvider.providerId === 'lmstudio') {
-        const lmstudioUrl: string = config.get('ai.lmstudioUrl', 'http://localhost:1234');
-        const currentModel: string = config.get('ai.lmstudioModel', '');
+        const lmstudioUrl: string = config.get('ai.lmStudioUrl', 'http://localhost:1234');
+        const currentModel: string = config.get('ai.lmStudioModel', '');
 
         type LMStudioModel = { id: string };
         let lmstudioModels: LMStudioModel[] = [];
@@ -568,7 +572,7 @@ export function registerCommands(
           chosenModel = input.trim();
         }
 
-        await config.update('ai.lmstudioModel', chosenModel, vscode.ConfigurationTarget.Global);
+        await config.update('ai.lmStudioModel', chosenModel, vscode.ConfigurationTarget.Global);
         vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'LM Studio', chosenModel || vscode.l10n.t({ message: 'default', comment: ['Shown when no specific AI model is configured'] })));
 
       } else if (pickedProvider.providerId === 'claude-api') {
@@ -768,119 +772,9 @@ export function registerCommands(
       await commitPanel.requestPullRequestRefresh();
     }),
 
-    vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', async () => {
-      if (!pullRequestManager || !manager) return;
-
-      const ADD_NEW = Symbol('add-new');
-      const accounts = pullRequestManager.listAccounts();
-      const grouped = [...accounts].sort((a, b) =>
-        forgeProviderLabel(a.provider).localeCompare(forgeProviderLabel(b.provider)) || a.label.localeCompare(b.label)
-      );
-
-      const avatars = await Promise.all(grouped.map(async account => {
-        const email = await pullRequestManager.getAccountEmail(account);
-        return email ? resolveAvatarIconPath(email, context.globalStorageUri.fsPath) : undefined;
-      }));
-
-      const items: (vscode.QuickPickItem & { accountId?: string | typeof ADD_NEW })[] = [];
-      let lastProvider: string | undefined;
-      grouped.forEach((account, i) => {
-        if (account.provider !== lastProvider) {
-          items.push({ label: forgeProviderLabel(account.provider), kind: vscode.QuickPickItemKind.Separator });
-          lastProvider = account.provider;
-        }
-        items.push({ label: account.label, description: account.host, iconPath: avatars[i], accountId: account.id });
-      });
-      items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
-      items.push({ label: `$(add) ${vscode.l10n.t('Add account…')}`, accountId: ADD_NEW });
-
-      const picked = await vscode.window.showQuickPick(items, { title: vscode.l10n.t('Pull Request Accounts'), placeHolder: vscode.l10n.t('Select an account, or add a new one') });
-      if (!picked || !picked.accountId) return;
-
-      if (picked.accountId === ADD_NEW) {
-        const provider = await vscode.window.showQuickPick(
-          [
-            { label: 'GitLab', provider: 'gitlab' as const },
-            { label: 'Bitbucket Cloud', provider: 'bitbucket' as const },
-            { label: 'Gitea / Forgejo', provider: 'gitea' as const },
-          ],
-          { title: vscode.l10n.t('Add Account'), placeHolder: vscode.l10n.t('Select a forge (GitHub uses your VS Code account, no token needed)') }
-        );
-        if (!provider) return;
-        const host = await vscode.window.showInputBox({
-          title: vscode.l10n.t('Add Account — Host'),
-          prompt: vscode.l10n.t('Enter the host for this account'),
-          placeHolder: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : 'gitea.example.com',
-          value: provider.provider === 'gitlab' ? 'gitlab.com' : provider.provider === 'bitbucket' ? 'bitbucket.org' : undefined,
-        });
-        if (!host?.trim()) return;
-
-        let email: string | undefined;
-        if (provider.provider === 'bitbucket') {
-          email = await vscode.window.showInputBox({ title: vscode.l10n.t('Add Account — Account Email'), prompt: vscode.l10n.t('Enter your Atlassian account email'), placeHolder: 'you@example.com' });
-          if (!email?.trim()) return;
-        }
-        const apiToken = await vscode.window.showInputBox({
-          title: provider.provider === 'bitbucket' ? vscode.l10n.t('Add Account — API Token') : vscode.l10n.t('Add Account — Personal Access Token'),
-          prompt: provider.provider === 'bitbucket'
-            ? vscode.l10n.t('Enter a Bitbucket API Token for {0}', host.trim())
-            : vscode.l10n.t('Enter a Personal Access Token for {0}', host.trim()),
-          placeHolder: vscode.l10n.t('Token is stored securely and never leaves this machine'),
-          password: true,
-        });
-        if (!apiToken?.trim()) return;
-        const label = await vscode.window.showInputBox({
-          title: vscode.l10n.t('Add Account — Label'),
-          prompt: vscode.l10n.t('Give this account a label (e.g. "Work" or "Personal") — helps tell accounts apart if you add more later'),
-          placeHolder: email?.trim() || host.trim(),
-        });
-
-        const result = await pullRequestManager.addAccountStandalone(
-          provider.provider, host.trim(), label?.trim() || email?.trim() || host.trim(),
-          { apiToken: apiToken.trim(), email: email?.trim() }
-        );
-        if (!result.ok) {
-          vscode.window.showErrorMessage(result.error ?? vscode.l10n.t('Failed to validate token'));
-          return;
-        }
-        vscode.window.showInformationMessage(vscode.l10n.t('Added account for {0}. Assign it to a repo from the Pull Requests panel.', host.trim()));
-        return;
-      }
-
-      // An existing account was picked — offer rename/remove.
-      const account = accounts.find(a => a.id === picked.accountId);
-      if (!account) return;
-
-      const accountAction = await vscode.window.showQuickPick(
-        [
-          { label: `$(edit) ${vscode.l10n.t('Rename')}`, action: 'rename' as const },
-          { label: `$(trash) ${vscode.l10n.t('Remove')}`, action: 'remove' as const },
-        ],
-        { title: account.label, placeHolder: `${forgeProviderLabel(account.provider)} — ${account.host}` }
-      );
-      if (!accountAction) return;
-
-      if (accountAction.action === 'rename') {
-        const newLabel = await vscode.window.showInputBox({
-          title: vscode.l10n.t('Rename Account'),
-          prompt: vscode.l10n.t('Enter a new label for this account'),
-          value: account.label,
-        });
-        if (!newLabel?.trim() || newLabel.trim() === account.label) return;
-        await pullRequestManager.renameAccount(account.id, newLabel.trim());
-        await commitPanel.requestPullRequestRefresh();
-        vscode.window.showInformationMessage(vscode.l10n.t('Renamed to "{0}".', newLabel.trim()));
-        return;
-      }
-
-      // accountAction.action === 'remove'
-      const remove = vscode.l10n.t('Remove');
-      const confirm = await vscode.window.showWarningMessage(vscode.l10n.t('Remove the "{0}" account? Any repo assigned to it will be disconnected.', account.label), { modal: true }, remove);
-      if (confirm !== remove) return;
-      await pullRequestManager.removeAccount(account.id);
-      await commitPanel.requestPullRequestRefresh();
-      vscode.window.showInformationMessage(vscode.l10n.t('Removed "{0}".', account.label));
-    }),
+    // Accounts are managed on the Cloud Integrations page of GitCharm's settings.
+    vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', () =>
+      vscode.commands.executeCommand('gitcharm.openSettings', 'integrations')),
 
     // ── File History ──────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import type { ParsedRemote } from './remoteUrlParser';
 import type { PullRequestProvider } from './types';
-import type { BitbucketCredentials } from './PatCredentialStore';
+import type { BitbucketCredentials } from '../integrations/IntegrationAccountStore';
 import { GitHubProvider } from './providers/GitHubProvider';
 import { GitLabProvider } from './providers/GitLabProvider';
 import { BitbucketProvider } from './providers/BitbucketProvider';

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
+import { getAiApiKey } from './aiSecrets';
 
 export interface GenerateOptions {
   /** Called with the whole text generated so far (not just the latest chunk), at most every
@@ -110,8 +111,8 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
     }
 
     case 'claude-api': {
-      const apiKey: string = cfg.get('ai.claudeApiKey', '');
-      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Configure {1} in settings.', 'Anthropic', 'gitcharm.ai.claudeApiKey'));
+      const apiKey = await getAiApiKey('claude');
+      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Add it in GitCharm Settings, under AI.', 'Anthropic'));
       const model: string = cfg.get('ai.claudeModel', 'claude-sonnet-4-6');
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -142,8 +143,8 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
     }
 
     case 'openai-api': {
-      const apiKey: string = cfg.get('ai.openaiApiKey', '');
-      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Configure {1} in settings.', 'OpenAI', 'gitcharm.ai.openaiApiKey'));
+      const apiKey = await getAiApiKey('openai');
+      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Add it in GitCharm Settings, under AI.', 'OpenAI'));
       const model: string = cfg.get('ai.openaiModel', 'gpt-4o');
       return streamChatCompletions('https://api.openai.com/v1/chat/completions', 'OpenAI API', {
         'Content-Type': 'application/json',
@@ -158,8 +159,8 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
     }
 
     case 'gemini-api': {
-      const apiKey: string = cfg.get('ai.geminiApiKey', '');
-      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Configure {1} in settings.', 'Gemini', 'gitcharm.ai.geminiApiKey'));
+      const apiKey = await getAiApiKey('gemini');
+      if (!apiKey) throw new Error(vscode.l10n.t('{0} API key not set. Add it in GitCharm Settings, under AI.', 'Gemini'));
       const model: string = cfg.get('ai.geminiModel', 'gemini-2.0-flash');
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:streamGenerateContent?alt=sse&key=${apiKey}`, {
         method: 'POST',
@@ -202,8 +203,8 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
     }
 
     case 'lmstudio': {
-      const model: string = cfg.get('ai.lmstudioModel', '');
-      const base: string = cfg.get('ai.lmstudioUrl', 'http://localhost:1234');
+      const model: string = cfg.get('ai.lmStudioModel', '');
+      const base: string = cfg.get('ai.lmStudioUrl', 'http://localhost:1234');
       return streamChatCompletions(`${base}/v1/chat/completions`, 'LM Studio', { 'Content-Type': 'application/json' },
         { model: model || undefined, messages: [{ role: 'user', content: prompt }] }, progress);
     }

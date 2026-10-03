@@ -50,7 +50,8 @@
     "onCommand:gitcharm.openLog",
     "onWebviewPanel:gitcharm.undocked",
     "onWebviewPanel:gitcharm.commitFullDetail",
-    "onWebviewPanel:gitcharm.pullRequestDetail"
+    "onWebviewPanel:gitcharm.pullRequestDetail",
+    "onWebviewPanel:gitcharm.settings"
   ],
   "main": "./out/host/extension.js",
   "l10n": "./l10n",
@@ -1069,8 +1070,7 @@
           "when": "false"
         },
         {
-          "command": "gitcharm.openSettings",
-          "when": "false"
+          "command": "gitcharm.openSettings"
         },
         {
           "command": "gitcharm.showBranchOptions",
@@ -1445,7 +1445,8 @@
             "order": 3,
             "type": "string",
             "default": "",
-            "description": "%config.ai.claudeApiKey.description%"
+            "description": "%config.ai.claudeApiKey.description%",
+            "markdownDeprecationMessage": "%config.ai.apiKey.deprecationMessage%"
           },
           "gitcharm.ai.claudeModel": {
             "order": 4,
@@ -1463,7 +1464,8 @@
             "order": 6,
             "type": "string",
             "default": "",
-            "description": "%config.ai.openaiApiKey.description%"
+            "description": "%config.ai.openaiApiKey.description%",
+            "markdownDeprecationMessage": "%config.ai.apiKey.deprecationMessage%"
           },
           "gitcharm.ai.openaiModel": {
             "order": 7,
@@ -1475,7 +1477,8 @@
             "order": 8,
             "type": "string",
             "default": "",
-            "description": "%config.ai.geminiApiKey.description%"
+            "description": "%config.ai.geminiApiKey.description%",
+            "markdownDeprecationMessage": "%config.ai.apiKey.deprecationMessage%"
           },
           "gitcharm.ai.geminiModel": {
             "order": 9,

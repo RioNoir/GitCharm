@@ -15,12 +15,15 @@ import { initLogger, logInfo, logWarn, notifyWithLogAction } from './utils/Logge
 import { plural } from './utils/plural';
 import { presentOrphanBranches } from './utils/orphanBranches';
 import { PullRequestManager } from './pullRequests/PullRequestManager';
-import { PatCredentialStore } from './pullRequests/PatCredentialStore';
+import { IntegrationAccountStore } from './integrations/IntegrationAccountStore';
+import { IntegrationsService } from './integrations/IntegrationsService';
+import { SettingsPanel } from './panels/SettingsPanel';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
 import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 import { avatarsEnabled } from './utils/avatarCache';
+import { initAiSecrets } from './ai/aiSecrets';
 
 /**
  * Avatars are off by default, so existing users are asked once whether to turn them back on.
@@ -265,8 +268,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const profileService = new GitProfileService(context, log);
   profileService.autoInitIfEmpty();
 
-  const patCredentialStore = new PatCredentialStore(context.secrets, context.globalState);
-  const pullRequestManager = new PullRequestManager(manager, patCredentialStore, context.workspaceState);
+  initAiSecrets(context);
+  const integrationAccounts = new IntegrationAccountStore(context.secrets, context.globalState);
+  const pullRequestManager = new PullRequestManager(manager, integrationAccounts, context.workspaceState);
+  const integrations = new IntegrationsService(integrationAccounts, pullRequestManager, manager);
 
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, profileService, context.globalState, context.workspaceState, pullRequestManager);
 
@@ -340,6 +345,12 @@ export function activate(context: vscode.ExtensionContext): void {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
         deserializeCommitFullDetailPanel(panel, state, context.extensionUri, manager, profileService),
     }),
+    vscode.window.registerWebviewPanelSerializer('gitcharm.settings', {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) => {
+        SettingsPanel.restore(panel, state, context.extensionUri, manager, integrations);
+        return Promise.resolve();
+      },
+    }),
     vscode.window.registerWebviewPanelSerializer('gitcharm.pullRequestDetail', {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
         pullRequestDetailPanel.restore(panel, state),
@@ -354,7 +365,7 @@ export function activate(context: vscode.ExtensionContext): void {
     annotationController,
   );
 
-  registerCommands(context, commitPanel, logPanel, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, pullRequestManager);
+  registerCommands(context, commitPanel, logPanel, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, integrations);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gitcharm.undock', () => {

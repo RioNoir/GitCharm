@@ -551,3 +551,101 @@ export type HostToAiExplainMsg =
 
 export type CommitFullDetailToHostMsg =
   | { type: 'COMMITFULLDETAIL_EXPLAIN'; repoId: string; hash: string };
+
+// ─── Settings page ───────────────────────────────────────────────────────────
+// GitCharm's own settings editor. The host reads the setting schema from package.json (descriptions already
+// localized), the webview lays it out in categories. Edits go through vscode.workspace.getConfiguration, so
+// the page and VS Code's Settings editor always show the same values.
+
+export type SettingsTarget = 'user' | 'workspace';
+
+/** One `gitcharm.*` setting as declared in package.json, key without the `gitcharm.` prefix. */
+export interface SettingSchema {
+  key: string;
+  type: 'boolean' | 'number' | 'string' | 'array' | 'object';
+  /** Markdown (from markdownDescription) or plain text. */
+  description: string;
+  enum?: string[];
+  enumDescriptions?: string[];
+  minimum?: number;
+  maximum?: number;
+  /** `application` / `machine` settings can't be set per workspace. */
+  scope?: string;
+  multiline?: boolean;
+}
+
+export interface SettingValue {
+  default: unknown;
+  user?: unknown;
+  workspace?: unknown;
+}
+
+export interface SettingsState {
+  schema: SettingSchema[];
+  values: Record<string, SettingValue>;
+  hasWorkspace: boolean;
+  /** Which AI providers have an API key in secure storage — never the keys themselves. */
+  apiKeys: Record<'claude' | 'openai' | 'gemini', boolean>;
+  repos: { name: string; color: string }[];
+  defaultPrompts: Record<string, string>;
+  aiModelLabel: string;
+}
+
+export interface AiModelOptionMsg { id: string; label: string; detail?: string }
+
+/** A saved account of a cloud integration (GitHub: an account signed into VS Code). */
+export interface IntegrationAccountMsg {
+  /** For GitHub, `github:<VS Code account id>` — the same value a repository binding uses. */
+  id: string;
+  label: string;
+  host: string;
+  /** Workspace repositories assigned to this account. */
+  repoNames: string[];
+}
+
+/** A workspace repository and the account it uses. */
+export interface IntegrationRepoMsg {
+  repoId: string;
+  name: string;
+  color: string;
+  providerLabel: string;
+  host: string;
+  /** The integration (see types/integrations.ts) whose accounts this repository can use. */
+  integrationId?: string;
+  /** No forge recognized for the host: it needs an entry under Self-hosted forges. */
+  detectionFailed: boolean;
+  connected: boolean;
+  /** Selected option value; '' when unassigned. */
+  value?: string;
+  options: { value: string; label: string }[];
+}
+
+export interface IntegrationsState {
+  /** Accounts per integration id. */
+  accounts: Record<string, IntegrationAccountMsg[]>;
+  repos: IntegrationRepoMsg[];
+}
+
+export type HostToSettingsMsg =
+  | { type: 'SETTINGS_STATE'; state: SettingsState }
+  | { type: 'SETTINGS_NAVIGATE'; section: string }
+  | { type: 'SETTINGS_MODELS'; requestId: string; models: AiModelOptionMsg[]; error?: string }
+  | { type: 'SETTINGS_TEST_RESULT'; requestId: string; ok: boolean; message: string; elapsedMs: number }
+  | { type: 'SETTINGS_INTEGRATIONS'; state: IntegrationsState }
+  | { type: 'SETTINGS_INTEGRATION_ADDED'; requestId: string; ok: boolean; error?: string };
+
+export type SettingsToHostMsg =
+  | { type: 'SETTINGS_UPDATE'; key: string; value: unknown; target: SettingsTarget }
+  | { type: 'SETTINGS_SET_API_KEY'; provider: 'claude' | 'openai' | 'gemini'; value: string }
+  | { type: 'SETTINGS_LIST_MODELS'; requestId: string; provider: string }
+  | { type: 'SETTINGS_TEST_AI'; requestId: string }
+  | { type: 'SETTINGS_OPEN_NATIVE'; key?: string }
+  | { type: 'SETTINGS_OPEN_JSON' }
+  | { type: 'SETTINGS_COPY'; text: string }
+  | { type: 'SETTINGS_OPEN_URL'; url: string }
+  | { type: 'SETTINGS_INTEGRATIONS_GET' }
+  | { type: 'SETTINGS_INTEGRATION_ADD'; requestId: string; integrationId: string; host?: string; label?: string; email?: string; token: string }
+  | { type: 'SETTINGS_INTEGRATION_RENAME'; accountId: string; label: string }
+  | { type: 'SETTINGS_INTEGRATION_REMOVE'; accountId: string }
+  | { type: 'SETTINGS_INTEGRATION_GITHUB_ADD' }
+  | { type: 'SETTINGS_INTEGRATION_ASSIGN'; repoId: string; value: string };

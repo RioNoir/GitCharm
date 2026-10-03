@@ -136,6 +136,7 @@
   "config.ai.openaiApiKey.description": "OpenAI API 密钥。仅在提供商为 'openai-api' 时使用。可在 platform.openai.com 获取密钥。",
   "config.ai.openaiModel.description": "OpenAI 模型 ID（例如 'gpt-4o'、'gpt-4o-mini'、'o3'）。仅在提供商为 'openai-api' 时使用。",
   "config.ai.geminiApiKey.description": "Google Gemini API 密钥。仅在提供商为 'gemini-api' 时使用。可在 aistudio.google.com 获取密钥。",
+  "config.ai.apiKey.deprecationMessage": "现在保存在安全存储中。请在 **GitCharm: 设置** 的 **AI** 页面中设置；在此处输入的密钥会自动移至该处。",
   "config.ai.geminiModel.description": "Gemini 模型 ID（例如 'gemini-2.0-flash'、'gemini-2.5-pro'）。在提供商为 'gemini-api' 或 'gemini-cli' 时使用。",
   "config.ai.geminiPath.description": "Gemini CLI 可执行文件的路径。仅在提供商为 'gemini-cli' 时使用。默认为 'gemini'（必须位于 PATH 中）。",
   "config.ai.codexModel.description": "要使用的 Codex 模型 ID（例如 'o3'、'o4-mini'）。仅在提供商为 'codex-cli' 时使用。留空则使用 CLI 默认值。使用“GitCharm: 选择 AI 模型”命令可交互式选择。",

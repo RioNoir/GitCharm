@@ -5,7 +5,7 @@ import type {
   PullRequestComment, PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestLabel, PullRequestProvider,
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
-import type { BitbucketCredentials } from '../PatCredentialStore';
+import type { BitbucketCredentials } from '../../integrations/IntegrationAccountStore';
 import { httpJson, HttpJsonError } from '../httpJson';
 import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
