@@ -1566,5 +1566,9 @@
   "The file was staged as resolved.": "Il file è stato messo in stage come risolto.",
   "{0} files were staged as resolved.": "{0} file sono stati messi in stage come risolti.",
   "Review the changes, then resolve the conflicts left.": "Controlla le modifiche, poi risolvi i conflitti rimasti.",
-  "The AI answer has no resolution.": "La risposta dell'AI non contiene una risoluzione."
+  "The AI answer has no resolution.": "La risposta dell'AI non contiene una risoluzione.",
+  "The repository has no remote": "Il repository non contiene un remote",
+  "No repository has a remote": "Nessun repository contiene un remote",
+  "Pull requests come from the Git forge hosting the remote (GitHub, GitLab, Bitbucket or Gitea). Once the repository has a remote, they show up here.": "Le pull request provengono dalla forge Git che ospita il remote (GitHub, GitLab, Bitbucket o Gitea). Quando il repository avrà un remote, compariranno qui.",
+  "Pull requests come from the Git forge hosting each remote (GitHub, GitLab, Bitbucket or Gitea). Repositories with a remote show up here.": "Le pull request provengono dalla forge Git che ospita ciascun remote (GitHub, GitLab, Bitbucket o Gitea). I repository con un remote compaiono qui."
 }

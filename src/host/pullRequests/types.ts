@@ -82,6 +82,8 @@ export interface PullRequestConnectionStatus {
   host: string;
   connected: boolean;
   detectionFailed: boolean;
+  /** The repository has no remote at all — nothing to detect a forge from. Set together with detectionFailed. */
+  noRemote?: boolean;
 }
 
 export type MergeStrategy = 'merge' | 'squash' | 'rebase' | 'fastForward';

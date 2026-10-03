@@ -3,6 +3,7 @@ import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../
 import { Codicon } from '../../shared/Codicon';
 import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
+import { EmptyTabState } from './EmptyTabState';
 import * as l10n from '@vscode/l10n';
 
 function useSkeletonStyle() {
@@ -158,6 +159,14 @@ function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: {
   onOpenAccountPicker: Props['onOpenAccountPicker'];
   onSetHostOverride: Props['onSetHostOverride'];
 }) {
+  if (repo.connection.noRemote) {
+    return (
+      <div style={css.connectBox}>
+        <Codicon name="cloud" style={{ fontSize: '20px', opacity: 0.5, marginBottom: '6px' }} />
+        <div style={{ ...css.connectText, marginBottom: 0 }}>{l10n.t('The repository has no remote')}</div>
+      </div>
+    );
+  }
   if (repo.connection.detectionFailed) {
     return <UnknownProviderPrompt repo={repo} onSetHostOverride={onSetHostOverride} />;
   }
@@ -304,6 +313,18 @@ function RepoSection({ repo, multiRepo, singleRepo, plain = false, isLast = fals
       )}
     </div>
   );
+}
+
+/** True once every listed repo has loaded and none has a remote: the tab then shows its empty state instead of the list. */
+export function noRepoHasRemote(repos: RepoPullRequests[]): boolean {
+  return repos.length > 0 && repos.every(r => !r.pending && r.connection.noRemote);
+}
+
+/** The tab's empty state when no listed repo has a remote — goes in place of the scroll area, like the Sync tab's. */
+export function NoRemoteState({ repoCount }: { repoCount: number }) {
+  return repoCount === 1
+    ? <EmptyTabState icon="cloud" message={l10n.t('The repository has no remote')} hint={l10n.t('Pull requests come from the Git forge hosting the remote (GitHub, GitLab, Bitbucket or Gitea). Once the repository has a remote, they show up here.')} />
+    : <EmptyTabState icon="cloud" message={l10n.t('No repository has a remote')} hint={l10n.t('Pull requests come from the Git forge hosting each remote (GitHub, GitLab, Bitbucket or Gitea). Repositories with a remote show up here.')} />;
 }
 
 export function PullRequestPanel({

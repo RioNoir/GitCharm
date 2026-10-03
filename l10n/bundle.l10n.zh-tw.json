@@ -1566,5 +1566,9 @@
   "The file was staged as resolved.": "檔案已作為已解決暫存。",
   "{0} files were staged as resolved.": "{0} 個檔案已作為已解決暫存。",
   "Review the changes, then resolve the conflicts left.": "請檢查變更，然後解決剩餘的衝突。",
-  "The AI answer has no resolution.": "AI 的回答中沒有解決結果。"
+  "The AI answer has no resolution.": "AI 的回答中沒有解決結果。",
+  "The repository has no remote": "儲存庫沒有遠端",
+  "No repository has a remote": "沒有任何儲存庫有遠端",
+  "Pull requests come from the Git forge hosting the remote (GitHub, GitLab, Bitbucket or Gitea). Once the repository has a remote, they show up here.": "提取要求來自託管遠端的 Git 平台（GitHub、GitLab、Bitbucket 或 Gitea）。儲存庫新增遠端後，它們會顯示在這裡。",
+  "Pull requests come from the Git forge hosting each remote (GitHub, GitLab, Bitbucket or Gitea). Repositories with a remote show up here.": "提取要求來自託管各遠端的 Git 平台（GitHub、GitLab、Bitbucket 或 Gitea）。有遠端的儲存庫會顯示在這裡。"
 }

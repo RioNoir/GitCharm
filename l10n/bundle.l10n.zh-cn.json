@@ -1566,5 +1566,9 @@
   "The file was staged as resolved.": "文件已作为已解决暂存。",
   "{0} files were staged as resolved.": "{0} 个文件已作为已解决暂存。",
   "Review the changes, then resolve the conflicts left.": "请检查更改，然后解决剩余的冲突。",
-  "The AI answer has no resolution.": "AI 的回答中没有解决结果。"
+  "The AI answer has no resolution.": "AI 的回答中没有解决结果。",
+  "The repository has no remote": "仓库没有远程",
+  "No repository has a remote": "没有任何仓库有远程",
+  "Pull requests come from the Git forge hosting the remote (GitHub, GitLab, Bitbucket or Gitea). Once the repository has a remote, they show up here.": "拉取请求来自托管远程的 Git 平台（GitHub、GitLab、Bitbucket 或 Gitea）。仓库添加远程后，它们会显示在这里。",
+  "Pull requests come from the Git forge hosting each remote (GitHub, GitLab, Bitbucket or Gitea). Repositories with a remote show up here.": "拉取请求来自托管各远程的 Git 平台（GitHub、GitLab、Bitbucket 或 Gitea）。有远程的仓库会显示在这里。"
 }

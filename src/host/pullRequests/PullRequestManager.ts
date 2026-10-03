@@ -261,7 +261,8 @@ export class PullRequestManager {
   async getConnectionStatus(repoId: string): Promise<PullRequestConnectionStatus> {
     const resolved = await this.resolveOrigin(repoId);
     if (!resolved || !resolved.provider) {
-      return { repoId, provider: 'unknown', host: '', connected: false, detectionFailed: true };
+      const remotes = await this.manager.getRepo(repoId)?.getRemotesWithUrls();
+      return { repoId, provider: 'unknown', host: '', connected: false, detectionFailed: true, noRemote: remotes?.length === 0 };
     }
     const provider = this.makeProvider(repoId, resolved.provider);
     if (!provider) {

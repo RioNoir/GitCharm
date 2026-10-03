@@ -16,7 +16,7 @@ import { EmptyTabState } from './components/EmptyTabState';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
-import { PullRequestPanel } from './components/PullRequestPanel';
+import { PullRequestPanel, NoRemoteState, noRepoHasRemote } from './components/PullRequestPanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
@@ -1986,7 +1986,9 @@ function App() {
           </ScrollArea>
         )}
 
-        {activeTab === 'pullrequests' && (
+        {activeTab === 'pullrequests' && (noRepoHasRemote(pullRequestRepos) ? (
+          <NoRemoteState repoCount={pullRequestRepos.length} />
+        ) : (
           /* Pull Requests tab */
           <ScrollArea
             style={css.repoList}
@@ -2019,7 +2021,7 @@ function App() {
               onOpenSearch={handlePrOpenSearch}
             />
           </ScrollArea>
-        )}
+        ))}
 
       </div>
 
