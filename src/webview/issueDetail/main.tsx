@@ -276,6 +276,8 @@ function App() {
                   onUnhideComment={() => undefined}
                   onClose={() => { setChangingState(true); send({ type: 'ISSUEDETAIL_CLOSE' }); }}
                   onOpenCommitAllChanges={() => undefined}
+                  onOpenReference={reference => send({ type: 'ISSUEDETAIL_OPEN_REFERENCE', reference })}
+                  onOpenCommitReference={commit => send({ type: 'ISSUEDETAIL_OPEN_COMMIT', commit })}
                 />
               </CollapsibleSection>
             </div>

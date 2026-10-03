@@ -15,14 +15,14 @@ import type { IssueDetail, IssueStateFilter, IssueSummary, LinkedIssue, LinkedPu
 import type {
   ChangedFile, CiCheck, CreatePullRequestInput, FileDiffContent, FileDiffRefs, ForgeProvider, MergeStrategy, PullRequestAuthorFilter,
   PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
-  PullRequestStateFilter, PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput,
+  PullRequestStateFilter, PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput, TimelineCommitReference, TimelineReference,
 } from '../pullRequests/types';
 
 export type {
   RepoPullRequests, CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary,
   PullRequestFilters, PullRequestStateFilter, PullRequestAuthorFilter, PullRequestDetail, ChangedFile,
   MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, PullRequestEvent, FileDiffContent, FileDiffRefs, ReviewEvent,
-  PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
+  PullRequestUser, PullRequestLabel, CiCheck, CommitNode, TimelineCommitReference, TimelineReference,
   RepoIssues, IssueFilters, IssueDetail, IssueStateFilter, IssueSummary, LinkedIssue, LinkedPullRequest,
 };
 
@@ -619,7 +619,11 @@ export type IssueDetailToHostMsg =
   | { type: 'ISSUEDETAIL_EXPLAIN' }
   | { type: 'ISSUEDETAIL_RESOLVE_AI' }
   | { type: 'ISSUEDETAIL_INSERT_REFERENCE' }
-  | { type: 'ISSUEDETAIL_OPEN_PULL_REQUEST'; pullRequest: LinkedPullRequest };
+  | { type: 'ISSUEDETAIL_OPEN_PULL_REQUEST'; pullRequest: LinkedPullRequest }
+  /** A pull request or issue from the Activity timeline: opened in its panel when it's in this repository. */
+  | { type: 'ISSUEDETAIL_OPEN_REFERENCE'; reference: TimelineReference }
+  /** A commit from the Activity timeline: its local detail when the repository has it, else the forge page. */
+  | { type: 'ISSUEDETAIL_OPEN_COMMIT'; commit: TimelineCommitReference };
 
 // ─── Resolve Issue with AI: Host → WebView ───────────────────────────────────
 

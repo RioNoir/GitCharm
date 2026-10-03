@@ -58,7 +58,7 @@ export function getCommitPanelConfig(lastTab: CommitPanelTabId | undefined): Com
       stash: cfg.get<boolean>('showStashBadge', false),
       worktree: cfg.get<boolean>('showWorktreesBadge', false),
       pullrequests: cfg.get<boolean>('showPullRequestsBadge', true),
-      issues: cfg.get<boolean>('showIssuesBadge', false),
+      issues: cfg.get<boolean>('showIssuesBadge', true),
       push: cfg.get<boolean>('showSyncBadge', true),
     },
     subjectMaxLength: Math.max(0, cfg.get<number>('subjectMaxLength', 0)),

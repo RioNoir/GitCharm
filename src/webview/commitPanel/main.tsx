@@ -1557,7 +1557,7 @@ function App() {
         const tabMeta = (tab: TabId) => ({
           label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : tab === 'issues' ? l10n.t('Issues') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
           iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : tab === 'issues' ? 'issues' : 'cloud',
-          badge: !(panelConfig ? panelConfig.badges[tab] : tab === 'changes' || tab === 'push' || tab === 'pullrequests') ? 0
+          badge: !(panelConfig ? panelConfig.badges[tab] : tab === 'changes' || tab === 'push' || tab === 'pullrequests' || tab === 'issues') ? 0
             : tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests : tab === 'issues' ? totalIssues
             : tab === 'shelf' ? totalShelves : tab === 'stash' ? totalStashes : tab === 'worktree' ? totalWorktrees : 0,
         });

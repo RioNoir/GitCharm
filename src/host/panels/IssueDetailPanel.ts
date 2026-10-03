@@ -15,6 +15,8 @@ import type { IssueResolvePanel } from './IssueResolvePanel';
 import { getAiModelLabel } from '../utils/aiModelLabel';
 import { agentProviderFor } from '../ai/aiGenerate';
 import { explainIssue, generateIssueBranchName, loadIssueContext } from '../issues/issueAiActions';
+import { createGit } from '../git/gitClient';
+import { openCommitFullDetailPanel } from './CommitFullDetailPanel';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -368,21 +370,50 @@ export class IssueDetailPanel {
         break;
       }
 
+      case 'ISSUEDETAIL_OPEN_REFERENCE': {
+        const ref = msg.reference;
+        if (!ref.sameRepo) {
+          vscode.env.openExternal(vscode.Uri.parse(ref.url));
+        } else if (ref.kind === 'issue') {
+          await this.open(repoId, {
+            id: String(ref.number), number: ref.number, title: ref.title, url: ref.url, state: ref.state === 'closed' ? 'closed' : 'open',
+            stateReason: ref.stateReason, authorName: '', createdAt: '', updatedAt: '',
+          });
+        } else {
+          await this.openPullRequest(repoId, ref.number, ref.url);
+        }
+        break;
+      }
+
+      case 'ISSUEDETAIL_OPEN_COMMIT': {
+        const { commit } = msg;
+        const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+        // The commit may only exist on the forge (another repository, or not fetched yet) — then show it there.
+        const local = commit.sameRepo && meta
+          ? await createGit(meta.rootPath).raw(['cat-file', '-e', `${commit.sha}^{commit}`]).then(() => true, () => false)
+          : false;
+        if (local) await openCommitFullDetailPanel(this.extensionUri, this.manager, repoId, commit.sha);
+        else if (commit.url) vscode.env.openExternal(vscode.Uri.parse(commit.url));
+        break;
+      }
+
       case 'ISSUEDETAIL_OPEN_PULL_REQUEST': {
         const pr = msg.pullRequest;
-        if (!pr.sameRepo || !this.pullRequestDetailPanel) {
-          vscode.env.openExternal(vscode.Uri.parse(pr.url));
-          break;
-        }
-        const detail = await this.pullRequestManager.getPullRequestDetail(repoId, pr.number);
-        if ('error' in detail) {
-          vscode.env.openExternal(vscode.Uri.parse(pr.url));
-          break;
-        }
-        await this.pullRequestDetailPanel.open(repoId, detail);
+        if (pr.sameRepo) await this.openPullRequest(repoId, pr.number, pr.url);
+        else vscode.env.openExternal(vscode.Uri.parse(pr.url));
         break;
       }
     }
+  }
+
+  /** A pull request of this repository in its detail panel; the browser when it can't be loaded. */
+  private async openPullRequest(repoId: string, number: number, url: string): Promise<void> {
+    const detail = this.pullRequestDetailPanel ? await this.pullRequestManager.getPullRequestDetail(repoId, number) : undefined;
+    if (!detail || 'error' in detail || !this.pullRequestDetailPanel) {
+      vscode.env.openExternal(vscode.Uri.parse(url));
+      return;
+    }
+    await this.pullRequestDetailPanel.open(repoId, detail);
   }
 
   dispose(): void {

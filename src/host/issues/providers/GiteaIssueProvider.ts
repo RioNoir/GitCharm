@@ -64,6 +64,7 @@ interface RawGiteaTimelineEntry {
   removed_assignee?: boolean;
   body?: string;
   ref_issue?: RawGiteaRefIssue | null;
+  ref_commit_sha?: string;
 }
 
 function parseXTotalCount(headers: Headers): number | undefined {
@@ -97,7 +98,13 @@ function mapRefPrState(pr: RawGiteaRefIssue): PullRequestSummary['state'] {
   return pr.pull_request?.draft ? 'draft' : 'open';
 }
 
-function mapTimelineEntry(entry: RawGiteaTimelineEntry): PullRequestEvent | null {
+/** Gitea stores a commit reference's text as an HTML link to the commit — its text is the message. */
+function commitMessageOf(body: string | undefined): string | undefined {
+  const text = body?.replace(/<[^>]+>/g, '').trim();
+  return text ? text.split('\n')[0] : undefined;
+}
+
+function mapTimelineEntry(entry: RawGiteaTimelineEntry, ownFullName: string, webBase: string): PullRequestEvent | null {
   const base = { id: String(entry.id), actorName: entry.user?.login ?? 'unknown', actorAvatarUrl: entry.user?.avatar_url, createdAt: entry.created_at };
   switch (entry.type) {
     case 'change_title':
@@ -114,6 +121,30 @@ function mapTimelineEntry(entry: RawGiteaTimelineEntry): PullRequestEvent | null
       return entry.assignee
         ? { ...base, kind: entry.removed_assignee ? 'unassigned' : 'assigned', user: { id: entry.assignee.login, username: entry.assignee.login, avatarUrl: entry.assignee.avatar_url } }
         : null;
+    case 'pull_ref':
+    case 'issue_ref':
+    case 'comment_ref': {
+      const ref = entry.ref_issue;
+      if (!ref) return null;
+      const repoFullName = ref.repository?.full_name;
+      const isPr = !!ref.pull_request;
+      return {
+        ...base, kind: 'crossReferenced',
+        reference: {
+          kind: isPr ? 'pullRequest' : 'issue', number: ref.number, title: ref.title, url: ref.html_url,
+          state: isPr ? mapRefPrState(ref) : ref.state, repoFullName,
+          sameRepo: !repoFullName || repoFullName.toLowerCase() === ownFullName,
+        },
+      };
+    }
+    case 'commit_ref': {
+      const sha = entry.ref_commit_sha;
+      if (!sha) return null;
+      return {
+        ...base, kind: 'commitReferenced',
+        commit: { sha, shortSha: sha.slice(0, 10), message: commitMessageOf(entry.body), url: `${webBase}/commit/${sha}`, sameRepo: true },
+      };
+    }
     default:
       return null;
   }
@@ -373,7 +404,11 @@ export class GiteaIssueProvider implements IssueProvider {
   }
 
   async listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]> {
-    return (await this.listTimeline(owner, repo, number)).map(mapTimelineEntry).filter((e): e is PullRequestEvent => e !== null);
+    const ownFullName = `${owner}/${repo}`.toLowerCase();
+    const webBase = `https://${this.host}/${owner}/${repo}`;
+    return (await this.listTimeline(owner, repo, number))
+      .map(entry => mapTimelineEntry(entry, ownFullName, webBase))
+      .filter((e): e is PullRequestEvent => e !== null);
   }
 
   /** Gitea records a PR that mentions an issue as a "pull_ref" timeline entry carrying the PR itself. */

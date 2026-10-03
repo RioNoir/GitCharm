@@ -1,4 +1,4 @@
-import type { ActionResult, PostCommentResult, PullRequestComment, PullRequestEvent, PullRequestSummary } from '../../pullRequests/types';
+import type { ActionResult, PostCommentResult, PullRequestComment, PullRequestEvent, PullRequestSummary, TimelineReference } from '../../pullRequests/types';
 import { httpJson, HttpJsonError } from '../../pullRequests/httpJson';
 import { formatApiError } from '../../pullRequests/formatApiError';
 import { mapGithubTimelineNode, type RawGithubTimelineNode } from '../../pullRequests/providers/GitHubProvider';
@@ -123,6 +123,74 @@ function mapPrState(pr: RawGraphqlPrRef): PullRequestSummary['state'] {
 }
 
 const PR_REF_FIELDS = 'number title url state isDraft repository { nameWithOwner }';
+const ISSUE_REF_FIELDS = 'number title url state stateReason repository { nameWithOwner }';
+
+interface RawGraphqlRefSource extends RawGraphqlPrRef {
+  __typename?: string;
+  stateReason?: string | null;
+}
+
+/** A timeline node about another pull request/issue or a commit — the PR provider's mapper doesn't know them. */
+interface RawReferenceNode {
+  __typename: string;
+  id: string;
+  createdAt: string;
+  actor?: { login: string; avatarUrl?: string } | null;
+  willCloseTarget?: boolean;
+  source?: RawGraphqlRefSource;
+  subject?: RawGraphqlRefSource;
+  commit?: { oid: string; abbreviatedOid: string; messageHeadline: string; url: string } | null;
+  commitRepository?: { nameWithOwner: string } | null;
+}
+
+function mapReference(ref: RawGraphqlRefSource, ownFullName: string, willClose?: boolean): TimelineReference | undefined {
+  if (!ref.number || !ref.url) return undefined;
+  const repoFullName = ref.repository?.nameWithOwner;
+  const isIssue = ref.__typename === 'Issue';
+  return {
+    kind: isIssue ? 'issue' : 'pullRequest',
+    number: ref.number,
+    title: ref.title ?? '',
+    url: ref.url,
+    state: isIssue ? (ref.state === 'CLOSED' ? 'closed' : 'open') : mapPrState(ref),
+    stateReason: isIssue && ref.state === 'CLOSED' ? mapStateReason(ref.stateReason) : undefined,
+    repoFullName,
+    sameRepo: !repoFullName || repoFullName.toLowerCase() === ownFullName,
+    willClose,
+  };
+}
+
+/** Maps the reference/commit/link nodes of an issue timeline; anything else goes through the PR provider's mapper. */
+function mapIssueTimelineNode(node: RawGithubTimelineNode & RawReferenceNode, ownFullName: string): PullRequestEvent | null {
+  const base = { id: node.id, actorName: node.actor?.login ?? 'ghost', actorAvatarUrl: node.actor?.avatarUrl, createdAt: node.createdAt };
+  switch (node.__typename) {
+    case 'CrossReferencedEvent': {
+      const reference = node.source && mapReference(node.source, ownFullName, node.willCloseTarget);
+      return reference ? { ...base, kind: 'crossReferenced', reference } : null;
+    }
+    case 'ConnectedEvent':
+    case 'DisconnectedEvent': {
+      // Both ends are named — this issue and the PR; only the PR end matches the fragment.
+      const end = node.subject?.number ? node.subject : node.source;
+      const reference = end && mapReference({ ...end, __typename: 'PullRequest' }, ownFullName, node.__typename === 'ConnectedEvent');
+      return reference ? { ...base, kind: node.__typename === 'ConnectedEvent' ? 'connected' : 'disconnected', reference } : null;
+    }
+    case 'ReferencedEvent': {
+      if (!node.commit) return null;
+      const repoFullName = node.commitRepository?.nameWithOwner;
+      return {
+        ...base,
+        kind: 'commitReferenced',
+        commit: {
+          sha: node.commit.oid, shortSha: node.commit.abbreviatedOid, message: node.commit.messageHeadline, url: node.commit.url,
+          repoFullName, sameRepo: !repoFullName || repoFullName.toLowerCase() === ownFullName,
+        },
+      };
+    }
+    default:
+      return mapGithubTimelineNode(node);
+  }
+}
 
 export class GitHubIssueProvider implements IssueProvider {
   readonly kind = 'github' as const;
@@ -434,7 +502,8 @@ export class GitHubIssueProvider implements IssueProvider {
       repository(owner: $owner, name: $repo) {
         issue(number: $number) {
           timelineItems(first: 100, itemTypes: [
-            RENAMED_TITLE_EVENT, LABELED_EVENT, UNLABELED_EVENT, CLOSED_EVENT, REOPENED_EVENT, ASSIGNED_EVENT, UNASSIGNED_EVENT
+            RENAMED_TITLE_EVENT, LABELED_EVENT, UNLABELED_EVENT, CLOSED_EVENT, REOPENED_EVENT, ASSIGNED_EVENT, UNASSIGNED_EVENT,
+            CROSS_REFERENCED_EVENT, REFERENCED_EVENT, CONNECTED_EVENT, DISCONNECTED_EVENT
           ]) {
             nodes {
               __typename
@@ -445,14 +514,19 @@ export class GitHubIssueProvider implements IssueProvider {
               ... on ReopenedEvent { id createdAt actor { login avatarUrl } }
               ... on AssignedEvent { id createdAt actor { login avatarUrl } assignee { ... on User { login avatarUrl } } }
               ... on UnassignedEvent { id createdAt actor { login avatarUrl } assignee { ... on User { login avatarUrl } } }
+              ... on CrossReferencedEvent { id createdAt willCloseTarget actor { login avatarUrl } source { __typename ... on PullRequest { ${PR_REF_FIELDS} } ... on Issue { ${ISSUE_REF_FIELDS} } } }
+              ... on ReferencedEvent { id createdAt actor { login avatarUrl } commit { oid abbreviatedOid messageHeadline url } commitRepository { nameWithOwner } }
+              ... on ConnectedEvent { id createdAt actor { login avatarUrl } source { ... on PullRequest { ${PR_REF_FIELDS} } } subject { ... on PullRequest { ${PR_REF_FIELDS} } } }
+              ... on DisconnectedEvent { id createdAt actor { login avatarUrl } source { ... on PullRequest { ${PR_REF_FIELDS} } } subject { ... on PullRequest { ${PR_REF_FIELDS} } } }
             }
           }
         }
       }
     }`;
-    const data = await this.graphql<{ repository?: { issue?: { timelineItems?: { nodes: RawGithubTimelineNode[] } } } }>(query, { owner, repo, number });
+    const data = await this.graphql<{ repository?: { issue?: { timelineItems?: { nodes: (RawGithubTimelineNode & RawReferenceNode)[] } } } }>(query, { owner, repo, number });
     const nodes = data.repository?.issue?.timelineItems?.nodes ?? [];
-    return nodes.map(mapGithubTimelineNode).filter((e): e is PullRequestEvent => e !== null);
+    const ownFullName = `${owner}/${repo}`.toLowerCase();
+    return nodes.map(n => mapIssueTimelineNode(n, ownFullName)).filter((e): e is PullRequestEvent => e !== null);
   }
 
   /** Cross-references from pull requests (a PR mentioning the issue, with `willCloseTarget` when it closes it on

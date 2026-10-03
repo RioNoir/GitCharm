@@ -109,7 +109,7 @@ export function IssueHeader({ summary, detail, canEdit, updating, creatingBranch
                 : l10n.t('The AI ({0}) reads the relevant files and proposes a fix; you review it, then it goes to a new branch, uncommitted', ai.modelLabel)}
             >
               <Codicon name="sparkle" style={{ fontSize: '13px' }} />
-              {l10n.t('Resolve with AI')}
+              {l10n.t('Resolve with AI (Beta)')}
             </button>
           )}
           {issue.state === 'open' && (

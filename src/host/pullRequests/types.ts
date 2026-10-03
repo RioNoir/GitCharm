@@ -221,7 +221,36 @@ export interface PullRequestCommit {
 
 export type PullRequestEventKind =
   | 'renamed' | 'labeled' | 'unlabeled' | 'closed' | 'reopened' | 'merged'
-  | 'baseChanged' | 'assigned' | 'unassigned' | 'reviewRequested' | 'reviewRequestRemoved';
+  | 'baseChanged' | 'assigned' | 'unassigned' | 'reviewRequested' | 'reviewRequestRemoved'
+  // Issue timelines: a pull request or issue mentioning this one, a commit referencing it, a pull request linked/unlinked to it.
+  | 'crossReferenced' | 'commitReferenced' | 'connected' | 'disconnected';
+
+/** The pull request or issue a 'crossReferenced' / 'connected' / 'disconnected' event points to. */
+export interface TimelineReference {
+  kind: 'pullRequest' | 'issue';
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'draft' | 'merged' | 'closed';
+  /** Closed issues only: why (GitHub). */
+  stateReason?: 'completed' | 'notPlanned' | 'duplicate';
+  repoFullName?: string;
+  /** False when it lives in another repository — it then opens in the browser. */
+  sameRepo: boolean;
+  /** The pull request closes this issue once merged. */
+  willClose?: boolean;
+}
+
+/** The commit a 'commitReferenced' event points to. */
+export interface TimelineCommitReference {
+  sha: string;
+  shortSha: string;
+  /** First line of the commit message, when the forge reports it. */
+  message?: string;
+  url?: string;
+  repoFullName?: string;
+  sameRepo: boolean;
+}
 
 /** A normalized non-comment, non-commit timeline entry (rename, label change, close/reopen/merge, target-branch
  * change, assign/unassign, review request). Real coverage differs sharply per forge — see each provider's
@@ -243,6 +272,10 @@ export interface PullRequestEvent {
   newBranch?: string;
   /** kind === 'assigned' | 'unassigned' | 'reviewRequested' | 'reviewRequestRemoved' only. */
   user?: PullRequestUser;
+  /** kind === 'crossReferenced' | 'connected' | 'disconnected' only. */
+  reference?: TimelineReference;
+  /** kind === 'commitReferenced' only. */
+  commit?: TimelineCommitReference;
 }
 
 export type ReviewEvent = 'approve' | 'requestChanges' | 'comment';

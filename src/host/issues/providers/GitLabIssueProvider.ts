@@ -1,4 +1,4 @@
-import type { ActionResult, PostCommentResult, PullRequestComment, PullRequestEvent, PullRequestLabel, PullRequestSummary } from '../../pullRequests/types';
+import type { ActionResult, PostCommentResult, PullRequestComment, PullRequestEvent, PullRequestLabel, PullRequestSummary, TimelineReference } from '../../pullRequests/types';
 import { httpJson, HttpJsonError } from '../../pullRequests/httpJson';
 import { formatApiError } from '../../pullRequests/formatApiError';
 import {
@@ -121,6 +121,10 @@ function mapMrState(mr: RawGitLabMr): PullRequestSummary['state'] {
   if (mr.state === 'closed' || mr.state === 'locked') return 'closed';
   return mr.draft || mr.work_in_progress ? 'draft' : 'open';
 }
+
+/** GitLab's system notes for references: "mentioned in merge request !12", "mentioned in commit group/project@1a2b3c4d",
+ * "mentioned in issue other/project#3" — the only place GitLab records who referenced an issue, and when. */
+const MENTION_NOTE = /^mentioned in (merge request|issue|commit) (?:([\w./-]+)([!#@]))?[!#]?([0-9a-f]{7,40}|\d+)\s*$/i;
 
 /** `references.full` is "group/project#12" for an issue, "group/project!12" for an MR. */
 function projectPathOf(full: string | undefined): string | undefined {
@@ -390,11 +394,12 @@ export class GitLabIssueProvider implements IssueProvider {
   async listEvents(owner: string, repo: string, number: number): Promise<PullRequestEvent[]> {
     const headers = await this.headers();
     const base = `${this.apiBase()}/projects/${this.projectId(owner, repo)}/issues/${number}`;
-    const [labelEvents, stateEvents] = await Promise.all([
+    const [labelEvents, stateEvents, notes] = await Promise.all([
       this.paginate<RawGitLabLabelEvent>(`${base}/resource_label_events`, headers),
       this.paginate<RawGitLabStateEvent>(`${base}/resource_state_events`, headers),
+      this.paginate<RawGitLabNote>(`${base}/notes?sort=asc`, headers).catch(() => [] as RawGitLabNote[]),
     ]);
-    const events: PullRequestEvent[] = [];
+    const events: PullRequestEvent[] = await this.mentionEvents(owner, repo, notes.filter(n => n.system), headers);
     for (const e of labelEvents) {
       if (!e.label) continue;
       events.push({
@@ -416,6 +421,55 @@ export class GitLabIssueProvider implements IssueProvider {
         createdAt: e.created_at,
       });
     }
+    return events;
+  }
+
+  /** Turns "mentioned in …" system notes into reference events, looking up titles (and commit messages) in the
+   * same project — at most a few lookups, best-effort: a reference whose details can't be read keeps its number. */
+  private async mentionEvents(owner: string, repo: string, systemNotes: RawGitLabNote[], headers: Record<string, string>): Promise<PullRequestEvent[]> {
+    const ownPath = `${owner}/${repo}`;
+    const events: PullRequestEvent[] = [];
+    const lookups: Promise<void>[] = [];
+    const MAX_LOOKUPS = 25;
+    for (const note of systemNotes) {
+      const m = MENTION_NOTE.exec(note.body.trim());
+      if (!m) continue;
+      const [, what, project, , id] = m;
+      const projectPath = project || ownPath;
+      const sameRepo = projectPath.toLowerCase() === ownPath.toLowerCase();
+      const projectApi = `${this.apiBase()}/projects/${encodeURIComponent(projectPath)}`;
+      const webBase = `https://${this.host}/${projectPath}/-`;
+      const base = { id: `note-${note.id}`, actorName: note.author?.username ?? 'unknown', actorAvatarUrl: note.author?.avatar_url, createdAt: note.created_at };
+      if (what.toLowerCase() === 'commit') {
+        const event: PullRequestEvent = {
+          ...base, kind: 'commitReferenced',
+          commit: { sha: id, shortSha: id.slice(0, 8), url: `${webBase}/commit/${id}`, repoFullName: projectPath, sameRepo },
+        };
+        events.push(event);
+        if (lookups.length < MAX_LOOKUPS) {
+          lookups.push(httpJson<{ id: string; short_id: string; title: string; web_url: string }>(`${projectApi}/repository/commits/${id}`, { headers })
+            .then(({ data }) => { event.commit = { ...event.commit!, sha: data.id, shortSha: data.short_id, message: data.title, url: data.web_url }; })
+            .catch(() => undefined));
+        }
+      } else {
+        const isMr = what.toLowerCase() === 'merge request';
+        const reference: TimelineReference = {
+          kind: isMr ? 'pullRequest' : 'issue', number: Number(id), title: '', state: 'open',
+          url: `${webBase}/${isMr ? 'merge_requests' : 'issues'}/${id}`, repoFullName: projectPath, sameRepo,
+        };
+        events.push({ ...base, kind: 'crossReferenced', reference });
+        if (lookups.length < MAX_LOOKUPS) {
+          lookups.push(httpJson<RawGitLabMr & RawGitLabIssue>(`${projectApi}/${isMr ? 'merge_requests' : 'issues'}/${id}`, { headers })
+            .then(({ data }) => {
+              reference.title = data.title;
+              reference.url = data.web_url;
+              reference.state = isMr ? mapMrState(data) : data.state === 'closed' ? 'closed' : 'open';
+            })
+            .catch(() => undefined));
+        }
+      }
+    }
+    await Promise.all(lookups);
     return events;
   }
 

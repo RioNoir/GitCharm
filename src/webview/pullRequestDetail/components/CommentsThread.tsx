@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '../../../host/types/messages';
+import type { PullRequestComment, PullRequestCommit, PullRequestEvent, TimelineCommitReference, TimelineReference } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { renderMarkdown } from '../../shared/renderMarkdown';
@@ -33,6 +33,9 @@ interface Props {
   onOpenCommitAllChanges: (commitSha: string, parentSha: string | undefined) => void;
   /** What the thread belongs to — only changes the wording of state events and the close button. */
   subject?: 'pullRequest' | 'issue';
+  /** Opens a pull request/issue or a commit named by a reference event; without them those rows aren't clickable. */
+  onOpenReference?: (reference: TimelineReference) => void;
+  onOpenCommitReference?: (commit: TimelineCommitReference) => void;
   /** Issue threads: a Reopen button where Close would be, once closed. */
   canReopen?: boolean;
   reopening?: boolean;
@@ -250,6 +253,10 @@ function eventIcon(kind: PullRequestEvent['kind']): string {
     case 'baseChanged': return 'git-branch';
     case 'assigned': case 'unassigned': return 'account';
     case 'reviewRequested': case 'reviewRequestRemoved': return 'eye';
+    case 'crossReferenced': return 'references';
+    case 'commitReferenced': return 'git-commit';
+    case 'connected': return 'link';
+    case 'disconnected': return 'debug-disconnect';
   }
 }
 
@@ -303,12 +310,79 @@ function eventText(event: PullRequestEvent, subject: 'pullRequest' | 'issue'): R
       return interpolateNodes(l10n.t('{0} requested a review from {1}'), actor, user);
     case 'reviewRequestRemoved':
       return interpolateNodes(l10n.t('{0} removed the review request for {1}'), actor, user);
+    case 'crossReferenced':
+      return interpolateNodes(l10n.t('{0} mentioned this'), actor);
+    case 'commitReferenced':
+      return subject === 'issue'
+        ? interpolateNodes(l10n.t('{0} added a commit that references this issue'), actor)
+        : interpolateNodes(l10n.t('{0} added a commit that references this pull request'), actor);
+    case 'connected':
+      return interpolateNodes(l10n.t('{0} linked a pull request that will close this issue'), actor);
+    case 'disconnected':
+      return interpolateNodes(l10n.t('{0} removed a link to a pull request'), actor);
   }
 }
 
-function EventRow({ event, subject }: { event: PullRequestEvent; subject: 'pullRequest' | 'issue' }) {
+/** GitHub's colors for a referenced pull request/issue: green open, purple merged/completed, red/gray closed. */
+function referenceIcon(ref: TimelineReference): { icon: string; color: string } {
+  if (ref.kind === 'issue') {
+    if (ref.state !== 'closed') return { icon: 'issues', color: '#3fb950' };
+    return ref.stateReason === 'notPlanned' || ref.stateReason === 'duplicate'
+      ? { icon: 'circle-slash', color: 'var(--vscode-descriptionForeground)' }
+      : { icon: 'pass', color: '#a371f7' };
+  }
+  switch (ref.state) {
+    case 'merged': return { icon: 'git-merge', color: '#a371f7' };
+    case 'closed': return { icon: 'git-pull-request-closed', color: '#f85149' };
+    case 'draft': return { icon: 'git-pull-request-draft', color: 'var(--vscode-descriptionForeground)' };
+    default: return { icon: 'git-pull-request', color: '#3fb950' };
+  }
+}
+
+/** The second line of a reference event: the pull request/issue or commit it points to, clickable. */
+function EventTarget({ event, onOpenReference, onOpenCommitReference }: {
+  event: PullRequestEvent;
+  onOpenReference?: (reference: TimelineReference) => void;
+  onOpenCommitReference?: (commit: TimelineCommitReference) => void;
+}) {
+  const ref = event.reference;
+  const commit = event.commit;
+  if (ref) {
+    const s = referenceIcon(ref);
+    const label = ref.sameRepo ? `#${ref.number}` : `${ref.repoFullName ?? ''}#${ref.number}`;
+    return (
+      <button className="icon-btn" style={css.eventTarget} disabled={!onOpenReference} onClick={() => onOpenReference?.(ref)} title={ref.title || label}>
+        <Codicon name={s.icon} style={{ fontSize: '13px', color: s.color, flexShrink: 0 }} />
+        <span style={css.eventTargetTitle}>{ref.title || label}</span>
+        {ref.title && <span style={css.eventTargetNumber}>{label}</span>}
+        {ref.willClose && event.kind === 'crossReferenced' && (
+          <span style={css.closesTag} title={l10n.t('Merging this pull request closes the issue')}>{l10n.t('closes')}</span>
+        )}
+        {!ref.sameRepo && <Codicon name="link-external" style={{ fontSize: '11px', opacity: 0.6, flexShrink: 0 }} />}
+      </button>
+    );
+  }
+  if (commit) {
+    return (
+      <button className="icon-btn" style={css.eventTarget} disabled={!onOpenCommitReference} onClick={() => onOpenCommitReference?.(commit)} title={commit.message ?? commit.sha}>
+        <span style={{ ...css.eventTargetTitle, fontFamily: 'var(--vscode-editor-font-family, monospace)', fontSize: '11px' }}>
+          {commit.message ?? (commit.sameRepo ? '' : commit.repoFullName)}
+        </span>
+        <span style={css.commitSha}>{commit.shortSha}</span>
+      </button>
+    );
+  }
+  return null;
+}
+
+function EventRow({ event, subject, onOpenReference, onOpenCommitReference }: {
+  event: PullRequestEvent;
+  subject: 'pullRequest' | 'issue';
+  onOpenReference?: (reference: TimelineReference) => void;
+  onOpenCommitReference?: (commit: TimelineCommitReference) => void;
+}) {
   const color = eventColor(event.kind);
-  return (
+  const row = (
     <div style={css.eventRow}>
       <span style={{ ...css.eventIconDot, color, borderColor: color }}>
         <Codicon name={eventIcon(event.kind)} style={{ fontSize: '14px' }} />
@@ -322,12 +396,21 @@ function EventRow({ event, subject }: { event: PullRequestEvent; subject: 'pullR
       </span>
     </div>
   );
+  if (!event.reference && !event.commit) return row;
+  return (
+    <div>
+      {row}
+      <div style={css.eventTargetRow}>
+        <EventTarget event={event} onOpenReference={onOpenReference} onOpenCommitReference={onOpenCommitReference} />
+      </div>
+    </div>
+  );
 }
 
 export function CommentsThread({
   comments, commits, events, loading, posting, canClose, closing, closeError, commentActionError,
   onPostComment, onUpdateComment, onDeleteComment, onHideComment, onUnhideComment, onClose, onOpenCommitAllChanges,
-  subject = 'pullRequest', canReopen = false, reopening = false, onReopen,
+  subject = 'pullRequest', canReopen = false, reopening = false, onReopen, onOpenReference, onOpenCommitReference,
 }: Props) {
   const [draft, setDraft] = useState('');
 
@@ -365,7 +448,7 @@ export function CommentsThread({
             if (item.kind === 'commit') {
               return <CommitRow key={`k-${item.commit.sha}`} commit={item.commit} onOpen={() => onOpenCommitAllChanges(item.commit.sha, item.commit.parentSha)} />;
             }
-            return <EventRow key={`e-${item.event.id}`} event={item.event} subject={subject} />;
+            return <EventRow key={`e-${item.event.id}`} event={item.event} subject={subject} onOpenReference={onOpenReference} onOpenCommitReference={onOpenCommitReference} />;
           })}
         </div>
       )}
@@ -490,6 +573,20 @@ const css = {
     fontFamily: 'var(--vscode-editor-font-family, monospace)', fontSize: '11px', opacity: 0.6, flexShrink: 0,
   } as React.CSSProperties,
   commitDate: { opacity: 0.5, flexShrink: 0 } as React.CSSProperties,
+  /** Indented past the icon dot and the avatar (12px padding + 26px dot + 8px gap), under the sentence. */
+  eventTargetRow: { position: 'relative' as const, zIndex: 1, padding: '0 12px 4px 46px' } as React.CSSProperties,
+  eventTarget: {
+    display: 'flex', alignItems: 'center', gap: '6px', width: '100%', padding: '3px 6px', borderRadius: '4px', fontSize: '12px',
+    background: 'transparent', border: 'none', color: 'inherit', textAlign: 'left' as const, cursor: 'pointer',
+  } as React.CSSProperties,
+  eventTargetTitle: {
+    color: 'var(--vscode-textLink-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0,
+  } as React.CSSProperties,
+  eventTargetNumber: { opacity: 0.6, flexShrink: 0 } as React.CSSProperties,
+  closesTag: {
+    fontSize: '10px', padding: '0 6px', borderRadius: '8px', flexShrink: 0,
+    background: 'color-mix(in srgb, #a371f7 18%, transparent)', color: '#a371f7',
+  } as React.CSSProperties,
   eventRow: {
     position: 'relative' as const, zIndex: 1,
     display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 12px', fontSize: '12px', opacity: 0.85,

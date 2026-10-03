@@ -402,7 +402,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.commitPanel.showWorktreesBadge` | `false` | Show the number of linked worktrees on the Worktrees tab. |
 | `gitcharm.commitPanel.showSyncBadge` | `true` | Show the number of commits to push and to pull on the Sync tab. |
 | `gitcharm.commitPanel.showPullRequestsBadge` | `true` | Show the number of pull requests on the Pull Requests tab. |
-| `gitcharm.commitPanel.showIssuesBadge` | `false` | Show the number of issues on the Issues tab. |
+| `gitcharm.commitPanel.showIssuesBadge` | `true` | Show the number of issues on the Issues tab. |
 | `gitcharm.commitPanel.showActivityBarBadge` | `true` | Show the number of changed files on GitCharm's icon in the activity bar. |
 | `gitcharm.openCommitPanelOnConflictResolved` | `true` | Open the GitCharm sidebar when a merge conflict is resolved. |
 | `gitcharm.suppressDivergedBranchWarning` | `false` | Suppress the "Branches have diverged" warning in the Git Menu and status bar. |

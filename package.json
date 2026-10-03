@@ -1631,7 +1631,7 @@
           "gitcharm.commitPanel.showIssuesBadge": {
             "order": 40,
             "type": "boolean",
-            "default": false,
+            "default": true,
             "description": "%config.commitPanel.showIssuesBadge.description%"
           },
           "gitcharm.commitPanel.showActivityBarBadge": {
