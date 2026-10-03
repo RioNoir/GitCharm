@@ -35,13 +35,14 @@ const PLACEHOLDER: Record<string, () => string> = {
   'pullRequests.defaultTargetBranch': () => l10n.t('Empty: detect main / master'),
 };
 
-const COMMIT_PANEL_TABS = ['changes', 'shelf', 'stash', 'worktrees', 'pullRequests', 'sync'];
+const COMMIT_PANEL_TABS = ['changes', 'shelf', 'stash', 'worktrees', 'issues', 'pullRequests', 'sync'];
 /** The setting that hides each Commit Panel tab (Changes can't be hidden). */
 const TAB_SHOW_SETTING: Record<string, string> = {
   shelf: 'commitPanel.showShelfTab',
   stash: 'commitPanel.showStashTab',
   worktrees: 'commitPanel.showWorktreesTab',
   pullRequests: 'commitPanel.showPullRequestsTab',
+  issues: 'commitPanel.showIssuesTab',
   sync: 'commitPanel.showSyncTab',
 };
 

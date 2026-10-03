@@ -11,7 +11,7 @@ export function generateNonce(): string {
 export function getWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
-  appName: 'commitPanel' | 'gitLog' |'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'commitFullDetail' | 'aiExplainDetail' | 'settings' | 'conflictAi',
+  appName: 'commitPanel' | 'gitLog' |'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'issueDetail' | 'issueCreate' | 'issueResolve' | 'commitFullDetail' | 'aiExplainDetail' | 'settings' | 'conflictAi',
   title: string,
   initialConfig?: Record<string, unknown>,
 ): string {
@@ -156,7 +156,15 @@ export function getWebviewHtml(
     .markdown-body a { color: var(--vscode-textLink-foreground); }
     .markdown-body a:hover { color: var(--vscode-textLink-activeForeground); }
     .markdown-body hr { margin: 14px 0; border: none; border-top: 1px solid var(--vscode-panel-border); }
-    .markdown-body img { max-width: 100%; }
+    /* Forges paste screenshots as <img width="1280" height="720">: max-width alone would shrink the width and keep
+       the fixed height, distorting them — height: auto keeps the aspect ratio. Same in the editor. */
+    .markdown-body img, .markdown-body video,
+    .gitcharm-tiptap-content img, .gitcharm-tiptap-content video { max-width: 100%; height: auto; box-sizing: border-box; }
+    .markdown-body picture { display: contents; }
+    /* A table holding images ("Before | After") would grow its cells to the images' full size instead of
+       shrinking them: lay it out at the available width, with equal columns. */
+    .markdown-body table:has(img) { display: table; width: 100%; table-layout: fixed; }
+    .markdown-body table:has(img) td, .markdown-body table:has(img) th { overflow-wrap: anywhere; }
     .markdown-body table {
       margin: 0 0 10px; border-collapse: collapse; width: auto; max-width: 100%; display: block; overflow-x: auto;
     }

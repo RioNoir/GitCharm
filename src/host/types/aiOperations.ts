@@ -2,9 +2,9 @@
 // (gitcharm.ai.operationModels) instead of the default ones (gitcharm.ai.provider + that provider's model).
 // No vscode import: the settings webview bundles this file too.
 
-export type AiOperation = 'commitMessage' | 'pullRequest' | 'explain' | 'resolveConflicts';
+export type AiOperation = 'commitMessage' | 'pullRequest' | 'explain' | 'resolveConflicts' | 'issues';
 
-export const AI_OPERATIONS: readonly AiOperation[] = ['commitMessage', 'pullRequest', 'explain', 'resolveConflicts'];
+export const AI_OPERATIONS: readonly AiOperation[] = ['commitMessage', 'pullRequest', 'explain', 'resolveConflicts', 'issues'];
 
 /** An operation's own provider and model. An empty model means the provider's default one. */
 export interface AiOperationTarget {

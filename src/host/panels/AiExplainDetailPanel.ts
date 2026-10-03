@@ -17,7 +17,7 @@ const panels = new Map<string, vscode.WebviewPanel>();
 
 export interface AiExplainSubject {
   key: string;
-  kind: 'commit' | 'pull-request';
+  kind: 'commit' | 'pull-request' | 'issue';
   title: string;
   subtitle?: string;
 }

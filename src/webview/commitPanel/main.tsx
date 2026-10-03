@@ -1,7 +1,7 @@
 import { plural } from '../shared/l10n';
 import * as l10n from '@vscode/l10n';
 import { isImeComposing } from '../shared/ime';
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { isEmbedded } from '../shared/embedded';
 import { useCommitStore } from './store/commitStore';
@@ -17,11 +17,12 @@ import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
 import { PullRequestPanel, NoRemoteState, noRepoHasRemote } from './components/PullRequestPanel';
+import { IssuePanel, IssuesNoRemoteState, noIssueRepoHasRemote } from './components/IssuePanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
 import { handleTreeNavKeyDown } from '../shared/keyboardNav';
-import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary } from '../shared/msgTypes';
+import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary, RepoIssues, IssueSummary } from '../shared/msgTypes';
 import type { CommitPanelConfig } from '../../host/types/messages';
 import type { FileStatus, RepoStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
@@ -255,7 +256,7 @@ const CHANGELIST_HEADER_ITEMS_CUSTOM = (): ContextMenuEntry[] => [
   { id: 'refresh',     label: l10n.t('Refresh'),           icon: 'refresh' },
 ];
 
-type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests';
+type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests' | 'issues';
 
 function App() {
   const store = useCommitStore();
@@ -265,7 +266,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>('changes');
   // The gitcharm.commitPanel.* settings: which tabs, in which order, labels and badges. Null until the host sends them.
   const [panelConfig, setPanelConfig] = useState<CommitPanelConfig | null>(null);
-  const shownTabs: TabId[] = panelConfig?.tabs ?? ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
+  const shownTabs: TabId[] = panelConfig?.tabs ?? ['changes', 'shelf', 'stash', 'worktree', 'issues', 'pullrequests', 'push'];
   // A tab turned off while open hands over to Changes.
   useEffect(() => {
     if (!shownTabs.includes(activeTab)) setActiveTab('changes');
@@ -298,6 +299,15 @@ function App() {
   const [expandedPrRepoIds, setExpandedPrRepoIds] = useState<Set<string>>(new Set());
   /** repoIds still awaited from the current streaming load — cleared as each PULLREQUEST_LIST_REPO_RESULT arrives; loading flips off once empty. */
   const pullRequestPendingRef = useRef<Set<string>>(new Set());
+
+  // ── Issue state ───────────────────────────────────────────────────────────
+  const [issueRepos, setIssueRepos] = useState<RepoIssues[]>([]);
+  const [issueLoading, setIssueLoading] = useState(false);
+  const [issueLoadingMore, setIssueLoadingMore] = useState<Record<string, boolean>>({});
+  const [expandedIssueRepoIds, setExpandedIssueRepoIds] = useState<Set<string>>(new Set());
+  const issuePendingRef = useRef<Set<string>>(new Set());
+  /** Text the host asked to insert into the commit message (an issue reference); `id` makes repeats distinct. */
+  const [commitInsert, setCommitInsert] = useState<{ id: number; text: string } | null>(null);
 
   // ── Submodule detached HEAD warnings ─────────────────────────────────────
   // repoId → headCommit — shown as dismissable banner above the file tree
@@ -355,6 +365,7 @@ function App() {
     setDetachedWarnings(pruneRecord);
     setWorktreeRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
     setPullRequestRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
+    setIssueRepos(prev => prev.filter(r => currentRepoIds.has(r.repoId)));
   }, [(store.status?.repos ?? []).map(r => r.repoId).join(',')]);
 
   const toggleVscodeRepoSelection = (repoId: string) => {
@@ -705,6 +716,52 @@ function App() {
           requestPullRequestList(true);
           break;
 
+        case 'ISSUE_LIST_RESULT':
+          setIssueLoading(false);
+          setIssueRepos(msg.repos);
+          break;
+
+        case 'ISSUE_LIST_START': {
+          issuePendingRef.current = new Set(msg.repoIds);
+          setIssueLoading(true);
+          const metas = useCommitStore.getState().repoMetas;
+          setIssueRepos(msg.repoIds.map(repoId => {
+            const meta = metas.find(m => m.id === repoId);
+            return {
+              repoId, repoName: meta?.name ?? repoId, repoColor: meta?.color ?? '#888',
+              connection: { repoId, provider: 'unknown', host: '', connected: false, detectionFailed: false },
+              issues: [], hasMore: false, pending: true,
+            };
+          }));
+          break;
+        }
+
+        case 'ISSUE_LIST_REPO_RESULT':
+          setIssueRepos(prev => {
+            const idx = prev.findIndex(r => r.repoId === msg.repo.repoId);
+            if (idx === -1) return [...prev, msg.repo];
+            const next = [...prev];
+            next[idx] = msg.repo;
+            return next;
+          });
+          issuePendingRef.current.delete(msg.repo.repoId);
+          if (issuePendingRef.current.size === 0) setIssueLoading(false);
+          break;
+
+        case 'ISSUE_LOAD_MORE_RESULT':
+          setIssueLoadingMore(prev => ({ ...prev, [msg.repoId]: false }));
+          if (msg.repo) setIssueRepos(prev => prev.map(r => r.repoId === msg.repoId ? msg.repo! : r));
+          break;
+
+        case 'ISSUE_INVALIDATED':
+          // Only re-fetch a list that was loaded already — an unopened tab loads its own when first shown.
+          if (issueListRequestedRef.current) requestIssueList(true);
+          break;
+
+        case 'COMMIT_INSERT_TEXT':
+          setCommitInsert({ id: Date.now(), text: msg.text });
+          break;
+
         case 'COMMIT_PANEL_CONFIG':
           setPanelConfig(msg.config);
           break;
@@ -713,6 +770,7 @@ function App() {
           setActiveTab(msg.tab);
           if (msg.tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
           if (msg.tab === 'pullrequests') requestPullRequestList();
+          if (msg.tab === 'issues') requestIssueList();
           break;
 
         case 'COMMIT_DESELECT_FILE':
@@ -889,6 +947,40 @@ function App() {
     send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider });
   }, [send]);
 
+  // ── Issue callbacks ───────────────────────────────────────────────────────
+
+  /** Whether the issue list was ever asked for — issues load on demand, unlike pull requests. */
+  const issueListRequestedRef = useRef(false);
+  const requestIssueList = useCallback((forceRefresh?: boolean) => {
+    issueListRequestedRef.current = true;
+    send({ type: 'ISSUE_REQUEST_LIST', forceRefresh });
+  }, [send]);
+
+  const handleIssueLoadMore = useCallback((repoId: string) => {
+    setIssueLoadingMore(prev => ({ ...prev, [repoId]: true }));
+    send({ type: 'ISSUE_LOAD_MORE', repoId });
+  }, [send]);
+
+  // Accordion — only one repo section can be expanded at a time.
+  const handleIssueToggleExpanded = useCallback((repoId: string) => {
+    setExpandedIssueRepoIds(prev => (prev.has(repoId) ? new Set() : new Set([repoId])));
+  }, []);
+
+  const issueHandlers = useMemo(() => ({
+    onToggleExpanded: handleIssueToggleExpanded,
+    onOpenInBrowser: (url: string) => send({ type: 'ISSUE_OPEN_IN_BROWSER', url }),
+    onOpenDetail: (repoId: string, issue: IssueSummary) => send({ type: 'ISSUE_OPEN_DETAIL', repoId, issue }),
+    onCreateBranch: (repoId: string, issue: IssueSummary) => send({ type: 'ISSUE_CREATE_BRANCH', repoId, issue }),
+    onInsertReference: (issue: IssueSummary) => send({ type: 'ISSUE_INSERT_REFERENCE', issue }),
+    // One connection per repository serves both tabs, so connecting goes through the Pull Requests account picker.
+    onOpenAccountPicker: (repoId: string) => send({ type: 'PULLREQUEST_OPEN_ACCOUNT_PICKER', repoId }),
+    onRequestCreate: (repoId: string) => send({ type: 'ISSUE_CREATE_PROMPT', repoId }),
+    onRefresh: (repoId: string) => send({ type: 'ISSUE_REFRESH_REPO', repoId }),
+    onSetHostOverride: (host: string, provider: ForgeProvider) => send({ type: 'PULLREQUEST_SET_HOST_PROVIDER_OVERRIDE', host, provider }),
+    onOpenFilters: (repoId: string) => send({ type: 'ISSUE_FILTERS_PROMPT', repoId }),
+    onOpenSearch: (repoId: string) => send({ type: 'ISSUE_SEARCH_PROMPT', repoId }),
+  }), [send, handleIssueToggleExpanded]);
+
   // ── Push / unpushed callbacks ─────────────────────────────────────────────
 
   const requestUnpushedCommits = useCallback((repoId: string) => {
@@ -944,6 +1036,11 @@ function App() {
     if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
     if (tab === 'worktree') requestWorktreeList();
     if (tab === 'pullrequests') requestPullRequestList();
+    if (tab === 'issues') requestIssueList();
+  }, [panelConfig]);
+  // The Issues badge (off by default) needs the lists even with the tab closed.
+  useEffect(() => {
+    if (panelConfig?.badges.issues && panelConfig.tabs.includes('issues') && !issueListRequestedRef.current) requestIssueList();
   }, [panelConfig]);
   useEffect(() => {
     if (initialTabAppliedRef.current) send({ type: 'COMMIT_ACTIVE_TAB', tab: activeTab });
@@ -1453,14 +1550,15 @@ function App() {
         // The linked worktrees: every repo has its main one.
         const totalWorktrees = worktreeRepos.reduce((sum, r) => sum + r.worktrees.filter(w => !w.isMain).length, 0);
         const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + (r.totalCount ?? r.pullRequests.length), 0);
+        const totalIssues = issueRepos.reduce((sum, r) => sum + (r.totalCount ?? r.issues.length), 0);
         const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode')
           ? l10n.t({ message: 'Commit', comment: ['Tab title: the tab with the commit form and changed files'] })
           : l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
         const tabMeta = (tab: TabId) => ({
-          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
-          iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud',
+          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : tab === 'issues' ? l10n.t('Issues') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
+          iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : tab === 'issues' ? 'issues' : 'cloud',
           badge: !(panelConfig ? panelConfig.badges[tab] : tab === 'changes' || tab === 'push' || tab === 'pullrequests') ? 0
-            : tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests
+            : tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests : tab === 'issues' ? totalIssues
             : tab === 'shelf' ? totalShelves : tab === 'stash' ? totalStashes : tab === 'worktree' ? totalWorktrees : 0,
         });
         const selectTab = (tab: TabId) => {
@@ -1472,6 +1570,7 @@ function App() {
           if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
           if (tab === 'worktree' && worktreeRepos.length === 0) requestWorktreeList();
           if (tab === 'pullrequests' && pullRequestRepos.length === 0) requestPullRequestList();
+          if (tab === 'issues' && !issueListRequestedRef.current) requestIssueList();
         };
         const allTabs = shownTabs;
         const activeMeta = tabMeta(activeTab);
@@ -1846,6 +1945,8 @@ function App() {
             defaultCommitAction={store.defaultCommitAction}
             defaultSaveAction={store.defaultSaveAction}
             subjectMaxLength={panelConfig?.subjectMaxLength ?? 0}
+            insertRequest={commitInsert}
+            onInsertHandled={() => setCommitInsert(null)}
             vscodeSelectedRepos={store.changesViewMode === 'vscode' ? vscodeSelectedRepos : undefined}
             getSelectedFilesForRepo={store.getSelectedFilesForRepo}
             onDeselectRepo={repoId => {
@@ -2080,6 +2181,34 @@ function App() {
               onSetHostOverride={handlePrSetHostOverride}
               onOpenFilters={handlePrOpenFilters}
               onOpenSearch={handlePrOpenSearch}
+            />
+          </ScrollArea>
+        ))}
+
+        {activeTab === 'issues' && (noIssueRepoHasRemote(issueRepos) ? (
+          <IssuesNoRemoteState repoCount={issueRepos.length} />
+        ) : (
+          /* Issues tab */
+          <ScrollArea
+            style={css.repoList}
+            onScroll={e => {
+              const el = e.currentTarget;
+              if (el.scrollTop + el.clientHeight < el.scrollHeight - 200) return;
+              const singleRepo = issueRepos.length === 1;
+              for (const repo of issueRepos) {
+                const isExpanded = singleRepo || expandedIssueRepoIds.has(repo.repoId);
+                if (isExpanded && repo.hasMore && !issueLoadingMore[repo.repoId]) handleIssueLoadMore(repo.repoId);
+              }
+            }}
+          >
+            <IssuePanel
+              repos={issueRepos}
+              plainHeaders={workspaceSingleRepo}
+              loading={issueLoading}
+              loadingMore={issueLoadingMore}
+              multiRepo={multiRepo}
+              expandedRepoIds={expandedIssueRepoIds}
+              {...issueHandlers}
             />
           </ScrollArea>
         ))}

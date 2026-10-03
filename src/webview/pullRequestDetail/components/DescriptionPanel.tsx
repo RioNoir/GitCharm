@@ -14,9 +14,11 @@ interface Props {
   saveError?: string;
   onSave: (description: string) => void;
   onCancelEdit: () => void;
+  /** The editor's placeholder; defaults to the pull request one. */
+  placeholder?: string;
 }
 
-export function DescriptionPanel({ description, loading, editing, saving, saveError, onSave, onCancelEdit }: Props) {
+export function DescriptionPanel({ description, loading, editing, saving, saveError, onSave, onCancelEdit, placeholder }: Props) {
   const mentionCandidates = useMentionCandidates();
   const html = useMemo(() => renderMarkdown(description, mentionCandidates), [description, mentionCandidates]);
   const [draft, setDraft] = useState(description);
@@ -32,7 +34,7 @@ export function DescriptionPanel({ description, loading, editing, saving, saveEr
     const unchanged = draft.trim() === description.trim();
     return (
       <div style={css.editWrap}>
-        <MarkdownEditor value={draft} onChange={setDraft} placeholder={l10n.t('Describe your changes…')} minHeight="120px" />
+        <MarkdownEditor value={draft} onChange={setDraft} placeholder={placeholder ?? l10n.t('Describe your changes…')} minHeight="120px" />
         {saveError && (
           <div style={css.alertError}>
             <Codicon name="error" style={{ fontSize: '14px', flexShrink: 0 }} />

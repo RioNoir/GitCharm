@@ -8,7 +8,7 @@ import { notifyHostReady } from '../shared/vscodeApi';
 import type { HostToAiExplainMsg } from '../../host/types/messages';
 
 function App() {
-  const [subjectKind, setSubjectKind] = useState<'commit' | 'pull-request' | null>(null);
+  const [subjectKind, setSubjectKind] = useState<'commit' | 'pull-request' | 'issue' | null>(null);
   const [subjectTitle, setSubjectTitle] = useState('');
   const [subjectSubtitle, setSubjectSubtitle] = useState<string | undefined>();
   const [modelLabel, setModelLabel] = useState('');
@@ -57,7 +57,7 @@ function App() {
   return (
     <div style={css.page}>
       <div style={css.header}>
-        <Codicon name={subjectKind === 'pull-request' ? 'git-pull-request' : 'git-commit'} style={{ fontSize: '14px', opacity: 0.7 }} />
+        <Codicon name={subjectKind === 'pull-request' ? 'git-pull-request' : subjectKind === 'issue' ? 'issues' : 'git-commit'} style={{ fontSize: '14px', opacity: 0.7 }} />
         <div style={css.headerText}>
           <div style={css.subjectTitle}>{subjectTitle}</div>
           {subjectSubtitle && <div style={css.subjectSubtitle}>{subjectSubtitle}</div>}

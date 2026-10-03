@@ -382,6 +382,9 @@ export function registerCommands(
         explainCommit: { label: vscode.l10n.t('Explain commit'), icon: 'sparkle' },
         explainPullRequest: { label: vscode.l10n.t('Explain pull request'), icon: 'sparkle' },
         resolveConflicts: { label: vscode.l10n.t('Resolve conflicts'), icon: 'git-merge' },
+        issueBranchName: { label: vscode.l10n.t('Issue branch name'), icon: 'git-branch' },
+        explainIssue: { label: vscode.l10n.t('Explain issue'), icon: 'sparkle' },
+        resolveIssue: { label: vscode.l10n.t('Resolve issue'), icon: 'issues' },
       };
       const config = vscode.workspace.getConfiguration('gitcharm');
       const picked = await vscode.window.showQuickPick(
@@ -779,6 +782,14 @@ export function registerCommands(
     // Accounts are managed on the Cloud Integrations page of GitCharm's settings.
     vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', () =>
       vscode.commands.executeCommand('gitcharm.openSettings', 'integrations')),
+
+    // ── Issue commands ────────────────────────────────────────────────────────
+
+    vscode.commands.registerCommand('gitcharm.issues.refresh', () => {
+      commitPanel.requestIssueRefresh();
+    }),
+
+    vscode.commands.registerCommand('gitcharm.issues.insertReference', () => commitPanel.pickIssueReferenceForCommit()),
 
     // ── File History ──────────────────────────────────────────────────────────
 

@@ -45,6 +45,10 @@ interface Props {
   onRebaseAction: (repoId: string, action: 'continue' | 'abort') => void;
   /** gitcharm.commitPanel.subjectMaxLength: a longer first line gets a warning; 0 turns it off. */
   subjectMaxLength?: number;
+  /** Text to insert at the cursor (an issue reference) — `id` changes on every request, so repeats insert again. */
+  insertRequest?: { id: number; text: string } | null;
+  /** Called once `insertRequest` is applied, so a remount (the form lives on the Changes tab) doesn't insert it again. */
+  onInsertHandled?: () => void;
 }
 
 interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; separatorAfter?: boolean; }
@@ -216,7 +220,7 @@ export function UnifiedCommitForm({
   loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   onSyncAction, onPullRepos, onPushRepos, onForcePushRepos,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
-  activeProfile, onOpenProfiles, onRebaseAction, subjectMaxLength = 0,
+  activeProfile, onOpenProfiles, onRebaseAction, subjectMaxLength = 0, insertRequest, onInsertHandled,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const [textareaFocused, setTextareaFocused] = useState(false);
@@ -284,6 +288,42 @@ export function UnifiedCommitForm({
   const amend = amendFlags[amendRepoId ?? ''] ?? false;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** Where the cursor was when the message box last had focus — a button click takes the focus away before inserting. */
+  const lastCaretRef = useRef<{ start: number; end: number } | null>(null);
+  const rememberCaret = () => {
+    const el = textareaRef.current;
+    if (el) lastCaretRef.current = { start: el.selectionStart, end: el.selectionEnd };
+  };
+
+  // Inserts at the remembered cursor, padded with spaces from adjacent words; without one, appends as its own paragraph.
+  useEffect(() => {
+    if (!insertRequest) return;
+    const { text } = insertRequest;
+    const caret = lastCaretRef.current;
+    let next: string;
+    let pos: number;
+    if (caret && caret.end <= message.length) {
+      const before = message.slice(0, caret.start);
+      const after = message.slice(caret.end);
+      const pre = before && !/\s$/.test(before) ? ' ' : '';
+      const post = after && !/^\s/.test(after) ? ' ' : '';
+      next = before + pre + text + post + after;
+      pos = (before + pre + text).length;
+    } else {
+      const trimmed = message.replace(/\s+$/, '');
+      next = trimmed ? `${trimmed}\n\n${text}` : text;
+      pos = next.length;
+    }
+    onMessageChange(next);
+    onInsertHandled?.();
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.selectionStart = el.selectionEnd = pos;
+      lastCaretRef.current = { start: pos, end: pos };
+    });
+  }, [insertRequest?.id]);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const ctxMenuRef = useRef<HTMLDivElement>(null);
 
@@ -474,7 +514,8 @@ export function UnifiedCommitForm({
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => setTextareaFocused(true)}
-          onBlur={() => setTextareaFocused(false)}
+          onBlur={() => { rememberCaret(); setTextareaFocused(false); }}
+          onSelect={rememberCaret}
           placeholder={generatingMessage ? l10n.t('Generating commit message…') : l10n.t('Commit message (Cmd+Enter to commit)')}
           readOnly={generatingMessage}
           rows={2}

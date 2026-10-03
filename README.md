@@ -18,7 +18,7 @@
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
-GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Log Panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
+GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Log Panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request and Issue management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
 
 It activates automatically when the opened workspace contains a Git repository.
 
@@ -116,6 +116,20 @@ The remote side of every repository: what to push and what to pull.
 
 <br>
 <img src="media/screenshots/pull_requests.png" alt="GitCharm log panel">
+
+### 🐞 Issues
+
+- Dedicated **Issues** tab in the Commit Panel, for the same four forges and on the same connection as Pull Requests — a repository connected once serves both tabs.
+- Per-repository list with state icons, author avatar, comment count and labels; filter by state, created by me, assigned to me and mentioning me (GitHub, Gitea), plus free-text/issue-number search, with infinite scroll.
+- **Issue detail** panel in an editor tab: description (editable in place), Activity timeline (comments, renames, label changes, close/reopen, assignments), assignees, labels, and the pull requests that reference or close the issue. Close, reopen, comment, and edit the title, assignees and labels directly; restored across VS Code restarts.
+- **New Issue** form with a Markdown description (pre-filled from the repository's issue template), assignees and labels.
+- **Create Branch** from an issue: names it from `gitcharm.issues.branchNameTemplate` (e.g. `42-fix-login-redirect`), lets you edit the name, then creates and checks it out.
+- **Create Branch with AI** (under the Create Branch button): the AI reads the issue and suggests a short, related name, following your branch prefixes — still editable before the branch is created.
+- **AI Explanation** of an issue (✨ button, as for pull requests): what is asked, the decisions taken in the discussion, and where to start.
+- **Resolve with AI**: works out a fix and shows it before touching anything — the plan and every changed file with its diff. **Apply on New Branch** creates a branch from HEAD (AI-suggested name, editable) and writes the changes there, **without committing**, then opens the Commit Panel with a draft message. With Claude Code or Codex as the model, an agent explores the code and edits files itself in a throwaway worktree; with any other provider the model picks the files to read and answers with the edits. Uses the "Issues" AI operation, so it can have its own provider and model.
+- **Reference an issue in the commit message**: from an issue row or the issue detail (or the **Reference an Issue in the Commit Message** command, which searches open issues), inserts `#42` — or `Fixes #42`, per `gitcharm.issues.commitReferenceTemplate` — at the cursor.
+- **Linked issues** in the Pull Request detail panel: the issues a PR closes once merged (from the forge's API on GitHub and GitLab, from "Fixes #123"-style keywords in the description on Gitea and Bitbucket).
+- Bitbucket Cloud: the issue tracker is optional (off by default) and the API token needs the `read:issue:bitbucket` / `write:issue:bitbucket` scopes; issues have a single assignee and their kind is shown as a label.
 
 ### 🗄️ Shelve & Stash
 
@@ -315,6 +329,8 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Customize AI Prompts` | Edits or resets the prompts used by the AI features. |
 | `GitCharm: Manage Pull Request Credentials` | Opens the Pull Request account manager (add, rename, remove accounts). |
 | `GitCharm: Refresh Pull Requests` | Refreshes the Pull Requests tab, bypassing the cache. |
+| `GitCharm: Refresh Issues` | Refreshes the Issues tab, bypassing the cache. |
+| `GitCharm: Reference an Issue in the Commit Message` | Searches the open issues of the connected repositories and inserts a reference to the chosen one into the commit message. |
 | `GitCharm: Show Output Log` | Opens the GitCharm output log, useful when reporting a bug. |
 
 ## ⌨️ Keybindings
@@ -367,13 +383,18 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.statusBar.showProfile` | `true` | Show the Git profile in use in the status bar. |
 | `gitcharm.pullRequests.defaultFilter` | `open` | The filter each repository's pull request list starts with: `open`, `mine`, `assignedToMe`, `reviewRequested` or `mentioningMe`. |
 | `gitcharm.pullRequests.autoRefreshInterval` | `0` | Refresh the pull request list every this many minutes while its tab is open and VS Code is focused (`0`: off). |
+| `gitcharm.issues.defaultFilter` | `open` | The filter each repository's issue list starts with: `open`, `mine`, `assignedToMe` or `mentioningMe`. |
+| `gitcharm.issues.autoRefreshInterval` | `0` | Refresh the issue list every this many minutes while its tab is open and VS Code is focused (`0`: off). |
+| `gitcharm.issues.branchNameTemplate` | `{number}-{title}` | The name suggested for a branch created from an issue: `{number}`, `{title}` (lowercase, hyphenated) and `{user}` (your forge username). |
+| `gitcharm.issues.commitReferenceTemplate` | `#{number}` | The text inserted into the commit message when referencing an issue, e.g. `Fixes #{number}`. `{title}` is also available. |
 | `gitcharm.commitPanel.showShelfTab` | `true` | Show the Shelf tab in the Commit Panel. |
 | `gitcharm.commitPanel.showStashTab` | `true` | Show the Stash tab in the Commit Panel. |
 | `gitcharm.commitPanel.showWorktreesTab` | `true` | Show the Worktrees tab in the Commit Panel. |
 | `gitcharm.commitPanel.showPullRequestsTab` | `true` | Show the Pull Requests tab in the Commit Panel. |
+| `gitcharm.commitPanel.showIssuesTab` | `true` | Show the Issues tab in the Commit Panel. |
 | `gitcharm.commitPanel.showSyncTab` | `true` | Show the Sync tab (commits to push and to pull) in the Commit Panel. |
 | `gitcharm.commitPanel.tabOrder` | all tabs | The order of the Commit Panel's tabs. Tabs left out of the list keep their place at the end; hidden tabs stay hidden. |
-| `gitcharm.commitPanel.defaultTab` | `changes` | The tab the Commit Panel opens on: `changes`, `shelf`, `stash`, `worktrees`, `pullRequests`, `sync`, or `lastUsed` (the last one used in the workspace). A hidden tab falls back to Changes. |
+| `gitcharm.commitPanel.defaultTab` | `changes` | The tab the Commit Panel opens on: `changes`, `shelf`, `stash`, `worktrees`, `issues`, `pullRequests`, `sync`, or `lastUsed` (the last one used in the workspace). A hidden tab falls back to Changes. |
 | `gitcharm.commitPanel.tabLabels` | `active` | Which tabs show their name next to the icon: `active`, `always` or `never` (icons only). |
 | `gitcharm.commitPanel.showChangesBadge` | `true` | Show the number of changed files on the Changes tab. |
 | `gitcharm.commitPanel.showShelfBadge` | `false` | Show the number of shelved changes on the Shelf tab. |
@@ -381,6 +402,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.commitPanel.showWorktreesBadge` | `false` | Show the number of linked worktrees on the Worktrees tab. |
 | `gitcharm.commitPanel.showSyncBadge` | `true` | Show the number of commits to push and to pull on the Sync tab. |
 | `gitcharm.commitPanel.showPullRequestsBadge` | `true` | Show the number of pull requests on the Pull Requests tab. |
+| `gitcharm.commitPanel.showIssuesBadge` | `false` | Show the number of issues on the Issues tab. |
 | `gitcharm.commitPanel.showActivityBarBadge` | `true` | Show the number of changed files on GitCharm's icon in the activity bar. |
 | `gitcharm.openCommitPanelOnConflictResolved` | `true` | Open the GitCharm sidebar when a merge conflict is resolved. |
 | `gitcharm.suppressDivergedBranchWarning` | `false` | Suppress the "Branches have diverged" warning in the Git Menu and status bar. |
@@ -421,8 +443,9 @@ Example:
 ```text
 src/host/                 VS Code extension host code
 src/host/git/             Git, diff, conflict, blame, workspace, and shelve services
-src/host/panels/          Webview providers for Commit, Log, Undocked Panel, and Pull Requests
+src/host/panels/          Webview providers for Commit, Log, Undocked Panel, Pull Requests and Issues
 src/host/pullRequests/    Multi-provider Pull Request manager, per-provider API clients, and credential storage
+src/host/issues/          Issue manager and per-provider issue API clients (on the Pull Requests connection)
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
 src/webview/gitLog/       React Log Panel
@@ -430,6 +453,8 @@ src/webview/commitFullDetail/ React commit "Full Detail" editor-tab panel
 src/webview/undockedPanel/ React undocked panel (Commit + Log side by side)
 src/webview/pullRequestCreate/ React Create Pull Request panel
 src/webview/pullRequestDetail/ React Pull Request detail panel
+src/webview/issueDetail/  React Issue detail panel
+src/webview/issueCreate/  React New Issue panel
 src/webview/shared/       Shared webview components, hooks, and message types
 media/                    Extension icons, codicons, and assets
 out/                      Built extension and webview bundles

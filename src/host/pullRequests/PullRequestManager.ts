@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import { parseRemoteUrl, resolveProvider } from './remoteUrlParser';
-import { createProvider } from './PullRequestProviderFactory';
+import { parseRemoteUrl, resolveProvider, type ParsedRemote } from './remoteUrlParser';
+import { createProvider, type ProviderFactoryDeps } from './PullRequestProviderFactory';
 import type { BitbucketCredentials, IntegrationAccount, IntegrationAccountStore } from '../integrations/IntegrationAccountStore';
 import { validateToken, type TokenCredentials } from '../integrations/validateCredentials';
 import type { IntegrationProvider } from '../types/integrations';
@@ -150,6 +150,9 @@ export class PullRequestManager {
   private readonly bindingsEmitter = new vscode.EventEmitter<void>();
   /** Fires when a repository is assigned another account, or none. */
   readonly onDidChangeBindings = this.bindingsEmitter.event;
+  private readonly invalidateEmitter = new vscode.EventEmitter<string | undefined>();
+  /** Fires when a repo's cached connection is dropped (account switched, forge override changed…) — undefined: every repo. */
+  readonly onDidInvalidate = this.invalidateEmitter.event;
   private cache = new Map<string, CacheEntry>();
   /** One provider instance per repo, reused across calls so each provider's own in-memory caches (e.g. GitLab's label-color cache, cached username) actually persist instead of being thrown away and re-fetched on every single request. */
   private providerCache = new Map<string, PullRequestProvider>();
@@ -162,6 +165,7 @@ export class PullRequestManager {
   ) {}
 
   invalidate(repoId?: string): void {
+    this.invalidateEmitter.fire(repoId);
     if (repoId) {
       this.cache.delete(repoId);
       this.providerCache.delete(repoId);
@@ -254,19 +258,34 @@ export class PullRequestManager {
     return bound && this.patStore.getAccount(bound) ? bound : undefined;
   }
 
-  private makeProvider(repoId: string, parsed: NonNullable<ReturnType<typeof parseRemoteUrl>>) {
-    const cached = this.providerCache.get(repoId);
-    if (cached) return cached;
-
+  /** Credential getters for the account a repo is assigned. */
+  private providerDeps(repoId: string, parsed: ParsedRemote): ProviderFactoryDeps {
     const accountId = this.resolveAccountId(repoId, parsed.provider, parsed.host);
     const githubAccountId = this.getGitHubAccountBinding(repoId);
-    const provider = createProvider(parsed, {
+    return {
       getGitHubToken: () => getGitHubToken(githubAccountId),
       getPatToken: () => accountId ? this.patStore.get(accountId) : Promise.resolve(undefined),
       getBitbucketCredentials: () => accountId ? this.patStore.getBitbucketCredentials(accountId) : Promise.resolve(undefined),
-    });
+    };
+  }
+
+  private makeProvider(repoId: string, parsed: ParsedRemote) {
+    const cached = this.providerCache.get(repoId);
+    if (cached) return cached;
+
+    const provider = createProvider(parsed, this.providerDeps(repoId, parsed));
     if (provider) this.providerCache.set(repoId, provider);
     return provider;
+  }
+
+  /**
+   * The forge a repo's origin points to, with credential getters for the account the repo is assigned — shared
+   * with IssueManager, so issues use the same connection (and the same account picker) as pull requests.
+   */
+  async resolveForgeContext(repoId: string): Promise<{ owner: string; repo: string; parsed: ParsedRemote; deps: ProviderFactoryDeps } | null> {
+    const resolved = await this.resolveOrigin(repoId);
+    if (!resolved?.provider) return null;
+    return { owner: resolved.owner, repo: resolved.repo, parsed: resolved.provider, deps: this.providerDeps(repoId, resolved.provider) };
   }
 
   async getConnectionStatus(repoId: string): Promise<PullRequestConnectionStatus> {

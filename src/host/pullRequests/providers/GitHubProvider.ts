@@ -956,7 +956,7 @@ interface RawGithubTimelineActor {
 
 /** `requestedReviewer`/`assignee` can be a Team instead of a User — the `login` field only exists on the User
  * variant, so a Team shows up here as `undefined` and the event's `user` is simply omitted. */
-interface RawGithubTimelineNode {
+export interface RawGithubTimelineNode {
   __typename: string;
   id: string;
   createdAt: string;
@@ -970,7 +970,7 @@ interface RawGithubTimelineNode {
   requestedReviewer?: RawGithubTimelineActor | null;
 }
 
-function mapGithubTimelineNode(node: RawGithubTimelineNode): PullRequestEvent | null {
+export function mapGithubTimelineNode(node: RawGithubTimelineNode): PullRequestEvent | null {
   const actorName = node.actor?.login ?? 'unknown';
   const actorAvatarUrl = node.actor?.avatarUrl;
   const base = { id: node.id, actorName, actorAvatarUrl, createdAt: node.createdAt };

@@ -31,6 +31,12 @@ interface Props {
   onUnhideComment: (commentId: string) => void;
   onClose: () => void;
   onOpenCommitAllChanges: (commitSha: string, parentSha: string | undefined) => void;
+  /** What the thread belongs to — only changes the wording of state events and the close button. */
+  subject?: 'pullRequest' | 'issue';
+  /** Issue threads: a Reopen button where Close would be, once closed. */
+  canReopen?: boolean;
+  reopening?: boolean;
+  onReopen?: () => void;
 }
 
 type TimelineItem =
@@ -261,7 +267,7 @@ function eventColor(kind: PullRequestEvent['kind']): string {
 }
 
 /** The whole sentence, actor included, so translators control word order ({0} is always the actor). */
-function eventText(event: PullRequestEvent): React.ReactNode {
+function eventText(event: PullRequestEvent, subject: 'pullRequest' | 'issue'): React.ReactNode {
   const actor = <strong>{event.actorName}</strong>;
   const user = <strong>{event.user?.username}</strong>;
   switch (event.kind) {
@@ -278,9 +284,13 @@ function eventText(event: PullRequestEvent): React.ReactNode {
         ? interpolateNodes(l10n.t('{0} removed the {1} label'), actor, <LabelChip label={event.label} />)
         : interpolateNodes(l10n.t('{0} removed a label'), actor);
     case 'closed':
-      return interpolateNodes(l10n.t('{0} closed this pull request'), actor);
+      return subject === 'issue'
+        ? interpolateNodes(l10n.t('{0} closed this issue'), actor)
+        : interpolateNodes(l10n.t('{0} closed this pull request'), actor);
     case 'reopened':
-      return interpolateNodes(l10n.t('{0} reopened this pull request'), actor);
+      return subject === 'issue'
+        ? interpolateNodes(l10n.t('{0} reopened this issue'), actor)
+        : interpolateNodes(l10n.t('{0} reopened this pull request'), actor);
     case 'merged':
       return interpolateNodes(l10n.t('{0} merged this pull request'), actor);
     case 'baseChanged':
@@ -296,7 +306,7 @@ function eventText(event: PullRequestEvent): React.ReactNode {
   }
 }
 
-function EventRow({ event }: { event: PullRequestEvent }) {
+function EventRow({ event, subject }: { event: PullRequestEvent; subject: 'pullRequest' | 'issue' }) {
   const color = eventColor(event.kind);
   return (
     <div style={css.eventRow}>
@@ -305,7 +315,7 @@ function EventRow({ event }: { event: PullRequestEvent }) {
       </span>
       <ForgeAvatarImg url={event.actorAvatarUrl} alt={event.actorName} title={event.actorName} style={css.commitAvatarImg} fallback={<span style={{ ...css.commitAvatarFallback, background: avatarColor(event.actorName) }} title={event.actorName}>{initials(event.actorName)}</span>} />
       <span style={css.eventText}>
-        {eventText(event)}
+        {eventText(event, subject)}
       </span>
       <span style={css.commitDate} title={new Date(event.createdAt).toLocaleString(dateLocale)}>
         {formatRelativeTime(event.createdAt)}
@@ -317,6 +327,7 @@ function EventRow({ event }: { event: PullRequestEvent }) {
 export function CommentsThread({
   comments, commits, events, loading, posting, canClose, closing, closeError, commentActionError,
   onPostComment, onUpdateComment, onDeleteComment, onHideComment, onUnhideComment, onClose, onOpenCommitAllChanges,
+  subject = 'pullRequest', canReopen = false, reopening = false, onReopen,
 }: Props) {
   const [draft, setDraft] = useState('');
 
@@ -354,7 +365,7 @@ export function CommentsThread({
             if (item.kind === 'commit') {
               return <CommitRow key={`k-${item.commit.sha}`} commit={item.commit} onOpen={() => onOpenCommitAllChanges(item.commit.sha, item.commit.parentSha)} />;
             }
-            return <EventRow key={`e-${item.event.id}`} event={item.event} />;
+            return <EventRow key={`e-${item.event.id}`} event={item.event} subject={subject} />;
           })}
         </div>
       )}
@@ -367,8 +378,16 @@ export function CommentsThread({
       <div style={css.actionsRow}>
         {canClose && (
           <button className="gc-btn-secondary" style={css.closeBtn} disabled={closing} onClick={onClose}>
-            <Codicon name="git-pull-request-closed" style={{ fontSize: '13px', color: '#cf222e' }} />
-            {closing ? l10n.t('Closing…') : l10n.t('Close Pull Request')}
+            {subject === 'issue'
+              ? <Codicon name="pass" style={{ fontSize: '13px', color: '#a371f7' }} />
+              : <Codicon name="git-pull-request-closed" style={{ fontSize: '13px', color: '#cf222e' }} />}
+            {closing ? l10n.t('Closing…') : subject === 'issue' ? l10n.t('Close Issue') : l10n.t('Close Pull Request')}
+          </button>
+        )}
+        {canReopen && onReopen && (
+          <button className="gc-btn-secondary" style={css.closeBtn} disabled={reopening} onClick={onReopen}>
+            <Codicon name="issue-reopened" style={{ fontSize: '13px', color: '#3fb950' }} />
+            {reopening ? l10n.t('Reopening…') : l10n.t('Reopen Issue')}
           </button>
         )}
         <div style={{ flex: 1 }} />

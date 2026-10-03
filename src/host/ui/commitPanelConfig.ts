@@ -8,10 +8,11 @@ const SETTING_TO_TAB: Record<string, CommitPanelTabId> = {
   stash: 'stash',
   worktrees: 'worktree',
   pullRequests: 'pullrequests',
+  issues: 'issues',
   sync: 'push',
 };
 
-const DEFAULT_ORDER: CommitPanelTabId[] = ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
+const DEFAULT_ORDER: CommitPanelTabId[] = ['changes', 'shelf', 'stash', 'worktree', 'issues', 'pullrequests', 'push'];
 
 /** The `show*Tab` setting of each tab that can be hidden. */
 const SHOW_SETTING: Partial<Record<CommitPanelTabId, string>> = {
@@ -19,6 +20,7 @@ const SHOW_SETTING: Partial<Record<CommitPanelTabId, string>> = {
   stash: 'showStashTab',
   worktree: 'showWorktreesTab',
   pullrequests: 'showPullRequestsTab',
+  issues: 'showIssuesTab',
   push: 'showSyncTab',
 };
 
@@ -56,6 +58,7 @@ export function getCommitPanelConfig(lastTab: CommitPanelTabId | undefined): Com
       stash: cfg.get<boolean>('showStashBadge', false),
       worktree: cfg.get<boolean>('showWorktreesBadge', false),
       pullrequests: cfg.get<boolean>('showPullRequestsBadge', true),
+      issues: cfg.get<boolean>('showIssuesBadge', false),
       push: cfg.get<boolean>('showSyncBadge', true),
     },
     subjectMaxLength: Math.max(0, cfg.get<number>('subjectMaxLength', 0)),

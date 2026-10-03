@@ -10,13 +10,14 @@ import { CommitsList } from './components/CommitsList';
 import { ChecksList } from './components/ChecksList';
 import { PeopleField, EditFieldButton } from './components/PeoplePanel';
 import { LabelsPanel } from './components/LabelsPanel';
+import { LinkedIssues } from './components/LinkedIssues';
 import { AiExplainFab } from '../shared/AiExplainFab';
 import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips } from '../shared/Skeleton';
 import { MentionCandidatesContext, toMentionCandidates, type MentionCandidate } from '../shared/mentions';
 import type {
-  ChangedFile, CiCheck, HostToPrDetailMsg, IconThemeData, MergeStrategy, PrDetailToHostMsg, PullRequestComment,
+  ChangedFile, CiCheck, HostToPrDetailMsg, IconThemeData, LinkedIssue, MergeStrategy, PrDetailToHostMsg, PullRequestComment,
   PullRequestCommit, PullRequestDetail, PullRequestEvent, PullRequestSummary,
 } from '../../host/types/messages';
 
@@ -105,6 +106,9 @@ function App() {
   const [savingDescription, setSavingDescription] = useState(false);
   const [descriptionError, setDescriptionError] = useState<string | undefined>();
   const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
+  const [linkedIssues, setLinkedIssues] = useState<LinkedIssue[]>([]);
+  const [linkedIssuesLoading, setLinkedIssuesLoading] = useState(true);
+  const [linkedIssuesError, setLinkedIssuesError] = useState<string | undefined>();
 
   const send = useCallback((msg: PrDetailToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -152,6 +156,12 @@ function App() {
           setSummary(msg.detail);
           setChecksLoading(true);
           send({ type: 'PRDETAIL_REQUEST_CHECKS', headSha: msg.detail.headSha });
+          send({ type: 'PRDETAIL_REQUEST_LINKED_ISSUES', description: msg.detail.description });
+          break;
+        case 'PRDETAIL_LINKED_ISSUES_RESULT':
+          setLinkedIssuesLoading(false);
+          setLinkedIssues(msg.issues);
+          setLinkedIssuesError(msg.error);
           break;
         case 'PRDETAIL_LOAD_ERROR':
           setDetailLoading(false);
@@ -547,6 +557,11 @@ function App() {
                 ) : (
                   <LabelsPanel labels={detail.labels} hasLabels={detail.capabilities.canManageLabels} />
                 )}
+              </StaticSection>
+              <StaticSection title={l10n.t('Linked issues')} icon="issues">
+                {linkedIssuesLoading ? <SkeletonChips count={1} />
+                  : linkedIssuesError ? <span style={css.notAvailable}>{linkedIssuesError}</span>
+                  : <LinkedIssues issues={linkedIssues} onOpen={issue => send({ type: 'PRDETAIL_OPEN_ISSUE', issue })} />}
               </StaticSection>
             </div>
           </div>

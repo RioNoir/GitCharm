@@ -10,6 +10,8 @@ import type { WorktreeEntry } from '../git/WorkspaceGitManager';
 import type { IconThemeData } from '../utils/IconThemeService';
 import type { ViewAndSortSettings, ViewAndSortUserPrefs } from './settings';
 import type { PullRequestFilters, RepoPullRequests } from '../pullRequests/PullRequestManager';
+import type { IssueFilters, RepoIssues } from '../issues/IssueManager';
+import type { IssueDetail, IssueStateFilter, IssueSummary, LinkedIssue, LinkedPullRequest } from '../issues/types';
 import type {
   ChangedFile, CiCheck, CreatePullRequestInput, FileDiffContent, FileDiffRefs, ForgeProvider, MergeStrategy, PullRequestAuthorFilter,
   PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
@@ -21,6 +23,7 @@ export type {
   PullRequestFilters, PullRequestStateFilter, PullRequestAuthorFilter, PullRequestDetail, ChangedFile,
   MergeStrategy, SubmitReviewInput, PullRequestComment, PullRequestCommit, PullRequestEvent, FileDiffContent, FileDiffRefs, ReviewEvent,
   PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
+  RepoIssues, IssueFilters, IssueDetail, IssueStateFilter, IssueSummary, LinkedIssue, LinkedPullRequest,
 };
 
 /** A Log Panel compare filter: commits reachable from `target` but not from `base`. Empty strings mean the defaults (HEAD / the repo's default branch). */
@@ -120,7 +123,7 @@ export interface UnpushedCommit {
 
 // ─── Commit Panel: Host → WebView ────────────────────────────────────────────
 
-export type CommitPanelTabId = 'changes' | 'shelf' | 'stash' | 'worktree' | 'pullrequests' | 'push';
+export type CommitPanelTabId = 'changes' | 'shelf' | 'stash' | 'worktree' | 'pullrequests' | 'issues' | 'push';
 
 /** How the Commit Panel lays out its tabs — the `gitcharm.commitPanel.*` settings, resolved by the host. */
 export interface CommitPanelConfig {
@@ -173,8 +176,15 @@ export type HostToCommitMsg =
   | { type: 'PULLREQUEST_LOAD_MORE_RESULT'; repoId: string; repo: RepoPullRequests | null }
   | { type: 'PULLREQUEST_INVALIDATED' }
   | { type: 'PULLREQUEST_CONNECTION_STATUS'; statuses: PullRequestConnectionStatus[] }
+  | { type: 'ISSUE_LIST_RESULT'; repos: RepoIssues[] }
+  | { type: 'ISSUE_LIST_START'; repoIds: string[] }
+  | { type: 'ISSUE_LIST_REPO_RESULT'; repo: RepoIssues }
+  | { type: 'ISSUE_LOAD_MORE_RESULT'; repoId: string; repo: RepoIssues | null }
+  | { type: 'ISSUE_INVALIDATED' }
+  /** Text to insert into the commit message at the cursor — e.g. an issue reference picked from the commit form. */
+  | { type: 'COMMIT_INSERT_TEXT'; text: string }
   | ({ type: 'COMMIT_VIEW_SORT_SETTINGS_UPDATE' } & ViewAndSortSettings)
-  | { type: 'COMMIT_SWITCH_TAB'; tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests' }
+  | { type: 'COMMIT_SWITCH_TAB'; tab: CommitPanelTabId }
   | { type: 'COMMIT_DESELECT_FILE'; filePath: string };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
@@ -290,6 +300,16 @@ export type CommitToHostMsg =
   | { type: 'PULLREQUEST_SEARCH_PROMPT'; repoId: string }
   | { type: 'PULLREQUEST_OPEN_IN_BROWSER'; url: string }
   | { type: 'PULLREQUEST_OPEN_DETAIL'; repoId: string; pr: PullRequestSummary }
+  | { type: 'ISSUE_REQUEST_LIST'; forceRefresh?: boolean }
+  | { type: 'ISSUE_REFRESH_REPO'; repoId: string }
+  | { type: 'ISSUE_LOAD_MORE'; repoId: string }
+  | { type: 'ISSUE_FILTERS_PROMPT'; repoId: string }
+  | { type: 'ISSUE_SEARCH_PROMPT'; repoId: string }
+  | { type: 'ISSUE_CREATE_PROMPT'; repoId: string }
+  | { type: 'ISSUE_OPEN_IN_BROWSER'; url: string }
+  | { type: 'ISSUE_OPEN_DETAIL'; repoId: string; issue: IssueSummary }
+  | { type: 'ISSUE_CREATE_BRANCH'; repoId: string; issue: IssueSummary }
+  | { type: 'ISSUE_INSERT_REFERENCE'; issue: IssueSummary }
   | { type: 'COMMIT_INIT_REPO' }
   | { type: 'COMMIT_OPEN_FOLDER' }
   | { type: 'COMMIT_CLONE_REPO' }
@@ -507,7 +527,8 @@ export type HostToPrDetailMsg =
   | { type: 'PRDETAIL_UPDATE_LABELS_RESULT'; ok: boolean; unsupported?: boolean; error?: string }
   | { type: 'PRDETAIL_CHECKS_RESULT'; checks: CiCheck[]; error?: string }
   | { type: 'PRDETAIL_MENTION_CANDIDATES'; users: PullRequestUser[] }
-  | { type: 'PRDETAIL_DESCRIPTION_UPDATED'; ok: boolean; error?: string };
+  | { type: 'PRDETAIL_DESCRIPTION_UPDATED'; ok: boolean; error?: string }
+  | { type: 'PRDETAIL_LINKED_ISSUES_RESULT'; issues: LinkedIssue[]; error?: string };
 
 // ─── Pull Request Detail: WebView → Host ─────────────────────────────────────
 
@@ -542,7 +563,115 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string }
   | { type: 'PRDETAIL_EXPLAIN' }
   | { type: 'PRDETAIL_REQUEST_MENTION_CANDIDATES' }
-  | { type: 'PRDETAIL_UPDATE_DESCRIPTION'; description: string };
+  | { type: 'PRDETAIL_UPDATE_DESCRIPTION'; description: string }
+  /** `description`: the PR's, for forges with no API for the issues a PR closes (read from its closing keywords). */
+  | { type: 'PRDETAIL_REQUEST_LINKED_ISSUES'; description: string }
+  | { type: 'PRDETAIL_OPEN_ISSUE'; issue: LinkedIssue };
+
+// ─── Issue Detail: Host → WebView ────────────────────────────────────────────
+
+export type HostToIssueDetailMsg =
+  | {
+      type: 'ISSUEDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: IssueSummary; provider: ForgeProvider; currentUsername?: string;
+      aiEnabled: boolean;
+      /** Model labels of the "explain" and "issues" AI operations. */
+      aiExplainModelLabel: string;
+      aiIssuesModelLabel: string;
+      /** How "Resolve with AI" works with the configured provider: an agent editing files, or a text proposal. */
+      aiResolveMode: 'agent' | 'text';
+    }
+  | { type: 'ISSUEDETAIL_LOADED'; detail: IssueDetail }
+  | { type: 'ISSUEDETAIL_LOAD_ERROR'; error: string }
+  | { type: 'ISSUEDETAIL_COMMENTS_RESULT'; comments: PullRequestComment[]; error?: string }
+  | { type: 'ISSUEDETAIL_COMMENT_POSTED'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_COMMENT_UPDATED'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_COMMENT_DELETED'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_EVENTS_RESULT'; events: PullRequestEvent[]; error?: string }
+  | { type: 'ISSUEDETAIL_LINKED_PRS_RESULT'; pullRequests: LinkedPullRequest[]; error?: string }
+  | { type: 'ISSUEDETAIL_STATE_RESULT'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_UPDATE_RESULT'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_UPDATE_ASSIGNEES_RESULT'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_UPDATE_LABELS_RESULT'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_DESCRIPTION_UPDATED'; ok: boolean; error?: string }
+  | { type: 'ISSUEDETAIL_MENTION_CANDIDATES'; users: PullRequestUser[] }
+  | { type: 'ISSUEDETAIL_CREATE_BRANCH_RESULT'; ok: boolean; branchName?: string; error?: string };
+
+// ─── Issue Detail: WebView → Host ────────────────────────────────────────────
+
+export type IssueDetailToHostMsg =
+  | { type: 'ISSUEDETAIL_REQUEST_DETAIL' }
+  | { type: 'ISSUEDETAIL_REQUEST_COMMENTS' }
+  | { type: 'ISSUEDETAIL_REQUEST_EVENTS' }
+  | { type: 'ISSUEDETAIL_REQUEST_LINKED_PRS' }
+  | { type: 'ISSUEDETAIL_REQUEST_MENTION_CANDIDATES' }
+  | { type: 'ISSUEDETAIL_POST_COMMENT'; body: string }
+  | { type: 'ISSUEDETAIL_UPDATE_COMMENT'; commentId: string; body: string }
+  | { type: 'ISSUEDETAIL_DELETE_COMMENT'; commentId: string }
+  | { type: 'ISSUEDETAIL_CLOSE' }
+  | { type: 'ISSUEDETAIL_REOPEN' }
+  | { type: 'ISSUEDETAIL_PICK_TITLE' }
+  | { type: 'ISSUEDETAIL_PICK_ASSIGNEES' }
+  | { type: 'ISSUEDETAIL_PICK_LABELS' }
+  | { type: 'ISSUEDETAIL_UPDATE_DESCRIPTION'; description: string }
+  | { type: 'ISSUEDETAIL_OPEN_IN_BROWSER' }
+  | { type: 'ISSUEDETAIL_CREATE_BRANCH' }
+  | { type: 'ISSUEDETAIL_CREATE_BRANCH_AI' }
+  | { type: 'ISSUEDETAIL_EXPLAIN' }
+  | { type: 'ISSUEDETAIL_RESOLVE_AI' }
+  | { type: 'ISSUEDETAIL_INSERT_REFERENCE' }
+  | { type: 'ISSUEDETAIL_OPEN_PULL_REQUEST'; pullRequest: LinkedPullRequest };
+
+// ─── Resolve Issue with AI: Host → WebView ───────────────────────────────────
+
+export type IssueResolvePhase =
+  | 'preparing' | 'selectingFiles' | 'readingFiles' | 'generating' | 'agentWorking' | 'collecting'
+  | 'ready' | 'failed' | 'cancelled' | 'applying' | 'applied';
+
+export interface IssueResolveFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted';
+  additions: number;
+  deletions: number;
+}
+
+export type HostToIssueResolveMsg =
+  | { type: 'ISSUERESOLVE_INIT'; repoName: string; number: number; title: string; mode: 'agent' | 'text'; modelLabel: string }
+  | { type: 'ISSUERESOLVE_PHASE'; phase: IssueResolvePhase }
+  /** Text mode: the files the model asked to read. */
+  | { type: 'ISSUERESOLVE_FILES_READ'; paths: string[] }
+  /** The model's answer (text mode) or the agent's activity log so far. */
+  | { type: 'ISSUERESOLVE_PROGRESS'; text: string }
+  | { type: 'ISSUERESOLVE_RESULT'; summary: string; files: IssueResolveFile[]; warnings: string[] }
+  | { type: 'ISSUERESOLVE_ERROR'; error: string }
+  | { type: 'ISSUERESOLVE_APPLIED'; branchName: string };
+
+export type IssueResolveToHostMsg =
+  | { type: 'ISSUERESOLVE_OPEN_DIFF'; path: string }
+  | { type: 'ISSUERESOLVE_VIEW_ALL' }
+  | { type: 'ISSUERESOLVE_APPLY' }
+  | { type: 'ISSUERESOLVE_DISCARD' }
+  | { type: 'ISSUERESOLVE_CANCEL' }
+  | { type: 'ISSUERESOLVE_RETRY' }
+  | { type: 'ISSUERESOLVE_OPEN_COMMIT_PANEL' };
+
+// ─── Create Issue: Host → WebView ────────────────────────────────────────────
+
+export type HostToIssueCreateMsg =
+  /** `template`: the repository's issue template, pre-filled as the description. */
+  | { type: 'ISSUECREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider; canManageLabels: boolean; canManageAssignees: boolean; singleAssignee: boolean; template?: string }
+  | { type: 'ISSUECREATE_MENTION_CANDIDATES'; users: PullRequestUser[] }
+  | { type: 'ISSUECREATE_ASSIGNEES_PICKED'; users: PullRequestUser[] }
+  | { type: 'ISSUECREATE_LABELS_PICKED'; labels: PullRequestLabel[] }
+  | { type: 'ISSUECREATE_SUBMIT_RESULT'; ok: boolean; error?: string };
+
+// ─── Create Issue: WebView → Host ────────────────────────────────────────────
+
+export type IssueCreateToHostMsg =
+  | { type: 'ISSUECREATE_REQUEST_MENTION_CANDIDATES' }
+  | { type: 'ISSUECREATE_PICK_ASSIGNEES'; current: PullRequestUser[] }
+  | { type: 'ISSUECREATE_PICK_LABELS'; current: PullRequestLabel[] }
+  | { type: 'ISSUECREATE_SUBMIT'; title: string; description: string; assigneeIds: string[]; labelIds: string[] }
+  | { type: 'ISSUECREATE_CANCEL' };
 
 // ─── Commit Full Detail: Host → WebView ──────────────────────────────────────
 // Reuses LogToHostMsg/HostToLogMsg for its file-tree/context-menu interactions
@@ -573,7 +702,7 @@ export type HostToCommitFullDetailMsg =
 // hits "Regenerate" on the originating panel's floating action button.
 
 export type HostToAiExplainMsg =
-  | { type: 'AIEXPLAIN_INIT'; subjectKind: 'commit' | 'pull-request'; subjectTitle: string; subjectSubtitle?: string; modelLabel: string }
+  | { type: 'AIEXPLAIN_INIT'; subjectKind: 'commit' | 'pull-request' | 'issue'; subjectTitle: string; subjectSubtitle?: string; modelLabel: string }
   | { type: 'AIEXPLAIN_RESULT'; explanation?: string; error?: string }
   | { type: 'AIEXPLAIN_PROGRESS'; explanation: string };
 

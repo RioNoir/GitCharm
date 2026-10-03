@@ -23,6 +23,10 @@ import { registerConflictAiCommands } from './commands/conflictAiCommands';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
 import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
+import { IssueManager } from './issues/IssueManager';
+import { IssueDetailPanel } from './panels/IssueDetailPanel';
+import { CreateIssuePanel } from './panels/CreateIssuePanel';
+import { IssueResolvePanel } from './panels/IssueResolvePanel';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 import { avatarResolver } from './utils/avatarResolver';
 import { initAiSecrets } from './ai/aiSecrets';
@@ -305,6 +309,23 @@ export function activate(context: vscode.ExtensionContext): void {
   commitPanel.setUndockedPanel(undockedPanel);
   commitPanel.setCreatePullRequestPanel(createPullRequestPanel);
   commitPanel.setPullRequestDetailPanel(pullRequestDetailPanel);
+  const issueManager = new IssueManager(manager, pullRequestManager, context.workspaceState);
+  const issueDetailPanel = new IssueDetailPanel(
+    context.extensionUri, manager, issueManager, pullRequestManager,
+    () => commitPanel.requestIssueRefresh(),
+    text => void commitPanel.insertCommitText(text),
+  );
+  const createIssuePanel = new CreateIssuePanel(context.extensionUri, manager, issueManager, pullRequestManager, (repoId, issue) => {
+    commitPanel.requestIssueRefresh();
+    void issueDetailPanel.open(repoId, issue);
+  });
+  issueDetailPanel.setPullRequestDetailPanel(pullRequestDetailPanel);
+  const issueResolvePanel = new IssueResolvePanel(context.extensionUri, manager, issueManager, prDocProvider, (_repoId, _issue, commitDraft) => {
+    void commitPanel.showCommitDraft(commitDraft);
+  });
+  issueDetailPanel.setIssueResolvePanel(issueResolvePanel);
+  pullRequestDetailPanel.setIssueSupport(issueManager, issueDetailPanel);
+  commitPanel.setIssueSupport(issueManager, issueDetailPanel, createIssuePanel);
   logPanel.setCommitPanel(commitPanel);
   logPanel.setUndockedPanel(undockedPanel);
   // Changing the setting from the Settings UI: switching back to the bottom
@@ -358,6 +379,13 @@ export function activate(context: vscode.ExtensionContext): void {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
         pullRequestDetailPanel.restore(panel, state),
     }),
+    vscode.window.registerWebviewPanelSerializer('gitcharm.issueDetail', {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel, state: unknown) =>
+        issueDetailPanel.restore(panel, state),
+    }),
+    issueDetailPanel,
+    createIssuePanel,
+    issueResolvePanel,
     manager,
     badge,
     logPanel,

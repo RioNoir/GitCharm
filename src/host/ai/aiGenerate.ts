@@ -11,6 +11,12 @@ export interface GenerateOptions {
   onProgress?: (textSoFar: string) => void;
   /** The answer is code: keep the leading indentation of its first line (only blank lines around it are dropped). */
   preserveIndentation?: boolean;
+  /** Upper bound on the answer's length, for providers that need one (the Anthropic API). Default 1024. */
+  maxTokens?: number;
+  /** How long a CLI may take before it's stopped. Default 60 seconds. */
+  timeoutMs?: number;
+  /** Stops the generation: the CLI is killed, the request aborted. */
+  signal?: AbortSignal;
 }
 
 const PROGRESS_INTERVAL_MS = 80;
@@ -31,7 +37,7 @@ export async function generateWithAI(
   options: GenerateOptions = {},
 ): Promise<string> {
   const progress = throttledProgress(options.onProgress);
-  const text = await generateRaw(provider, prompt, cfg, progress);
+  const text = await generateRaw(provider, prompt, cfg, progress, options);
   const cleaned = cleanModelOutput(text, options.preserveIndentation);
   if (!cleaned) throw new Error(vscode.l10n.t('{0} returned an empty response', providerLabel(provider)));
   return cleaned;
@@ -89,7 +95,8 @@ function throttledProgress(onProgress: GenerateOptions['onProgress']): Progress 
   };
 }
 
-async function generateRaw(provider: string, prompt: string, cfg: vscode.WorkspaceConfiguration, progress: Progress): Promise<string> {
+async function generateRaw(provider: string, prompt: string, cfg: vscode.WorkspaceConfiguration, progress: Progress, options: GenerateOptions = {}): Promise<string> {
+  const cli: CliOptions = { timeoutMs: options.timeoutMs, signal: options.signal };
   switch (provider) {
     case 'claude-cli': {
       const claudeModel: string = cfg.get('ai.claudeModel', '');
@@ -107,7 +114,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
       let result: string | undefined;
       let resultError: string | undefined;
       try {
-        await runCli(cfg.get('ai.claudePath', 'claude'), args, '', line => {
+        await runCli(cfg.get('ai.claudePath', 'claude'), args, '', { ...cli, onLine: line => {
           const event = parseJson<ClaudeCliEvent>(line);
           if (!event) return;
           if (event.type === 'stream_event' && event.event?.type === 'content_block_delta' && event.event.delta?.type === 'text_delta') {
@@ -117,7 +124,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
             if (event.is_error) resultError = event.result || event.subtype || 'error';
             else result = event.result;
           }
-        });
+        } });
       } catch (err) {
         // A failed run still reports its reason as a `result` event on stdout — clearer than the raw JSON stream.
         throw resultError ? new Error(resultError) : err;
@@ -132,6 +139,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
       const model: string = cfg.get('ai.claudeModel', 'claude-sonnet-4-6');
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
+        signal: options.signal,
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
@@ -139,7 +147,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
         },
         body: JSON.stringify({
           model: model || 'claude-sonnet-4-6',
-          max_tokens: 1024,
+          max_tokens: options.maxTokens ?? 1024,
           stream: true,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -165,13 +173,13 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
       return streamChatCompletions('https://api.openai.com/v1/chat/completions', 'OpenAI API', {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-      }, { model: model || 'gpt-4o', messages: [{ role: 'user', content: prompt }] }, progress);
+      }, { model: model || 'gpt-4o', messages: [{ role: 'user', content: prompt }] }, progress, options.signal);
     }
 
     case 'gemini-cli': {
       const geminiModel: string = cfg.get('ai.geminiModel', '');
       const geminiArgs = geminiModel ? ['-m', geminiModel, '-p', prompt] : ['-p', prompt];
-      return runCli(cfg.get('ai.geminiPath', 'gemini'), geminiArgs, '');
+      return runCli(cfg.get('ai.geminiPath', 'gemini'), geminiArgs, '', cli);
     }
 
     case 'gemini-api': {
@@ -180,6 +188,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
       const model: string = cfg.get('ai.geminiModel', 'gemini-2.0-flash');
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:streamGenerateContent?alt=sse&key=${apiKey}`, {
         method: 'POST',
+        signal: options.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       });
@@ -196,7 +205,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
     case 'codex-cli': {
       const codexModel: string = cfg.get('ai.codexModel', '');
       const codexArgs = ['exec', '--dangerously-bypass-approvals-and-sandbox', ...(codexModel ? ['-m', codexModel] : [])];
-      const output = await runCli(cfg.get('ai.codexPath', 'codex'), codexArgs, prompt);
+      const output = await runCli(cfg.get('ai.codexPath', 'codex'), codexArgs, prompt, cli);
       return output.split('\n').filter(l => l.trim()).pop() ?? output.trim();
     }
 
@@ -205,6 +214,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
       const base: string = cfg.get('ai.ollamaUrl', 'http://localhost:11434');
       const res = await fetch(`${base}/api/chat`, {
         method: 'POST',
+        signal: options.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, stream: true, messages: [{ role: 'user', content: prompt }] }),
       });
@@ -222,7 +232,7 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
       const model: string = cfg.get('ai.lmStudioModel', '');
       const base: string = cfg.get('ai.lmStudioUrl', 'http://localhost:1234');
       return streamChatCompletions(`${base}/v1/chat/completions`, 'LM Studio', { 'Content-Type': 'application/json' },
-        { model: model || undefined, messages: [{ role: 'user', content: prompt }] }, progress);
+        { model: model || undefined, messages: [{ role: 'user', content: prompt }] }, progress, options.signal);
     }
 
     case 'vscode-lm':
@@ -240,10 +250,12 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
         model = all[0];
       }
       if (!model) throw new Error(vscode.l10n.t('No VS Code LM model available. Install GitHub Copilot or use the "GitCharm: Select AI Model" command to switch provider.'));
+      const cancellation = new vscode.CancellationTokenSource();
+      options.signal?.addEventListener('abort', () => cancellation.cancel());
       const response = await model.sendRequest(
         [vscode.LanguageModelChatMessage.User(prompt)],
         {},
-        new vscode.CancellationTokenSource().token,
+        cancellation.token,
       );
       let result = '';
       for await (const chunk of response.text) {
@@ -264,8 +276,8 @@ interface ClaudeCliEvent {
 }
 
 /** OpenAI-compatible `/chat/completions` with `stream: true` (OpenAI, LM Studio). */
-async function streamChatCompletions(url: string, label: string, headers: Record<string, string>, body: Record<string, unknown>, progress: Progress): Promise<string> {
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ ...body, stream: true }) });
+async function streamChatCompletions(url: string, label: string, headers: Record<string, string>, body: Record<string, unknown>, progress: Progress, signal?: AbortSignal): Promise<string> {
+  const res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify({ ...body, stream: true }) });
   if (!res.ok) throw new Error(vscode.l10n.t('{0} error {1}: {2}', label, res.status, await res.text()));
   let text = '';
   for await (const data of readSse(res)) {
@@ -333,35 +345,46 @@ function getLoginShellPath(): Promise<string | undefined> {
   return loginShellPath;
 }
 
+interface CliOptions {
+  /** Receives each stdout line as it arrives, for CLIs that stream JSON events. */
+  onLine?: (line: string) => void;
+  /** Working directory — an agent edits the files there. Default: VS Code's own. */
+  cwd?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 /**
  * Runs a CLI and resolves with its whole stdout. `input` is written to stdin (then closed) — Codex reads its
- * prompt from there; the others take it as an argument. `onLine` receives each stdout line as it arrives, for
- * CLIs that stream JSON events. If the binary isn't on VS Code's PATH, retries once with the login shell's PATH
- * (never on Windows, which has no login shell to ask).
+ * prompt from there; the others take it as an argument. If the binary isn't on VS Code's PATH, retries once with
+ * the login shell's PATH (never on Windows, which has no login shell to ask).
  */
-async function runCli(bin: string, args: string[], input: string, onLine?: (line: string) => void): Promise<string> {
+async function runCli(bin: string, args: string[], input: string, options: CliOptions = {}): Promise<string> {
   try {
-    return await spawnCli(bin, args, input, process.env, onLine);
+    return await spawnCli(bin, args, input, process.env, options);
   } catch (firstErr) {
     if (process.platform === 'win32' || (firstErr as NodeJS.ErrnoException).code !== 'ENOENT') throw firstErr;
     const shellPath = await getLoginShellPath();
     if (!shellPath) throw firstErr;
-    return spawnCli(bin, args, input, { ...process.env, PATH: shellPath }, onLine);
+    return spawnCli(bin, args, input, { ...process.env, PATH: shellPath }, options);
   }
 }
 
-function spawnCli(bin: string, args: string[], input: string, env: NodeJS.ProcessEnv, onLine?: (line: string) => void): Promise<string> {
+function spawnCli(bin: string, args: string[], input: string, env: NodeJS.ProcessEnv, { onLine, cwd, timeoutMs = CLI_TIMEOUT_MS, signal }: CliOptions): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    if (signal?.aborted) { reject(new Error(vscode.l10n.t('Cancelled'))); return; }
+    const child = spawn(bin, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let pending = '';
     let settled = false;
-    const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
+    const onAbort = () => { child.kill(); finish(() => reject(new Error(vscode.l10n.t('Cancelled')))); };
+    signal?.addEventListener('abort', onAbort);
+    const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); fn(); } };
     const timer = setTimeout(() => {
       child.kill();
-      finish(() => reject(new Error(vscode.l10n.t('{0} did not answer within {1} seconds', bin, CLI_TIMEOUT_MS / 1000))));
-    }, CLI_TIMEOUT_MS);
+      finish(() => reject(new Error(vscode.l10n.t('{0} did not answer within {1} seconds', bin, Math.round(timeoutMs / 1000)))));
+    }, timeoutMs);
 
     child.stdout.on('data', (d: Buffer) => {
       const chunk = d.toString();
@@ -387,4 +410,101 @@ function spawnCli(bin: string, args: string[], input: string, env: NodeJS.Proces
     child.stdin.on('error', () => { /* the CLI may exit before reading stdin — its exit code tells the story */ });
     child.stdin.end(input);
   });
+}
+
+// ─── Agent mode ──────────────────────────────────────────────────────────────
+// Claude Code and Codex can work on a repository themselves: read any file, search, and edit. GitCharm runs them
+// that way only for "Resolve with AI", in a directory of its choosing (a throwaway worktree), and reads the result
+// back from git — the agent never commits, pushes or runs shell commands.
+
+export type AgentProvider = 'claude-cli' | 'codex-cli';
+
+const AGENT_TIMEOUT_MS = 20 * 60_000;
+
+/** The agent CLI `operation` is configured with, if it is one — otherwise the operation can only generate text. */
+export function agentProviderFor(operation: AiOperation, cfg = vscode.workspace.getConfiguration('gitcharm')): AgentProvider | undefined {
+  const { provider } = aiConfigFor(operation, cfg);
+  return provider === 'claude-cli' || provider === 'codex-cli' ? provider : undefined;
+}
+
+export interface AgentRunOptions {
+  /** The directory the agent works in — every edit lands there. */
+  cwd: string;
+  /** The activity so far, one line per step (files read and edited, the agent's own remarks). */
+  onProgress?: (log: string) => void;
+  signal?: AbortSignal;
+}
+
+interface ClaudeAgentEvent extends ClaudeCliEvent {
+  message?: { content?: Array<{ type?: string; name?: string; text?: string; input?: Record<string, unknown> }> };
+}
+
+/** One readable line for a tool call: its name and the file or pattern it works on. */
+function describeToolUse(name: string, input: Record<string, unknown> | undefined): string {
+  const target = input?.file_path ?? input?.path ?? input?.pattern ?? input?.notebook_path;
+  return typeof target === 'string' ? `${name} ${target}` : name;
+}
+
+/** Runs the agent configured for `operation` in `options.cwd` and resolves with its closing summary. */
+export async function runAgentForOperation(operation: AiOperation, prompt: string, cfg: vscode.WorkspaceConfiguration, options: AgentRunOptions): Promise<string> {
+  const target = aiConfigFor(operation, cfg);
+  const progress = throttledProgress(options.onProgress);
+  const cli: CliOptions = { cwd: options.cwd, timeoutMs: AGENT_TIMEOUT_MS, signal: options.signal };
+
+  if (target.provider === 'claude-cli') {
+    const model: string = target.cfg.get('ai.claudeModel', '');
+    const args = [
+      '--print',
+      '--output-format', 'stream-json', '--verbose',
+      // Edits are accepted without asking, shell commands and the network are off: the agent reads and writes files only.
+      '--permission-mode', 'acceptEdits',
+      '--allowedTools', 'Read,Edit,MultiEdit,Write,Glob,Grep,LS',
+      '--disallowedTools', 'Bash,WebFetch,WebSearch',
+      '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence',
+      ...(model ? ['--model', model] : []),
+    ];
+    const steps: string[] = [];
+    let result: string | undefined;
+    let resultError: string | undefined;
+    try {
+      // The prompt goes in on stdin: it can be long, and the tool lists above take a variable number of values.
+      await runCli(target.cfg.get('ai.claudePath', 'claude'), args, prompt, { ...cli, onLine: line => {
+        const event = parseJson<ClaudeAgentEvent>(line);
+        if (!event) return;
+        if (event.type === 'assistant') {
+          for (const block of event.message?.content ?? []) {
+            if (block.type === 'tool_use' && block.name) steps.push(`• ${describeToolUse(block.name, block.input)}`);
+            else if (block.type === 'text' && block.text?.trim()) steps.push(block.text.trim());
+          }
+          progress(steps.join('\n'));
+        } else if (event.type === 'result') {
+          if (event.is_error) resultError = event.result || event.subtype || 'error';
+          else result = event.result;
+        }
+      } });
+    } catch (err) {
+      throw resultError ? new Error(resultError) : err;
+    }
+    if (resultError) throw new Error(resultError);
+    options.onProgress?.(steps.join('\n'));
+    return result ?? steps.filter(s => !s.startsWith('• ')).pop() ?? '';
+  }
+
+  if (target.provider === 'codex-cli') {
+    const model: string = target.cfg.get('ai.codexModel', '');
+    // --full-auto: writes allowed inside the working directory only, no approval prompts (nobody could answer them).
+    const args = ['exec', '--full-auto', '--skip-git-repo-check', ...(model ? ['-m', model] : [])];
+    const lines: string[] = [];
+    const output = await runCli(target.cfg.get('ai.codexPath', 'codex'), args, prompt, { ...cli, onLine: line => {
+      // eslint-disable-next-line no-control-regex
+      lines.push(line.replace(/\u001b\[[0-9;]*m/g, ''));
+      progress(lines.slice(-200).join('\n'));
+    } });
+    options.onProgress?.(lines.slice(-200).join('\n'));
+    // Codex ends with its final message: the last paragraph of the output.
+    const paragraphs = output.trim().split(/\n\s*\n/);
+    return paragraphs[paragraphs.length - 1]?.trim() ?? '';
+  }
+
+  throw new Error(vscode.l10n.t('{0} cannot work on files: choose Claude Code or Codex for this operation.', target.provider));
 }

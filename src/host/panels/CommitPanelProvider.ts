@@ -12,7 +12,7 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
-import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId } from '../types/messages';
+import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId, IssueStateFilter, IssueSummary } from '../types/messages';
 import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
@@ -37,6 +37,10 @@ import { resolveAvatarIconPath, resolveGitHubUsernameAvatarIconPath } from '../u
 import { attachAvatarResolver } from '../utils/avatarResolver';
 import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
 import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
+import { issueCommitReference, type IssueManager } from '../issues/IssueManager';
+import type { IssueDetailPanel } from './IssueDetailPanel';
+import type { CreateIssuePanel } from './CreateIssuePanel';
+import { createBranchForIssue } from './IssueDetailPanel';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
@@ -92,6 +96,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   private cachedActiveProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   private createPullRequestPanel?: CreatePullRequestPanel;
   private pullRequestDetailPanel?: PullRequestDetailPanel;
+  private issueManager?: IssueManager;
+  private issueDetailPanel?: IssueDetailPanel;
+  private createIssuePanel?: CreateIssuePanel;
 
   setLogProvider(provider: GitLogPanelProvider): void {
     this.logProvider = provider;
@@ -111,6 +118,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   setPullRequestDetailPanel(provider: PullRequestDetailPanel): void {
     this.pullRequestDetailPanel = provider;
+  }
+
+  /** Issues share the Pull Requests tab's forge connection; set after construction like the other panels, to avoid a dependency cycle. */
+  setIssueSupport(issueManager: IssueManager, issueDetailPanel: IssueDetailPanel, createIssuePanel: CreateIssuePanel): void {
+    this.issueManager = issueManager;
+    this.issueDetailPanel = issueDetailPanel;
+    this.createIssuePanel = createIssuePanel;
+    this.restartIssueAutoRefresh();
   }
 
   setBranchStatusBar(bar: BranchStatusBar): void {
@@ -200,6 +215,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('gitcharm.pullRequests.autoRefreshInterval')) this.restartPullRequestAutoRefresh();
       if (e.affectsConfiguration('gitcharm.pullRequests.defaultFilter')) this.requestPullRequestRefresh();
+      if (e.affectsConfiguration('gitcharm.issues.autoRefreshInterval')) this.restartIssueAutoRefresh();
+      if (e.affectsConfiguration('gitcharm.issues.defaultFilter')) this.requestIssueRefresh();
     });
 
     this.manager.onStatusChange(async (status) => {
@@ -229,6 +246,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       this.broadcastCommit({ type: 'WORKTREE_LIST_RESULT', repos: worktreeRepos });
 
       this.requestPullRequestRefresh();
+      this.requestIssueRefresh();
     });
 
     this.manager.onWorktreeChange(async () => {
@@ -421,6 +439,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.post({ type: 'PULLREQUEST_LIST_REPO_RESULT', repo });
   }
 
+  /** Re-fetches one repo's issue list under its current filters — used after any filter change. */
+  private async refreshIssueRepo(repoId: string): Promise<void> {
+    if (!this.issueManager) return;
+    const meta = this.manager.getRepoMetas().find(m => m.id === repoId);
+    if (!meta) return;
+    const repo = await this.issueManager.listForRepo(meta.id, meta.name, meta.color, true);
+    this.post({ type: 'ISSUE_LIST_REPO_RESULT', repo });
+  }
+
   private broadcastCommit(msg: HostToCommitMsg): void {
     this.enrichCommitMsg(msg);
     this.syncBadgeFromMsg(msg);
@@ -437,7 +464,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests'): void {
+  switchToTab(tab: CommitPanelTabId): void {
     if (!isCommitPanelTabShown(tab)) return;
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
   }
@@ -494,6 +521,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     logInfo('pullrequest-connect-pat', `Connected to ${connection.host}`);
     const repos = await this.pullRequestManager.getAllPullRequests(true);
     this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+    this.requestIssueRefresh();
   }
 
   /**
@@ -548,6 +576,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
       const repos = await this.pullRequestManager.getAllPullRequests(true);
       this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+      this.requestIssueRefresh();
       return;
     }
 
@@ -578,6 +607,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       await this.pullRequestManager.assignAccount(repoId, picked.accountId as string);
       const repos = await this.pullRequestManager.getAllPullRequests(true);
       this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+      this.requestIssueRefresh();
     }
   }
 
@@ -613,6 +643,106 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     if (!this.pullRequestManager) return;
     this.pullRequestManager.invalidate();
     this.post({ type: 'PULLREQUEST_INVALIDATED' });
+  }
+
+  private issueRefreshTimer: ReturnType<typeof setInterval> | undefined;
+
+  /** gitcharm.issues.autoRefreshInterval, in minutes (0: off) — same visibility rules as the pull request refresh. */
+  private restartIssueAutoRefresh(): void {
+    if (this.issueRefreshTimer) clearInterval(this.issueRefreshTimer);
+    this.issueRefreshTimer = undefined;
+    const minutes = vscode.workspace.getConfiguration('gitcharm.issues').get<number>('autoRefreshInterval', 0);
+    if (!minutes || minutes <= 0) return;
+    this.issueRefreshTimer = setInterval(() => {
+      const visible = !!this.view?.visible || !!this.undockedPanel?.isOpen();
+      if (visible && this.activeTab === 'issues' && vscode.window.state.focused) this.requestIssueRefresh();
+    }, Math.max(1, minutes) * 60_000);
+  }
+
+  /** Invalidates the issue cache and asks the webview to re-request the list with its current filters. */
+  requestIssueRefresh(): void {
+    if (!this.issueManager) return;
+    this.issueManager.invalidate();
+    this.broadcastCommit({ type: 'ISSUE_INVALIDATED' });
+  }
+
+  /** Shows the Changes tab with `message` as the commit message draft — only when the message box is empty. */
+  async showCommitDraft(message: string): Promise<void> {
+    if (!this.undockedPanel?.isOpen()) await vscode.commands.executeCommand(`${CommitPanelProvider.viewType}.focus`);
+    this.broadcastCommit({ type: 'COMMIT_SWITCH_TAB', tab: 'changes' });
+    this.broadcastCommit({ type: 'COMMIT_SET_MESSAGE', message, ifEmpty: true });
+  }
+
+  /** Inserts text (an issue reference) into the commit message, bringing the Changes tab into view. */
+  async insertCommitText(text: string): Promise<void> {
+    if (!this.undockedPanel?.isOpen()) await vscode.commands.executeCommand(`${CommitPanelProvider.viewType}.focus`);
+    this.broadcastCommit({ type: 'COMMIT_SWITCH_TAB', tab: 'changes' });
+    this.broadcastCommit({ type: 'COMMIT_INSERT_TEXT', text });
+  }
+
+  /** The "Reference an Issue in the Commit Message" command — offers the issues of every connected repo. */
+  pickIssueReferenceForCommit(): Promise<void> {
+    return this.pickIssueReference([]);
+  }
+
+  /**
+   * A searchable picker of open issues from the repos being committed (all connected repos when none of them
+   * has an issue tracker to offer); the chosen issue's reference is inserted into the commit message.
+   */
+  private async pickIssueReference(repoIds: string[]): Promise<void> {
+    const issueManager = this.issueManager;
+    if (!issueManager) return;
+    const eligible = issueManager.eligibleRepoIds();
+    const wanted = repoIds.filter(id => eligible.includes(id));
+    const candidates = wanted.length > 0 ? wanted : eligible;
+    const connected: string[] = [];
+    for (const repoId of candidates) {
+      if ((await this.pullRequestManager?.getConnectionStatus(repoId))?.connected) connected.push(repoId);
+    }
+    if (connected.length === 0) {
+      vscode.window.showInformationMessage(vscode.l10n.t('Connect the repository to its Git forge (Issues tab) to reference its issues.'));
+      return;
+    }
+    const metas = this.manager.getRepoMetas();
+    const showRepo = connected.length > 1;
+    type Item = vscode.QuickPickItem & { issue?: IssueSummary };
+
+    const qp = vscode.window.createQuickPick<Item>();
+    qp.title = vscode.l10n.t('Reference an Issue');
+    qp.placeholder = vscode.l10n.t('Search open issues by title or number');
+    qp.matchOnDescription = true;
+    let searchId = 0;
+    const search = async (query: string) => {
+      const id = ++searchId;
+      qp.busy = true;
+      const results = await Promise.all(connected.map(async repoId => ({ repoId, ...(await issueManager.searchOpenIssues(repoId, query)) })));
+      if (id !== searchId) return;
+      qp.busy = false;
+      const items: Item[] = [];
+      for (const { repoId, items: issues, error } of results) {
+        const repoName = metas.find(m => m.id === repoId)?.name ?? repoId;
+        if (showRepo && (issues.length > 0 || error)) items.push({ label: repoName, kind: vscode.QuickPickItemKind.Separator });
+        if (error) items.push({ label: `$(warning) ${error}`, alwaysShow: true });
+        for (const issue of issues) {
+          items.push({ label: `#${issue.number} ${issue.title}`, description: issue.labels?.map(l => l.name).join(', '), alwaysShow: !!query, issue });
+        }
+      }
+      qp.items = items;
+    };
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    qp.onDidChangeValue(value => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => void search(value), 300);
+    });
+    qp.onDidAccept(() => {
+      const issue = qp.selectedItems[0]?.issue;
+      if (!issue) return;
+      qp.hide();
+      void this.insertCommitText(issueCommitReference(issue));
+    });
+    qp.onDidHide(() => { if (debounce) clearTimeout(debounce); qp.dispose(); });
+    qp.show();
+    await search('');
   }
 
   /** Reads fresh status after a stage/unstage op. simple-git reads directly from the git index so it's always accurate once the op completes. */
@@ -2864,6 +2994,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         await this.pullRequestManager.disconnect(msg.repoId);
         const repos = await this.pullRequestManager.getAllPullRequests(true);
         this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+        this.requestIssueRefresh();
         break;
       }
 
@@ -2876,8 +3007,108 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const repos = await this.pullRequestManager.getAllPullRequests(true);
           this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
         }
+        this.requestIssueRefresh();
         break;
       }
+
+      case 'ISSUE_REQUEST_LIST': {
+        if (!this.issueManager) { this.post({ type: 'ISSUE_LIST_RESULT', repos: [] }); break; }
+        this.post({ type: 'ISSUE_LIST_START', repoIds: this.issueManager.eligibleRepoIds() });
+        await this.issueManager.getAllIssuesStreaming(!!msg.forceRefresh, repo => {
+          this.post({ type: 'ISSUE_LIST_REPO_RESULT', repo });
+        });
+        break;
+      }
+
+      case 'ISSUE_LOAD_MORE': {
+        if (!this.issueManager) break;
+        const repo = await this.issueManager.loadMore(msg.repoId);
+        this.post({ type: 'ISSUE_LOAD_MORE_RESULT', repoId: msg.repoId, repo });
+        break;
+      }
+
+      case 'ISSUE_REFRESH_REPO': {
+        await this.refreshIssueRepo(msg.repoId);
+        break;
+      }
+
+      case 'ISSUE_FILTERS_PROMPT': {
+        if (!this.issueManager) break;
+        const current = this.issueManager.getFiltersForRepo(msg.repoId);
+        const capabilities = await this.issueManager.getCapabilities(msg.repoId);
+        const STATE_LABELS: Record<IssueStateFilter, string> = { open: vscode.l10n.t('Open'), closed: vscode.l10n.t('Closed') };
+        const STATE_ORDER: IssueStateFilter[] = ['open', 'closed'];
+        interface FilterQuickPickItem extends vscode.QuickPickItem {
+          stateValue?: IssueStateFilter;
+          isAuthorToggle?: boolean;
+          isAssignedToggle?: boolean;
+          isMentionsToggle?: boolean;
+        }
+        const items: FilterQuickPickItem[] = [
+          { label: vscode.l10n.t('State'), kind: vscode.QuickPickItemKind.Separator },
+          ...STATE_ORDER.map(s => ({ label: STATE_LABELS[s], picked: current.states.includes(s), stateValue: s })),
+          { label: '', kind: vscode.QuickPickItemKind.Separator },
+          { label: vscode.l10n.t('Created by me'), picked: current.author === 'mine', isAuthorToggle: true },
+          ...(capabilities?.canFilterAssignee ? [{ label: vscode.l10n.t('Assigned to me'), picked: current.assignedToMe, isAssignedToggle: true }] : []),
+          ...(capabilities?.canFilterMentions ? [{ label: vscode.l10n.t('Mentioning you'), picked: current.mentioningMe, isMentionsToggle: true }] : []),
+        ];
+        const picked = await vscode.window.showQuickPick(items, { canPickMany: true, title: vscode.l10n.t('Filter Issues') });
+        if (picked === undefined) break;
+        const pickedStates = STATE_ORDER.filter(s => picked.some(p => p.stateValue === s));
+        await this.issueManager.setFiltersForRepo(msg.repoId, {
+          states: pickedStates.length > 0 ? pickedStates : current.states,
+          author: picked.some(p => p.isAuthorToggle) ? 'mine' : 'all',
+          assignedToMe: picked.some(p => p.isAssignedToggle),
+          mentioningMe: picked.some(p => p.isMentionsToggle),
+          search: current.search,
+        });
+        await this.refreshIssueRepo(msg.repoId);
+        break;
+      }
+
+      case 'ISSUE_SEARCH_PROMPT': {
+        if (!this.issueManager) break;
+        const current = this.issueManager.getFiltersForRepo(msg.repoId);
+        const input = await vscode.window.showInputBox({
+          title: vscode.l10n.t('Search Issues'),
+          prompt: vscode.l10n.t('Title text, or an issue number like 1234 or #1234'),
+          placeHolder: vscode.l10n.t('Search…'),
+          value: current.search,
+        });
+        if (input === undefined) break;
+        await this.issueManager.setFiltersForRepo(msg.repoId, { ...current, search: input.trim() });
+        await this.refreshIssueRepo(msg.repoId);
+        break;
+      }
+
+      case 'ISSUE_CREATE_PROMPT': {
+        await this.createIssuePanel?.open(msg.repoId);
+        break;
+      }
+
+      case 'ISSUE_OPEN_IN_BROWSER': {
+        vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        break;
+      }
+
+      case 'ISSUE_OPEN_DETAIL': {
+        await this.issueDetailPanel?.open(msg.repoId, msg.issue);
+        break;
+      }
+
+      case 'ISSUE_CREATE_BRANCH': {
+        if (!this.issueManager) break;
+        const result = await createBranchForIssue(this.manager, this.issueManager, msg.repoId, msg.issue);
+        if (result.branchName) vscode.window.showInformationMessage(vscode.l10n.t('Switched to new branch "{0}"', result.branchName));
+        else if (!result.ok) vscode.window.showErrorMessage(result.error ?? vscode.l10n.t('Failed to create branch'));
+        break;
+      }
+
+      case 'ISSUE_INSERT_REFERENCE': {
+        await this.insertCommitText(issueCommitReference(msg.issue));
+        break;
+      }
+
 
       case 'NOTIFY_ERROR': {
         logError('notify', `${msg.message}`);

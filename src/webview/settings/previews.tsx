@@ -169,6 +169,7 @@ const COMMIT_TABS: { id: string; icon: string; show?: string; badge?: string; co
   { id: 'shelf', icon: 'archive', show: 'commitPanel.showShelfTab', badge: 'commitPanel.showShelfBadge', count: 3, label: () => l10n.t('Shelf') },
   { id: 'stash', icon: 'git-stash', show: 'commitPanel.showStashTab', badge: 'commitPanel.showStashBadge', count: 1, label: () => l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) },
   { id: 'worktrees', icon: 'worktree', show: 'commitPanel.showWorktreesTab', badge: 'commitPanel.showWorktreesBadge', count: 2, label: () => l10n.t('Worktrees') },
+  { id: 'issues', icon: 'issues', show: 'commitPanel.showIssuesTab', badge: 'commitPanel.showIssuesBadge', count: 7, label: () => l10n.t('Issues') },
   { id: 'pullRequests', icon: 'git-pull-request', show: 'commitPanel.showPullRequestsTab', badge: 'commitPanel.showPullRequestsBadge', count: 4, label: () => l10n.t('Pull Requests') },
   { id: 'sync', icon: 'cloud', show: 'commitPanel.showSyncTab', badge: 'commitPanel.showSyncBadge', count: 2, label: () => l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }) },
 ];

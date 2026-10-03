@@ -12,6 +12,8 @@ import { buildPrompt } from '../ai/prompts';
 import { attachAvatarResolver, checkAvatarUrl } from '../utils/avatarResolver';
 import { panelIcon } from '../utils/panelIcon';
 import { webviewReadyGate } from '../utils/webviewReadyGate';
+import type { IssueManager } from '../issues/IssueManager';
+import type { IssueDetailPanel } from './IssueDetailPanel';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -43,6 +45,8 @@ function labelSwatchIconPath(hexColor: string): vscode.Uri {
 export class PullRequestDetailPanel {
   private panels = new Map<string, vscode.WebviewPanel>();
   private diffCache = new Map<string, FileDiffContent>();
+  private issueManager?: IssueManager;
+  private issueDetailPanel?: IssueDetailPanel;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -51,6 +55,12 @@ export class PullRequestDetailPanel {
     private readonly prDocProvider: PullRequestDocumentProvider,
     private readonly onChanged: () => void,
   ) {}
+
+  /** Set after construction — the issue panel opens PRs too, so each holds the other. */
+  setIssueSupport(issueManager: IssueManager, issueDetailPanel: IssueDetailPanel): void {
+    this.issueManager = issueManager;
+    this.issueDetailPanel = issueDetailPanel;
+  }
 
   async open(repoId: string, pr: PullRequestSummary): Promise<void> {
     const key = `${repoId}:${pr.number}`;
@@ -303,6 +313,26 @@ export class PullRequestDetailPanel {
         const result = await this.pullRequestManager.updatePullRequest(repoId, pr.number, { description: msg.description });
         post({ type: 'PRDETAIL_DESCRIPTION_UPDATED', ok: result.ok, error: result.error });
         if (result.ok) this.onChanged();
+        break;
+      }
+
+      case 'PRDETAIL_REQUEST_LINKED_ISSUES': {
+        if (!this.issueManager) { post({ type: 'PRDETAIL_LINKED_ISSUES_RESULT', issues: [] }); break; }
+        const { items: issues, error } = await this.issueManager.listIssuesClosedByPullRequest(repoId, pr.number, msg.description);
+        post({ type: 'PRDETAIL_LINKED_ISSUES_RESULT', issues, error });
+        break;
+      }
+
+      case 'PRDETAIL_OPEN_ISSUE': {
+        const issue = msg.issue;
+        if (!issue.sameRepo || !this.issueDetailPanel) {
+          vscode.env.openExternal(vscode.Uri.parse(issue.url));
+          break;
+        }
+        await this.issueDetailPanel.open(repoId, {
+          id: String(issue.number), number: issue.number, title: issue.title, url: issue.url, state: issue.state,
+          stateReason: issue.stateReason, authorName: '', createdAt: '', updatedAt: '',
+        });
         break;
       }
 

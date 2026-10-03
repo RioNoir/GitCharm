@@ -23,6 +23,9 @@ export const AI_PROMPT_KEYS = [
   'ai.prompts.explainCommit',
   'ai.prompts.explainPullRequest',
   'ai.prompts.resolveConflicts',
+  'ai.prompts.issueBranchName',
+  'ai.prompts.explainIssue',
+  'ai.prompts.resolveIssue',
 ];
 
 /** Every `gitcharm.*` setting must be listed in exactly one category (except the API keys, kept in SecretStorage). */
@@ -49,6 +52,12 @@ export function getCategories(): CategoryDef[] {
       ],
     },
     {
+      id: 'issues', group: workflow, icon: 'issues',
+      label: l10n.t('Issues'),
+      description: l10n.t('How the issue list is filtered and refreshed, and how branches and commit messages refer to an issue.'),
+      keys: ['issues.defaultFilter', 'issues.autoRefreshInterval', 'issues.branchNameTemplate', 'issues.commitReferenceTemplate'],
+    },
+    {
       id: 'sync', group: workflow, icon: 'sync', preview: 'sync',
       label: l10n.t('Sync'),
       description: l10n.t('When GitCharm fetches from the remotes, how it pulls, and when it refreshes its views.'),
@@ -73,10 +82,10 @@ export function getCategories(): CategoryDef[] {
       keys: [
         'changesViewMode', 'defaultCommitAction', 'defaultSaveAction', 'openCommitPanelOnConflictResolved',
         'commitSignoff', 'commitPanel.subjectMaxLength',
-        'commitPanel.showShelfTab', 'commitPanel.showStashTab', 'commitPanel.showWorktreesTab', 'commitPanel.showPullRequestsTab', 'commitPanel.showSyncTab',
-        'commitPanel.tabOrder', 'commitPanel.defaultTab', 'commitPanel.tabLabels',
+        'commitPanel.showShelfTab', 'commitPanel.showStashTab', 'commitPanel.showWorktreesTab', 'commitPanel.showPullRequestsTab', 'commitPanel.showIssuesTab',
+        'commitPanel.showSyncTab', 'commitPanel.tabOrder', 'commitPanel.defaultTab', 'commitPanel.tabLabels',
         'commitPanel.showChangesBadge', 'commitPanel.showShelfBadge', 'commitPanel.showStashBadge', 'commitPanel.showWorktreesBadge',
-        'commitPanel.showPullRequestsBadge', 'commitPanel.showSyncBadge', 'commitPanel.showActivityBarBadge',
+        'commitPanel.showPullRequestsBadge', 'commitPanel.showIssuesBadge', 'commitPanel.showSyncBadge', 'commitPanel.showActivityBarBadge',
       ],
     },
     {
@@ -103,7 +112,7 @@ export function getCategories(): CategoryDef[] {
     {
       id: 'ai', group: ai, icon: 'sparkle', custom: 'ai',
       label: l10n.t('AI'),
-      description: l10n.t('Pick the model that writes commit messages and pull requests, and explains changes.'),
+      description: l10n.t('Pick the model that writes commit messages and pull requests, explains changes, and works on issues.'),
       keys: [
         'ai.enabled', 'ai.provider', 'ai.modelId', 'ai.claudeModel', 'ai.claudePath', 'ai.openaiModel', 'ai.geminiModel',
         'ai.geminiPath', 'ai.codexModel', 'ai.codexPath', 'ai.ollamaModel', 'ai.ollamaUrl', 'ai.lmStudioModel', 'ai.lmStudioUrl',
@@ -161,6 +170,7 @@ export function settingLabel(key: string): string {
     case 'commitPanel.showStashTab': return l10n.t('Show Stash tab');
     case 'commitPanel.showWorktreesTab': return l10n.t('Show Worktrees tab');
     case 'commitPanel.showPullRequestsTab': return l10n.t('Show Pull Requests tab');
+    case 'commitPanel.showIssuesTab': return l10n.t('Show Issues tab');
     case 'commitPanel.showSyncTab': return l10n.t('Show Sync tab');
     case 'commitPanel.tabOrder': return l10n.t('Tab order');
     case 'commitSignoff': return l10n.t('Sign off commits');
@@ -186,6 +196,11 @@ export function settingLabel(key: string): string {
     case 'commitPanel.showStashBadge': return l10n.t('Stash badge');
     case 'commitPanel.showWorktreesBadge': return l10n.t('Worktrees badge');
     case 'commitPanel.showPullRequestsBadge': return l10n.t('Pull Requests badge');
+    case 'commitPanel.showIssuesBadge': return l10n.t('Issues badge');
+    case 'issues.defaultFilter': return l10n.t('Default filter');
+    case 'issues.autoRefreshInterval': return l10n.t('Auto-refresh (minutes)');
+    case 'issues.branchNameTemplate': return l10n.t('Branch name for an issue');
+    case 'issues.commitReferenceTemplate': return l10n.t('Issue reference in commit messages');
     case 'commitPanel.showActivityBarBadge': return l10n.t('Activity bar badge');
     case 'gitLog.showAuthor': return l10n.t('Show author');
     case 'gitLog.showAuthorAvatar': return l10n.t('Show author avatar');
@@ -219,6 +234,9 @@ export function settingLabel(key: string): string {
     case 'ai.operationModels': return l10n.t('Models per operation');
     case 'ai.offerConflictResolution': return l10n.t('Offer to resolve conflicts');
     case 'ai.prompts.resolveConflicts': return l10n.t('Resolve conflicts');
+    case 'ai.prompts.issueBranchName': return l10n.t('Issue branch name');
+    case 'ai.prompts.explainIssue': return l10n.t('Explain issue');
+    case 'ai.prompts.resolveIssue': return l10n.t('Resolve issue');
     case 'ai.prompts.commitMessage': return l10n.t('Commit message');
     case 'ai.prompts.pullRequestTitle': return l10n.t('Pull request title');
     case 'ai.prompts.pullRequestDescription': return l10n.t('Pull request description');
@@ -248,6 +266,7 @@ export function enumLabel(key: string, value: string): string {
     case 'commitPanel.defaultTab=stash': return l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] });
     case 'commitPanel.defaultTab=worktrees': return l10n.t('Worktrees');
     case 'commitPanel.defaultTab=pullRequests': return l10n.t('Pull Requests');
+    case 'commitPanel.defaultTab=issues': return l10n.t('Issues');
     case 'commitPanel.defaultTab=sync': return l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] });
     case 'commitPanel.defaultTab=lastUsed': return l10n.t('Last used');
     case 'commitPanel.tabLabels=active': return l10n.t('Active tab');
@@ -263,6 +282,10 @@ export function enumLabel(key: string, value: string): string {
     case 'pullRequests.defaultFilter=assignedToMe': return l10n.t('Assigned to me');
     case 'pullRequests.defaultFilter=reviewRequested': return l10n.t('Awaiting my review');
     case 'pullRequests.defaultFilter=mentioningMe': return l10n.t('Mentioning me');
+    case 'issues.defaultFilter=open': return l10n.t('All open');
+    case 'issues.defaultFilter=mine': return l10n.t('Created by me');
+    case 'issues.defaultFilter=assignedToMe': return l10n.t('Assigned to me');
+    case 'issues.defaultFilter=mentioningMe': return l10n.t('Mentioning me');
     case 'commitPanel.tabLabels=always': return l10n.t('All tabs');
     case 'commitPanel.tabLabels=never': return l10n.t('Icons only');
     case 'gitLogDefaultLocation=panel': return l10n.t('Bottom panel');

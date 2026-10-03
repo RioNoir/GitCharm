@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../shared/msgTypes';
+import type { RepoPullRequests, PullRequestSummary, ForgeProvider, PullRequestConnectionStatus } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
 import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
@@ -7,7 +7,7 @@ import { EmptyTabState } from './EmptyTabState';
 import { ForgeAvatarImg } from '../../shared/ForgeAvatarImg';
 import * as l10n from '@vscode/l10n';
 
-function useSkeletonStyle() {
+export function useSkeletonStyle() {
   useEffect(() => {
     const id = 'gitcharm-pr-skeleton-pulse';
     if (document.getElementById(id)) return;
@@ -65,7 +65,7 @@ function stateIcon(state: PullRequestSummary['state']): { icon: string; color: s
   }
 }
 
-function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
+export function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   return (
     <ForgeAvatarImg
       url={avatarUrl} alt={name} title={name} style={row.avatarImg}
@@ -133,8 +133,11 @@ function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, o
   );
 }
 
+/** What the connect prompts need of a repo section — shared by the Pull Requests and Issues tabs, which use one connection. */
+type ConnectableRepo = { repoId: string; connection: PullRequestConnectionStatus };
+
 function UnknownProviderPrompt({ repo, onSetHostOverride }: {
-  repo: RepoPullRequests;
+  repo: ConnectableRepo;
   onSetHostOverride: Props['onSetHostOverride'];
 }) {
   const [selected, setSelected] = React.useState<ForgeProvider>('github');
@@ -156,8 +159,8 @@ function UnknownProviderPrompt({ repo, onSetHostOverride }: {
   );
 }
 
-function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: {
-  repo: RepoPullRequests;
+export function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: {
+  repo: ConnectableRepo;
   onOpenAccountPicker: Props['onOpenAccountPicker'];
   onSetHostOverride: Props['onSetHostOverride'];
 }) {
@@ -197,7 +200,7 @@ function SkeletonRow() {
   );
 }
 
-function RepoSkeleton() {
+export function RepoSkeleton() {
   return (
     <>
       <SkeletonRow />
@@ -365,7 +368,7 @@ export function PullRequestPanel({
   );
 }
 
-const css = {
+export const css = {
   root: { display: 'flex', flexDirection: 'column' as const },
   repoSection: {} as React.CSSProperties,
   repoHeader: (color: string, singleRepo?: boolean): React.CSSProperties => ({
@@ -409,7 +412,7 @@ const css = {
   } as React.CSSProperties,
 };
 
-const row = {
+export const row = {
   header: {
     display: 'flex', alignItems: 'center', gap: '6px',
     padding: '5px 8px', cursor: 'pointer', minHeight: '36px',

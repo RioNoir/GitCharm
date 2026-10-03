@@ -19,10 +19,14 @@ export type AiPromptId =
   | 'pullRequestDescription'
   | 'explainCommit'
   | 'explainPullRequest'
-  | 'resolveConflicts';
+  | 'resolveConflicts'
+  | 'issueBranchName'
+  | 'explainIssue'
+  | 'resolveIssue';
 
 export const AI_PROMPT_IDS: readonly AiPromptId[] = [
   'commitMessage', 'pullRequestTitle', 'pullRequestDescription', 'explainCommit', 'explainPullRequest', 'resolveConflicts',
+  'issueBranchName', 'explainIssue', 'resolveIssue',
 ];
 
 export const DEFAULT_PROMPTS: Record<AiPromptId, string> = {
@@ -101,6 +105,43 @@ export const DEFAULT_PROMPTS: Record<AiPromptId, string> = {
     '- Do not repeat the lines before or after the conflict',
     '- Never output conflict markers (<<<<<<<, |||||||, =======, >>>>>>>)',
     '- Any comment you add is written in this language: {language}',
+  ].join('\n'),
+
+  issueBranchName: [
+    'You are naming a git branch for working on the issue below.',
+    '',
+    'Rules:',
+    '- Output ONLY the branch name, on one line, nothing else',
+    '- Short but specific: 2 to 5 words in English, lowercase, joined by hyphens (e.g. "fix-login-redirect-loop")',
+    '- Start with the issue number followed by a hyphen (e.g. "42-fix-login-redirect-loop")',
+    '- If a naming convention or prefixes are included below, follow them (e.g. "feature/42-…" or "bugfix/42-…", picking the prefix that fits the issue)',
+    '- Only letters, digits, hyphens and at most one slash; no spaces, no quotes, no trailing punctuation',
+  ].join('\n'),
+
+  explainIssue: [
+    'You are a senior developer explaining an issue from the project\'s issue tracker to a teammate who is about to work on it.',
+    '',
+    'Rules:',
+    '- Write the explanation in this language: {language}',
+    '- Start with a one-sentence summary of the problem or request',
+    '- Then explain what is being asked, the expected behavior, and any constraints or decisions taken in the discussion',
+    '- Mention the current status (open/closed, linked pull requests) when it is included below',
+    '- Finish with a short "Where to start" section: concrete first steps to tackle it. Do not invent details about the code base that are not in the issue',
+    '- Be concise but complete',
+    '- The output is rendered as Markdown: use it (bold, lists, headings, inline code) where it helps readability',
+    '- Output ONLY the explanation, no code fences wrapping the whole response, no preamble',
+  ].join('\n'),
+
+  resolveIssue: [
+    'You are a senior software engineer resolving the issue below in this repository.',
+    '',
+    'Rules:',
+    '- First understand the issue and the relevant code, then make the smallest complete change that resolves it',
+    '- Follow the existing code style, structure and conventions of the files you touch',
+    '- Do not refactor or reformat code unrelated to the issue, and do not add new dependencies unless the issue requires it',
+    '- Update or add tests only where the repository already has tests for the code you change',
+    '- Write your explanation of the change in this language: {language}; code, identifiers and code comments follow the language already used in the code',
+    '- If the issue cannot be resolved with the information available, say so and explain what is missing instead of guessing',
   ].join('\n'),
 };
 

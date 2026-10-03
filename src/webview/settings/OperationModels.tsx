@@ -21,8 +21,9 @@ function operationLabel(op: AiOperation): string {
   switch (op) {
     case 'commitMessage': return l10n.t('Commit messages');
     case 'pullRequest': return l10n.t('Pull request titles and descriptions');
-    case 'explain': return l10n.t('Explaining commits and pull requests');
+    case 'explain': return l10n.t('Explaining commits, pull requests and issues');
     case 'resolveConflicts': return l10n.t('Resolving conflicts');
+    case 'issues': return l10n.t('Issue branch names and fixes');
   }
 }
 
@@ -31,6 +32,7 @@ const OPERATION_ICON: Record<AiOperation, string> = {
   pullRequest: 'git-pull-request',
   explain: 'comment-discussion',
   resolveConflicts: 'git-merge',
+  issues: 'issues',
 };
 
 /**
