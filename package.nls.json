@@ -201,6 +201,8 @@
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Checkout Branch (downloads or updates the PR's actual source branch)",
   "config.section.experimental.title": "Experimental",
   "config.resetViewLocationsOnStartup.description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally.",
+  "command.interactiveRebase.title": "Interactive Rebase...",
+  "customEditor.rebaseTodo.displayName": "GitCharm Interactive Rebase",
   "command.resolveConflictsWithAi.title": "Resolve Conflicts with AI",
   "command.resolveAllConflictsWithAi.title": "Resolve All Conflicts with AI",
   "command.resolveConflictHunkWithAi.title": "Resolve This Conflict with AI",

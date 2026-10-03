@@ -202,7 +202,7 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_DO_COMMIT'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_PUSH'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean }
-  | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'abort' }
+  | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'skip' | 'abort' }
   | { type: 'COMMIT_PULL_ALL' }
   // rebase: omitted, the user picks merge or rebase, as in the branch menu's Pull…
   | { type: 'COMMIT_PULL_REPO'; requestId: string; repoId: string; rebase?: boolean }
@@ -408,6 +408,8 @@ export type LogToHostMsg =
   | { type: 'LOG_PUSH_BRANCH_PICK'; repoIds: string[]; branchName: string }
   | { type: 'LOG_MERGE'; requestId: string; repoId: string; from: string }
   | { type: 'LOG_REBASE'; requestId: string; repoId: string; onto: string }
+  /** Opens the interactive rebase editor: the current branch's commits from `hash` on, or those not yet on `onto`. */
+  | { type: 'LOG_INTERACTIVE_REBASE'; repoId: string; hash?: string; onto?: string }
   | { type: 'LOG_COMPARE'; requestId: string; repoId: string; refA: string; refB: string }
   | { type: 'LOG_DELETE_BRANCH'; requestId: string; repoId: string; branchName: string; force: boolean }
   | { type: 'LOG_DELETE_BRANCH_MULTI'; requestId: string; repoIds: string[]; branchName: string }
@@ -832,3 +834,56 @@ export type HostToConflictAiMsg =
 
 export type ConflictAiToHostMsg =
   | { type: 'CONFLICTAI_OPEN_FILE'; path: string; line: number };
+
+// ─── Interactive rebase ──────────────────────────────────────────────────────
+// The editor of an interactive rebase. 'managed': GitCharm started it from its own UI and runs git once the
+// plan is confirmed, with new messages collected up front. 'todo': git opened its git-rebase-todo file in
+// VS Code (sequence.editor set to `code --wait`); the plan is written back to that file and git carries on.
+
+export type RebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+
+export interface RebaseCommit {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  /** The full message. */
+  message: string;
+  authorName: string;
+  authorDate: string;
+  /** Already on the upstream: rewriting it needs a force push. */
+  pushed: boolean;
+}
+
+/**
+ * One commit of the plan, in the order git replays them (oldest first). `message` (managed mode only): the
+ * message of a group head — reworded, or with squash commits folded into it.
+ */
+export interface RebasePlanEntry {
+  hash: string;
+  action: RebaseAction;
+  message?: string;
+}
+
+export type HostToRebaseMsg =
+  | {
+      type: 'REBASE_INIT';
+      mode: 'managed' | 'todo';
+      repoName: string;
+      branch: string;
+      /** What the commits are replayed onto: a branch, a short hash, or '' for the root. */
+      onto: string;
+      /** Oldest first. */
+      commits: RebaseCommit[];
+      /** The actions git proposed (todo mode); pick for every commit otherwise. */
+      actions?: RebaseAction[];
+      /** Merge commits in the range, which an interactive rebase flattens away. */
+      mergeCount: number;
+      protectedBranch: boolean;
+    }
+  | { type: 'REBASE_BUSY'; busy: boolean }
+  | { type: 'REBASE_ERROR'; error: string };
+
+export type RebaseToHostMsg =
+  | { type: 'REBASE_START'; plan: RebasePlanEntry[] }
+  | { type: 'REBASE_CANCEL' }
+  | { type: 'REBASE_OPEN_COMMIT'; hash: string };

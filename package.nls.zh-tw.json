@@ -201,6 +201,8 @@
   "config.pullRequests.defaultCheckoutAction.enum.branch": "簽出分支（下載或更新該 PR 實際的來源分支）",
   "config.section.experimental.title": "實驗性",
   "config.resetViewLocationsOnStartup.description": "啟動時執行 VS Code 的「重設檢視位置」動作。可用於清除過時的 GitCharm 徽章位置，但會全域重設檢視位置。",
+  "command.interactiveRebase.title": "互動式重訂基底...",
+  "customEditor.rebaseTodo.displayName": "GitCharm 互動式重訂基底",
   "command.resolveConflictsWithAi.title": "使用 AI 解決衝突",
   "command.resolveAllConflictsWithAi.title": "使用 AI 解決所有衝突",
   "command.resolveConflictHunkWithAi.title": "使用 AI 解決此衝突",

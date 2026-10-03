@@ -42,7 +42,7 @@ interface Props {
   generatingMessage: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   onOpenProfiles: () => void;
-  onRebaseAction: (repoId: string, action: 'continue' | 'abort') => void;
+  onRebaseAction: (repoId: string, action: 'continue' | 'skip' | 'abort') => void;
   /** gitcharm.commitPanel.subjectMaxLength: a longer first line gets a warning; 0 turns it off. */
   subjectMaxLength?: number;
   /** Text to insert at the cursor (an issue reference) — `id` changes on every request, so repeats insert again. */
@@ -611,11 +611,14 @@ export function UnifiedCommitForm({
               dropdownAlign="right"
               enabled={!loading}
               icon="debug-continue"
-              label={l10n.t('Continue Rebase')}
+              label={rebasing.rebaseProgress
+                ? l10n.t('Continue Rebase ({0}/{1})', rebasing.rebaseProgress.step, rebasing.rebaseProgress.total)
+                : l10n.t('Continue Rebase')}
               title={l10n.t('Continue the rebase in {0}', metaMap.get(rebasing.repoId)?.name ?? rebasing.repoId)}
               items={[
-                { icon: 'debug-continue', label: l10n.t('Continue Rebase'), onSelect: () => onRebaseAction(rebasing.repoId, 'continue') },
-                { icon: 'error',          label: l10n.t('Abort Rebase'),    onSelect: () => onRebaseAction(rebasing.repoId, 'abort')    },
+                { icon: 'debug-continue',  label: l10n.t('Continue Rebase'), onSelect: () => onRebaseAction(rebasing.repoId, 'continue') },
+                { icon: 'debug-step-over', label: l10n.t('Skip Commit'),     onSelect: () => onRebaseAction(rebasing.repoId, 'skip')     },
+                { icon: 'error',           label: l10n.t('Abort Rebase'),    onSelect: () => onRebaseAction(rebasing.repoId, 'abort')    },
               ]}
               onMainClick={() => onRebaseAction(rebasing.repoId, 'continue')}
             />

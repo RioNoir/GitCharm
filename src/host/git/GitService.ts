@@ -15,7 +15,8 @@ import type {
   RepoStatus,
   SubmoduleEntry,
 } from '../types/git';
-import type { CompareRange, RangeFileEntry, StashEntry, UnpushedCommit } from '../types/messages';
+import type { CompareRange, RangeFileEntry, RebaseCommit, RebasePlanEntry, StashEntry, UnpushedCommit } from '../types/messages';
+import { buildRebaseTodo, shQuote } from './rebaseTodo';
 import { isSafeCompareRef } from './compareRange';
 import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
@@ -221,7 +222,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
+    return { repoId: this.repoId, branch: freshBranchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, ...(await this.operationState()) };
   }
 
   private async getShortHash(): Promise<string | undefined> {
@@ -400,7 +401,7 @@ export class GitService {
         unstagedFiles,
         isDetachedHead: isDetached,
         conflictCount,
-        mergeRebaseState: await this.getMergeRebaseState() ?? undefined,
+        ...(await this.operationState()),
       };
     }
 
@@ -434,7 +435,7 @@ export class GitService {
       }
     }
 
-    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, mergeRebaseState: await this.getMergeRebaseState() ?? undefined };
+    return { repoId: this.repoId, branch: branchInfo, stagedFiles, unstagedFiles, isDetachedHead: status.detached, conflictCount, ...(await this.operationState()) };
   }
 
   async getCurrentBranch(): Promise<BranchInfo> {
@@ -1480,6 +1481,13 @@ export class GitService {
     return null;
   }
 
+  /** The RepoStatus fields of a merge or rebase in progress. */
+  private async operationState(): Promise<Pick<RepoStatus, 'mergeRebaseState' | 'rebaseProgress'>> {
+    const state = await this.getMergeRebaseState();
+    if (state !== 'rebase') return { mergeRebaseState: state ?? undefined };
+    return { mergeRebaseState: state, rebaseProgress: await this.getRebaseProgress() };
+  }
+
   async rebaseContinue(): Promise<void> {
     // `rebase --continue` opens an editor for the commit being replayed. core.editor=true
     // is the no-op shell builtin, so the stored message is accepted unchanged and the
@@ -1498,6 +1506,90 @@ export class GitService {
 
   async abortRebase(): Promise<void> {
     await this.git.raw(['rebase', '--abort']);
+  }
+
+  async rebaseSkip(): Promise<void> {
+    await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+      .raw(['-c', 'core.editor=true', 'rebase', '--skip']);
+  }
+
+  /**
+   * How far an interactive rebase has got: commits replayed (the one it stopped at included) out of all of
+   * them. Counted from the todo files rather than msgnum/end, which also count label and exec lines.
+   */
+  async getRebaseProgress(): Promise<{ step: number; total: number } | undefined> {
+    const dir = path.join(await this.gitDir(), 'rebase-merge');
+    const count = (name: string) => {
+      try {
+        return fs.readFileSync(path.join(dir, name), 'utf8').split('\n')
+          .filter(l => /^(p|pick|r|reword|e|edit|s|squash|f|fixup|m|merge)\s/.test(l.trim())).length;
+      } catch {
+        return -1;
+      }
+    };
+    const done = count('done');
+    const todo = count('git-rebase-todo');
+    if (done < 0 || todo < 0 || done + todo === 0) return undefined;
+    return { step: done, total: done + todo };
+  }
+
+  /** Whether tracked files have uncommitted changes, which keep a rebase from starting. */
+  async hasTrackedChanges(): Promise<boolean> {
+    return (await this.git.raw(['status', '--porcelain', '--untracked-files=no'])).trim() !== '';
+  }
+
+  async isAncestorOfHead(hash: string): Promise<boolean> {
+    return this.git.raw(['merge-base', '--is-ancestor', hash, 'HEAD']).then(() => true, () => false);
+  }
+
+  /**
+   * The commits an interactive rebase onto `upstream` replays (null: the whole history, `--root`), oldest
+   * first — as git lists them in its todo: no merge commits, and none whose change `upstream` already has.
+   */
+  async getRebaseCommits(upstream: string | null): Promise<{ commits: RebaseCommit[]; mergeCount: number }> {
+    const RS = '\x1E', GS = '\x1D';
+    const range = upstream ? ['--right-only', '--cherry-pick', `${upstream}...HEAD`] : ['HEAD'];
+    const [raw, merges, unpushed] = await Promise.all([
+      this.git.raw(['log', '--no-merges', '--topo-order', '--reverse', '--abbrev=8', `--format=%H${GS}%h${GS}%aN${GS}%aI${GS}%B${RS}`, ...range, '--']),
+      this.git.raw(['rev-list', '--count', '--merges', upstream ? `${upstream}..HEAD` : 'HEAD', '--']),
+      this.readUnpushedHashes(),
+    ]);
+    const commits = raw.split(RS).map(r => r.replace(/^\n/, '')).filter(Boolean).map(record => {
+      const [hash, shortHash, authorName, authorDate, body = ''] = record.split(GS);
+      const message = body.trim();
+      return {
+        hash, shortHash, authorName, authorDate, message,
+        subject: message.split('\n')[0] ?? '',
+        pushed: unpushed !== 'all' && !unpushed.has(hash),
+      };
+    });
+    return { commits, mergeCount: parseInt(merges.trim(), 10) || 0 };
+  }
+
+  /**
+   * Runs an interactive rebase that carries out `plan` (oldest first) without stopping for an editor — it
+   * only stops where the plan says edit, or on a conflict. The todo and the new messages are written to
+   * the git dir, where the exec lines of a rebase resumed later (even after a reload) still find them.
+   */
+  async interactiveRebase(upstream: string | null, plan: RebasePlanEntry[], subjects: ReadonlyMap<string, string>, autostash: boolean): Promise<void> {
+    const dir = path.join(await this.gitDir(), 'gitcharm-rebase');
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    const todo = buildRebaseTodo(plan, subjects, (index, message) => {
+      const file = path.join(dir, `message-${index}`);
+      fs.writeFileSync(file, message.endsWith('\n') ? message : `${message}\n`);
+      return file;
+    });
+    const todoFile = path.join(dir, 'git-rebase-todo');
+    fs.writeFileSync(todoFile, todo);
+    // git hands sequence.editor the todo it generated; copying ours over it is the whole edit. core.editor=true
+    // accepts any message git would still ask for (a squash left to git) unchanged.
+    await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } }).raw([
+      '-c', `sequence.editor=cp ${shQuote(todoFile)}`, '-c', 'core.editor=true',
+      'rebase', '--interactive', ...(autostash ? ['--autostash'] : []), ...(upstream ? [upstream] : ['--root']),
+    ]);
+    // Done without stopping: no exec line is left to read the messages. (A stopped rebase leaves them for the next run to clear.)
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 
   async getRemotes(): Promise<string[]> {

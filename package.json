@@ -52,7 +52,8 @@
     "onWebviewPanel:gitcharm.commitFullDetail",
     "onWebviewPanel:gitcharm.pullRequestDetail",
     "onWebviewPanel:gitcharm.issueDetail",
-    "onWebviewPanel:gitcharm.settings"
+    "onWebviewPanel:gitcharm.settings",
+    "onCustomEditor:gitcharm.rebaseTodo"
   ],
   "main": "./out/host/extension.js",
   "l10n": "./l10n",
@@ -149,6 +150,14 @@
         }
       ]
     },
+    "customEditors": [
+      {
+        "viewType": "gitcharm.rebaseTodo",
+        "displayName": "%customEditor.rebaseTodo.displayName%",
+        "selector": [{ "filenamePattern": "git-rebase-todo" }],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
         "command": "gitcharm.openLog",
@@ -544,6 +553,12 @@
         "title": "%command.compareWith.title%",
         "category": "GitCharm",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "gitcharm.interactiveRebase",
+        "title": "%command.interactiveRebase.title%",
+        "category": "GitCharm",
+        "icon": "$(list-ordered)"
       },
       {
         "command": "gitcharm.resolveConflictsWithAi",

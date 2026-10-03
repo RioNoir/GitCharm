@@ -173,6 +173,7 @@ The remote side of every repository: what to push and what to pull.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
 - Author avatars in commit rows and commit detail, from the forges: the repository's own GitHub, GitLab, Bitbucket or Gitea when it is connected, then GitHub, GitLab and Codeberg noreply addresses — no email address is sent to third parties. Gravatar can be turned on as a last fallback (off by default). Colored-initials fallback. Initials correctly handle names with parenthesized suffixes (e.g. "Name Surname (Tag)").
 - **Explain with AI** and **Open Full Detail** context menu actions; AI actions hidden when AI is disabled.
+- **Interactive rebase** from a commit (**Interactively Rebase from Here…**) or onto a branch: pick, reword, edit, squash, fixup or drop commits and reorder them by drag and drop or Alt+Up/Down, with new messages written up front. With `sequence.editor` set to `code --wait`, a `git rebase -i` from the terminal opens the same editor.
 - Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, create a new branch, and **New Branch from "…"** (created in every repository that has that branch).
 - **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
 - Tag context menu: checkout, merge into current, push to remote, and delete (local, remote, or both).
@@ -317,6 +318,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Check for Orphaned Branches` | Fetches, then lists local branches whose remote branch was deleted. |
 | `GitCharm: Open Merge Editor` | Opens VS Code's merge editor for the active conflicted file. |
 | `GitCharm: Show File History` | Shows the Git history of the active file. |
+| `GitCharm: Interactive Rebase...` | Rebases the current branch interactively from a chosen commit or onto a branch. |
 | `GitCharm: Compare with...` | Diffs a file or folder against a chosen branch, tag, or commit. |
 | `GitCharm: Manage Hidden Repositories` | Reopens repositories previously hidden from the Commit Panel and Log Panel. |
 | `GitCharm: Manage Git Profiles` | Opens the Git profile manager. |

@@ -20,6 +20,7 @@ const apps = [
   { name: 'aiExplainDetail',   entry: 'src/webview/aiExplainDetail/main.tsx' },
   { name: 'settings',          entry: 'src/webview/settings/main.tsx' },
   { name: 'conflictAi',        entry: 'src/webview/conflictAi/main.tsx' },
+  { name: 'interactiveRebase', entry: 'src/webview/interactiveRebase/main.tsx' },
 ];
 
 /** @returns {import('esbuild').BuildOptions} */

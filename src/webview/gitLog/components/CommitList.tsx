@@ -1745,6 +1745,20 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
               style={ctxStyles.item}
               onClick={() =>
                 send({
+                  type: "LOG_INTERACTIVE_REBASE",
+                  repoId: commit.repoId,
+                  hash: commit.hash,
+                } satisfies LogToHostMsg)
+              }
+            >
+              <Codicon name="list-ordered" style={ctxStyles.icon} />
+              <span>{l10n.t('Interactively Rebase from Here...')}</span>
+            </div>
+            <div
+              data-ctx-item=""
+              style={ctxStyles.item}
+              onClick={() =>
+                send({
                   type: "LOG_REVERT_COMMIT",
                   requestId: generateId(),
                   repoId: commit.repoId,

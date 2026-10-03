@@ -1156,6 +1156,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         if (!repo) { logWarn('rebase-action', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         try {
           if (msg.action === 'continue') await repo.rebaseContinue();
+          else if (msg.action === 'skip') await repo.rebaseSkip();
           else await repo.abortRebase();
           this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true });
           logInfo('rebase-action', `Rebase ${msg.action} in ${msg.repoId}`);

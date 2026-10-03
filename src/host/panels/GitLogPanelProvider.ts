@@ -13,6 +13,8 @@ import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import type { GitProfileService } from '../git/GitProfileService';
 import { openSquashEditor } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
+import type { RebaseTarget } from './InteractiveRebasePanel';
+import { openInteractiveRebase } from '../commands/interactiveRebaseCommands';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger';
@@ -1285,6 +1287,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             vscode.window.showErrorMessage(vscode.l10n.t('Merge of "{0}" failed: {1}', msg.from, errMsg));
           }
         }
+        break;
+      }
+
+      case 'LOG_INTERACTIVE_REBASE': {
+        const target: RebaseTarget | undefined = msg.hash ? { kind: 'commit', hash: msg.hash } : msg.onto ? { kind: 'onto', ref: msg.onto } : undefined;
+        if (target) await openInteractiveRebase(msg.repoId, target);
         break;
       }
 

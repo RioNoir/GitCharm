@@ -201,6 +201,8 @@
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Hacer checkout de la rama (descarga o actualiza la rama de origen real de la PR)",
   "config.section.experimental.title": "Experimental",
   "config.resetViewLocationsOnStartup.description": "Ejecutar al iniciar la acción 'Restablecer ubicaciones de las vistas' de VS Code. Útil para corregir la posición obsoleta del distintivo de GitCharm, pero restablece la posición de todas las vistas.",
+  "command.interactiveRebase.title": "Rebase interactivo...",
+  "customEditor.rebaseTodo.displayName": "Rebase interactivo de GitCharm",
   "command.resolveConflictsWithAi.title": "Resolver conflictos con IA",
   "command.resolveAllConflictsWithAi.title": "Resolver todos los conflictos con IA",
   "command.resolveConflictHunkWithAi.title": "Resolver este conflicto con IA",

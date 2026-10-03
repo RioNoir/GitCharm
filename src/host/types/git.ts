@@ -154,4 +154,6 @@ export interface RepoStatus {
   conflictCount: number;
   /** Set while a merge or rebase is still open, so the panel can offer Continue / Abort. */
   mergeRebaseState?: 'merge' | 'rebase';
+  /** An interactive rebase's progress: commits replayed (the current one included) out of all of them. */
+  rebaseProgress?: { step: number; total: number };
 }

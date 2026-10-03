@@ -201,6 +201,8 @@
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Branch auschecken (lädt den tatsächlichen Quell-Branch des PR herunter oder aktualisiert ihn)",
   "config.section.experimental.title": "Experimentell",
   "config.resetViewLocationsOnStartup.description": "Beim Start die VS Code-Aktion „Ansichtspositionen zurücksetzen“ ausführen. Nützlich, um eine veraltete Platzierung des GitCharm-Badges zu korrigieren, setzt jedoch die Positionen aller Ansichten global zurück.",
+  "command.interactiveRebase.title": "Interaktiver Rebase...",
+  "customEditor.rebaseTodo.displayName": "GitCharm Interaktiver Rebase",
   "command.resolveConflictsWithAi.title": "Konflikte mit KI lösen",
   "command.resolveAllConflictsWithAi.title": "Alle Konflikte mit KI lösen",
   "command.resolveConflictHunkWithAi.title": "Diesen Konflikt mit KI lösen",
