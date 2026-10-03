@@ -37,6 +37,7 @@ Large workspaces with many submodules, such as PX4-Autopilot with 44, load and r
 - A repository listed alone because the others are filtered out (no changes, nothing shelved…) keeps its color and dot, and the Commit tab keeps the multi-repository layout; the neutral single-repository look is only for a workspace with one repository
 
 ### 🔧 Other
+- The **GitCharm Settings** page shows a note at the top: GitCharm is free and always will be, with a **Support GitCharm** button to its Ko-fi page
 - Shorter labels in the translations: e.g. "Silently Stash this file" no longer adds "without confirmation", and progress messages drop "in progress" before the ellipsis
 
 ## v0.6.2

@@ -1831,5 +1831,8 @@
   "No Git repository found.": "未找到 Git 仓库。",
   "Select a repository": "选择一个仓库",
   "Onto Branch": "到分支",
-  "Rebase from a commit (included), or onto a branch": "从某个提交（包含）开始变基，或变基到某个分支"
+  "Rebase from a commit (included), or onto a branch": "从某个提交（包含）开始变基，或变基到某个分支",
+  "Support GitCharm": "支持 GitCharm",
+  "GitCharm is free, and always will be.": "GitCharm 免费，并将永远免费。",
+  "If it makes your work easier, consider supporting its development.": "如果它让你的工作更轻松，请考虑支持它的开发。"
 }

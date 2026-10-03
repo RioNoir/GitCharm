@@ -1831,5 +1831,8 @@
   "No Git repository found.": "找不到 Git 儲存庫。",
   "Select a repository": "選取一個儲存庫",
   "Onto Branch": "至分支",
-  "Rebase from a commit (included), or onto a branch": "從某個提交（包含）開始重定基底，或重定基底至某個分支"
+  "Rebase from a commit (included), or onto a branch": "從某個提交（包含）開始重定基底，或重定基底至某個分支",
+  "Support GitCharm": "支持 GitCharm",
+  "GitCharm is free, and always will be.": "GitCharm 免費，並將永遠免費。",
+  "If it makes your work easier, consider supporting its development.": "如果它讓你的工作更輕鬆，請考慮支持它的開發。"
 }

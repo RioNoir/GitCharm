@@ -12,6 +12,15 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 
 /* ── Header: search + scope tabs ─────────────────────────────────────────── */
 .gc-header { flex-shrink: 0; padding: 11px 24px 0; max-width: 1200px; width: 100%; margin: 0 auto; }
+/* Support banner: always visible above the search. */
+.gc-support {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 10px 8px 12px; border-radius: 4px;
+  background: color-mix(in srgb, var(--vscode-button-background) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vscode-button-background) 40%, transparent);
+}
+.gc-support-icon { color: var(--vscode-charts-red, #f14c4c); flex-shrink: 0; }
+.gc-support-text { flex: 1; min-width: 0; font-size: 12px; line-height: 1.45; }
+.gc-support-btn { flex-shrink: 0; padding: 3px 10px; font-size: 12px; }
 .gc-search {
   display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 3px;
   background: var(--vscode-input-background); color: var(--vscode-input-foreground);
@@ -56,6 +65,8 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 @media (max-width: 760px) {
   .gc-toc { display: none; }
   .gc-header { padding: 11px 12px 0; }
+  .gc-support { flex-wrap: wrap; }
+  .gc-support-btn { margin-left: 22px; }
   .gc-content { padding: 0 12px 32px; }
 }
 

@@ -16,6 +16,9 @@ import { SETTINGS_CSS } from './styles';
 
 declare const window: Window & { __INITIAL_CONFIG__?: { section?: string } };
 
+/** Same link as package.json's `sponsor` and the README banner. */
+const SUPPORT_URL = 'https://ko-fi.com/rionoir';
+
 interface UiState { category?: string; target?: SettingsTarget; collapsed?: string[] }
 
 function loadUiState(): UiState {
@@ -146,6 +149,16 @@ function App() {
   return (
     <div className="gc-settings">
       <header className="gc-header">
+        <aside className="gc-support" aria-label={l10n.t('Support GitCharm')}>
+          <Codicon name="heart" className="gc-support-icon" />
+          <div className="gc-support-text">
+            <strong>{l10n.t('GitCharm is free, and always will be.')}</strong>{' '}
+            {l10n.t('If it makes your work easier, consider supporting its development.')}
+          </div>
+          <button type="button" className="gc-btn gc-btn-primary gc-support-btn" title={SUPPORT_URL} onClick={() => send({ type: 'SETTINGS_OPEN_URL', url: SUPPORT_URL })}>
+            <Codicon name="heart-filled" /> {l10n.t('Support GitCharm')}
+          </button>
+        </aside>
         <div className="gc-search">
           <input
             ref={searchRef}

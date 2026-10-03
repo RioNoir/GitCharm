@@ -1831,5 +1831,8 @@
   "No Git repository found.": "Nessun repository Git trovato.",
   "Select a repository": "Seleziona un repository",
   "Onto Branch": "Su un branch",
-  "Rebase from a commit (included), or onto a branch": "Rebase da un commit (incluso), o su un branch"
+  "Rebase from a commit (included), or onto a branch": "Rebase da un commit (incluso), o su un branch",
+  "Support GitCharm": "Supporta GitCharm",
+  "GitCharm is free, and always will be.": "GitCharm è gratuito, e lo sarà sempre.",
+  "If it makes your work easier, consider supporting its development.": "Se ti semplifica il lavoro, valuta di supportarne lo sviluppo."
 }
