@@ -277,6 +277,12 @@ export interface PullRequestProvider {
   hasCredentials(): Promise<boolean>;
   /** Current authenticated username, used to implement the "mine" author filter. Cached by the caller. */
   getCurrentUsername(): Promise<string | undefined>;
+  /**
+   * Avatar of the forge account that authored a commit, as the forge itself matches it: by commit (`sha`), or by
+   * email on GitLab, which already holds the repo and its authors' addresses — nothing goes to a third party.
+   * Undefined when no account matches, the commit isn't on the forge, or no `sha` is given where one is needed.
+   */
+  getCommitAuthorAvatar(owner: string, repo: string, email: string, sha?: string): Promise<string | undefined>;
   /** Branch names for a repo, used to populate the target-branch editor — always a remote API call, since the base repo may not be the local `origin` (e.g. a fork's upstream). */
   listBranches(owner: string, repo: string): Promise<string[]>;
   /** Candidate users for reviewer/assignee pickers — repo collaborators (GitHub/Gitea), project members (GitLab), or workspace members (Bitbucket). */

@@ -17,7 +17,7 @@ import { getVsCodeApi } from '../shared/vscodeApi';
 import { isEmbedded } from '../shared/embedded';
 import { commitRevision, selectionGroups } from './utils/commitSelection';
 import type { CommitSelection } from './utils/commitSelection';
-import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutByLocation, LogViewLocation, CommitSelectionMode, RangeFileEntry } from '../../host/types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutByLocation, LogViewLocation, CommitSelectionMode, RangeFileEntry, LogColumns } from '../../host/types/messages';
 import type { CommitNode } from '../shared/types';
 
 function generateId() {
@@ -55,6 +55,7 @@ function App() {
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [layoutByLocation, setLayoutByLocation] = useState(initialLayout);
+  const [columns, setColumns] = useState<LogColumns>({ author: true, avatar: true, date: true, hash: true, refs: true });
   const [viewLocation, setViewLocation] = useState(detectViewLocation);
   const { filtersHidden, sidebarHidden } = layoutByLocation[viewLocation];
   const [themeVersion, setThemeVersion] = useState(0);
@@ -165,6 +166,10 @@ function App() {
           store.setBranches(msg.branches);
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           if (msg.layout) setLayoutByLocation(msg.layout);
+          if (msg.columns) setColumns(msg.columns);
+          break;
+        case 'LOG_COLUMNS':
+          setColumns(msg.columns);
           break;
         case 'LOG_LAYOUT_PREFS':
           setLayoutByLocation(msg.layout);
@@ -691,6 +696,7 @@ function App() {
             emptyState={compareEmptyState}
             commitLimitReached={store.hasMore ? null : store.commitLimitReached}
             hideDate={viewLocation === 'sideBar'}
+            columns={columns}
           />
         </div>
 

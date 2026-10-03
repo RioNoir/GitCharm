@@ -7,7 +7,7 @@ import { focusOnHover } from './keyboardNav';
 
 /**
  * Shared file-tree renderer used everywhere a set of changed files needs to be shown nested by
- * folder (or flat) with a status letter and +/- line stats — Shelf, Stash, Git Log commit detail,
+ * folder (or flat) with a status letter and +/- line stats — Shelf, Stash, Log Panel commit detail,
  * and the PR "Changed Files" tab. NOT used by the Commit Panel's own Changes/Commit tab
  * (`FileTree.tsx`), which has its own checkboxes and staging interactions and stays separate.
  */

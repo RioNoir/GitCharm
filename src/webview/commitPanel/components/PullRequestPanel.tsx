@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
 import type { RepoPullRequests, PullRequestSummary, ForgeProvider } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
+import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { EmptyTabState } from './EmptyTabState';
+import { ForgeAvatarImg } from '../../shared/ForgeAvatarImg';
 import * as l10n from '@vscode/l10n';
 
 function useSkeletonStyle() {
@@ -65,11 +66,12 @@ function stateIcon(state: PullRequestSummary['state']): { icon: string; color: s
 }
 
 function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
-  const [failed, setFailed] = React.useState(false);
-  if (avatarsEnabled && avatarUrl && !failed) {
-    return <img src={avatarUrl} alt={name} title={name} style={row.avatarImg} onError={() => setFailed(true)} />;
-  }
-  return <span style={{ ...row.avatarFallback, background: avatarColor(name) }} title={name}>{initials(name)}</span>;
+  return (
+    <ForgeAvatarImg
+      url={avatarUrl} alt={name} title={name} style={row.avatarImg}
+      fallback={<span style={{ ...row.avatarFallback, background: avatarColor(name) }} title={name}>{initials(name)}</span>}
+    />
+  );
 }
 
 /** GitHub-style "✓ 3/3" — the icon reflects the worst state (any failure wins over pending), the count is passed/total. */

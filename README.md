@@ -18,7 +18,7 @@
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
-GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Git Log panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
+GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Log Panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
 
 It activates automatically when the opened workspace contains a Git repository.
 
@@ -84,7 +84,7 @@ When there is nothing left to commit, the primary button turns into the remote a
 The remote side of every repository: what to push and what to pull.
 
 - Lists only the repositories out of sync with their remote — commits to push, a branch to publish, or commits to pull — with an empty state when everything is up to date. Repositories with commits to push open by default, the others start collapsed.
-- Commits to push, including branches without an upstream tracking branch; for commits to pull, how many (the Git Log lists them).
+- Commits to push, including branches without an upstream tracking branch; for commits to pull, how many (the Log Panel lists them).
 - Commit count badge on the tab label: commits to push plus commits to pull, auto-updated after each commit, undo, push, pull, or fetch.
 - File count badge on the Changes tab label showing the total number of modified files.
 - Branch info header with matching badges (↑ ahead, ↓ behind, Unpublished) and, on hover, **Fetch**, **Pull…** (merge or rebase), and **Push** / **Publish Branch** for that repository.
@@ -94,7 +94,7 @@ The remote side of every repository: what to push and what to pull.
 - **Undo** the HEAD commit (with confirmation) directly from the list of commits to push.
 - **Explain with AI** context menu action on commits: opens the detail panel with an auto-generated explanation of the changes.
 - **Open Full Detail** context menu action on commits.
-- Click any row to jump to that commit in the Git Log panel.
+- Click any row to jump to that commit in the Log Panel.
 - **Publish** button for branches that have never been pushed.
 - Silent refresh: existing commits stay visible while reloading (no flicker).
 
@@ -104,7 +104,7 @@ The remote side of every repository: what to push and what to pull.
 - Per-repository list with state icons (open, draft, merged, closed), author avatar, source → target branch, and total/loaded count; filter by state, author, assigned-to-me, review-requested-to-me, and mentions, plus free-text/PR-number search.
 - **Account picker**: connect a new account (GitHub via VS Code's built-in authentication, or a Personal Access Token for GitLab/Bitbucket/Gitea) or switch between already-saved accounts per repository — no more silent auto-selection of a single saved account.
 - **Manage Pull Request Credentials** command: a single account list grouped by provider, with rename and remove actions, and an entry to add a new account.
-- Avatars (GitHub username avatar, or Gravatar when an account email is known) shown next to accounts in the account pickers, falling back to a generic icon when no avatar can be resolved.
+- Avatars (GitHub username avatar, or the account email's avatar resolved as for commit authors) shown next to accounts in the account pickers, falling back to a generic icon when no avatar can be resolved.
 - Checks shown per PR in the list, GitHub-style (e.g. "✓ 3/3").
 - **Create Pull Request**: two-column layout with native branch QuickPickers, a Markdown (TipTap) description editor, and a live commit/file diff preview against the selected branches.
 - Markdown editor for descriptions and comments: `@` mentions with autocomplete from the repository's members, tables, H1–H3 headings, and Markdown pasted as plain text keeps its formatting.
@@ -122,25 +122,25 @@ The remote side of every repository: what to push and what to pull.
 - **Shelve** with patch-based shelves: create, apply (full or partial), delete, rename, and inspect per-file diffs.
 - Binary-file handling and conflict detection on unshelve.
 - **Native stash** support: list, apply, pop, drop, rename, and file diff preview.
-- Stashes are shown as native nodes directly in the Git Log commit list, with the stash commit's hash and a `stash@{N}` badge.
+- Stashes are shown as native nodes directly in the Log Panel commit list, with the stash commit's hash and a `stash@{N}` badge.
 - Row selection is maintained when the context menu is open, matching the behavior of other tabs.
 
 <img src="media/screenshots/shelf_stash_push.png" alt="GitCharm commit panel">
 
 ### 🪟 Undocked Panel
 
-- **Undock…** in the Git Log burger menu (or `GitCharm: Undock` in the Command Palette) opens a native QuickPick with four options:
-  - **Undock in Editor Tab (Log & Commit)** — opens a resizable editor tab with Commit Panel on the left and Git Log on the right.
+- **Undock…** in the Log Panel burger menu (or `GitCharm: Undock` in the Command Palette) opens a native QuickPick with four options:
+  - **Undock in Editor Tab (Log & Commit)** — opens a resizable editor tab with Commit Panel on the left and Log Panel on the right.
   - **Undock in New Window (Log & Commit)** — same layout in a separate VS Code window.
-  - **Undock in Editor Tab** — editor tab with the Git Log only.
-  - **Undock in New Window** — separate window with the Git Log only.
-- **Default Location…** in the same burger menu (or `GitCharm: Set Default Git Log Location` in the Command Palette) does the same thing, but *remembers* the choice: Bottom Panel, Editor Tab (Log & Commit / Only Log), or New Window (Log & Commit / Only Log). The picked location applies immediately and is written to `gitcharm.gitLogDefaultLocation` / `gitcharm.gitLogDefaultLayout`, so `GitCharm: Focus Git Log` and its keyboard shortcut (`Ctrl/Cmd+Alt+L`) reopen the Log there — even after you close the editor tab or restart VS Code.
+  - **Undock in Editor Tab** — editor tab with the Log Panel only.
+  - **Undock in New Window** — separate window with the Log Panel only.
+- **Default Location…** in the same burger menu (or `GitCharm: Set Default Log Panel Location` in the Command Palette) does the same thing, but *remembers* the choice: Bottom Panel, Editor Tab (Log & Commit / Only Log), or New Window (Log & Commit / Only Log). The picked location applies immediately and is written to `gitcharm.gitLogDefaultLocation` / `gitcharm.gitLogDefaultLayout`, so `GitCharm: Focus Log Panel` and its keyboard shortcut (`Ctrl/Cmd+Alt+L`) reopen the Log there — even after you close the editor tab or restart VS Code.
   - **Undock…** is session-only and never changes the setting; **Default Location…** is the persistent counterpart.
   - Picking anything other than **Bottom Panel** also removes the GitCharm Log view from the bottom panel, so you never end up with two Log surfaces. Switching back restores it.
 - State is fully synchronised with the sidebar panels: commits, branches, and status update in real time in both views.
 - The undocked tab shows the same toolbar actions as the Commit Panel (Fetch All, Pull All, Push All, Sync All, Branch Menu, Settings).
 
-### 📜 Git Log Panel
+### 📜 Log Panel
 
 - Commit graph with branch visualization.
 - **Uncommitted changes** row on top of each repository's HEAD, updated live: select it to see the changed files against HEAD, click a file for its working-tree diff, or use **Open Changes** for a multi-file diff. Turn it off with `gitcharm.showUncommittedChangesInLog`.
@@ -157,7 +157,7 @@ The remote side of every repository: what to push and what to pull.
 - Bold commit message for the HEAD commit in the list.
 - Author name shown in commit rows when the panel is wider than 550 px.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
-- Author avatars in commit rows and commit detail: resolves GitHub noreply emails to GitHub avatars, other emails to Gravatar, with a colored-initials fallback. Initials correctly handle names with parenthesized suffixes (e.g. "Name Surname (Tag)").
+- Author avatars in commit rows and commit detail, from the forges: the repository's own GitHub, GitLab, Bitbucket or Gitea when it is connected, then GitHub, GitLab and Codeberg noreply addresses — no email address is sent to third parties. Gravatar can be turned on as a last fallback (off by default). Colored-initials fallback. Initials correctly handle names with parenthesized suffixes (e.g. "Name Surname (Tag)").
 - **Explain with AI** and **Open Full Detail** context menu actions; AI actions hidden when AI is disabled.
 - Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, create a new branch, and **New Branch from "…"** (created in every repository that has that branch).
 - **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
@@ -193,14 +193,14 @@ The remote side of every repository: what to push and what to pull.
 - Reserved names `Local` and `Global` are displayed as implicit entries with source tooltip.
 - Active profile applied automatically to the local repo config before every commit.
 - Each workspace/repository can use a different identity.
-- Avatars in the profile picker: resolves each profile's email to a GitHub or Gravatar avatar, falling back to a generic icon when none can be resolved.
+- Avatars in the profile picker: resolves each profile's email as for commit authors (noreply addresses, then Gravatar if enabled), falling back to a generic icon when none can be resolved.
 
 
 ### 🔍 Git Annotations (Blame)
 
 - Inline blame columns in the editor showing commit author, relative date, and summary.
 - Ghost text with the same information rendered at the end of the current line.
-- Hover actions link directly to the commit in the Git Log panel.
+- Hover actions link directly to the commit in the Log Panel.
 - Accessible via editor context menu and Command Palette; toggled with dedicated commands.
 - Layout adapts around edits, tabs, CodeLens, and editor alignment.
 
@@ -292,13 +292,13 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 
 | Command | Description |
 |:--|:--|
-| `GitCharm: Focus Git Log` | Focuses the Git Log wherever it is set to open. |
+| `GitCharm: Focus Log Panel` | Focuses the Log Panel wherever it is set to open. |
 | `GitCharm: Commit` | Commits the selected changes. |
 | `GitCharm: Fetch All Remotes` | Fetches all remotes across all repositories. |
 | `GitCharm: Pull All (Update Project)` | Pulls all repositories (prompts for merge or rebase strategy). |
 | `GitCharm: Push All` | Pushes all repositories. |
 | `GitCharm: Sync All (Pull + Push)` | Pulls then pushes all repositories; stops if any pull fails. |
-| `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Git Log panel. |
+| `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Log Panel. |
 | `GitCharm: Branch Menu` | Opens the Status Bar branch menu. |
 | `GitCharm: Check for Orphaned Branches` | Fetches, then lists local branches whose remote branch was deleted. |
 | `GitCharm: Open Merge Editor` | Opens VS Code's merge editor for the active conflicted file. |
@@ -308,8 +308,8 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Manage Git Profiles` | Opens the Git profile manager. |
 | `GitCharm: Switch Git Profile` | Switches the active Git profile for the current workspace. |
 | `GitCharm: Open Git Annotations` / `Close Git Annotations` / `Toggle Git Annotations` | Shows or hides inline blame annotations in the active editor. |
-| `GitCharm: Undock` | Opens a QuickPick to undock the Git Log (with or without the Commit Panel) into an editor tab or a new window. |
-| `GitCharm: Set Default Log Location` | Opens a QuickPick to choose — and persist — where the Git Log opens: bottom panel, editor tab, or a new window. |
+| `GitCharm: Undock` | Opens a QuickPick to undock the Log Panel (with or without the Commit Panel) into an editor tab or a new window. |
+| `GitCharm: Set Default Log Location` | Opens a QuickPick to choose — and persist — where the Log Panel opens: bottom panel, editor tab, or a new window. |
 | `GitCharm: Add Worktree` / `Prune Worktrees` | Creates a worktree, or removes stale worktree entries. |
 | `GitCharm: Select AI Model` | Opens a QuickPick to choose the AI provider and model. |
 | `GitCharm: Customize AI Prompts` | Edits or resets the prompts used by the AI features. |
@@ -321,15 +321,20 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 
 | Keybinding | macOS | Command |
 |:--|:--|:--|
-| `Ctrl+Alt+L` | `Cmd+Alt+L` | `GitCharm: Focus Git Log` |
+| `Ctrl+Alt+L` | `Cmd+Alt+L` | `GitCharm: Focus Log Panel` |
 | `Ctrl+Alt+K` | `Cmd+Alt+K` | `GitCharm: Commit` |
 
 ## ⚙️ Settings
 
 | Setting | Default | Description |
 |:--|:--|:--|
-| `gitcharm.graphMaxCommits` | `1000` | Maximum number of commits loaded into the Git Log graph (100–10000). |
-| `gitcharm.showUncommittedChangesInLog` | `true` | Show a row for uncommitted changes on top of the Git Log graph. |
+| `gitcharm.graphMaxCommits` | `1000` | Maximum number of commits loaded into the Log Panel graph (100–10000). |
+| `gitcharm.showUncommittedChangesInLog` | `true` | Show a row for uncommitted changes on top of the Log Panel graph. |
+| `gitcharm.gitLog.showAuthor` | `true` | Show the author's name in each row of the Log Panel commit list (when the list is wide enough). |
+| `gitcharm.gitLog.showAuthorAvatar` | `true` | Show the author's avatar in each row of the Log Panel commit list. |
+| `gitcharm.gitLog.showDate` | `true` | Show the commit date in each row of the Log Panel commit list. |
+| `gitcharm.gitLog.showHash` | `true` | Show the short commit hash in each row of the Log Panel commit list. |
+| `gitcharm.gitLog.showInlineBranches` | `true` | Show branch, tag and stash badges next to the commits they point to in the Log Panel commit list. |
 | `gitcharm.fetchOnStartup` | `true` | Fetches all remotes once when GitCharm activates. |
 | `gitcharm.notifyOnIncomingCommits` | `true` | Notify on startup when there are incoming commits to pull. |
 | `gitcharm.notifyOnUnpushedCommits` | `true` | Notify on startup when there are unpushed commits. |
@@ -341,17 +346,48 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.branchNameModels` | `[]` | Branch name prefixes suggested when creating a branch (e.g. `feature/`, `bugfix/`). |
 | `gitcharm.showLastCommitInBranchMenu` | `false` | Show each branch's and tag's last commit in the branch and tag menus. |
 | `gitcharm.autoRefreshInterval` | `0` | Auto-refresh interval in seconds. `0` disables interval refresh and uses file watchers only. |
-| `gitcharm.gitLogDefaultLocation` | `"panel"` | Where `GitCharm: Focus Git Log` opens the Log: `panel`, `editorTab`, or `newWindow`. Anything but `panel` also hides the Log view from the bottom panel. |
+| `gitcharm.gitLogDefaultLocation` | `"panel"` | Where `GitCharm: Focus Log Panel` opens the Log: `panel`, `editorTab`, or `newWindow`. Anything but `panel` also hides the Log view from the bottom panel. |
 | `gitcharm.gitLogDefaultLayout` | `"logAndCommit"` | What the Log shows outside the bottom panel: `logAndCommit` or `logOnly`. Ignored when the location is `panel`. |
 | `gitcharm.changesViewMode` | `"simplified"` | How to display changed files: `simplified`, `changelists`, or `vscode`. Chosen via QuickPick on first install. |
 | `gitcharm.defaultCommitAction` | `"commit"` | Main action of the commit button: `commit` or `commitAndPush`. |
 | `gitcharm.defaultSaveAction` | `"stash"` | Main action of the Save button: `stash` or `shelve`. |
 | `gitcharm.promptAddUntrackedToGit` | `true` | Offer to add new untracked files to Git. |
+| `gitcharm.protectedBranches` | `[]` | Branches GitCharm guards, e.g. `main` or `release/*` (`*` matches anything). Committing or pushing to one asks first; force-pushing to one is refused. |
+| `gitcharm.confirm.discardChanges` | `true` | Ask before discarding changes or deleting files and folders from the Commit Panel. |
+| `gitcharm.confirm.dropStashesAndShelves` | `true` | Ask before dropping a stash or deleting a shelf. |
+| `gitcharm.confirm.commitOperations` | `true` | Ask before reverting, dropping or undoing commits. |
+| `gitcharm.confirm.deleteBranches` | `true` | Ask before deleting a branch. |
+| `gitcharm.autoFetchInterval` | `0` | Fetch from every remote every this many minutes while VS Code is focused (`0`: off). New incoming commits are notified as at startup. |
+| `gitcharm.fetchPrune` | `true` | Remove remote-tracking branches that no longer exist on the remote when fetching. |
+| `gitcharm.pullMode` | `ask` | How GitCharm pulls: `ask` (merge/rebase picker where offered, merge elsewhere), `merge`, `rebase` or `ffOnly`. |
+| `gitcharm.commitSignoff` | `false` | Add a Signed-off-by line to every commit (`git commit --signoff`). |
+| `gitcharm.commitPanel.subjectMaxLength` | `0` | Warn when the commit message's first line is longer than this many characters (`0`: off). |
+| `gitcharm.dateFormat` | `auto` | How dates are shown: `auto` (absolute in the Log Panel, relative elsewhere for recent dates), `absolute` or `relative`. Takes effect after reloading the window. |
+| `gitcharm.statusBar.showBranch` | `true` | Show the current branch (the Git Menu) in the status bar. |
+| `gitcharm.statusBar.showProfile` | `true` | Show the Git profile in use in the status bar. |
+| `gitcharm.pullRequests.defaultFilter` | `open` | The filter each repository's pull request list starts with: `open`, `mine`, `assignedToMe`, `reviewRequested` or `mentioningMe`. |
+| `gitcharm.pullRequests.autoRefreshInterval` | `0` | Refresh the pull request list every this many minutes while its tab is open and VS Code is focused (`0`: off). |
+| `gitcharm.commitPanel.showShelfTab` | `true` | Show the Shelf tab in the Commit Panel. |
+| `gitcharm.commitPanel.showStashTab` | `true` | Show the Stash tab in the Commit Panel. |
+| `gitcharm.commitPanel.showWorktreesTab` | `true` | Show the Worktrees tab in the Commit Panel. |
+| `gitcharm.commitPanel.showPullRequestsTab` | `true` | Show the Pull Requests tab in the Commit Panel. |
+| `gitcharm.commitPanel.showSyncTab` | `true` | Show the Sync tab (commits to push and to pull) in the Commit Panel. |
+| `gitcharm.commitPanel.tabOrder` | all tabs | The order of the Commit Panel's tabs. Tabs left out of the list keep their place at the end; hidden tabs stay hidden. |
+| `gitcharm.commitPanel.defaultTab` | `changes` | The tab the Commit Panel opens on: `changes`, `shelf`, `stash`, `worktrees`, `pullRequests`, `sync`, or `lastUsed` (the last one used in the workspace). A hidden tab falls back to Changes. |
+| `gitcharm.commitPanel.tabLabels` | `active` | Which tabs show their name next to the icon: `active`, `always` or `never` (icons only). |
+| `gitcharm.commitPanel.showChangesBadge` | `true` | Show the number of changed files on the Changes tab. |
+| `gitcharm.commitPanel.showShelfBadge` | `false` | Show the number of shelved changes on the Shelf tab. |
+| `gitcharm.commitPanel.showStashBadge` | `false` | Show the number of stashes on the Stash tab. |
+| `gitcharm.commitPanel.showWorktreesBadge` | `false` | Show the number of linked worktrees on the Worktrees tab. |
+| `gitcharm.commitPanel.showSyncBadge` | `true` | Show the number of commits to push and to pull on the Sync tab. |
+| `gitcharm.commitPanel.showPullRequestsBadge` | `true` | Show the number of pull requests on the Pull Requests tab. |
+| `gitcharm.commitPanel.showActivityBarBadge` | `true` | Show the number of changed files on GitCharm's icon in the activity bar. |
 | `gitcharm.openCommitPanelOnConflictResolved` | `true` | Open the GitCharm sidebar when a merge conflict is resolved. |
 | `gitcharm.suppressDivergedBranchWarning` | `false` | Suppress the "Branches have diverged" warning in the Git Menu and status bar. |
 | `gitcharm.gitAnnotations.enabled` | `true` | Enable inline Git blame annotations in the editor. |
 | `gitcharm.gitGhostText.enabled` | `true` | Enable inline Git ghost text in the editor. |
-| `gitcharm.avatars.enabled` | `false` | Show author avatars. **Privacy:** when enabled, a hash of each commit author's email is sent to gravatar.com (or GitHub for noreply addresses). Leave disabled for private or company repositories. |
+| `gitcharm.avatars.enabled` | `true` | Show author avatars, taken from the forges: the repository's own GitHub, GitLab, Bitbucket or Gitea when it is connected, and GitHub, GitLab and Codeberg noreply addresses. No email address is sent to third parties. |
+| `gitcharm.avatars.gravatar.enabled` | `false` | When no forge has an avatar for an author, look it up on Gravatar. **Privacy:** this sends a hash of the author's email to gravatar.com, which can reveal the address. Leave disabled for private or company repositories. |
 | `gitcharm.ai.enabled` | `true` | Enable AI-powered features (commit messages, pull request title and description, explanations). |
 | `gitcharm.ai.provider` | `"vscode-lm"` | AI provider: `vscode-lm`, `claude-api`, `openai-api`, `gemini-api`, `claude-cli`, `codex-cli`, `gemini-cli`, `ollama`, or `lmstudio`. |
 | `gitcharm.ai.language` | `""` | Language for AI-generated text (e.g. `en`, `it`). Defaults to English when empty. |
@@ -389,7 +425,7 @@ src/host/panels/          Webview providers for Commit, Log, Undocked Panel, and
 src/host/pullRequests/    Multi-provider Pull Request manager, per-provider API clients, and credential storage
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
-src/webview/gitLog/       React Git Log panel
+src/webview/gitLog/       React Log Panel
 src/webview/commitFullDetail/ React commit "Full Detail" editor-tab panel
 src/webview/undockedPanel/ React undocked panel (Commit + Log side by side)
 src/webview/pullRequestCreate/ React Create Pull Request panel

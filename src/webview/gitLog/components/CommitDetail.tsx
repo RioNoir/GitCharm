@@ -10,6 +10,7 @@ import { formatDateTime } from '../../shared/dateUtils';
 import type { RefGroup } from '../utils/refs';
 import { isPrimaryBranch } from '../../shared/branchUtils';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
+import { forgeSha } from '../../shared/avatars';
 import { CommitRow } from '../../shared/CommitRow';
 import { FileTreeView } from '../../shared/FileTreeView';
 import { GenericFileTree } from '../../shared/GenericFileTree';
@@ -159,7 +160,7 @@ interface Props {
   hideExtendedDetailButton?: boolean;
   /** Renders the commit header (author/hash/dates/refs/message/merge list) and the file list
    * side by side instead of stacked — for use in a full-page context (the "Open Full Detail"
-   * panel) where there's room for two columns, unlike the narrow Git Log sidebar this
+   * panel) where there's room for two columns, unlike the narrow Log Panel sidebar this
    * component is otherwise embedded in. */
   twoColumnLayout?: boolean;
 }
@@ -186,7 +187,7 @@ const CHANGED_FILE_STATUS: Record<string, ChangedFile['status']> = {
   A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added', U: 'added',
 };
 
-/** Maps the Git Log's single-letter file status (from a raw git diff) to FileTreeView's ChangedFile shape. */
+/** Maps the Log Panel's single-letter file status (from a raw git diff) to FileTreeView's ChangedFile shape. */
 function toChangedFile(f: { path: string; status: string; added?: number; removed?: number; oldPath?: string }): ChangedFile {
   return {
     path: f.path, oldPath: f.oldPath,
@@ -792,7 +793,7 @@ export function CommitDetail({ commit, fullMessage, selection, onSelectionModeCh
           <div>
             {twoColumnLayout && <div style={styles.detailsLabel}>{l10n.t('Author')}</div>}
             <div style={twoColumnLayout ? styles.authorRowTwoColumn : styles.authorRow}>
-              <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} />
+              <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail} size={32} repoId={commit.repoId} sha={forgeSha(commit)} />
               {twoColumnLayout ? (
                 <div style={styles.authorMeta}>
                   <span style={styles.authorName}>{commit.authorName}</span>
@@ -1184,7 +1185,7 @@ const styles = {
   },
   // Full-page variant (the "Open Full Detail" panel): commit header/metadata on the left,
   // file list on the right, side by side instead of stacked — there's room for two columns
-  // there, unlike the narrow Git Log sidebar this component is normally embedded in.
+  // there, unlike the narrow Log Panel sidebar this component is normally embedded in.
   containerTwoColumn: {
     position: 'relative' as const,
     display: 'flex',
@@ -1319,7 +1320,7 @@ const styles = {
     fontSize: '11px',
     opacity: 0.65,
   } as React.CSSProperties,
-  // Same look as the Git Log's repository tabs, each tab taking half the width
+  // Same look as the Log Panel's repository tabs, each tab taking half the width
   modeTabs: {
     display: 'flex',
     borderBottom: '1px solid var(--vscode-panel-border)',

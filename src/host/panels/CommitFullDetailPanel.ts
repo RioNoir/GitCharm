@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
+import { attachAvatarResolver } from '../utils/avatarResolver';
 import { EMPTY_TREE, openSmartDiff } from './GitLogPanelProvider';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { loadIconTheme } from '../utils/IconThemeService';
@@ -111,7 +112,7 @@ async function setupPanel(
   try {
     if (isStash) {
       // A stash ref isn't a real commit git log can decorate — read it from the stash
-      // list instead, the same way the Git Log panel builds a stash's CommitNode.
+      // list instead, the same way the Log Panel builds a stash's CommitNode.
       const stash = (await repo.stashList()).find(s => s.ref === hash);
       if (!stash) throw new Error(vscode.l10n.t('Stash not found'));
       commitInfo = {
@@ -168,6 +169,7 @@ async function setupPanel(
   panel.webview.html = getWebviewHtml(panel.webview, extensionUri, 'commitFullDetail', panel.title);
   const gate = webviewReadyGate<HostToCommitFullDetailMsg>(panel);
 
+  attachAvatarResolver(panel.webview);
   panel.webview.onDidReceiveMessage((msg: CommitFullDetailToHostMsg | LogToHostMsg) => handleMessage(msg, repoId, hash, repo, panel, extensionUri));
 
   const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {

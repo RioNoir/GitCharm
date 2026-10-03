@@ -48,9 +48,18 @@ export class BadgeController implements vscode.Disposable {
     if (this.lastStatus) this.update(this.lastStatus);
   }
 
+  /** Redraws the badge from the last status, after `gitcharm.commitPanel.showActivityBarBadge` changed. */
+  refresh(): void {
+    if (this.lastStatus) this.update(this.lastStatus);
+  }
+
   update(status: WorkspaceStatus): void {
     this.stopLoading();
     this.lastStatus = status;
+    if (!vscode.workspace.getConfiguration('gitcharm.commitPanel').get<boolean>('showActivityBarBadge', true)) {
+      this.treeView.badge = undefined;
+      return;
+    }
     const total = status.repos
       .filter(r => !this.hiddenRepoIds.includes(r.repoId))
       .reduce((sum, r) => sum + r.stagedFiles.length + r.unstagedFiles.length, 0);

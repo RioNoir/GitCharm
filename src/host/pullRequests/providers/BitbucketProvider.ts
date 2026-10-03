@@ -371,6 +371,19 @@ export class BitbucketProvider implements PullRequestProvider {
     }
   }
 
+  async getCommitAuthorAvatar(owner: string, repo: string, _email: string, sha?: string): Promise<string | undefined> {
+    if (!sha) return undefined;
+    const headers = await this.headers();
+    try {
+      const { data } = await httpJson<{ author?: { user?: { links?: { avatar?: { href?: string } } } } }>(
+        `${this.apiBase()}/repositories/${owner}/${repo}/commit/${encodeURIComponent(sha)}`, { headers },
+      );
+      return data.author?.user?.links?.avatar?.href || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   getCapabilities(): PullRequestCapabilities {
     return CAPABILITIES;
   }

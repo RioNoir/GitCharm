@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkspaceGitManager } from './git/WorkspaceGitManager';
 import { CommitPanelProvider } from './panels/CommitPanelProvider';
+import { isCommitPanelTabShown } from './ui/commitPanelConfig';
 import { GitLogPanelProvider } from './panels/GitLogPanelProvider';
 import { UndockedPanelProvider } from './panels/UndockedPanelProvider';
 import { syncGitLogLocationContext, watchGitLogLocationContext } from './settings/GitLogLocationSettings';
@@ -23,42 +24,34 @@ import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
 import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
-import { avatarsEnabled } from './utils/avatarCache';
+import { avatarResolver } from './utils/avatarResolver';
 import { initAiSecrets } from './ai/aiSecrets';
 
 /**
- * Avatars are off by default, so existing users are asked once whether to turn them back on.
- * Either answer is remembered; the setting itself is the way to change it afterwards.
+ * Before avatars and Gravatar were two settings, `avatars.enabled` (off by default) meant Gravatar, and users were
+ * asked once whether to turn it on. Their answer carries over, once: those who turned it on keep Gravatar; those
+ * who kept it off get the new default — avatars from the forges only, which share no email address.
  */
-async function maybeAskAboutAvatars(globalState: vscode.Memento): Promise<void> {
-  const ASKED_KEY = 'hasAskedAboutAvatars';
-  if (globalState.get<boolean>(ASKED_KEY)) return;
-  // Someone who already turned them on (or whose admin did) doesn't need the question.
-  if (avatarsEnabled()) { await globalState.update(ASKED_KEY, true); return; }
-
-  const ENABLE = vscode.l10n.t('Enable avatars');
-  const KEEP = vscode.l10n.t('Keep disabled');
-  const picked = await vscode.window.showInformationMessage(
-    vscode.l10n.t('GitCharm can show author avatars from Gravatar. This sends a hash of each commit author\'s email to gravatar.com, which can reveal those addresses. Change this later in Settings under "{0}".', 'gitcharm.avatars.enabled'),
-    ENABLE,
-    KEEP,
-  );
-  if (picked === undefined) return; // dismissed without answering — ask again next time
-  await globalState.update(ASKED_KEY, true);
-  if (picked === ENABLE) {
-    suppressAvatarReloadPrompt = true;
-    await vscode.workspace.getConfiguration('gitcharm').update('avatars.enabled', true, vscode.ConfigurationTarget.Global);
-  }
+async function migrateAvatarSettings(globalState: vscode.Memento): Promise<void> {
+  const MIGRATED_KEY = 'avatarSettingsMigrated';
+  if (globalState.get<boolean>(MIGRATED_KEY)) return;
+  const cfg = vscode.workspace.getConfiguration('gitcharm');
+  const previous = cfg.inspect<boolean>('avatars.enabled')?.globalValue;
+  if (previous !== undefined) suppressAvatarReloadPrompt = true;
+  if (previous === true) await cfg.update('avatars.gravatar.enabled', true, vscode.ConfigurationTarget.Global);
+  else if (previous === false) await cfg.update('avatars.enabled', undefined, vscode.ConfigurationTarget.Global);
+  await globalState.update(MIGRATED_KEY, true);
 }
 
-/** Webviews read the avatar flag from their HTML, so a later toggle only takes effect on reload. */
+/** Webviews read the avatar and date settings from their HTML, so a later change only takes effect on reload. */
 let suppressAvatarReloadPrompt = false;
 function watchAvatarSetting(): vscode.Disposable {
   return vscode.workspace.onDidChangeConfiguration(async e => {
-    if (!e.affectsConfiguration('gitcharm.avatars.enabled')) return;
+    if (!e.affectsConfiguration('gitcharm.avatars') && !e.affectsConfiguration('gitcharm.dateFormat')) return;
+    avatarResolver.clear();
     if (suppressAvatarReloadPrompt) { suppressAvatarReloadPrompt = false; return; }
     const RELOAD = vscode.l10n.t('Reload Window');
-    const picked = await vscode.window.showInformationMessage(vscode.l10n.t('Reload the window to apply the GitCharm avatar setting.'), RELOAD);
+    const picked = await vscode.window.showInformationMessage(vscode.l10n.t('Reload the window to apply the GitCharm setting.'), RELOAD);
     if (picked === RELOAD) await vscode.commands.executeCommand('workbench.action.reloadWindow');
   });
 }
@@ -158,7 +151,9 @@ async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPa
     : plural(totalAhead, vscode.l10n.t('1 unpushed commit across {0} repositories.', reposWithAhead), vscode.l10n.t('{0} unpushed commits across {1} repositories.', totalAhead, reposWithAhead));
 
   const goToPush = vscode.l10n.t('Go to Push');
-  const picked = await vscode.window.showInformationMessage(message, goToPush, vscode.l10n.t('Dismiss'));
+  // Without the Sync tab there's nowhere to go: the notification just informs.
+  const actions = isCommitPanelTabShown('push') ? [goToPush, vscode.l10n.t('Dismiss')] : [vscode.l10n.t('Dismiss')];
+  const picked = await vscode.window.showInformationMessage(message, ...actions);
 
   if (picked === goToPush) {
     await vscode.commands.executeCommand('gitcharm.commitPanel.focus');
@@ -166,7 +161,10 @@ async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPa
   }
 }
 
-async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalState: vscode.Memento): Promise<void> {
+/** Incoming commits last told about: a periodic fetch only speaks up when there are more than that. */
+let lastNotifiedBehind = 0;
+
+async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalState: vscode.Memento, periodic = false): Promise<void> {
   const DO_NOT_SHOW_KEY = 'doNotShowIncomingCommitsNotification';
   if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
   if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnIncomingCommits', true)) return;
@@ -188,7 +186,9 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
     .filter((b): b is BranchInfo => b !== null);
 
   const totalBehind = branches.reduce((sum, b) => sum + (b.aheadBehind?.behind ?? 0), 0);
-  if (totalBehind === 0) return;
+  const alreadyKnown = periodic && totalBehind <= lastNotifiedBehind;
+  lastNotifiedBehind = totalBehind;
+  if (totalBehind === 0 || alreadyKnown) return;
 
   const reposWithBehind = branches.filter(b => (b.aheadBehind?.behind ?? 0) > 0).length;
 
@@ -209,7 +209,7 @@ async function maybeNotifyIncomingCommits(manager: WorkspaceGitManager, globalSt
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling…'), cancellable: false },
       async () => {
-        const results = await manager.pullAll(false);
+        const results = await manager.pullAll();
         const failed = results.filter(r => !r.ok);
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
@@ -235,7 +235,7 @@ function notifyOrphanBranches(manager: WorkspaceGitManager, logPanel: GitLogPane
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = initLogger(context);
-  // Set before any view renders: hides the bottom-panel Git Log view while the
+  // Set before any view renders: hides the bottom-panel Log Panel view while the
   // Log's default home is an editor tab or a separate window, so there is only
   // ever one Log surface.
   syncGitLogLocationContext();
@@ -249,8 +249,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // DEV ONLY: uncomment to reset the incoming commits notification flag
   //context.globalState.update('doNotShowIncomingCommitsNotification', false);
   showViewModeQuickpick(context.globalState);
-  void maybeAskAboutAvatars(context.globalState);
   context.subscriptions.push(watchAvatarSetting());
+  void migrateAvatarSettings(context.globalState);
   setTimeout(() => maybeShowSupportNotification(context.globalState), 5 * 60 * 1000); // DEV: use 5 * 60 * 1000 for production
 
   const shelveDocProvider = new ShelveDocumentProvider();
@@ -272,6 +272,7 @@ export function activate(context: vscode.ExtensionContext): void {
   initAiSecrets(context);
   const integrationAccounts = new IntegrationAccountStore(context.secrets, context.globalState);
   const pullRequestManager = new PullRequestManager(manager, integrationAccounts, context.workspaceState);
+  avatarResolver.setForgeLookup((repoId, email, sha) => pullRequestManager.getCommitAuthorAvatar(repoId, email, sha));
   const integrations = new IntegrationsService(integrationAccounts, pullRequestManager, manager);
 
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, profileService, context.globalState, context.workspaceState, pullRequestManager);
@@ -287,6 +288,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
   context.subscriptions.push(badgeDisposable);
+  context.subscriptions.push(manager.onPeriodicFetch(() => { void maybeNotifyIncomingCommits(manager, context.globalState, true); }));
   const logPanel = new GitLogPanelProvider(context.extensionUri, manager, profileService, context.globalState);
   context.subscriptions.push(
     manager.onOrphanBranches(newlyOrphaned => notifyOrphanBranches(manager, logPanel, newlyOrphaned))

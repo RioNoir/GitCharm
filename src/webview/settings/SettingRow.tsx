@@ -2,8 +2,8 @@ import * as l10n from '@vscode/l10n';
 import React, { useMemo } from 'react';
 import { renderMarkdown } from '../shared/renderMarkdown';
 import type { SettingSchema } from '../../host/types/messages';
-import { Checkbox, EnumCards, EnumSelect, GearMenu, HostOverridesEditor, NumberInput, ProjectColorsEditor, StringList, TextInput } from './controls';
-import { settingLabel } from './layout';
+import { Checkbox, EnumCards, EnumSelect, GearMenu, HostOverridesEditor, NumberInput, OrderedList, ProjectColorsEditor, StringList, TextInput } from './controls';
+import { enumLabel, settingLabel } from './layout';
 import { aiProviderIcon } from './providerIcons';
 import { normalizeBranchModel } from '../../host/types/branchModels';
 
@@ -20,7 +20,7 @@ export interface RowContext {
   scopeNote(key: string): string | undefined;
   /** Why the selected target can't hold this setting, if it can't. */
   writeBlockedReason(key: string): string | undefined;
-  /** The category label shown before the setting's name, as VS Code does ("Git Log: Default Location"). */
+  /** The label of the category the setting is listed under, so the search also matches it. */
   categoryOf(key: string): string;
   openNative(key: string): void;
   copy(text: string): void;
@@ -33,6 +33,16 @@ const CARD_ENUM_MAX = 6;
 const PLACEHOLDER: Record<string, () => string> = {
   'ai.language': () => l10n.t('Empty: VS Code display language (e.g. en, it, fr)'),
   'pullRequests.defaultTargetBranch': () => l10n.t('Empty: detect main / master'),
+};
+
+const COMMIT_PANEL_TABS = ['changes', 'shelf', 'stash', 'worktrees', 'pullRequests', 'sync'];
+/** The setting that hides each Commit Panel tab (Changes can't be hidden). */
+const TAB_SHOW_SETTING: Record<string, string> = {
+  shelf: 'commitPanel.showShelfTab',
+  stash: 'commitPanel.showStashTab',
+  worktrees: 'commitPanel.showWorktreesTab',
+  pullRequests: 'commitPanel.showPullRequestsTab',
+  sync: 'commitPanel.showSyncTab',
 };
 
 /** Stores branch models the way the branch prompt reads them ("feature" -> "feature/*"). */
@@ -59,10 +69,7 @@ export function RowHeader({ ctx, settingKey, label }: { ctx: RowContext; setting
         ]}
       />
       <div className="gc-row-title" title={id}>
-        <span>
-          <span className="category">{ctx.categoryOf(settingKey)}: </span>
-          <span className="label">{title}</span>
-        </span>
+        <span className="label">{title}</span>
         {note && <span className="gc-row-misc">{note}</span>}
       </div>
     </>
@@ -105,6 +112,17 @@ export function SettingRow({ ctx, settingKey, children }: { ctx: RowContext; set
   if (!control) {
     if (settingKey === 'projectColors') {
       control = <ProjectColorsEditor value={(value as Record<string, string>) ?? {}} repos={ctx.repos} disabled={disabled} onChange={v => ctx.update(settingKey, v)} />;
+    } else if (settingKey === 'commitPanel.tabOrder') {
+      control = (
+        <OrderedList
+          value={(value as string[]) ?? []}
+          items={COMMIT_PANEL_TABS}
+          itemLabel={id => enumLabel('commitPanel.defaultTab', id)}
+          itemNote={id => (TAB_SHOW_SETTING[id] && !ctx.get<boolean>(TAB_SHOW_SETTING[id]) ? l10n.t('hidden') : undefined)}
+          disabled={disabled}
+          onChange={v => ctx.update(settingKey, v)}
+        />
+      );
     } else if (settingKey === 'pullRequests.hostProviderOverrides') {
       control = <HostOverridesEditor value={(value as Record<string, string>) ?? {}} disabled={disabled} onChange={v => ctx.update(settingKey, v)} />;
     } else if (schema.type === 'array') {
@@ -113,7 +131,7 @@ export function SettingRow({ ctx, settingKey, children }: { ctx: RowContext; set
           value={(value as string[]) ?? []}
           disabled={disabled}
           label={label}
-          placeholder={settingKey === 'branchNameModels' ? 'feature/' : 'node_modules'}
+          placeholder={settingKey === 'branchNameModels' ? 'feature/' : settingKey === 'protectedBranches' ? 'release/*' : 'node_modules'}
           format={settingKey === 'branchNameModels' ? branchModel : undefined}
           onChange={v => ctx.update(settingKey, v)}
         />

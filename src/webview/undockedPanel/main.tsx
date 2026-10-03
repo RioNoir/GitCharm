@@ -1,5 +1,5 @@
 /**
- * Undocked panel — mounts both the Git Log and Commit Panel side by side.
+ * Undocked panel — mounts both the Log Panel and Commit Panel side by side.
  *
  * Host → Webview messages are wrapped: { target: 'log'|'commit', msg: <payload> }
  * Webview → Host messages are raw — the host routes them by type prefix (LOG_* vs COMMIT_*).
@@ -16,7 +16,7 @@ import '../shared/l10n';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
-// ── Log sub-app — mounts the full Git Log ────────────────────────────────────
+// ── Log sub-app — mounts the full Log Panel ────────────────────────────────────
 import { LogApp } from '../gitLog/main';
 
 // ── Commit sub-app — mounts the full commit panel ────────────────────────────

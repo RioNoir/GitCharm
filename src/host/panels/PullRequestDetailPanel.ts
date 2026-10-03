@@ -9,7 +9,7 @@ import { formatGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
 import { getAiModelLabel } from '../utils/aiModelLabel';
 import { buildPrompt } from '../ai/prompts';
-import { avatarsEnabled } from '../utils/avatarCache';
+import { attachAvatarResolver, checkAvatarUrl } from '../utils/avatarResolver';
 import { panelIcon } from '../utils/panelIcon';
 import { webviewReadyGate } from '../utils/webviewReadyGate';
 
@@ -20,11 +20,12 @@ function truncateTitle(title: string): string {
 }
 
 /** QuickPickItem.iconPath accepts a remote https URI directly (same as the GitHub Pull Requests extension does for reviewer/assignee avatars in its own pickers) — no local caching needed. */
-function avatarIconPath(avatarUrl: string | undefined): vscode.Uri | undefined {
-  // VS Code fetches a remote iconPath itself, so it must honour the opt-in like every other avatar.
-  if (!avatarUrl || !avatarsEnabled()) return undefined;
+async function avatarIconPath(avatarUrl: string | undefined): Promise<vscode.Uri | undefined> {
+  // VS Code fetches a remote iconPath itself, so it must honour the avatar settings like every other avatar.
+  const url = await checkAvatarUrl(avatarUrl);
+  if (!url) return undefined;
   try {
-    return vscode.Uri.parse(avatarUrl, true);
+    return vscode.Uri.parse(url, true);
   } catch {
     return undefined;
   }
@@ -133,6 +134,7 @@ export class PullRequestDetailPanel {
     webviewReadyGate<HostToPrDetailMsg>(panel);
 
     const currentPr = { value: null as PullRequestSummary | null };
+    attachAvatarResolver(panel.webview);
     panel.webview.onDidReceiveMessage((msg: PrDetailToHostMsg) => {
       const pr = currentPr.value;
       if (!pr) return; // still loading the initial summary (restore path) — nothing to act on yet
@@ -430,7 +432,7 @@ export class PullRequestDetailPanel {
         if (error) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: false, error }); break; }
         const currentIds = new Set('error' in detail ? [] : detail.reviewers.map(r => r.id));
         const picked = await vscode.window.showQuickPick(
-          collaborators.map(c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: avatarIconPath(c.avatarUrl) })),
+          Promise.all(collaborators.map(async c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: await avatarIconPath(c.avatarUrl) }))),
           { title: vscode.l10n.t('Reviewers'), placeHolder: vscode.l10n.t('Select reviewers'), canPickMany: true },
         );
         if (!picked) { post({ type: 'PRDETAIL_UPDATE_REVIEWERS_RESULT', ok: true }); break; }
@@ -450,7 +452,7 @@ export class PullRequestDetailPanel {
         if (error) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: false, error }); break; }
         const currentIds = new Set('error' in detail ? [] : detail.assignees.map(a => a.id));
         const picked = await vscode.window.showQuickPick(
-          collaborators.map(c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: avatarIconPath(c.avatarUrl) })),
+          Promise.all(collaborators.map(async c => ({ label: c.username, id: c.id, picked: currentIds.has(c.id), iconPath: await avatarIconPath(c.avatarUrl) }))),
           { title: vscode.l10n.t('Assignees'), placeHolder: vscode.l10n.t('Select assignees'), canPickMany: true },
         );
         if (!picked) { post({ type: 'PRDETAIL_UPDATE_ASSIGNEES_RESULT', ok: true }); break; }

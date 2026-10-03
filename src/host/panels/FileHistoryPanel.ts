@@ -181,7 +181,7 @@ function getHtml(nonce: string, csp: string, codiconUri: string, data: PanelData
     today: capitalize(rtf.format(0, 'day')),
     yesterday: capitalize(rtf.format(-1, 'day')),
     daysAgo,
-    showInLog: vscode.l10n.t('Show in Git Log'),
+    showInLog: vscode.l10n.t('Show in Log Panel'),
     dateLocale: getSystemLocale(),
   };
   return `<!DOCTYPE html>

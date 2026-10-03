@@ -307,6 +307,19 @@ export class GiteaProvider implements PullRequestProvider {
     }
   }
 
+  async getCommitAuthorAvatar(owner: string, repo: string, _email: string, sha?: string): Promise<string | undefined> {
+    if (!sha) return undefined;
+    const headers = await this.headers();
+    try {
+      const { data } = await httpJson<{ author: { avatar_url?: string } | null }>(
+        `${this.apiBase()}/repos/${owner}/${repo}/git/commits/${encodeURIComponent(sha)}?stat=false&verification=false&files=false`, { headers },
+      );
+      return data.author?.avatar_url || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   getCapabilities(): PullRequestCapabilities {
     return CAPABILITIES;
   }

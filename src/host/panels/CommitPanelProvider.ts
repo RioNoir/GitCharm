@@ -1,14 +1,18 @@
 import * as vscode from 'vscode';
+import { configuredPullMode } from '../git/GitService';
+import type { PullMode } from '../git/GitService';
+import { confirmAction } from '../utils/confirmAction';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
+import { getCommitPanelConfig, isCommitPanelTabShown } from '../ui/commitPanelConfig';
 import { cleanPartialModelOutput, generateForOperation } from '../ai/aiGenerate';
 import { buildPrompt } from '../ai/prompts';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
-import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter } from '../types/messages';
+import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId } from '../types/messages';
 import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
@@ -30,12 +34,14 @@ import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
 import type { IntegrationAccount } from '../integrations/IntegrationAccountStore';
 import { resolveAvatarIconPath, resolveGitHubUsernameAvatarIconPath } from '../utils/avatarCache';
+import { attachAvatarResolver } from '../utils/avatarResolver';
 import type { CreatePullRequestPanel } from './CreatePullRequestPanel';
 import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
 const COMMIT_MESSAGE_WORKSPACE_KEY = 'gitcharm.commitPanel.draftMessage';
+const LAST_TAB_WORKSPACE_KEY = 'gitcharm.commitPanel.lastTab';
 const COMMIT_SEEDED_WORKSPACE_KEY = 'gitcharm.commitPanel.seededMessage';
 
 /**
@@ -190,6 +196,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.viewAndSortSettings = new ViewAndSortSettingsService(this.globalState, this.workspaceState);
     this.viewAndSortSettings.migrateIfNeeded().then(() => this.syncContextKeys(this.viewAndSortSettings.getAll()));
 
+    this.restartPullRequestAutoRefresh();
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('gitcharm.pullRequests.autoRefreshInterval')) this.restartPullRequestAutoRefresh();
+      if (e.affectsConfiguration('gitcharm.pullRequests.defaultFilter')) this.requestPullRequestRefresh();
+    });
+
     this.manager.onStatusChange(async (status) => {
       await this.refreshActiveProfile();
       this.postChangelistsUpdate(status);
@@ -278,6 +290,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       'GitCharm'
     );
 
+    attachAvatarResolver(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((msg: CommitToHostMsg) =>
       this.handleMessage(msg, webviewView.webview).catch(e => {
         logError('handle-message', formatGitError(e), getRawErrorDetail(e));
@@ -326,6 +339,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             });
           }).catch(() => { /* icon theme optional */ });
         }
+      }
+      if (e.affectsConfiguration('gitcharm.commitPanel')) {
+        this.broadcastCommit({ type: 'COMMIT_PANEL_CONFIG', config: this.getPanelConfig() });
+        this.badgeController?.refresh();
       }
       if (e.affectsConfiguration('gitcharm.ai.enabled')) {
         this.manager.getAllStatuses().then(status => {
@@ -377,7 +394,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
       if (m.aiEnabled === undefined) m.aiEnabled = this.getAiEnabled();
       if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
+      if (m.panelConfig === undefined) m.panelConfig = this.getPanelConfig();
     }
+  }
+
+  private getPanelConfig() {
+    return getCommitPanelConfig(this.workspaceState?.get<CommitPanelTabId>(LAST_TAB_WORKSPACE_KEY));
   }
 
   private post(msg: HostToCommitMsg): void {
@@ -416,6 +438,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   }
 
   switchToTab(tab: 'changes' | 'shelf' | 'stash' | 'worktree' | 'push' | 'pullrequests'): void {
+    if (!isCommitPanelTabShown(tab)) return;
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
   }
 
@@ -564,6 +587,25 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const email = await this.pullRequestManager.getAccountEmail(account);
     if (!email) return undefined;
     return resolveAvatarIconPath(email, this.globalStoragePath);
+  }
+
+  /** The tab the panel shows, as last reported by the webview. */
+  private activeTab: CommitPanelTabId | undefined;
+  private pullRequestRefreshTimer: ReturnType<typeof setInterval> | undefined;
+
+  /**
+   * gitcharm.pullRequests.autoRefreshInterval, in minutes (0: off). Each refresh queries every connected forge, so
+   * it only runs while someone can see the list: the Pull Requests tab open in a visible panel, VS Code focused.
+   */
+  private restartPullRequestAutoRefresh(): void {
+    if (this.pullRequestRefreshTimer) clearInterval(this.pullRequestRefreshTimer);
+    this.pullRequestRefreshTimer = undefined;
+    const minutes = vscode.workspace.getConfiguration('gitcharm.pullRequests').get<number>('autoRefreshInterval', 0);
+    if (!minutes || minutes <= 0) return;
+    this.pullRequestRefreshTimer = setInterval(() => {
+      const visible = !!this.view?.visible || !!this.undockedPanel?.isOpen();
+      if (visible && this.activeTab === 'pullrequests' && vscode.window.state.focused) this.requestPullRequestRefresh();
+    }, Math.max(1, minutes) * 60_000);
   }
 
   /** Invalidates the PR cache and asks the webview to re-request the list with its current filters. */
@@ -756,6 +798,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(msg: CommitToHostMsg, _webview: vscode.Webview): Promise<void> {
     switch (msg.type) {
+      case 'COMMIT_ACTIVE_TAB': {
+        this.activeTab = msg.tab;
+        await this.workspaceState?.update(LAST_TAB_WORKSPACE_KEY, msg.tab);
+        break;
+      }
+
       case 'COMMIT_PERSIST_MESSAGE': {
         await this.workspaceState?.update(COMMIT_MESSAGE_WORKSPACE_KEY, msg.message || undefined);
         break;
@@ -1020,8 +1068,10 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('pull', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const repoName = this.manager.getRepoMetas().find(m => m.id === msg.repoId)?.name ?? msg.repoId;
-        let rebase = msg.rebase;
-        if (rebase === undefined) {
+        let mode: PullMode | undefined = msg.rebase === undefined ? undefined : msg.rebase ? 'rebase' : 'merge';
+        const configured = configuredPullMode();
+        if (mode === undefined && configured !== 'ask') mode = configured;
+        if (mode === undefined) {
           const pick = await vscode.window.showQuickPick(
             [
               { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes')}`, rebase: false },
@@ -1030,15 +1080,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             { title: vscode.l10n.t('Pull — {0}', repoName) },
           );
           if (!pick) { this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
-          rebase = pick.rebase;
+          mode = pick.rebase ? 'rebase' : 'merge';
         }
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('[{0}]: Pulling…', repoName), cancellable: false },
           async () => {
             try {
-              const output = rebase ? await repo.pullRebase() : await repo.pull();
+              const output = await repo.pullWith(mode);
               this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: true, output });
-              logInfo('pull', `Pulled ${msg.repoId}${rebase ? ' (rebase)' : ''}`);
+              logInfo('pull', `Pulled ${msg.repoId} (${mode})`);
               this.logProvider?.refresh();
             } catch (e: unknown) {
               logError('pull', formatGitError(e), getRawErrorDetail(e));
@@ -1209,7 +1259,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
                     await repo.push();
                   }
                 } else if (state.behind > 0) {
-                  await repo.pull();
+                  await repo.pullWithDefault();
                 } else if (state.ahead > 0) {
                   try {
                     await repo.push();
@@ -1252,7 +1302,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('discard', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const discard = vscode.l10n.t('Discard');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('discardChanges', 
           vscode.l10n.t('Discard changes to {0}? This cannot be undone.', msg.path),
           { modal: true }, discard
         );
@@ -1272,7 +1322,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'COMMIT_DISCARD_FILES': {
         const n = msg.files.length;
         const discard = vscode.l10n.t('Discard');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('discardChanges', 
           plural(n, vscode.l10n.t('Discard changes to 1 file? This cannot be undone.'), vscode.l10n.t('Discard changes to {0} files? This cannot be undone.', n)),
           { modal: true }, discard
         );
@@ -1396,7 +1446,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('delete-file', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const del = vscode.l10n.t('Delete');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('discardChanges', 
           vscode.l10n.t('Delete {0}? This cannot be undone.', msg.filePath),
           { modal: true }, del
         );
@@ -1416,7 +1466,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('delete-folder', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const del = vscode.l10n.t('Delete');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('discardChanges', 
           vscode.l10n.t('Delete folder "{0}" and all its contents? This cannot be undone.', msg.folderPath),
           { modal: true }, del
         );
@@ -1658,7 +1708,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const svc = this.getShelveService(msg.repoId);
         if (!svc) { logWarn('shelve-drop', 'Repo not found'); this.post({ type: 'SHELVE_OP_RESULT', requestId: msg.requestId, repoId: msg.repoId, op: 'drop', ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const del = vscode.l10n.t('Delete');
-        const confirmDrop = await vscode.window.showWarningMessage(
+        const confirmDrop = await confirmAction('dropStashesAndShelves', 
           vscode.l10n.t('Delete this shelved changelist? This cannot be undone.'),
           { modal: true }, del
         );
@@ -1862,7 +1912,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           return;
         }
         const drop = vscode.l10n.t('Drop');
-        const confirmDrop = await vscode.window.showWarningMessage(
+        const confirmDrop = await confirmAction('dropStashesAndShelves', 
           vscode.l10n.t('Drop this stash? This cannot be undone.'),
           { modal: true }, drop
         );
@@ -1965,7 +2015,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('drop-commits', 'Repo not found'); this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const drop = vscode.l10n.t('Drop');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('commitOperations', 
           plural(msg.hashes.length, vscode.l10n.t('Drop 1 commit? This rewrites history and cannot be undone.'), vscode.l10n.t('Drop {0} commits? This rewrites history and cannot be undone.', msg.hashes.length)),
           { modal: true }, drop
         );
@@ -1988,7 +2038,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('revert', 'Repo not found'); this.post({ type: 'PUSH_REVERT_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const revert = vscode.l10n.t('Revert');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('commitOperations', 
           plural(msg.hashes.length, vscode.l10n.t('Revert 1 commit? This creates a new commit that undoes the changes.'), vscode.l10n.t('Revert {0} commits? This creates new commits that undo the changes.', msg.hashes.length)),
           { modal: true }, revert
         );
@@ -2094,7 +2144,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('undo-commit', 'Repo not found'); this.post({ type: 'COMMIT_OP_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
         const undo = vscode.l10n.t('Undo Commit');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('commitOperations', 
           vscode.l10n.t('Undo last commit? Changes will be kept as unstaged (git reset --soft HEAD~1).'),
           { modal: true }, undo
         );

@@ -1,7 +1,7 @@
 import * as l10n from '@vscode/l10n';
 
 /** Previews drawn beside a category's settings, reacting to their current values (see previews.tsx). */
-export type PreviewId = 'changesView' | 'gitLog' | 'repositories' | 'branches' | 'notifications' | 'editor';
+export type PreviewId = 'changesView' | 'gitLog' | 'appearance' | 'discovery' | 'branches' | 'sync' | 'notifications' | 'editor';
 
 export interface CategoryDef {
   id: string;
@@ -29,15 +29,10 @@ export const AI_PROMPT_KEYS = [
 export function getCategories(): CategoryDef[] {
   const workflow = l10n.t({ message: 'Workflow', comment: ['Settings page: sidebar heading'] });
   const views = l10n.t({ message: 'Views', comment: ['Settings page: sidebar heading'] });
+  const ai = l10n.t({ message: 'AI', comment: ['Settings page: sidebar heading'] });
   const integrations = l10n.t({ message: 'Integrations', comment: ['Settings page: sidebar heading'] });
   const advanced = l10n.t({ message: 'Advanced', comment: ['Settings page: sidebar heading'] });
   return [
-    {
-      id: 'commit', group: workflow, icon: 'git-commit', preview: 'changesView',
-      label: l10n.t('Commit & Changes'),
-      description: l10n.t('How the Commit Panel lists your changes and what its main buttons do.'),
-      keys: ['changesViewMode', 'defaultCommitAction', 'defaultSaveAction', 'promptAddUntrackedToGit', 'openCommitPanelOnConflictResolved'],
-    },
     {
       id: 'branches', group: workflow, icon: 'git-branch', preview: 'branches',
       label: l10n.t('Branches'),
@@ -45,31 +40,68 @@ export function getCategories(): CategoryDef[] {
       keys: ['branchNameModels', 'showLastCommitInBranchMenu', 'suppressDivergedBranchWarning'],
     },
     {
-      id: 'sync', group: workflow, icon: 'sync', preview: 'notifications',
-      label: l10n.t('Sync & Notifications'),
-      description: l10n.t('When GitCharm fetches and refreshes, and what it tells you about.'),
-      keys: ['fetchOnStartup', 'autoRefreshInterval', 'notifyOnIncomingCommits', 'notifyOnUnpushedCommits', 'notifyOnOrphanBranches'],
+      id: 'pullRequests', group: workflow, icon: 'git-pull-request',
+      label: l10n.t('Pull Requests'),
+      description: l10n.t('Defaults for creating, merging and checking out pull requests, and how the list is filtered and refreshed.'),
+      keys: [
+        'pullRequests.defaultTargetBranch', 'pullRequests.defaultMergeStrategy', 'pullRequests.defaultCheckoutAction',
+        'pullRequests.defaultFilter', 'pullRequests.autoRefreshInterval',
+      ],
     },
     {
-      id: 'gitLog', group: views, icon: 'history', preview: 'gitLog',
-      label: l10n.t('Git Log'),
-      description: l10n.t('Where the Git Log opens, its layout, and how much history it loads.'),
-      keys: ['gitLogDefaultLocation', 'gitLogDefaultLayout', 'graphMaxCommits', 'showUncommittedChangesInLog'],
+      id: 'sync', group: workflow, icon: 'sync', preview: 'sync',
+      label: l10n.t('Sync'),
+      description: l10n.t('When GitCharm fetches from the remotes, how it pulls, and when it refreshes its views.'),
+      keys: ['fetchOnStartup', 'autoFetchInterval', 'fetchPrune', 'pullMode', 'autoRefreshInterval'],
     },
     {
-      id: 'repositories', group: views, icon: 'repo', preview: 'repositories',
-      label: l10n.t('Repositories'),
-      description: l10n.t('Which repositories and submodules GitCharm finds, and the color of each.'),
-      keys: ['repositoryScanMaxDepth', 'repositoryScanIgnoredFolders', 'submoduleMaxDepth', 'projectColors'],
+      id: 'safety', group: workflow, icon: 'shield',
+      label: l10n.t('Safety'),
+      description: l10n.t('Branches to guard, and which destructive actions ask for confirmation first.'),
+      keys: ['protectedBranches', 'confirm.discardChanges', 'confirm.dropStashesAndShelves', 'confirm.commitOperations', 'confirm.deleteBranches'],
+    },
+    {
+      id: 'notifications', group: workflow, icon: 'bell', preview: 'notifications',
+      label: l10n.t('Notifications'),
+      description: l10n.t('What GitCharm tells you about with a notification.'),
+      keys: ['notifyOnIncomingCommits', 'notifyOnUnpushedCommits', 'notifyOnOrphanBranches', 'promptAddUntrackedToGit'],
+    },
+    {
+      id: 'commitPanel', group: views, icon: 'gitcharm-commit', preview: 'changesView',
+      label: l10n.t('Commit Panel'),
+      description: l10n.t('How the Commit Panel lists your changes, what its main buttons do, and which tabs it shows.'),
+      keys: [
+        'changesViewMode', 'defaultCommitAction', 'defaultSaveAction', 'openCommitPanelOnConflictResolved',
+        'commitSignoff', 'commitPanel.subjectMaxLength',
+        'commitPanel.showShelfTab', 'commitPanel.showStashTab', 'commitPanel.showWorktreesTab', 'commitPanel.showPullRequestsTab', 'commitPanel.showSyncTab',
+        'commitPanel.tabOrder', 'commitPanel.defaultTab', 'commitPanel.tabLabels',
+        'commitPanel.showChangesBadge', 'commitPanel.showShelfBadge', 'commitPanel.showStashBadge', 'commitPanel.showWorktreesBadge',
+        'commitPanel.showPullRequestsBadge', 'commitPanel.showSyncBadge', 'commitPanel.showActivityBarBadge',
+      ],
+    },
+    {
+      id: 'gitLog', group: views, icon: 'gitcharm-log', preview: 'gitLog',
+      label: l10n.t('Log Panel'),
+      description: l10n.t('Where the Log Panel opens, its layout, and how much history it loads.'),
+      keys: [
+        'gitLogDefaultLocation', 'gitLogDefaultLayout', 'graphMaxCommits', 'showUncommittedChangesInLog',
+        'gitLog.showAuthor', 'gitLog.showAuthorAvatar', 'gitLog.showDate', 'gitLog.showHash', 'gitLog.showInlineBranches',
+      ],
     },
     {
       id: 'editor', group: views, icon: 'code', preview: 'editor',
       label: l10n.t('Editor'),
       description: l10n.t('Blame information shown right inside your files.'),
-      keys: ['gitAnnotations.enabled', 'gitGhostText.enabled', 'avatars.enabled'],
+      keys: ['gitAnnotations.enabled', 'gitGhostText.enabled'],
     },
     {
-      id: 'ai', group: integrations, icon: 'sparkle', custom: 'ai',
+      id: 'appearance', group: views, icon: 'symbol-color', preview: 'appearance',
+      label: l10n.t('Appearance'),
+      description: l10n.t('How GitCharm shows dates and commit authors, tells repositories apart, and what it puts in the status bar.'),
+      keys: ['dateFormat', 'avatars.enabled', 'avatars.gravatar.enabled', 'projectColors', 'statusBar.showBranch', 'statusBar.showProfile'],
+    },
+    {
+      id: 'ai', group: ai, icon: 'sparkle', custom: 'ai',
       label: l10n.t('AI'),
       description: l10n.t('Pick the model that writes commit messages and pull requests, and explains changes.'),
       keys: [
@@ -79,7 +111,7 @@ export function getCategories(): CategoryDef[] {
       ],
     },
     {
-      id: 'aiPrompts', group: integrations, icon: 'note', custom: 'aiPrompts',
+      id: 'aiPrompts', group: ai, icon: 'note', custom: 'aiPrompts',
       label: l10n.t('AI Prompts'),
       description: l10n.t('The instructions sent to the model. The changes themselves are always added after them.'),
       keys: AI_PROMPT_KEYS,
@@ -91,10 +123,10 @@ export function getCategories(): CategoryDef[] {
       keys: ['pullRequests.hostProviderOverrides'],
     },
     {
-      id: 'pullRequests', group: integrations, icon: 'git-pull-request',
-      label: l10n.t('Pull Requests'),
-      description: l10n.t('Defaults for creating, merging and checking out pull requests.'),
-      keys: ['pullRequests.defaultTargetBranch', 'pullRequests.defaultMergeStrategy', 'pullRequests.defaultCheckoutAction'],
+      id: 'discovery', group: advanced, icon: 'search', preview: 'discovery',
+      label: l10n.t('Repository Discovery'),
+      description: l10n.t('Which repositories and submodules GitCharm finds in the workspace.'),
+      keys: ['repositoryScanMaxDepth', 'repositoryScanIgnoredFolders', 'submoduleMaxDepth'],
     },
     {
       id: 'experimental', group: advanced, icon: 'beaker',
@@ -125,6 +157,41 @@ export function settingLabel(key: string): string {
     case 'gitLogDefaultLayout': return l10n.t('Default layout');
     case 'graphMaxCommits': return l10n.t('Maximum commits');
     case 'showUncommittedChangesInLog': return l10n.t('Show uncommitted changes');
+    case 'commitPanel.showShelfTab': return l10n.t('Show Shelf tab');
+    case 'commitPanel.showStashTab': return l10n.t('Show Stash tab');
+    case 'commitPanel.showWorktreesTab': return l10n.t('Show Worktrees tab');
+    case 'commitPanel.showPullRequestsTab': return l10n.t('Show Pull Requests tab');
+    case 'commitPanel.showSyncTab': return l10n.t('Show Sync tab');
+    case 'commitPanel.tabOrder': return l10n.t('Tab order');
+    case 'commitSignoff': return l10n.t('Sign off commits');
+    case 'commitPanel.subjectMaxLength': return l10n.t('Commit title length');
+    case 'protectedBranches': return l10n.t('Protected branches');
+    case 'confirm.discardChanges': return l10n.t('Confirm discarding changes');
+    case 'confirm.dropStashesAndShelves': return l10n.t('Confirm dropping stashes and shelves');
+    case 'confirm.commitOperations': return l10n.t('Confirm reverting, dropping and undoing commits');
+    case 'confirm.deleteBranches': return l10n.t('Confirm deleting branches');
+    case 'autoFetchInterval': return l10n.t('Periodic fetch (minutes)');
+    case 'fetchPrune': return l10n.t('Prune on fetch');
+    case 'pullMode': return l10n.t('Pull mode');
+    case 'dateFormat': return l10n.t('Date format');
+    case 'statusBar.showBranch': return l10n.t('Branch in the status bar');
+    case 'statusBar.showProfile': return l10n.t('Git profile in the status bar');
+    case 'pullRequests.defaultFilter': return l10n.t('Default filter');
+    case 'pullRequests.autoRefreshInterval': return l10n.t('Auto-refresh (minutes)');
+    case 'commitPanel.defaultTab': return l10n.t('Default tab');
+    case 'commitPanel.tabLabels': return l10n.t('Tab names');
+    case 'commitPanel.showChangesBadge': return l10n.t('Changes badge');
+    case 'commitPanel.showSyncBadge': return l10n.t('Sync badge');
+    case 'commitPanel.showShelfBadge': return l10n.t('Shelf badge');
+    case 'commitPanel.showStashBadge': return l10n.t('Stash badge');
+    case 'commitPanel.showWorktreesBadge': return l10n.t('Worktrees badge');
+    case 'commitPanel.showPullRequestsBadge': return l10n.t('Pull Requests badge');
+    case 'commitPanel.showActivityBarBadge': return l10n.t('Activity bar badge');
+    case 'gitLog.showAuthor': return l10n.t('Show author');
+    case 'gitLog.showAuthorAvatar': return l10n.t('Show author avatar');
+    case 'gitLog.showDate': return l10n.t('Show date');
+    case 'gitLog.showHash': return l10n.t('Show hash');
+    case 'gitLog.showInlineBranches': return l10n.t('Show inline branches');
     case 'repositoryScanMaxDepth': return l10n.t('Repository scan depth');
     case 'repositoryScanIgnoredFolders': return l10n.t('Folders ignored by the scan');
     case 'submoduleMaxDepth': return l10n.t('Submodule depth');
@@ -132,6 +199,7 @@ export function settingLabel(key: string): string {
     case 'gitAnnotations.enabled': return l10n.t('Git annotations');
     case 'gitGhostText.enabled': return l10n.t('Inline blame (ghost text)');
     case 'avatars.enabled': return l10n.t('Author avatars');
+    case 'avatars.gravatar.enabled': return l10n.t('Gravatar as fallback');
     case 'ai.enabled': return l10n.t('AI features');
     case 'ai.language': return l10n.t('Language');
     case 'ai.provider': return l10n.t('Provider');
@@ -175,6 +243,28 @@ export function enumLabel(key: string, value: string): string {
     case 'defaultCommitAction=commitAndPush': return 'Commit and Push';
     case 'defaultSaveAction=stash': return 'Stash';
     case 'defaultSaveAction=shelve': return 'Shelve';
+    case 'commitPanel.defaultTab=changes': return l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
+    case 'commitPanel.defaultTab=shelf': return l10n.t('Shelf');
+    case 'commitPanel.defaultTab=stash': return l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] });
+    case 'commitPanel.defaultTab=worktrees': return l10n.t('Worktrees');
+    case 'commitPanel.defaultTab=pullRequests': return l10n.t('Pull Requests');
+    case 'commitPanel.defaultTab=sync': return l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] });
+    case 'commitPanel.defaultTab=lastUsed': return l10n.t('Last used');
+    case 'commitPanel.tabLabels=active': return l10n.t('Active tab');
+    case 'pullMode=ask': return l10n.t('Ask');
+    case 'pullMode=merge': return 'Merge';
+    case 'pullMode=rebase': return 'Rebase';
+    case 'pullMode=ffOnly': return l10n.t('Fast-forward only');
+    case 'dateFormat=auto': return l10n.t('Automatic');
+    case 'dateFormat=absolute': return l10n.t('Absolute');
+    case 'dateFormat=relative': return l10n.t('Relative');
+    case 'pullRequests.defaultFilter=open': return l10n.t('All open');
+    case 'pullRequests.defaultFilter=mine': return l10n.t('Created by me');
+    case 'pullRequests.defaultFilter=assignedToMe': return l10n.t('Assigned to me');
+    case 'pullRequests.defaultFilter=reviewRequested': return l10n.t('Awaiting my review');
+    case 'pullRequests.defaultFilter=mentioningMe': return l10n.t('Mentioning me');
+    case 'commitPanel.tabLabels=always': return l10n.t('All tabs');
+    case 'commitPanel.tabLabels=never': return l10n.t('Icons only');
     case 'gitLogDefaultLocation=panel': return l10n.t('Bottom panel');
     case 'gitLogDefaultLocation=editorTab': return l10n.t('Editor tab');
     case 'gitLogDefaultLocation=newWindow': return l10n.t('New window');

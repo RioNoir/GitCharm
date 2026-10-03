@@ -80,7 +80,6 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
   content: ''; position: absolute; left: 5px; top: 15px; bottom: 18px; border-left: 2px solid var(--vscode-settings-modifiedItemIndicator, var(--vscode-focusBorder));
 }
 .gc-row-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; line-height: 20px; color: var(--vscode-settings-headerForeground, var(--vscode-foreground)); }
-.gc-row-title .category { font-weight: normal; }
 .gc-row-title .label { font-weight: 600; }
 .gc-row-misc { font-size: 12px; font-style: italic; color: var(--vscode-descriptionForeground); }
 .gc-row-gear { position: absolute; left: -22px; top: 11px; opacity: 0; }
@@ -191,6 +190,7 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 .gc-list-header, .gc-list-row { display: flex; align-items: center; min-height: 24px; padding: 0 4px 0 8px; gap: 8px; }
 .gc-list-header { font-weight: 600; border-bottom: 1px solid var(--vscode-settings-headerBorder, var(--vscode-panel-border)); }
 .gc-list-row { cursor: default; }
+.gc-list-note { color: var(--vscode-descriptionForeground); }
 .gc-list-row:hover { background: var(--vscode-list-hoverBackground); }
 .gc-list-row .gc-list-actions { margin-left: auto; display: flex; opacity: 0; }
 .gc-list-row:hover .gc-list-actions, .gc-list-row:focus-within .gc-list-actions { opacity: 1; }
@@ -366,7 +366,7 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 /* Commit Panel mock (Commit & Changes) */
 .pv-commit { font-size: 11px; }
 .pv-commit-title { padding: 6px 8px 2px; font-weight: 600; }
-.pv-commit-tabs { display: flex; align-items: center; gap: 10px; padding: 3px 8px 0; border-bottom: 1px solid var(--vscode-panel-border); }
+.pv-commit-tabs { display: flex; align-items: center; gap: 10px; padding: 3px 8px 0; border-bottom: 1px solid var(--vscode-panel-border); overflow: hidden; white-space: nowrap; }
 .pv-commit-tab { display: inline-flex; align-items: center; gap: 4px; padding-bottom: 3px; font-weight: 600; }
 .pv-commit-tab.active { border-bottom: 1px solid var(--vscode-panelTitle-activeBorder, var(--vscode-focusBorder)); }
 .pv-cb { display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; border-radius: 2px; flex-shrink: 0; border: 1px solid var(--vscode-checkbox-border, rgba(128,128,128,0.6)); }

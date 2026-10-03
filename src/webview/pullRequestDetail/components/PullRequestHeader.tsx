@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { MergeStrategy, PullRequestDetail, PullRequestSummary } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
+import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import * as l10n from '@vscode/l10n';
 import { interpolateNodes } from './interpolateNodes';
+import { ForgeAvatarImg } from '../../shared/ForgeAvatarImg';
 
 interface Props {
   summary: PullRequestSummary;
@@ -288,10 +289,7 @@ export function PullRequestHeader({
           {badge.label}
         </span>
 
-        {avatarsEnabled && summary.authorAvatarUrl
-          ? <img src={summary.authorAvatarUrl} alt={summary.authorName} style={css.avatarImg} />
-          : <span style={{ ...css.avatarFallback, background: avatarColor(summary.authorName) }}>{initials(summary.authorName)}</span>
-        }
+        <ForgeAvatarImg url={summary.authorAvatarUrl} alt={summary.authorName} style={css.avatarImg} fallback={<span style={{ ...css.avatarFallback, background: avatarColor(summary.authorName) }}>{initials(summary.authorName)}</span>} />
 
         <span style={css.summaryText}>
           {interpolateNodes(

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { confirmAction } from './confirmAction';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
 import { formatGitError } from './gitErrorUtils';
@@ -47,7 +48,7 @@ export function presentOrphanBranches(
     const metaById = new Map(manager.getRepoMetas().map(m => [m.id, m]));
     const list = orphaned.map(o => `"${o.branchName}"${metaById.get(o.repoId) ? ` (${metaById.get(o.repoId)!.name})` : ''}`).join(', ');
     const del = vscode.l10n.t('Delete');
-    const confirm = await vscode.window.showWarningMessage(
+    const confirm = await confirmAction('deleteBranches', 
       plural(count, vscode.l10n.t('Delete branch {0}?', list), vscode.l10n.t('Delete branches {0}?', list)),
       { modal: true }, del
     );

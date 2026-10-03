@@ -1,6 +1,7 @@
 import * as l10n from '@vscode/l10n';
 import React, { useEffect, useState } from 'react';
 import { Codicon } from '../shared/Codicon';
+import { GitCharmIcon } from '../shared/GitCharmIcon';
 import type { PreviewId } from './layout';
 import { modelPrefix, normalizeBranchModels } from '../../host/types/branchModels';
 
@@ -85,8 +86,10 @@ function PreviewContent({ id, ...props }: PreviewProps & { id: PreviewId }) {
       <div className="gc-preview-body" aria-hidden="true">
         {id === 'changesView' && <ChangesViewPreview {...props} />}
         {id === 'gitLog' && <GitLogPreview {...props} />}
-        {id === 'repositories' && <RepositoriesPreview {...props} />}
+        {id === 'appearance' && <AppearancePreview {...props} />}
+        {id === 'discovery' && <DiscoveryPreview {...props} />}
         {id === 'branches' && <BranchesPreview {...props} />}
+        {id === 'sync' && <SyncPreview {...props} />}
         {id === 'notifications' && <NotificationsPreview {...props} />}
         {id === 'editor' && <EditorPreview {...props} />}
       </div>
@@ -161,6 +164,39 @@ function FileRow({ name, kind, status, check, indent = 1, count, className }: {
 
 const COMMIT_MESSAGE = 'Fix date formatting';
 
+const COMMIT_TABS: { id: string; icon: string; show?: string; badge?: string; count?: number; label(): string }[] = [
+  { id: 'changes', icon: 'git-branch-changes', badge: 'commitPanel.showChangesBadge', label: () => '' },
+  { id: 'shelf', icon: 'archive', show: 'commitPanel.showShelfTab', badge: 'commitPanel.showShelfBadge', count: 3, label: () => l10n.t('Shelf') },
+  { id: 'stash', icon: 'git-stash', show: 'commitPanel.showStashTab', badge: 'commitPanel.showStashBadge', count: 1, label: () => l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) },
+  { id: 'worktrees', icon: 'worktree', show: 'commitPanel.showWorktreesTab', badge: 'commitPanel.showWorktreesBadge', count: 2, label: () => l10n.t('Worktrees') },
+  { id: 'pullRequests', icon: 'git-pull-request', show: 'commitPanel.showPullRequestsTab', badge: 'commitPanel.showPullRequestsBadge', count: 4, label: () => l10n.t('Pull Requests') },
+  { id: 'sync', icon: 'cloud', show: 'commitPanel.showSyncTab', badge: 'commitPanel.showSyncBadge', count: 2, label: () => l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }) },
+];
+
+/** The Commit Panel's tab bar as the commitPanel.* settings lay it out — the Changes tab being the active one. */
+function CommitTabs({ get, changesLabel, changesCount }: { get: PreviewProps['get']; changesLabel: string; changesCount: number }) {
+  const order = get<string[]>('commitPanel.tabOrder') ?? [];
+  const labels = get<string>('commitPanel.tabLabels');
+  const sorted = [
+    ...order.map(id => COMMIT_TABS.find(t => t.id === id)).filter((t): t is typeof COMMIT_TABS[number] => !!t),
+    ...COMMIT_TABS.filter(t => !order.includes(t.id)),
+  ].filter((t, i, all) => all.indexOf(t) === i && (!t.show || get<boolean>(t.show)));
+  return (
+    <div className="pv-commit-tabs">
+      {sorted.map(t => {
+        const active = t.id === 'changes';
+        const label = labels === 'always' || (labels !== 'never' && active) ? (active ? changesLabel : t.label()) : '';
+        const count = t.badge && get<boolean>(t.badge) ? (active ? changesCount : t.count) : undefined;
+        return (
+          <span key={t.id} className={`pv-commit-tab${active ? ' active' : ''}`} style={active ? undefined : { opacity: 0.6, fontWeight: 'normal' }}>
+            <Codicon name={t.icon} style={{ fontSize: 11 }} />{label}{count !== undefined && <span className="pv-count">{count}</span>}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Scene: a file of the second repository is hovered, then selected (or staged, in the VS Code view); the
  * commit message types itself; the main button is pressed; the panel confirms the commit.
@@ -184,12 +220,7 @@ function ChangesViewPreview({ get, repos }: PreviewProps) {
   return (
     <div className="pv-panel pv-commit">
       <div className="pv-commit-title">GitCharm Commit</div>
-      <div className="pv-commit-tabs">
-        <span className="pv-commit-tab active"><Codicon name="git-branch" style={{ fontSize: 11 }} />{simplified ? 'Changes' : 'Commit'}<span className="pv-count">{simplified ? 9 : 10}</span></span>
-        <Codicon name="archive" style={{ fontSize: 11, opacity: 0.6 }} />
-        <Codicon name="cloud-download" style={{ fontSize: 11, opacity: 0.6 }} />
-        <Codicon name="git-pull-request" style={{ fontSize: 11, opacity: 0.6 }} />
-      </div>
+      <CommitTabs get={get} changesLabel={simplified ? 'Changes' : 'Commit'} changesCount={simplified ? 9 : 10} />
       <div className="pv-content">
         {simplified && (
           <>
@@ -272,17 +303,19 @@ function ChangesViewPreview({ get, repos }: PreviewProps) {
   );
 }
 
-// ── Git Log ─────────────────────────────────────────────────────────────────
+// ── Log Panel ─────────────────────────────────────────────────────────────────
 
 const GRAPH_ROWS = [
-  { msg: 'Add login form validation', author: 'Alex Kim', hash: 'a1b2c3d', when: '2h', lane: 0 },
+  { msg: 'Add login form validation', author: 'Alex Kim', hash: 'a1b2c3d', when: '2h', lane: 0, ref: 'main' },
   { msg: 'Merge branch feature/search', author: 'Sam Rivera', hash: '9f8e7d6', when: '5h', lane: 0 },
-  { msg: 'Improve search ranking', author: 'Sam Rivera', hash: 'e4f5a6b', when: '1d', lane: 1 },
+  { msg: 'Improve search ranking', author: 'Sam Rivera', hash: 'e4f5a6b', when: '1d', lane: 1, ref: 'feature/search' },
   { msg: 'Fix date formatting', author: 'Alex Kim', hash: '3c4d5e6', when: '2d', lane: 0 },
   { msg: 'Bump dependencies', author: 'Jo Chen', hash: '7a8b9c0', when: '3d', lane: 0 },
 ];
 
-function MiniGraph({ uncommitted, color, compact, selected }: { uncommitted: boolean; color: string; compact?: boolean; selected: number }) {
+interface LogColumns { author: boolean; avatar: boolean; date: boolean; hash: boolean; refs: boolean }
+
+function MiniGraph({ uncommitted, color, compact, selected, columns }: { uncommitted: boolean; color: string; compact?: boolean; selected: number; columns: LogColumns }) {
   return (
     <div className="pv-graph">
       {uncommitted && (
@@ -296,8 +329,15 @@ function MiniGraph({ uncommitted, color, compact, selected }: { uncommitted: boo
           <span className="pv-lane">
             <span className="pv-node" style={{ background: r.lane ? '#ffb74d' : color, marginLeft: r.lane * 10 }} />
           </span>
+          {columns.refs && r.ref && (
+            <span className="pv-repo-pill" style={{ color: r.lane ? '#ffb74d' : color, borderColor: r.lane ? '#ffb74d' : color }}>{r.ref}</span>
+          )}
           <span className="pv-grow pv-ellipsis">{r.msg}</span>
-          {!compact && <span className="pv-muted">{r.author}</span>}
+          {columns.avatar && <span className="pv-avatar img" style={SMALL_AVATAR} />}
+          {/* As in the Log Panel, where the author's name needs a wide enough list. */}
+          {columns.author && !compact && <span className="pv-muted">{r.author}</span>}
+          {columns.date && <span className="pv-muted">{r.when}</span>}
+          {columns.hash && !compact && <span className="pv-muted mono">{r.hash}</span>}
         </div>
       ))}
     </div>
@@ -310,13 +350,20 @@ function GitLogPreview({ get }: PreviewProps) {
   const logOnly = get<string>('gitLogDefaultLayout') === 'logOnly';
   const uncommitted = get<boolean>('showUncommittedChangesInLog');
   const max = get<number>('graphMaxCommits');
+  const columns: LogColumns = {
+    author: get<boolean>('gitLog.showAuthor'),
+    avatar: get<boolean>('gitLog.showAuthorAvatar'),
+    date: get<boolean>('gitLog.showDate'),
+    hash: get<boolean>('gitLog.showHash'),
+    refs: get<boolean>('gitLog.showInlineBranches'),
+  };
   const color = 'var(--vscode-charts-blue, #4fc3f7)';
   const compact = location === 'panel';
   const selected = useLoop(compact ? 3 : 5, 1200, 0);
   const commit = GRAPH_ROWS[selected];
   const logPane = (
     <div className="pv-split">
-      <div className="pv-split-main"><MiniGraph uncommitted={uncommitted} color={color} compact={compact} selected={selected} /></div>
+      <div className="pv-split-main"><MiniGraph uncommitted={uncommitted} color={color} compact={compact} selected={selected} columns={columns} /></div>
       {/* The layout only applies outside the bottom panel, where the Commit panel can sit beside the log. */}
       {!compact && !logOnly && (
         <div className="pv-split-side">
@@ -339,7 +386,7 @@ function GitLogPreview({ get }: PreviewProps) {
           <div className="pv-editor-area">
             {location === 'editorTab' ? (
               <>
-                <div className="pv-tabs"><span className="pv-etab">App.tsx</span><span className="pv-etab active"><Codicon name="history" style={{ fontSize: 11 }} /> Git Log</span></div>
+                <div className="pv-tabs"><span className="pv-etab">App.tsx</span><span className="pv-etab active"><GitCharmIcon name="log" style={{ fontSize: 11 }} /> Log Panel</span></div>
                 {logPane}
               </>
             ) : (
@@ -368,17 +415,19 @@ function GitLogPreview({ get }: PreviewProps) {
   );
 }
 
-// ── Repositories ────────────────────────────────────────────────────────────
+// ── Appearance & Repository Discovery ───────────────────────────────────────
 
 /** Scene: each repository's tab gets selected in turn; its commits and its place in the workspace light up. */
-function RepositoriesPreview({ get, repos }: PreviewProps) {
+/**
+ * Scene: the Log Panel of a multi-repo workspace, each repository highlighted in turn with its color. Authors with a
+ * forge account show its avatar; the one with only a company address needs Gravatar, else shows initials.
+ */
+function AppearancePreview({ get, repos }: PreviewProps) {
   const list = effectiveRepos(repos, get<Record<string, string>>('projectColors'));
-  const depth = get<number>('repositoryScanMaxDepth');
-  const subDepth = get<number>('submoduleMaxDepth');
-  const ignored = get<string[]>('repositoryScanIgnoredFolders');
+  const avatars = get<boolean>('avatars.enabled');
+  const gravatar = avatars && get<boolean>('avatars.gravatar.enabled');
   const active = useLoop(Math.min(list.length, 3), 1400, 0);
   const activeName = list[active]?.name;
-  const dim = (name: string | undefined) => (name !== undefined && name !== activeName ? ' pv-dim' : ' pv-lit');
   return (
     <div className="pv-stack">
       <div className="pv-panel">
@@ -394,8 +443,11 @@ function RepositoriesPreview({ get, repos }: PreviewProps) {
           {GRAPH_ROWS.slice(0, 4).map((row, i) => {
             const r = list[i % Math.min(list.length, 3)];
             return (
-              <div key={i} className={`pv-graph-row${dim(r.name)}`}>
+              <div key={i} className={`pv-graph-row${r.name !== activeName ? ' pv-dim' : ' pv-lit'}`}>
                 <span className="pv-lane"><span className="pv-node" style={{ background: r.color }} /></span>
+                {avatars && (row.author !== GRAVATAR_ONLY_AUTHOR || gravatar)
+                  ? <span className="pv-avatar img" style={SMALL_AVATAR} />
+                  : <span className="pv-avatar" style={SMALL_AVATAR}>{initialsOf(row.author)}</span>}
                 <span className="pv-grow pv-ellipsis">{row.msg}</span>
                 <span className="pv-repo-pill" style={{ color: r.color, borderColor: r.color }}>{r.name}</span>
               </div>
@@ -403,11 +455,32 @@ function RepositoriesPreview({ get, repos }: PreviewProps) {
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The sample author without a forge account: only Gravatar can have a picture of them. */
+const GRAVATAR_ONLY_AUTHOR = 'Alex Kim';
+
+const SMALL_AVATAR: React.CSSProperties = { width: 16, height: 16, fontSize: 7 };
+
+function initialsOf(name: string): string {
+  return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+}
+
+/** Scene: the workspace folder tree, with what the scan finds (by depth, submodules) and what it skips. */
+function DiscoveryPreview({ get, repos }: PreviewProps) {
+  const list = effectiveRepos(repos, get<Record<string, string>>('projectColors'));
+  const depth = get<number>('repositoryScanMaxDepth');
+  const subDepth = get<number>('submoduleMaxDepth');
+  const ignored = get<string[]>('repositoryScanIgnoredFolders');
+  return (
+    <div className="pv-stack">
       <div className="pv-tree">
         <div className="pv-tree-row"><Codicon name="root-folder" /> workspace</div>
-        <div className={`pv-tree-row${dim(list[0].name)}`} style={{ paddingLeft: 16 }}><Codicon name="repo" /> {list[0].name}</div>
-        <div className={`pv-tree-row${depth < 1 ? ' off' : dim(list[1]?.name)}`} style={{ paddingLeft: 16 }}><Codicon name="folder" /> packages/<Codicon name="repo" /> {list[1]?.name ?? 'api'} <span className="pv-muted">{l10n.t('depth {0}', 1)}</span></div>
-        <div className={`pv-tree-row${subDepth < 1 ? ' off' : dim(list[2]?.name)}`} style={{ paddingLeft: 32 }}><Codicon name="package" /> {list[2]?.name ?? 'vendor/lib'} <span className="pv-muted">{l10n.t('submodule')}</span></div>
+        <div className="pv-tree-row pv-lit" style={{ paddingLeft: 16 }}><Codicon name="repo" /> {list[0].name}</div>
+        <div className={`pv-tree-row${depth < 1 ? ' off' : ' pv-lit'}`} style={{ paddingLeft: 16 }}><Codicon name="folder" /> packages/<Codicon name="repo" /> {list[1]?.name ?? 'api'} <span className="pv-muted">{l10n.t('depth {0}', 1)}</span></div>
+        <div className={`pv-tree-row${subDepth < 1 ? ' off' : ' pv-lit'}`} style={{ paddingLeft: 32 }}><Codicon name="package" /> {list[2]?.name ?? 'vendor/lib'} <span className="pv-muted">{l10n.t('submodule')}</span></div>
         {ignored.slice(0, 2).map(f => (
           <div key={f} className="pv-tree-row off" style={{ paddingLeft: 16 }}><Codicon name="folder" /> {f} <span className="pv-muted">{l10n.t('ignored')}</span></div>
         ))}
@@ -478,20 +551,14 @@ function Toast({ icon, text, actions }: { icon: string; text: string; actions: s
   );
 }
 
-/** Scene: startup — the fetch runs, then each enabled notification pops up in turn. */
-function NotificationsPreview({ get }: PreviewProps) {
+/** Scene: startup — the fetch runs, then the views keep refreshing. */
+function SyncPreview({ get }: PreviewProps) {
   const fetch = get<boolean>('fetchOnStartup');
   const refresh = get<number>('autoRefreshInterval');
-  const toasts: React.ReactElement[] = [];
-  if (get<boolean>('notifyOnIncomingCommits')) toasts.push(<Toast key="in" icon="cloud-download" text={l10n.t('3 incoming commits on main')} actions={['Pull']} />);
-  if (get<boolean>('notifyOnUnpushedCommits')) toasts.push(<Toast key="out" icon="cloud-upload" text={l10n.t('2 commits ready to push on feature/search')} actions={['Push']} />);
-  if (get<boolean>('notifyOnOrphanBranches')) toasts.push(<Toast key="orphan" icon="git-branch" text={l10n.t('1 local branch lost its remote')} actions={[l10n.t('Review')]} />);
-
-  // 0–1: fetching; then one notification per step; then a pause before starting over.
-  const length = 2 + toasts.length + 3;
-  const step = useLoop(length, 900, length - 1);
+  const autoFetch = get<number>('autoFetchInterval');
+  // 0–1: fetching; then a pause before starting over.
+  const step = useLoop(5, 900, 4);
   const fetching = fetch && step < 2;
-  const shown = Math.max(0, Math.min(toasts.length, step - 1));
   return (
     <div className="pv-stack">
       <div className="pv-timeline">
@@ -499,11 +566,37 @@ function NotificationsPreview({ get }: PreviewProps) {
           <Codicon name={!fetch ? 'circle-slash' : fetching ? 'loading' : 'check'} className={fetching ? 'codicon-modifier-spin' : undefined} />
           {!fetch ? l10n.t('No fetch at startup') : fetching ? l10n.t('Fetching all remotes…') : l10n.t('Fetch all remotes at startup')}
         </div>
+        <div className={`pv-timeline-step${autoFetch > 0 ? '' : ' off'}`}>
+          <Codicon name={autoFetch > 0 ? 'cloud-download' : 'circle-slash'} />
+          {autoFetch > 0 ? l10n.t('Fetch every {0} min', autoFetch) : l10n.t('No periodic fetch')}
+        </div>
         <div className="pv-timeline-step"><Codicon name="sync" /> {refresh > 0 ? l10n.t('Refresh every {0}s', refresh) : l10n.t('Refresh when files change')}</div>
       </div>
+    </div>
+  );
+}
+
+/** Scene: each enabled notification pops up in turn. */
+function NotificationsPreview({ get }: PreviewProps) {
+  const toasts: React.ReactElement[] = [];
+  if (get<boolean>('notifyOnIncomingCommits')) toasts.push(<Toast key="in" icon="cloud-download" text={l10n.t('3 incoming commits on main')} actions={['Pull']} />);
+  if (get<boolean>('notifyOnUnpushedCommits')) toasts.push(<Toast key="out" icon="cloud-upload" text={l10n.t('2 commits ready to push on feature/search')} actions={['Push']} />);
+  if (get<boolean>('notifyOnOrphanBranches')) toasts.push(<Toast key="orphan" icon="git-branch" text={l10n.t('1 local branch lost its remote')} actions={[l10n.t('Review')]} />);
+  // As in WorkspaceGitManager: the prompt is never shown with the Simplified changes view.
+  const promptUntracked = get<boolean>('promptAddUntrackedToGit');
+  const simplified = get<string>('changesViewMode') === 'simplified';
+  if (promptUntracked && !simplified) toasts.push(<Toast key="untracked" icon="new-file" text={l10n.t('Do you want to add "{0}" to Git?', 'login-form.tsx')} actions={[l10n.t('Add'), l10n.t('Cancel')]} />);
+
+  // One notification per step, then a pause before starting over.
+  const length = 1 + toasts.length + 3;
+  const step = useLoop(length, 900, length - 1);
+  const shown = Math.max(0, Math.min(toasts.length, step));
+  return (
+    <div className="pv-stack">
       {toasts.length > 0
         ? <div className="pv-toasts">{toasts.slice(0, shown)}</div>
         : <div className="pv-empty"><Codicon name="bell-slash" /> {l10n.t('No notifications')}</div>}
+      {promptUntracked && simplified && <div className="pv-footnote"><Codicon name="info" /> {l10n.t('With the Simplified changes view, GitCharm never asks to add new files to Git.')}</div>}
     </div>
   );
 }

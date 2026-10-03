@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Codicon } from './Codicon';
-import { avatarsEnabled, avatarColor, initials, initialsFontSize } from './avatars';
+import { avatarsEnabled, avatarColor, initials, initialsFontSize, resolveAuthorAvatar } from './avatars';
 import * as l10n from '@vscode/l10n';
 
 interface Props {
@@ -8,85 +8,26 @@ interface Props {
   authorEmail: string;
   size?: number;
   isYou?: boolean;
+  /** The repository the commit is in: the host asks its forge for the author first. */
+  repoId?: string;
+  /** The commit, when it's on the forge (pushed) — some forges match authors by commit. */
+  sha?: string;
 }
 
-async function gravatarUrl(email: string, size: number): Promise<string> {
-  const normalized = email.trim().toLowerCase();
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
-  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return `https://gravatar.com/avatar/${hash}?s=${size * 2}&d=404`;
-}
-
-function githubAvatarUrl(email: string, size: number): string | null {
-  if (!email.toLowerCase().endsWith('@users.noreply.github.com')) return null;
-  const local = email.split('@')[0] ?? '';
-  const username = local.includes('+') ? local.split('+')[1] : local;
-  return username ? `https://avatars.githubusercontent.com/${username}?size=${size * 2}` : null;
-}
-
-// Fetches the image as a blob, draws it on an offscreen canvas, and checks
-// whether all sampled pixels are nearly identical (blank/default avatar).
-function loadImagePixels(url: string, sampleSize = 8): Promise<boolean> {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = sampleSize;
-        canvas.height = sampleSize;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(false); return; }
-        ctx.drawImage(img, 0, 0, sampleSize, sampleSize);
-        const { data } = ctx.getImageData(0, 0, sampleSize, sampleSize);
-        const unique = new Set<number>();
-        for (let i = 0; i < data.length; i += 4) {
-          const r = Math.round((data[i]!)   / 16);
-          const g = Math.round((data[i+1]!) / 16);
-          const b = Math.round((data[i+2]!) / 16);
-          unique.add((r << 8) | (g << 4) | b);
-        }
-        resolve(unique.size <= 3);
-      } catch {
-        // Canvas tainted (CORS) — assume not blank
-        resolve(false);
-      }
-    };
-
-    img.onerror = () => resolve(true); // 404 or network error → treat as blank
-    img.src = url;
-  });
-}
-
-async function resolveAvatarUrl(email: string, size: number): Promise<string | null> {
-  const github = githubAvatarUrl(email, size);
-  if (github) {
-    const blank = await loadImagePixels(github);
-    return blank ? null : github;
-  }
-
-  const gravatar = await gravatarUrl(email, size);
-  const blank = await loadImagePixels(gravatar);
-  return blank ? null : gravatar;
-}
-
-export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false }: Props) {
+export function AuthorAvatar({ authorName, authorEmail, size = 20, isYou = false, repoId, sha }: Props) {
   const [url, setUrl] = useState<string | null | 'loading'>(avatarsEnabled ? 'loading' : null);
-  const prevEmailRef = useRef(authorEmail);
 
   useEffect(() => {
-    // Avatars are opt-in: with the setting off, stay on initials and make no request.
+    // With avatars off, stay on initials and make no request.
     if (!avatarsEnabled) return;
-    prevEmailRef.current = authorEmail;
     setUrl('loading');
 
     let cancelled = false;
-    resolveAvatarUrl(authorEmail, size).then(resolved => {
+    resolveAuthorAvatar(authorEmail, repoId, sha).then(resolved => {
       if (!cancelled) setUrl(resolved);
     });
     return () => { cancelled = true; };
-  }, [authorEmail, size]);
+  }, [authorEmail, repoId, sha]);
 
   if (isYou) {
     return (

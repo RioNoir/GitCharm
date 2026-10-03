@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Codicon } from './Codicon';
 import { AuthorAvatar } from './AuthorAvatar';
-import { avatarsEnabled } from './avatars';
 import { formatRelativeTime } from './formatRelativeTime';
 import { renderMarkdown } from './renderMarkdown';
 import * as l10n from '@vscode/l10n';
 import { dateLocale, plural } from './l10n';
+import { ForgeAvatarImg } from './ForgeAvatarImg';
 
 export interface CommitRowData {
   hash: string;
@@ -32,7 +32,7 @@ interface Props {
 }
 
 /**
- * A single commit row shared by the PR detail's commit list and the Git Log's Full
+ * A single commit row shared by the PR detail's commit list and the Log Panel's Full
  * Detail merged-commits list: avatar, hash badge, message (with an expandable full
  * body), author/relative-date, and optional aggregate +/- stats. Expands to a caller-
  * supplied file list.
@@ -54,10 +54,7 @@ export function CommitRow({ commit, expanded, isLast, onToggle, renderFiles }: P
         onClick={onToggle}
       >
         <Codicon name={expanded ? 'chevron-down' : 'chevron-right'} style={{ fontSize: '13px', opacity: 0.6, flexShrink: 0 }} />
-        {avatarsEnabled && commit.authorAvatarUrl
-          ? <img src={commit.authorAvatarUrl} alt={commit.authorName} style={css.avatarImg} />
-          : <AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail ?? ''} size={24} />
-        }
+        <ForgeAvatarImg url={commit.authorAvatarUrl} alt={commit.authorName} style={css.avatarImg} fallback={<AuthorAvatar authorName={commit.authorName} authorEmail={commit.authorEmail ?? ''} size={24} />} />
         <div style={css.commitMain}>
           <span style={css.commitMessage}>
             {commit.message.split('\n')[0]}

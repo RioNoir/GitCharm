@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import type { PullRequestComment, PullRequestCommit, PullRequestEvent } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
+import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import { renderMarkdown } from '../../shared/renderMarkdown';
 import { useMentionCandidates } from '../../shared/mentions';
 import { MarkdownEditor } from '../../shared/MarkdownEditor';
@@ -12,6 +12,7 @@ import { LabelChip } from './LabelsPanel';
 import * as l10n from '@vscode/l10n';
 import { dateLocale } from '../../shared/l10n';
 import { interpolateNodes } from './interpolateNodes';
+import { ForgeAvatarImg } from '../../shared/ForgeAvatarImg';
 
 interface Props {
   comments: PullRequestComment[];
@@ -164,10 +165,7 @@ function CommentRow({ comment, onUpdate, onDelete, onHide, onUnhide }: {
   return (
     <div style={css.comment}>
       <div style={css.commentHeader}>
-        {avatarsEnabled && comment.authorAvatarUrl
-          ? <img src={comment.authorAvatarUrl} alt={comment.authorName} style={css.avatarImg} />
-          : <span style={{ ...css.avatarFallback, background: avatarColor(comment.authorName) }}>{initials(comment.authorName)}</span>
-        }
+        <ForgeAvatarImg url={comment.authorAvatarUrl} alt={comment.authorName} style={css.avatarImg} fallback={<span style={{ ...css.avatarFallback, background: avatarColor(comment.authorName) }}>{initials(comment.authorName)}</span>} />
         <span>
           <strong style={css.commentAuthor}>{comment.authorName}</strong>
         </span>
@@ -225,10 +223,7 @@ function CommitRow({ commit, onOpen }: { commit: PullRequestCommit; onOpen: () =
       <span style={{ ...css.eventIconDot, color: 'var(--vscode-descriptionForeground)', borderColor: 'var(--vscode-descriptionForeground)' }}>
         <Codicon name="git-commit" style={{ fontSize: '14px' }} />
       </span>
-      {avatarsEnabled && commit.authorAvatarUrl
-        ? <img src={commit.authorAvatarUrl} alt={commit.authorName} title={commit.authorName} style={css.commitAvatarImg} />
-        : <span style={{ ...css.commitAvatarFallback, background: avatarColor(commit.authorName) }} title={commit.authorName}>{initials(commit.authorName)}</span>
-      }
+      <ForgeAvatarImg url={commit.authorAvatarUrl} alt={commit.authorName} title={commit.authorName} style={css.commitAvatarImg} fallback={<span style={{ ...css.commitAvatarFallback, background: avatarColor(commit.authorName) }} title={commit.authorName}>{initials(commit.authorName)}</span>} />
       <span style={css.commitAuthor}>{commit.authorName}</span>
       <span style={css.commitLink}>{commit.message.split('\n')[0]}</span>
       <span style={css.commitSha}>{commit.shortSha}</span>
@@ -308,10 +303,7 @@ function EventRow({ event }: { event: PullRequestEvent }) {
       <span style={{ ...css.eventIconDot, color, borderColor: color }}>
         <Codicon name={eventIcon(event.kind)} style={{ fontSize: '14px' }} />
       </span>
-      {avatarsEnabled && event.actorAvatarUrl
-        ? <img src={event.actorAvatarUrl} alt={event.actorName} title={event.actorName} style={css.commitAvatarImg} />
-        : <span style={{ ...css.commitAvatarFallback, background: avatarColor(event.actorName) }} title={event.actorName}>{initials(event.actorName)}</span>
-      }
+      <ForgeAvatarImg url={event.actorAvatarUrl} alt={event.actorName} title={event.actorName} style={css.commitAvatarImg} fallback={<span style={{ ...css.commitAvatarFallback, background: avatarColor(event.actorName) }} title={event.actorName}>{initials(event.actorName)}</span>} />
       <span style={css.eventText}>
         {eventText(event)}
       </span>

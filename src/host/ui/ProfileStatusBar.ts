@@ -15,14 +15,23 @@ export class ProfileStatusBar implements vscode.Disposable {
   ) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
     this.statusBarItem.command = 'gitcharm.manageProfiles';
-    this.statusBarItem.show();
+    this.applyVisibility();
 
     this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('gitcharm.statusBar.showProfile')) this.applyVisibility();
+      }),
       this.profileService.onProfileChange(() => this.refresh()),
       vscode.window.onDidChangeActiveTextEditor(() => this.refresh()),
     );
 
     this.refresh();
+  }
+
+  /** gitcharm.statusBar.showProfile: profiles stay manageable from the command palette when hidden. */
+  private applyVisibility(): void {
+    if (vscode.workspace.getConfiguration('gitcharm.statusBar').get<boolean>('showProfile', true)) this.statusBarItem.show();
+    else this.statusBarItem.hide();
   }
 
   private async avatarIconPath(email: string): Promise<vscode.Uri | undefined> {

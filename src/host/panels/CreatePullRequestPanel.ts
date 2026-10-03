@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { getWebviewHtml } from '../utils/webviewHtml';
+import { attachAvatarResolver } from '../utils/avatarResolver';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import type { ChangedFile, HostToPrCreateMsg, PrCreateToHostMsg } from '../types/messages';
@@ -114,6 +115,7 @@ export class CreatePullRequestPanel {
       panel.webview.postMessage({ type: 'PRCREATE_ICON_THEME', iconTheme } satisfies HostToPrCreateMsg);
     });
 
+    attachAvatarResolver(panel.webview);
     panel.webview.onDidReceiveMessage((msg: PrCreateToHostMsg) => this.handleMessage(msg, repoId, panel));
     panel.onDidDispose(() => { this.panels.delete(repoId); this.latestCompareRequestId.delete(repoId); iconThemeWatcher.dispose(); });
     this.panels.set(repoId, panel);

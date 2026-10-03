@@ -13,6 +13,7 @@ import { focusableFieldStyle, generatingFieldStyle } from './inputStyles';
 import * as l10n from '@vscode/l10n';
 import { isImeComposing } from './ime';
 import { decorateMentions, useMentionCandidates, type MentionCandidate } from './mentions';
+import { ForgeAvatarImg } from './ForgeAvatarImg';
 
 interface Props {
   value: string;
@@ -379,9 +380,7 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
               onMouseDown={e => { e.preventDefault(); suggestion.command({ id: item.token, label: item.label }); }}
               onMouseEnter={() => setSuggestionIndex(i)}
             >
-              {item.avatarUrl
-                ? <img src={item.avatarUrl} alt="" style={css.suggestionAvatar} />
-                : <Codicon name="account" style={{ fontSize: '14px', opacity: 0.7 }} />}
+              <ForgeAvatarImg url={item.avatarUrl} alt="" style={css.suggestionAvatar} fallback={<Codicon name="account" style={{ fontSize: '14px', opacity: 0.7 }} />} />
               <span style={css.suggestionLabel}>{item.label}</span>
               {item.token !== `@${item.label}` && !item.token.startsWith('@{') && <span style={css.suggestionToken}>{item.token}</span>}
             </div>

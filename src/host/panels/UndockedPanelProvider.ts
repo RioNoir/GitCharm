@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getWebviewHtml } from '../utils/webviewHtml';
+import { attachAvatarResolver } from '../utils/avatarResolver';
 import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import type { CommitToHostMsg, HostToCommitMsg, LogToHostMsg, HostToLogMsg } from '../types/messages';
@@ -79,6 +80,7 @@ export class UndockedPanelProvider implements vscode.Disposable {
       { showCommit, logLayout: this.logPanel.getLayoutPrefs() },
     );
 
+    this.disposables.push(attachAvatarResolver(this.panel.webview));
     // Route incoming messages to the correct provider based on message type prefix
     this.panel.webview.onDidReceiveMessage(
       (msg: UndockedToHostMsg) => {

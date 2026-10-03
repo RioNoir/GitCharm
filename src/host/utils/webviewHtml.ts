@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import { avatarsEnabled } from './avatarCache';
+import { avatarsEnabled } from './avatarResolver';
 import { getSystemLocale } from './systemLocale';
 
 export function generateNonce(): string {
@@ -285,6 +285,7 @@ export function getWebviewHtml(
   <div id="root"></div>
   <script nonce="${nonce}">if (/Cursor/.test(navigator.userAgent)) document.body.classList.add('cursor-host');
 window.__GITCHARM_AVATARS__ = ${avatarsEnabled()};
+window.__GITCHARM_DATE_FORMAT__ = ${JSON.stringify(vscode.workspace.getConfiguration('gitcharm').get<string>('dateFormat', 'auto'))};
 window.__L10N__ = ${l10nJson};${initialConfig ? `\nwindow.__INITIAL_CONFIG__ = ${JSON.stringify(initialConfig)};` : ''}</script>
   <script nonce="${nonce}" type="module" src="${jsUri}"></script>
 </body>

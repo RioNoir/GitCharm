@@ -205,6 +205,44 @@ export function StringList({ value, onChange, placeholder, disabled, label, form
   );
 }
 
+/**
+ * An array setting that is a fixed set of items in a chosen order: every item listed once, moved with up/down
+ * buttons. `value` may leave items out or hold unknown ones: unknown ones are dropped, missing ones go last.
+ */
+export function OrderedList({ value, items, itemLabel, itemNote, onChange, disabled }: {
+  value: string[]; items: string[]; itemLabel(id: string): string; itemNote?(id: string): string | undefined;
+  onChange(v: string[]): void; disabled?: boolean;
+}) {
+  const order = [...value.filter((id, i) => items.includes(id) && value.indexOf(id) === i), ...items.filter(id => !value.includes(id))];
+  const move = (from: number, to: number) => {
+    const next = [...order];
+    const [id] = next.splice(from, 1);
+    next.splice(to, 0, id);
+    onChange(next);
+  };
+  return (
+    <div className="gc-list-widget">
+      {order.map((id, i) => {
+        const label = itemLabel(id);
+        const note = itemNote?.(id);
+        return (
+          <div key={id} className="gc-list-row">
+            <span className="gc-list-value">{label}{note && <span className="gc-list-note"> · {note}</span>}</span>
+            <span className="gc-list-actions">
+              <button type="button" className="gc-icon-btn" title={l10n.t('Move Up')} aria-label={l10n.t('Move {0} up', label)} disabled={disabled || i === 0} onClick={() => move(i, i - 1)}>
+                <Codicon name="arrow-up" />
+              </button>
+              <button type="button" className="gc-icon-btn" title={l10n.t('Move Down')} aria-label={l10n.t('Move {0} down', label)} disabled={disabled || i === order.length - 1} onClick={() => move(i, i + 1)}>
+                <Codicon name="arrow-down" />
+              </button>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** gitcharm.projectColors: a key/value table listing every repository of the workspace, plus any other name already configured. */

@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import { confirmAction } from '../utils/confirmAction';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
+import { attachAvatarResolver } from '../utils/avatarResolver';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus } from '../types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus, LogColumns } from '../types/messages';
 import type { BranchInfo, FileStatus, GitFileStatus, RepoMeta, WorkspaceStatus } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
@@ -132,6 +134,17 @@ const COMPARE_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
   undocked: 'gitcharm.undockedLogCompareActive',
 };
 
+function getLogColumns(): LogColumns {
+  const cfg = vscode.workspace.getConfiguration('gitcharm.gitLog');
+  return {
+    author: cfg.get<boolean>('showAuthor', true),
+    avatar: cfg.get<boolean>('showAuthorAvatar', true),
+    date: cfg.get<boolean>('showDate', true),
+    hash: cfg.get<boolean>('showHash', true),
+    refs: cfg.get<boolean>('showInlineBranches', true),
+  };
+}
+
 export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'gitcharm.gitLog';
 
@@ -198,7 +211,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     return { panel: read('panel'), sideBar: read('sideBar') };
   }
 
-  /** Change a layout preference for the location of the Git Log the user is looking at. */
+  /** Change a layout preference for the location of the Log Panel the user is looking at. */
   async setLayoutPref(pref: keyof LogLayoutPrefs, value: boolean): Promise<void> {
     const location = this.undockedPanel?.isActive() ? 'panel' : this.dockedLocation;
     const current = this.getLayoutPrefs()[location];
@@ -217,14 +230,14 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
   }
 
-  /** Clear the text/author/branch/date filters (and the compared branches) of the Git Log the user is looking at. */
+  /** Clear the text/author/branch/date filters (and the compared branches) of the Log Panel the user is looking at. */
   clearFilters(): void {
     const msg: HostToLogMsg = { type: 'LOG_CLEAR_FILTERS' };
     if (this.undockedPanel?.isActive()) this.undockedPanel.postToLog(msg);
     else this.post(msg);
   }
 
-  /** Turn compare mode on or off in the Git Log the user is looking at. */
+  /** Turn compare mode on or off in the Log Panel the user is looking at. */
   async setCompareMode(active: boolean): Promise<void> {
     // The compare controls live in the filters bar, so entering compare mode reveals it
     if (active) {
@@ -242,7 +255,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.refresh();
   }
 
-  /** Fetch all remotes, then reload repos/branches and commits on every open Git Log. */
+  /** Fetch all remotes, then reload repos/branches and commits on every open Log Panel. */
   async fetchAndRefresh(): Promise<void> {
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Fetching all'), cancellable: false },
@@ -260,7 +273,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   /**
-   * Open the Git Log where the persisted default says — bottom panel, editor tab
+   * Open the Log Panel where the persisted default says — bottom panel, editor tab
    * or a separate window. Used by `gitcharm.openLog` (command + keybinding).
    */
   openPreferred(): void {
@@ -268,7 +281,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   /**
-   * Reveal the Git Log on whichever surface the default location points at.
+   * Reveal the Log Panel on whichever surface the default location points at.
    * `wasOpen` tells callers whether the surface was already live, so they know
    * if a follow-up message can be posted right away or has to be queued until
    * the webview has booted and asked for its first batch of commits.
@@ -285,7 +298,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     return { target: 'undocked', wasOpen };
   }
 
-  /** Ask for — and persist — the default Git Log location, then apply it right away. */
+  /** Ask for — and persist — the default Log Panel location, then apply it right away. */
   async triggerDefaultLocationPick(): Promise<void> {
     type Item = vscode.QuickPickItem & { location: GitLogLocation; layout: GitLogLayout };
     const currentLocation = getGitLogDefaultLocation();
@@ -306,7 +319,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
     const pick = await vscode.window.showQuickPick<Item>(items, {
       title: vscode.l10n.t('Default GitCharm Log Location'),
-      placeHolder: vscode.l10n.t('Where should the Git Log open from now on?'),
+      placeHolder: vscode.l10n.t('Where should the Log Panel open from now on?'),
     });
     if (!pick) return;
 
@@ -370,6 +383,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       this.manager.onStatusChange(status => this.broadcast({ type: 'LOG_WORKING_TREE_STATUS', repos: this.toWorkingTreeStatus(status) })),
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('gitcharm.showUncommittedChangesInLog')) void this.pushWorkingTreeStatus();
+        if (e.affectsConfiguration('gitcharm.gitLog')) this.broadcast({ type: 'LOG_COLUMNS', columns: getLogColumns() });
       })
     );
 
@@ -422,15 +436,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         webviewView.webview,
         this.extensionUri,
         'gitLog',
-        'Git Log',
+        'Log Panel',
         { logLayout: this.getLayoutPrefs() },
       );
     } catch (e: unknown) {
       logError('gitLogHtml', String(e), e instanceof Error ? e.stack : undefined);
-      webviewView.webview.html = this.getLoadFailureHtml(vscode.l10n.t('Git Log failed to load.'), vscode.l10n.t('Run the build task and reload the window, then check the GitCharm output log if it still fails.'));
-      notifyWithLogAction('error', vscode.l10n.t('Git Log failed to load. See the GitCharm output log for details.'));
+      webviewView.webview.html = this.getLoadFailureHtml(vscode.l10n.t('Log Panel failed to load.'), vscode.l10n.t('Run the build task and reload the window, then check the GitCharm output log if it still fails.'));
+      notifyWithLogAction('error', vscode.l10n.t('Log Panel failed to load. See the GitCharm output log for details.'));
     }
 
+    this.disposables.push(attachAvatarResolver(webviewView.webview));
     webviewView.webview.onDidReceiveMessage(
       (msg: LogToHostMsg) => {
         void this.handleMessage(msg).catch(e => this.handleMessageFailure(msg, 'sidebar', e));
@@ -499,12 +514,12 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     });
   }
 
-  /** Focus/reveal the Git Log panel in the bottom bar. */
+  /** Focus/reveal the Log Panel in the bottom bar. */
   focus(): void {
     vscode.commands.executeCommand(`${GitLogPanelProvider.viewType}.focus`);
   }
 
-  /** Reveal the Git Log (wherever it lives) and scroll to a specific commit. */
+  /** Reveal the Log Panel (wherever it lives) and scroll to a specific commit. */
   selectCommit(hash: string, repoId: string): void {
     const { target, wasOpen } = this.revealPreferred();
 
@@ -526,7 +541,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.pendingScrollRepoId = repoId;
   }
 
-  /** Reveal the Git Log and filter it to a specific repository (and optionally branch). */
+  /** Reveal the Log Panel and filter it to a specific repository (and optionally branch). */
   focusRepo(repoId: string, branch?: string): void {
     const { target, wasOpen } = this.revealPreferred();
 
@@ -559,10 +574,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
       if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
       if (m.layout === undefined) m.layout = this.getLayoutPrefs();
+      if (m.columns === undefined) m.columns = getLogColumns();
     }
   }
 
-  /** Send to the docked Git Log view. */
+  /** Send to the docked Log Panel view. */
   private post(msg: HostToLogMsg): void {
     this.enrichLogMsg(msg);
     this.view?.webview.postMessage(msg);
@@ -602,7 +618,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       const now = Date.now();
       if (now - this.lastLogLoadErrorNotice > 10_000) {
         this.lastLogLoadErrorNotice = now;
-        notifyWithLogAction('error', vscode.l10n.t('Git Log failed to load. See the GitCharm output log for details.'));
+        notifyWithLogAction('error', vscode.l10n.t('Log Panel failed to load. See the GitCharm output log for details.'));
       }
     }
   }
@@ -1071,7 +1087,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling'), cancellable: false },
           async () => {
             try {
-              const output = await repo.pull();
+              const output = await repo.pullWithDefault();
               post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true, output });
               post({ type: 'LOG_REFRESH' });
             } catch (e: unknown) {
@@ -1096,7 +1112,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
             { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Pulling "{0}"', msg.branchName), cancellable: false },
             async () => {
               try {
-                await repo.pull();
+                await repo.pullWithDefault();
                 post({ type: 'LOG_REFRESH' });
               } catch (e: unknown) {
                 logError('pullBranch', formatGitError(e), getRawErrorDetail(e));
@@ -1306,7 +1322,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         }
 
         const deleteLabel = vscode.l10n.t('Delete');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('deleteBranches', 
           vscode.l10n.t('Delete branch "{0}"?', msg.branchName), { modal: true }, deleteLabel
         );
         if (confirm !== deleteLabel) {
@@ -1549,7 +1565,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         {
           const revertLabel = vscode.l10n.t('Revert');
-          const confirm = await vscode.window.showWarningMessage(
+          const confirm = await confirmAction('commitOperations', 
             vscode.l10n.t('Revert commit {0}? This creates a new commit that undoes the changes.', msg.hash.slice(0, 8)),
             { modal: true }, revertLabel
           );
@@ -1664,7 +1680,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         {
           const revertLabel = vscode.l10n.t('Revert');
-          const confirm = await vscode.window.showWarningMessage(
+          const confirm = await confirmAction('commitOperations', 
             plural(
               msg.hashes.length,
               vscode.l10n.t('Revert 1 commit? This creates a new commit that undoes the changes.'),
@@ -1704,7 +1720,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const dropLabel = vscode.l10n.t('Drop');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('commitOperations', 
           plural(
             msg.hashes.length,
             vscode.l10n.t('Drop 1 commit? This rewrites history and cannot be undone.'),
@@ -1765,7 +1781,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const dropLabel = vscode.l10n.t('Drop');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('commitOperations', 
           vscode.l10n.t('Drop commit {0}? This rewrites history. Only drop unpushed commits — dropping a pushed commit will require a force push.', msg.hash.slice(0, 8)),
           { modal: true }, dropLabel
         );
@@ -1810,7 +1826,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
         const undoLabel = vscode.l10n.t('Undo Commit');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('commitOperations', 
           vscode.l10n.t('Undo last commit? Changes will be moved back to the staged area.'),
           { modal: true }, undoLabel
         );
@@ -2432,7 +2448,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) break;
         const dropLabel = vscode.l10n.t('Drop');
-        const confirm = await vscode.window.showWarningMessage(
+        const confirm = await confirmAction('dropStashesAndShelves', 
           vscode.l10n.t('Drop this stash? This cannot be undone.'),
           { modal: true }, dropLabel
         );

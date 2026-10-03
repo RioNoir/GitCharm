@@ -354,6 +354,18 @@ export class GitLabProvider implements PullRequestProvider {
     }
   }
 
+  async getCommitAuthorAvatar(_owner: string, _repo: string, email: string): Promise<string | undefined> {
+    const headers = await this.headers();
+    try {
+      // Matched by the instance itself; for an address without an account it answers with a Gravatar URL or its
+      // default picture, which the caller drops.
+      const { data } = await httpJson<{ avatar_url?: string }>(`${this.apiBase()}/avatar?email=${encodeURIComponent(email)}&size=64`, { headers });
+      return data.avatar_url || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   getCapabilities(): PullRequestCapabilities {
     return CAPABILITIES;
   }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatListDate } from '../../shared/dateUtils';
 import type { ShelveEntry } from '../../shared/msgTypes';
 import { Codicon } from '../../shared/Codicon';
 import { RepoSectionHeader } from './RepoSectionHeader';
@@ -9,7 +10,7 @@ import { useCommitStore } from '../store/commitStore';
 import { GenericFileTree } from '../../shared/GenericFileTree';
 import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import * as l10n from '@vscode/l10n';
-import { plural, locale, dateLocale } from '../../shared/l10n';
+import { plural } from '../../shared/l10n';
 
 interface Props {
   repoId: string;
@@ -62,22 +63,7 @@ function statusLetter(status: string): string {
   return STATUS_LETTERS[status] ?? 'M';
 }
 
-const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const diffMs = Date.now() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return l10n.t('just now');
-    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return rtf.format(-diffH, 'hour');
-    const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return rtf.format(-diffD, 'day');
-    return d.toLocaleDateString(dateLocale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
-  } catch { return iso; }
-}
+const formatDate = formatListDate;
 
 type ShelfFile = ShelveEntry['files'][number];
 

@@ -54,7 +54,7 @@ export function isGitLogDefaultUndocked(): boolean {
 
 /**
  * Mirror the default location into the `gitcharm.gitLogDefaultUndocked` context
- * key, which package.json uses to hide the bottom-panel Git Log view when the
+ * key, which package.json uses to hide the bottom-panel Log Panel view when the
  * Log lives in an editor tab or its own window. Call this as early as possible
  * in activation, before VS Code evaluates the view's `when` clause.
  */

@@ -43,6 +43,8 @@ interface Props {
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   onOpenProfiles: () => void;
   onRebaseAction: (repoId: string, action: 'continue' | 'abort') => void;
+  /** gitcharm.commitPanel.subjectMaxLength: a longer first line gets a warning; 0 turns it off. */
+  subjectMaxLength?: number;
 }
 
 interface DropdownButtonItem { icon: string; label: string; onSelect: () => void; separatorAfter?: boolean; }
@@ -214,7 +216,7 @@ export function UnifiedCommitForm({
   loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
   onSyncAction, onPullRepos, onPushRepos, onForcePushRepos,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
-  activeProfile, onOpenProfiles, onRebaseAction,
+  activeProfile, onOpenProfiles, onRebaseAction, subjectMaxLength = 0,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const [textareaFocused, setTextareaFocused] = useState(false);
@@ -498,6 +500,16 @@ export function UnifiedCommitForm({
           </button>
         )}
       </div>
+      {(() => {
+        const subjectLength = [...message.split('\n')[0]].length;
+        if (!subjectMaxLength || subjectLength <= subjectMaxLength) return null;
+        return (
+          <div style={styles.subjectWarning} role="status">
+            <Codicon name="warning" style={{ fontSize: '12px', flexShrink: 0 }} />
+            {l10n.t('The first line is {0} characters long, over the {1} suggested.', subjectLength, subjectMaxLength)}
+          </div>
+        );
+      })()}
 
       {ctxMenu && (
         <div ref={ctxMenuRef} style={{ ...styles.ctxMenu, top: ctxMenu.y, left: ctxMenu.x, transform: 'translateY(-100%)' }}>
@@ -614,6 +626,10 @@ export function UnifiedCommitForm({
 }
 
 const styles = {
+  subjectWarning: {
+    display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 2px 0', fontSize: '11px',
+    color: 'var(--vscode-editorWarning-foreground, #cca700)',
+  } as React.CSSProperties,
   container: {
     display: 'flex',
     flexDirection: 'column' as const,

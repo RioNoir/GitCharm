@@ -10,6 +10,7 @@ import { IntegrationsSection, type IntegrationsActions } from './IntegrationsSec
 import { AiSection, PromptsSection } from './AiSection';
 import { getCategories, settingLabel, type CategoryDef } from './layout';
 import { Preview } from './previews';
+import { GitCharmIcon } from '../shared/GitCharmIcon';
 import { SettingRow, type RowContext } from './SettingRow';
 import { SETTINGS_CSS } from './styles';
 
@@ -213,7 +214,7 @@ function App() {
                       aria-current={active ? 'page' : undefined}
                       onClick={() => { setQuery(''); setCategory(c.id); }}
                     >
-                      <Codicon name={c.icon} />
+                      {c.icon.startsWith('gitcharm-') ? <GitCharmIcon name={c.icon.slice('gitcharm-'.length)} style={{ fontSize: 14 }} /> : <Codicon name={c.icon} />}
                       <span className="gc-toc-label">{c.label}</span>
                       {q && <span className="gc-toc-count">({c.keys.filter(matches).length})</span>}
                     </button>

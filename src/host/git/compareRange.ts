@@ -1,5 +1,5 @@
 /**
- * Ref helpers for the Git Log compare mode. Kept free of any `vscode` import so they
+ * Ref helpers for the Log Panel compare mode. Kept free of any `vscode` import so they
  * can be exercised outside the extension host.
  */
 

@@ -9,9 +9,10 @@ import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import type { RefGroup } from '../utils/refs';
 import { Codicon } from '../../shared/Codicon';
 import { getVsCodeApi } from '../../shared/vscodeApi';
-import type { LogToHostMsg } from '../../../host/types/messages';
+import type { LogToHostMsg, LogColumns } from '../../../host/types/messages';
 import { selectionGroups } from '../utils/commitSelection';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
+import { forgeSha } from '../../shared/avatars';
 import { formatDateTime, formatDateOnly, formatDateCompact } from '../../shared/dateUtils';
 import * as l10n from '@vscode/l10n';
 import { plural } from '../../shared/l10n';
@@ -42,6 +43,8 @@ interface Props {
   emptyState?: { title: string; subtitle?: string };
   /** Leave the date column out whatever the width (the hover popover still shows it). */
   hideDate?: boolean;
+  /** What each row shows besides the graph and the message (the gitcharm.gitLog.show* settings). */
+  columns?: LogColumns;
   /** Set when the list stops at gitcharm.graphMaxCommits though git has more: that number. */
   commitLimitReached?: number | null;
 }
@@ -53,6 +56,8 @@ interface RepoBlock {
   startRow: number;
   rowCount: number;
 }
+
+const ALL_COLUMNS: LogColumns = { author: true, avatar: true, date: true, hash: true, refs: true };
 
 const REPO_LABEL_WIDTH = 6;
 const REPO_LABEL_WIDTH_EXPANDED = 110;
@@ -181,7 +186,7 @@ const DRAG_SCROLL_STEP = 8;
 /** Identifies a row across repos — the same hash can show up in several. */
 const commitKey = (c: { hash: string; repoId: string }) => `${c.hash}:${c.repoId}`;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, hideDate, commitLimitReached }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -785,7 +790,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 offsetX={labelColWidth}
               />
 
-              {commit.refs.length > 0 && (() => {
+              {columns.refs && commit.refs.length > 0 && (() => {
                 const allGroups = mergeLocalRemote(groupRefs(commit.refs));
                 const headBranchGroup = allGroups.find(g => g.isHead && !g.isDetached);
                 const remoteHeadGroup = allGroups.find(g => g.isRemoteHead);
@@ -864,7 +869,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 );
               })()}
               <div style={styles.info}>
-                {commit.isStash && (
+                {columns.refs && commit.isStash && (
                   <span style={{ ...styles.refBadge(commit.dotColor, false, false, isSelected), marginRight: '4px' }}>
                     <Codicon name="git-stash" style={{ fontSize: '10px', flexShrink: 0, lineHeight: 1 }} />
                     <span style={styles.refBadgeLabel}>{commit.stashRef}</span>
@@ -911,16 +916,18 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               {commit.unpushed && (
                 <Codicon name="arrow-up" style={styles.unpushedIcon} title={l10n.t('Not pushed')} />
               )}
-              <div style={containerWidth > 550 ? styles.metaWithAuthor : styles.meta}>
-                <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={(commit.isStash || commit.isWorkingTree) && !activeProfile} />
-                {containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName)}</span>}
-              </div>
-              {!hideDate && containerWidth > 330 && (
+              {(columns.avatar || (columns.author && containerWidth > 550)) && (
+                <div style={columns.author && containerWidth > 550 ? styles.metaWithAuthor : styles.meta}>
+                  {columns.avatar && <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={20} isYou={(commit.isStash || commit.isWorkingTree) && !activeProfile} repoId={commit.repoId} sha={forgeSha(commit)} />}
+                  {columns.author && containerWidth > 550 && <span style={styles.author}>{formatAuthorName(commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName)}</span>}
+                </div>
+              )}
+              {columns.date && !hideDate && containerWidth > 330 && (
                 <span style={{ ...styles.date, minWidth: dateWidth }}>
                   {dateFormat(commit.authorDate)}
                 </span>
               )}
-              {containerWidth > 550 && (
+              {columns.hash && containerWidth > 550 && (
                 <span style={styles.shortHash} title={commit.isWorkingTree ? undefined : commit.hash}>{commit.shortHash}</span>
               )}
             </div>
@@ -933,7 +940,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
         <div style={styles.limitFooter} onClick={e => e.stopPropagation()}>
           <Codicon name="info" style={{ fontSize: '12px', flexShrink: 0 }} />
           <span style={styles.limitFooterText}>
-            {l10n.t('Showing the first {0} commits. Older commits are past the Git Log limit.', commitLimitReached)}
+            {l10n.t('Showing the first {0} commits. Older commits are past the Log Panel limit.', commitLimitReached)}
           </span>
           <button
             data-log-action-btn=""
@@ -1095,7 +1102,7 @@ function CommitPopover({ commit, rowTop, listRect, mouseX, onClose, popoverHover
 
       {/* Author + date */}
       <div style={popoverStyles.row}>
-        <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={16} isYou={commit.isStash && !activeProfile} />
+        <AuthorAvatar authorName={commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName} authorEmail={commit.isStash ? (activeProfile?.gitEmail ?? '') : commit.authorEmail} size={16} isYou={commit.isStash && !activeProfile} repoId={commit.repoId} sha={forgeSha(commit)} />
         <span style={popoverStyles.author}>{commit.isStash ? (activeProfile?.gitName ?? l10n.t('You')) : commit.authorName}</span>
         <span style={popoverStyles.dot}>·</span>
         <span style={popoverStyles.date}>{formatDateTime(commit.authorDate)}</span>

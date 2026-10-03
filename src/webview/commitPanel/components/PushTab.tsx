@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatListDate } from '../../shared/dateUtils';
 import type { UnpushedCommit } from '../../shared/msgTypes';
 import type { RepoStatus, RepoMeta } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
@@ -9,7 +10,7 @@ import { ScrollArea } from '../../shared/ScrollArea';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { useCommitStore } from '../store/commitStore';
 import * as l10n from '@vscode/l10n';
-import { plural, locale, dateLocale } from '../../shared/l10n';
+import { plural } from '../../shared/l10n';
 
 interface Props {
   repos: RepoStatus[];
@@ -145,22 +146,7 @@ function PushDropItem({ icon, label, onSelect }: { icon: string; label: string; 
   );
 }
 
-const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const diffMs = Date.now() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return l10n.t('just now');
-    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return rtf.format(-diffH, 'hour');
-    const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return rtf.format(-diffD, 'day');
-    return d.toLocaleDateString(dateLocale, { month: 'short', day: 'numeric', year: diffD > 365 ? 'numeric' : undefined });
-  } catch { return iso; }
-}
+const formatDate = formatListDate;
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -244,7 +230,7 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
     <div ref={ref} style={{ ...ctxStyles.menu, left: pos.x, top: pos.y, ...(pos.maxHeight ? { maxHeight: pos.maxHeight, overflowY: 'auto' } : {}) }} onContextMenu={e => e.preventDefault()}>
       {n === 1 && (
         <>
-          <MenuItem icon="go-to-file" label={l10n.t('View in Git Log')} onClick={wrap(onViewInLog)} />
+          <MenuItem icon="go-to-file" label={l10n.t('View in Log Panel')} onClick={wrap(onViewInLog)} />
           <MenuItem icon="open-preview" label={l10n.t('Open Full Detail')} onClick={wrap(onOpenDetail)} />
           <MenuItem icon="diff-multiple" label={l10n.t('Open Changes')} onClick={wrap(onOpenChanges)} />
           {aiEnabled && <MenuItem icon="sparkle" label={l10n.t('Explain with AI')} onClick={wrap(onExplain)} />}
@@ -335,7 +321,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
           <span style={styles.commitHash}>{commit.shortHash}</span> {commit.message.split('\n')[0]}
         </span>
         <span style={styles.commitMeta}>
-          <AuthorAvatar authorName={commit.author} authorEmail={commit.authorEmail} size={16} />
+          <AuthorAvatar authorName={commit.author} authorEmail={commit.authorEmail} size={16} repoId={repoId} />
           <span style={styles.commitMetaText}>
             {commit.author} · {formatDate(commit.date)}
             {commit.filesChanged != null && (
@@ -418,7 +404,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   const commitCount = hasUpstream ? ahead : (unpushed?.commits?.length ?? 0);
   const commits = unpushed?.commits ?? [];
   // Open by default only when there are commits to show — a branch to publish with nothing
-  // new on it, or a repo with only commits to pull (those are in the Git Log), starts
+  // new on it, or a repo with only commits to pull (those are in the Log Panel), starts
   // closed. Each default keeps its own record of the user's toggle, so a repo gaining
   // commits opens again.
   const expandedByDefault = singleRepo || commitCount > 0;
@@ -656,7 +642,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
                 <div style={styles.emptyRow}>{l10n.t('No commits found')}</div>
               )
             )}
-            {/* Commits to pull: just how many — the Git Log lists them */}
+            {/* Commits to pull: just how many — the Log Panel lists them */}
             {behind > 0 && (
               <div style={styles.behindRow}>
                 <Codicon name="arrow-down" style={{ marginRight: '6px', opacity: 0.7, flexShrink: 0 }} />

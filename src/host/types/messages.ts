@@ -23,14 +23,14 @@ export type {
   PullRequestUser, PullRequestLabel, CiCheck, CommitNode,
 };
 
-/** A Git Log compare filter: commits reachable from `target` but not from `base`. Empty strings mean the defaults (HEAD / the repo's default branch). */
+/** A Log Panel compare filter: commits reachable from `target` but not from `base`. Empty strings mean the defaults (HEAD / the repo's default branch). */
 export interface CompareRange {
   base: string;
   target: string;
 }
 
 /**
- * A repo's uncommitted changes for the Git Log's working-tree row. Statuses are the
+ * A repo's uncommitted changes for the Log Panel's working-tree row. Statuses are the
  * log's single letters (M/A/D/R/C), plus U for untracked and ! for conflicted; a file
  * both staged and unstaged is listed once.
  */
@@ -39,7 +39,7 @@ export interface LogWorkingTreeStatus {
   files: Array<{ path: string; status: string; oldPath?: string; staged: boolean; unstaged: boolean }>;
 }
 
-/** Commits of one repo picked together in the Git Log. */
+/** Commits of one repo picked together in the Log Panel. */
 export interface CommitSelectionGroup {
   repoId: string;
   hashes: string[];
@@ -120,8 +120,25 @@ export interface UnpushedCommit {
 
 // ─── Commit Panel: Host → WebView ────────────────────────────────────────────
 
+export type CommitPanelTabId = 'changes' | 'shelf' | 'stash' | 'worktree' | 'pullrequests' | 'push';
+
+/** How the Commit Panel lays out its tabs — the `gitcharm.commitPanel.*` settings, resolved by the host. */
+export interface CommitPanelConfig {
+  /** The tabs shown, in order. Always holds 'changes': it has the commit form. */
+  tabs: CommitPanelTabId[];
+  /** The tab to open on: the configured one, or the one last used — falls back to 'changes' when hidden. */
+  initialTab: CommitPanelTabId;
+  /** Which tabs show their name next to the icon. */
+  labels: 'active' | 'always' | 'never';
+  /** The count badges each tab may show. */
+  badges: Record<CommitPanelTabId, boolean>;
+  /** Characters past which the commit message's first line is flagged; 0: never. */
+  subjectMaxLength: number;
+}
+
 export type HostToCommitMsg =
-  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } }
+  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; panelConfig?: CommitPanelConfig }
+  | { type: 'COMMIT_PANEL_CONFIG'; config: CommitPanelConfig }
   | { type: 'COMMIT_PERSISTED_MESSAGE_RESULT'; message: string }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
   | { type: 'COMMIT_OP_RESULT'; requestId: string; ok: boolean; output?: string; error?: string; succeededRepoIds?: string[] }
@@ -165,6 +182,8 @@ export type HostToCommitMsg =
 export type CommitToHostMsg =
   | { type: 'COMMIT_REQUEST_STATUS' }
   | { type: 'COMMIT_PERSIST_MESSAGE'; message: string }
+  /** The tab the user switched to, remembered for the "last used" default tab. */
+  | { type: 'COMMIT_ACTIVE_TAB'; tab: CommitPanelTabId }
   | { type: 'COMMIT_REQUEST_DIFF'; requestId: string; repoId: string; filePath: string; staged: boolean }
   | { type: 'COMMIT_STAGE_FILES'; requestId: string; repoId: string; paths: string[] }
   | { type: 'COMMIT_UNSTAGE_FILES'; requestId: string; repoId: string; paths: string[] }
@@ -283,7 +302,7 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_OPEN_REPO_IN_NEW_WINDOW'; repoId: string }
   | { type: 'COMMIT_REVEAL_REPO_IN_OS'; repoId: string };
 
-// ─── Git Log: Host → WebView ─────────────────────────────────────────────────
+// ─── Log Panel: Host → WebView ─────────────────────────────────────────────────
 
 export type { IconThemeData };
 
@@ -294,14 +313,14 @@ export interface TagInfo {
   repoId: string;
 }
 
-/** Visibility of the Git Log filters bar and branch sidebar. */
+/** Visibility of the Log Panel filters bar and branch sidebar. */
 export interface LogLayoutPrefs {
   filtersHidden: boolean;
   sidebarHidden: boolean;
 }
 
 /**
- * Where a Git Log is shown: a wide area (bottom panel, editor tab) or a tall, narrow
+ * Where a Log Panel is shown: a wide area (bottom panel, editor tab) or a tall, narrow
  * side bar. VS Code doesn't tell a view which container it is in, so the webview
  * infers it from its own shape.
  */
@@ -310,8 +329,18 @@ export type LogViewLocation = 'panel' | 'sideBar';
 /** Global layout preferences, kept apart for each location. */
 export type LogLayoutByLocation = Record<LogViewLocation, LogLayoutPrefs>;
 
+/** What each row of the Log Panel's commit list shows besides the graph and the message (the `gitcharm.gitLog.show*` settings). */
+export interface LogColumns {
+  author: boolean;
+  avatar: boolean;
+  date: boolean;
+  hash: boolean;
+  refs: boolean;
+}
+
 export type HostToLogMsg =
-  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation }
+  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation; columns?: LogColumns }
+  | { type: 'LOG_COLUMNS'; columns: LogColumns }
   | { type: 'LOG_LAYOUT_PREFS'; layout: LogLayoutByLocation }
   | { type: 'LOG_CLEAR_FILTERS' }
   | { type: 'LOG_SET_COMPARE_MODE'; active: boolean }
@@ -339,7 +368,7 @@ export type HostToLogMsg =
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
   | { type: 'LOG_DESELECT_FILE'; filePath: string };
 
-// ─── Git Log: WebView → Host ─────────────────────────────────────────────────
+// ─── Log Panel: WebView → Host ─────────────────────────────────────────────────
 
 export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange }

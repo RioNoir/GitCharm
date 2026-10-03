@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { configuredPullMode } from '../git/GitService';
+import type { PullMode } from '../git/GitService';
 import { CommitPanelProvider } from '../panels/CommitPanelProvider';
 import { GitLogPanelProvider } from '../panels/GitLogPanelProvider';
 import { BranchStatusBar } from '../ui/BranchStatusBar';
@@ -27,12 +29,12 @@ export function registerCommands(
   integrations?: IntegrationsService,
 ): void {
   context.subscriptions.push(
-    // Open the Git Log where the persisted default location says
+    // Open the Log Panel where the persisted default location says
     vscode.commands.registerCommand('gitcharm.openLog', () => {
       logPanel.openPreferred();
     }),
 
-    // Pick and persist where the Git Log opens by default
+    // Pick and persist where the Log Panel opens by default
     vscode.commands.registerCommand('gitcharm.setGitLogDefaultLocation', () => {
       void logPanel.triggerDefaultLocationPick();
     }),
@@ -209,20 +211,21 @@ export function registerCommands(
       const metas = manager.getRepoMetas();
       const metaById = new Map(metas.map(m => [m.id, m]));
 
-      const pick = await vscode.window.showQuickPick(
+      const configured = configuredPullMode();
+      const pick = configured !== 'ask' ? { mode: configured } : await vscode.window.showQuickPick(
         [
-          { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes into the current branch')}`, rebase: false },
-          { label: `$(repo-forked) ${vscode.l10n.t('Rebase the current branch on top of incoming changes')}`, rebase: true },
+          { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes into the current branch')}`, mode: 'merge' as PullMode },
+          { label: `$(repo-forked) ${vscode.l10n.t('Rebase the current branch on top of incoming changes')}`, mode: 'rebase' as PullMode },
         ],
         { title: vscode.l10n.t('Sync — Pull Strategy') }
-      ) as { label: string; rebase: boolean } | undefined;
+      );
       if (!pick) return;
 
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Syncing all repositories…'), cancellable: false },
         async () => {
           // Pull first
-          const pullResults = await manager.pullAll(pick.rebase);
+          const pullResults = await manager.pullAll(pick.mode);
           const pullFailed = pullResults.filter(r => !r.ok);
 
           if (pullFailed.length > 0) {

@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { configuredPullMode } from '../git/GitService';
+import type { PullMode } from '../git/GitService';
 import * as path from 'path';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { GitService } from '../git/GitService';
@@ -98,7 +100,7 @@ export class BranchStatusBar implements vscode.Disposable {
     );
     this.statusBarItem.command = 'gitcharm.showBranchMenu';
     this.statusBarItem.tooltip = vscode.l10n.t('Git Menu');
-    this.statusBarItem.show();
+    this.applyVisibility();
 
     this.statusDisposable = this.manager.onStatusChange(status => this.refresh(status));
     // Also refresh on branch change: the status change fires at 300ms and may catch
@@ -109,8 +111,15 @@ export class BranchStatusBar implements vscode.Disposable {
       if (e.affectsConfiguration('gitcharm.suppressDivergedBranchWarning')) {
         this.refresh();
       }
+      if (e.affectsConfiguration('gitcharm.statusBar.showBranch')) this.applyVisibility();
     });
     this.manager.getAllStatusesFresh().then(s => this.refresh(s));
+  }
+
+  /** gitcharm.statusBar.showBranch: the Git Menu stays reachable from the command palette when hidden. */
+  private applyVisibility(): void {
+    if (vscode.workspace.getConfiguration('gitcharm.statusBar').get<boolean>('showBranch', true)) this.statusBarItem.show();
+    else this.statusBarItem.hide();
   }
 
   async refresh(preloadedStatus?: import('../types/git').WorkspaceStatus): Promise<void> {
@@ -1000,19 +1009,20 @@ export class BranchStatusBar implements vscode.Disposable {
   }
 
   async updateProject(): Promise<void> {
-    const pick = await vscode.window.showQuickPick(
+    const configured = configuredPullMode();
+    const pick = configured !== 'ask' ? { mode: configured } : await vscode.window.showQuickPick(
       [
         {
           label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes into the current branch')}`,
-          rebase: false,
+          mode: 'merge' as PullMode,
         },
         {
           label: `$(repo-forked) ${vscode.l10n.t('Rebase the current branch on top of incoming changes')}`,
-          rebase: true,
+          mode: 'rebase' as PullMode,
         },
       ],
       { title: vscode.l10n.t('Update Project — Strategy') }
-    ) as { label: string; rebase: boolean } | undefined;
+    );
 
     if (!pick) return;
 
@@ -1026,7 +1036,7 @@ export class BranchStatusBar implements vscode.Disposable {
         cancellable: false,
       },
       async () => {
-        const results = await this.manager.pullAll(pick.rebase);
+        const results = await this.manager.pullAll(pick.mode);
         const failed = results.filter(r => !r.ok);
         const ok = results.filter(r => r.ok);
         if (failed.length === 0) {
@@ -1211,19 +1221,20 @@ export class BranchStatusBar implements vscode.Disposable {
         label: `$(repo-pull) ${vscode.l10n.t('Pull…')}`,
         description: vscode.l10n.t('Pull from remote'),
         action: async () => {
-          const pick = await vscode.window.showQuickPick(
+          const configured = configuredPullMode();
+          const pick = configured !== 'ask' ? { mode: configured } : await vscode.window.showQuickPick(
             [
-              { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes')}`, rebase: false },
-              { label: `$(repo-forked) ${vscode.l10n.t('Rebase onto incoming changes')}`, rebase: true },
+              { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes')}`, mode: 'merge' as PullMode },
+              { label: `$(repo-forked) ${vscode.l10n.t('Rebase onto incoming changes')}`, mode: 'rebase' as PullMode },
             ],
             { title: vscode.l10n.t('Pull — {0}', meta.name) }
-          ) as { label: string; rebase: boolean } | undefined;
+          );
           if (!pick) return;
           await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('[{0}]: Pulling…', meta.name), cancellable: false },
             async () => {
               try {
-                const msg = pick.rebase ? await repo.pullRebase() : await repo.pull();
+                const msg = await repo.pullWith(pick.mode);
                 vscode.window.showInformationMessage(`[${meta.name}]: ${msg}`);
                 logInfo(`pull:${meta.name}`, `[${meta.name}]: ${msg}`);
               } catch (e: unknown) {
@@ -1299,19 +1310,20 @@ export class BranchStatusBar implements vscode.Disposable {
         label: `$(sync) ${vscode.l10n.t('Sync…')}`,
         description: vscode.l10n.t('Pull then push'),
         action: async () => {
-          const pick = await vscode.window.showQuickPick(
+          const configured = configuredPullMode();
+          const pick = configured !== 'ask' ? { mode: configured } : await vscode.window.showQuickPick(
             [
-              { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes')}`, rebase: false },
-              { label: `$(repo-forked) ${vscode.l10n.t('Rebase onto incoming changes')}`, rebase: true },
+              { label: `$(git-merge) ${vscode.l10n.t('Merge incoming changes')}`, mode: 'merge' as PullMode },
+              { label: `$(repo-forked) ${vscode.l10n.t('Rebase onto incoming changes')}`, mode: 'rebase' as PullMode },
             ],
             { title: vscode.l10n.t('Sync — {0}', meta.name) }
-          ) as { label: string; rebase: boolean } | undefined;
+          );
           if (!pick) return;
           await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('[{0}]: Syncing…', meta.name), cancellable: false },
             async () => {
               try {
-                const msg = pick.rebase ? await repo.pullRebase() : await repo.pull();
+                const msg = await repo.pullWith(pick.mode);
                 vscode.window.showInformationMessage(vscode.l10n.t('[{0}]: Pull — {1}', meta.name, msg));
                 logInfo(`sync-pull:${meta.name}`, `[${meta.name}]: Pull — ${msg}`);
               } catch (e: unknown) {
@@ -2043,7 +2055,7 @@ export class BranchStatusBar implements vscode.Disposable {
       { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('[{0}]: Pulling…', meta.name), cancellable: false },
       async () => {
         try {
-          await repo.pull();
+          await repo.pullWithDefault();
           const msg = `[${meta.name}]: pulled successfully.`;
           vscode.window.showInformationMessage(vscode.l10n.t('[{0}]: pulled successfully.', meta.name));
           logInfo(`pull:${meta.name}`, msg);
@@ -2249,7 +2261,7 @@ export class BranchStatusBar implements vscode.Disposable {
 
   // ── Multi-repo branch actions ────────────────────────────────────────────
 
-  /** Prompt for a name, then create a branch from `fromBranch` in each repo (optionally checking it out). Also used by the Git Log. */
+  /** Prompt for a name, then create a branch from `fromBranch` in each repo (optionally checking it out). Also used by the Log Panel. */
   async newBranchFrom(fromBranch: string, metas: RepoMeta[]): Promise<void> {
     const branchName = await promptBranchName({
       title: vscode.l10n.t("New Branch from '{0}'", fromBranch),
@@ -2346,7 +2358,7 @@ export class BranchStatusBar implements vscode.Disposable {
           const repo = this.manager.getRepo(meta.id);
           if (!repo) continue;
           try {
-            await repo.pull();
+            await repo.pullWithDefault();
           } catch (e: unknown) {
             logError(`pull:${meta.name}`, formatGitError(e), getRawErrorDetail(e));
             errors.push(`${meta.name}: ${formatGitError(e)}`);

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { guardProtectedBranch } from '../utils/protectedBranches';
 import { SimpleGit } from 'simple-git';
 import { createGit } from './gitClient';
 import * as crypto from 'crypto';
@@ -57,6 +58,14 @@ function stripCommitComments(raw: string): string {
   return raw.replace(/^\s*#.*$\n?/gm, '').trim();
 }
 
+export type PullMode = 'merge' | 'rebase' | 'ffOnly';
+
+/** gitcharm.pullMode: 'ask' keeps the merge/rebase picker where GitCharm shows one. */
+export function configuredPullMode(): PullMode | 'ask' {
+  const mode = vscode.workspace.getConfiguration('gitcharm').get<string>('pullMode', 'ask');
+  return mode === 'merge' || mode === 'rebase' || mode === 'ffOnly' ? mode : 'ask';
+}
+
 export class GitService {
   private git: SimpleGit;
   // Set immediately after a tag checkout, cleared when VS Code API confirms the update.
@@ -69,7 +78,7 @@ export class GitService {
   // ── Ref-keyed cache ───────────────────────────────────────────────────────
   //
   // Branches, tags, stashes, unpushed/incoming commits and the log itself depend only on
-  // the repo's refs (plus HEAD and the branch config), yet the Git Log re-read all of them
+  // the repo's refs (plus HEAD and the branch config), yet the Log Panel re-read all of them
   // for every repo on every page and refresh: ~15 git processes per repo, hundreds with a
   // few dozen submodules. They are kept here instead, valid while refsFingerprint() — one
   // git process, shared by all the reads of one load — is unchanged. Comparing against
@@ -1372,12 +1381,15 @@ export class GitService {
 
   async commit(message: string, amend: boolean, credentials?: { gitName: string; gitEmail: string }, log?: (s: string) => void): Promise<string> {
     log?.(`GitService.commit — credentials=${JSON.stringify(credentials)} amend=${amend}`);
+    await guardProtectedBranch('commit', this.rootPath, await this.headBranchName());
+    const signoff = vscode.workspace.getConfiguration('gitcharm').get<boolean>('commitSignoff', false);
     if (credentials?.gitName && credentials?.gitEmail) {
       const flags = [
         '-c', `user.name=${credentials.gitName}`,
         '-c', `user.email=${credentials.gitEmail}`,
         'commit', '-m', message,
         ...(amend ? ['--amend'] : []),
+        ...(signoff ? ['--signoff'] : []),
       ];
       log?.(`GitService.commit — running git.raw with flags: ${JSON.stringify(flags)}`);
       await this.git.raw(flags);
@@ -1386,10 +1398,10 @@ export class GitService {
     log?.(`GitService.commit — no credentials, using vsRepo/simple-git`);
     const vsRepo = this.vsRepo();
     if (vsRepo) {
-      await vsRepo.commit(message, { amend });
+      await vsRepo.commit(message, { amend, signoff });
       return '';
     }
-    const result = await this.git.commit(message, undefined, amend ? { '--amend': null } : {});
+    const result = await this.git.commit(message, undefined, { ...(amend ? { '--amend': null } : {}), ...(signoff ? { '--signoff': null } : {}) });
     return result.summary.changes.toString();
   }
 
@@ -1550,6 +1562,7 @@ export class GitService {
   }
 
   async pushBranch(branchName: string, remote: string, remoteBranchName: string, setUpstream: boolean): Promise<void> {
+    await guardProtectedBranch('push', this.rootPath, remoteBranchName);
     const refspec = `refs/heads/${branchName}:refs/heads/${remoteBranchName}`;
     const vsRepo = this.vsRepo();
     if (vsRepo?.state.remotes.some(item => item.name === remote)) {
@@ -1603,6 +1616,7 @@ export class GitService {
   }
 
   async push(force = false, remote?: string): Promise<string> {
+    await guardProtectedBranch(force ? 'forcePush' : 'push', this.rootPath, await this.headBranchName());
     const vsRepo = this.vsRepo();
     // Only use VS Code API when it actually knows the remotes for this repo.
     // If remotes are empty VS Code would push to an unknown remote (exit 128).
@@ -1641,6 +1655,14 @@ export class GitService {
     return 'pushed';
   }
 
+  /** The checked-out branch's name, or undefined on a detached HEAD. */
+  private async headBranchName(): Promise<string | undefined> {
+    const fromApi = this.vsRepo()?.state.HEAD?.name;
+    if (fromApi) return fromApi;
+    const name = (await this.git.raw(['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => '')).trim();
+    return name && name !== 'HEAD' ? name : undefined;
+  }
+
   async pull(): Promise<string> {
     const vsRepo = this.vsRepo();
     if (vsRepo && vsRepo.state.remotes.length > 0) {
@@ -1652,6 +1674,26 @@ export class GitService {
     if (!tracking.trim()) return vscode.l10n.t('No remote tracking branch — skipped');
     const result = await this.git.pull();
     return vscode.l10n.t('{0} files changed, {1} insertions, {2} deletions', result.summary.changes, result.summary.insertions, result.summary.deletions);
+  }
+
+  /** Pulls the way gitcharm.pullMode says ("ask" only matters where a pull picker is shown: plain pulls merge). */
+  async pullWithDefault(): Promise<string> {
+    const mode = configuredPullMode();
+    return this.pullWith(mode === 'ask' ? 'merge' : mode);
+  }
+
+  async pullWith(mode: PullMode): Promise<string> {
+    if (mode === 'rebase') return this.pullRebase();
+    if (mode === 'ffOnly') return this.pullFastForwardOnly();
+    return this.pull();
+  }
+
+  /** Pulls only when the branch can fast-forward: git refuses otherwise, leaving local commits untouched. */
+  async pullFastForwardOnly(): Promise<string> {
+    const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
+    if (!tracking) return vscode.l10n.t('No remote tracking branch — skipped');
+    await this.git.raw(['pull', '--ff-only']);
+    return vscode.l10n.t('pulled (fast-forward)');
   }
 
   async pullRebase(): Promise<string> {
@@ -1670,9 +1712,10 @@ export class GitService {
   }
 
   async fetchAll(): Promise<void> {
+    const prune = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchPrune', true);
     const vsRepo = this.vsRepo();
-    if (vsRepo && vsRepo.state.remotes.length > 0) { await vsRepo.fetch({ prune: true }); return; }
-    await this.git.fetch(['--all', '--prune']);
+    if (vsRepo && vsRepo.state.remotes.length > 0) { await vsRepo.fetch({ prune }); return; }
+    await this.git.fetch(['--all', ...(prune ? ['--prune'] : [])]);
   }
 
   async checkout(branchName: string, createNew?: boolean, from?: string): Promise<void> {

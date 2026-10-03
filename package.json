@@ -58,21 +58,21 @@
   "contributes": {
     "icons": {
       "gitcharm-compare-mode": {
-        "description": "GitCharm: Git Log compare mode (off)",
+        "description": "GitCharm: Log Panel compare mode (off)",
         "default": {
           "fontPath": "media/icon-font/gitcharm-icons.woff",
           "fontCharacter": "\\E000"
         }
       },
       "gitcharm-compare-mode-active": {
-        "description": "GitCharm: Git Log compare mode (on)",
+        "description": "GitCharm: Log Panel compare mode (on)",
         "default": {
           "fontPath": "media/icon-font/gitcharm-icons.woff",
           "fontCharacter": "\\E001"
         }
       },
       "gitcharm-log": {
-        "description": "GitCharm: Git Log",
+        "description": "GitCharm: Log Panel",
         "default": {
           "fontPath": "media/icon-font/gitcharm-icons.woff",
           "fontCharacter": "\\E002"
@@ -1232,6 +1232,36 @@
             "default": true,
             "description": "%config.showUncommittedChangesInLog.description%"
           },
+          "gitcharm.gitLog.showAuthor": {
+            "order": 82,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.gitLog.showAuthor.description%"
+          },
+          "gitcharm.gitLog.showAuthorAvatar": {
+            "order": 83,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.gitLog.showAuthorAvatar.description%"
+          },
+          "gitcharm.gitLog.showDate": {
+            "order": 84,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.gitLog.showDate.description%"
+          },
+          "gitcharm.gitLog.showHash": {
+            "order": 85,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.gitLog.showHash.description%"
+          },
+          "gitcharm.gitLog.showInlineBranches": {
+            "order": 86,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.gitLog.showInlineBranches.description%"
+          },
           "gitcharm.repositoryScanMaxDepth": {
             "order": 60,
             "type": "number",
@@ -1326,9 +1356,16 @@
           "gitcharm.avatars.enabled": {
             "order": 105,
             "type": "boolean",
-            "default": false,
+            "default": true,
             "scope": "application",
             "markdownDescription": "%config.avatars.enabled.markdownDescription%"
+          },
+          "gitcharm.avatars.gravatar.enabled": {
+            "order": 106,
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "%config.avatars.gravatar.enabled.markdownDescription%"
           },
           "gitcharm.gitLogDefaultLocation": {
             "order": 12,
@@ -1383,6 +1420,202 @@
             "type": "boolean",
             "default": true,
             "description": "%config.promptAddUntrackedToGit.description%"
+          },
+          "gitcharm.protectedBranches": {
+            "order": 50,
+            "type": "array",
+            "items": { "type": "string" },
+            "default": [],
+            "markdownDescription": "%config.protectedBranches.markdownDescription%"
+          },
+          "gitcharm.confirm.discardChanges": {
+            "order": 51,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.confirm.discardChanges.description%"
+          },
+          "gitcharm.confirm.dropStashesAndShelves": {
+            "order": 52,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.confirm.dropStashesAndShelves.description%"
+          },
+          "gitcharm.confirm.commitOperations": {
+            "order": 53,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.confirm.commitOperations.description%"
+          },
+          "gitcharm.confirm.deleteBranches": {
+            "order": 54,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.confirm.deleteBranches.description%"
+          },
+          "gitcharm.autoFetchInterval": {
+            "order": 55,
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "description": "%config.autoFetchInterval.description%"
+          },
+          "gitcharm.fetchPrune": {
+            "order": 56,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.fetchPrune.description%"
+          },
+          "gitcharm.pullMode": {
+            "order": 57,
+            "type": "string",
+            "enum": ["ask", "merge", "rebase", "ffOnly"],
+            "enumDescriptions": ["%config.pullMode.ask%", "%config.pullMode.merge%", "%config.pullMode.rebase%", "%config.pullMode.ffOnly%"],
+            "default": "ask",
+            "description": "%config.pullMode.description%"
+          },
+          "gitcharm.commitSignoff": {
+            "order": 58,
+            "type": "boolean",
+            "default": false,
+            "description": "%config.commitSignoff.description%"
+          },
+          "gitcharm.commitPanel.subjectMaxLength": {
+            "order": 59,
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "description": "%config.commitPanel.subjectMaxLength.description%"
+          },
+          "gitcharm.dateFormat": {
+            "order": 60,
+            "type": "string",
+            "enum": ["auto", "absolute", "relative"],
+            "enumDescriptions": ["%config.dateFormat.auto%", "%config.dateFormat.absolute%", "%config.dateFormat.relative%"],
+            "default": "auto",
+            "description": "%config.dateFormat.description%"
+          },
+          "gitcharm.statusBar.showBranch": {
+            "order": 61,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.statusBar.showBranch.description%"
+          },
+          "gitcharm.statusBar.showProfile": {
+            "order": 62,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.statusBar.showProfile.description%"
+          },
+          "gitcharm.pullRequests.defaultFilter": {
+            "order": 63,
+            "type": "string",
+            "enum": ["open", "mine", "assignedToMe", "reviewRequested", "mentioningMe"],
+            "enumDescriptions": ["%config.pullRequests.defaultFilter.open%", "%config.pullRequests.defaultFilter.mine%", "%config.pullRequests.defaultFilter.assignedToMe%", "%config.pullRequests.defaultFilter.reviewRequested%", "%config.pullRequests.defaultFilter.mentioningMe%"],
+            "default": "open",
+            "description": "%config.pullRequests.defaultFilter.description%"
+          },
+          "gitcharm.pullRequests.autoRefreshInterval": {
+            "order": 64,
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "description": "%config.pullRequests.autoRefreshInterval.description%"
+          },
+          "gitcharm.commitPanel.showShelfTab": {
+            "order": 30,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showShelfTab.description%"
+          },
+          "gitcharm.commitPanel.showStashTab": {
+            "order": 31,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showStashTab.description%"
+          },
+          "gitcharm.commitPanel.showWorktreesTab": {
+            "order": 32,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showWorktreesTab.description%"
+          },
+          "gitcharm.commitPanel.showPullRequestsTab": {
+            "order": 33,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showPullRequestsTab.description%"
+          },
+          "gitcharm.commitPanel.showSyncTab": {
+            "order": 34,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showSyncTab.description%"
+          },
+          "gitcharm.commitPanel.tabOrder": {
+            "order": 35,
+            "type": "array",
+            "items": { "type": "string", "enum": ["changes", "shelf", "stash", "worktrees", "pullRequests", "sync"] },
+            "uniqueItems": true,
+            "default": ["changes", "shelf", "stash", "worktrees", "pullRequests", "sync"],
+            "description": "%config.commitPanel.tabOrder.description%"
+          },
+          "gitcharm.commitPanel.defaultTab": {
+            "order": 36,
+            "type": "string",
+            "enum": ["changes", "shelf", "stash", "worktrees", "pullRequests", "sync", "lastUsed"],
+            "enumDescriptions": ["%config.commitPanel.defaultTab.changes%", "%config.commitPanel.defaultTab.shelf%", "%config.commitPanel.defaultTab.stash%", "%config.commitPanel.defaultTab.worktrees%", "%config.commitPanel.defaultTab.pullRequests%", "%config.commitPanel.defaultTab.sync%", "%config.commitPanel.defaultTab.lastUsed%"],
+            "default": "changes",
+            "description": "%config.commitPanel.defaultTab.description%"
+          },
+          "gitcharm.commitPanel.tabLabels": {
+            "order": 37,
+            "type": "string",
+            "enum": ["active", "always", "never"],
+            "enumDescriptions": ["%config.commitPanel.tabLabels.active%", "%config.commitPanel.tabLabels.always%", "%config.commitPanel.tabLabels.never%"],
+            "default": "active",
+            "description": "%config.commitPanel.tabLabels.description%"
+          },
+          "gitcharm.commitPanel.showChangesBadge": {
+            "order": 38,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showChangesBadge.description%"
+          },
+          "gitcharm.commitPanel.showShelfBadge": {
+            "order": 38,
+            "type": "boolean",
+            "default": false,
+            "description": "%config.commitPanel.showShelfBadge.description%"
+          },
+          "gitcharm.commitPanel.showStashBadge": {
+            "order": 38,
+            "type": "boolean",
+            "default": false,
+            "description": "%config.commitPanel.showStashBadge.description%"
+          },
+          "gitcharm.commitPanel.showWorktreesBadge": {
+            "order": 38,
+            "type": "boolean",
+            "default": false,
+            "description": "%config.commitPanel.showWorktreesBadge.description%"
+          },
+          "gitcharm.commitPanel.showSyncBadge": {
+            "order": 39,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showSyncBadge.description%"
+          },
+          "gitcharm.commitPanel.showPullRequestsBadge": {
+            "order": 40,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showPullRequestsBadge.description%"
+          },
+          "gitcharm.commitPanel.showActivityBarBadge": {
+            "order": 41,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.commitPanel.showActivityBarBadge.description%"
           },
           "gitcharm.defaultCommitAction": {
             "order": 20,

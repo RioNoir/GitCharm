@@ -580,7 +580,7 @@ export class FileAnnotationController implements vscode.Disposable {
       `$(account) **${escapeMarkdown(line.author)}** &nbsp;·&nbsp; $(calendar) ${formatDateFull(line.date)}\n\n` +
       `${escapeMarkdown(line.summary)}\n\n` +
       `---\n\n` +
-      `[$(history) ${vscode.l10n.t('Open in Git Log')}](${commandUri})`
+      `[$(history) ${vscode.l10n.t('Open in Log Panel')}](${commandUri})`
     );
     md.isTrusted = true;
     md.supportThemeIcons = true;

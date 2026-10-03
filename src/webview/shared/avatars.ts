@@ -1,11 +1,90 @@
+import { useEffect, useState } from 'react';
+import { getVsCodeApi } from './vscodeApi';
+
 /**
- * Author avatars are opt-in (`gitcharm.avatars.enabled`, default off): resolving one sends a
- * hash of the author's email to gravatar.com, which can be reversed back to the address.
- * The host injects the flag into every webview's HTML; when it is off, no avatar image is
- * requested and callers fall back to initials.
+ * `gitcharm.avatars.enabled` (default on). The host injects the flag into every webview's HTML; with it off, no
+ * avatar image is requested and callers fall back to initials. Which avatars may be shown — and so whether
+ * Gravatar may be contacted — is decided by the host: see host/utils/avatarResolver.ts.
  */
 export const avatarsEnabled: boolean =
   (window as unknown as { __GITCHARM_AVATARS__?: boolean }).__GITCHARM_AVATARS__ === true;
+
+// ── Resolved by the host, in batches ─────────────────────────────────────────
+
+type Request = { email: string; repoId?: string; sha?: string } | { url: string };
+
+const waiting = new Map<string, (url: string | null) => void>();
+let batch: (Request & { id: string })[] = [];
+let nextId = 0;
+let listening = false;
+
+function listen(): void {
+  if (listening) return;
+  listening = true;
+  window.addEventListener('message', (e: MessageEvent) => {
+    const msg = e.data as { type?: string; id?: string; url?: string | null };
+    if (msg?.type !== 'AVATAR_RESOLVED' || !msg.id) return;
+    waiting.get(msg.id)?.(msg.url ?? null);
+    waiting.delete(msg.id);
+  });
+}
+
+/** Requests made in the same frame (a list rendering) go to the host as one message. */
+function ask(req: Request): Promise<string | null> {
+  listen();
+  const id = String(nextId++);
+  const promise = new Promise<string | null>(resolve => waiting.set(id, resolve));
+  if (batch.length === 0) {
+    setTimeout(() => {
+      getVsCodeApi().postMessage({ type: 'AVATAR_RESOLVE', requests: batch });
+      batch = [];
+    }, 0);
+  }
+  batch.push({ ...req, id });
+  return promise;
+}
+
+const authorCache = new Map<string, { promise: Promise<string | null>; withSha: boolean }>();
+
+/**
+ * The avatar URL of a commit author, or null for initials. `repoId` lets the host ask that repo's forge;
+ * `sha` is a commit of theirs already on the forge (pushed), which GitHub, Gitea and Bitbucket match by.
+ */
+export function resolveAuthorAvatar(email: string, repoId?: string, sha?: string): Promise<string | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!avatarsEnabled || !normalized) return Promise.resolve(null);
+  const key = `${repoId ?? ''}|${normalized}`;
+  const cached = authorCache.get(key);
+  // Asked without a commit, an author may still be found once one comes along: ask again then.
+  if (cached && (cached.withSha || !sha)) return cached.promise;
+  const promise = ask({ email: normalized, repoId, sha });
+  authorCache.set(key, { promise, withSha: !!sha });
+  return promise;
+}
+
+const urlCache = new Map<string, Promise<string | null>>();
+
+/**
+ * An avatar URL a forge's API gave (PR authors, reviewers, commenters…), as the host lets it be shown: forges
+ * hand out Gravatar URLs for accounts without a picture of their own, or redirect to them, and the host follows
+ * the redirects to check. Undefined while it checks, and when it may not be shown.
+ */
+export function useForgeAvatarUrl(url: string | undefined): string | undefined {
+  const [checked, setChecked] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    setChecked(undefined);
+    if (!url || !avatarsEnabled) return;
+    let promise = urlCache.get(url);
+    if (!promise) {
+      promise = ask({ url });
+      urlCache.set(url, promise);
+    }
+    let cancelled = false;
+    void promise.then(result => { if (!cancelled) setChecked(result ?? undefined); });
+    return () => { cancelled = true; };
+  }, [url]);
+  return checked;
+}
 
 /**
  * Stable background color for an initials avatar. Keyed by name rather than email because forges report
@@ -38,4 +117,9 @@ export function initials(name: string): string {
   if (parts.length === 0) return trimmed ? trimmed.slice(0, 2).toUpperCase() : '?';
   if (parts.length === 1) { const w = parts[0] ?? ''; return (w.length > 1 ? w[0] + w[1] : w[0] ?? '?').toUpperCase(); }
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
+}
+
+/** The commit to give resolveAuthorAvatar for a Log Panel entry: only one the forge has — not unpushed, a stash or the working tree. */
+export function forgeSha(commit: { hash: string; unpushed?: boolean; isStash?: boolean; isWorkingTree?: boolean }): string | undefined {
+  return commit.unpushed || commit.isStash || commit.isWorkingTree ? undefined : commit.hash;
 }

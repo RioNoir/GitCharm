@@ -31,6 +31,17 @@ export const DEFAULT_PR_FILTERS: PullRequestFilters = {
   states: ['open'], author: 'all', assignedToMe: false, reviewRequestedToMe: false, mentioningMe: false, search: '',
 };
 
+/** The filters a repo starts with until they're changed for it — gitcharm.pullRequests.defaultFilter. */
+function configuredDefaultFilters(): PullRequestFilters {
+  switch (vscode.workspace.getConfiguration('gitcharm.pullRequests').get<string>('defaultFilter', 'open')) {
+    case 'mine': return { ...DEFAULT_PR_FILTERS, author: 'mine' };
+    case 'assignedToMe': return { ...DEFAULT_PR_FILTERS, assignedToMe: true };
+    case 'reviewRequested': return { ...DEFAULT_PR_FILTERS, reviewRequestedToMe: true };
+    case 'mentioningMe': return { ...DEFAULT_PR_FILTERS, mentioningMe: true };
+    default: return DEFAULT_PR_FILTERS;
+  }
+}
+
 const STATE_FILTER_VALUES: PullRequestStateFilter[] = ['open', 'draft', 'closed', 'merged'];
 
 function isPullRequestFilters(v: unknown): v is PullRequestFilters {
@@ -170,7 +181,7 @@ export class PullRequestManager {
 
   getFiltersForRepo(repoId: string): PullRequestFilters {
     const stored = this.repoFilters()[repoId];
-    return stored && isPullRequestFilters(stored) ? stored : DEFAULT_PR_FILTERS;
+    return stored && isPullRequestFilters(stored) ? stored : configuredDefaultFilters();
   }
 
   async setFiltersForRepo(repoId: string, filters: PullRequestFilters): Promise<void> {
@@ -270,6 +281,15 @@ export class PullRequestManager {
     }
     const connected = await provider.hasCredentials();
     return { repoId, provider: resolved.provider.provider, host: resolved.host, connected, detectionFailed: false };
+  }
+
+  /** Avatar of a commit's author, from the repo's own forge — only for a repo connected to one. See PullRequestProvider.getCommitAuthorAvatar. */
+  async getCommitAuthorAvatar(repoId: string, email: string, sha?: string): Promise<string | undefined> {
+    const resolved = await this.resolveOrigin(repoId);
+    if (!resolved?.provider) return undefined;
+    const provider = this.makeProvider(repoId, resolved.provider);
+    if (!provider || !(await provider.hasCredentials())) return undefined;
+    return provider.getCommitAuthorAvatar(resolved.owner, resolved.repo, email, sha);
   }
 
   /** Loads the first page for a repo under its own persisted filters, replacing any cached pages for that repo. */

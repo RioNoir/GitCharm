@@ -264,6 +264,20 @@ export class GitHubProvider implements PullRequestProvider {
     }
   }
 
+  async getCommitAuthorAvatar(owner: string, repo: string, _email: string, sha?: string): Promise<string | undefined> {
+    if (!sha) return undefined;
+    const headers = await this.headers();
+    try {
+      // The list endpoint, filtered to the one commit: unlike /commits/{sha}, it leaves out the files and their patches.
+      const { data } = await httpJson<{ author: { avatar_url?: string } | null }[]>(
+        `${this.apiBase()}/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(sha)}&per_page=1`, { headers },
+      );
+      return data[0]?.author?.avatar_url || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   getCapabilities(): PullRequestCapabilities {
     return CAPABILITIES;
   }

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
+import { logWarn } from '../utils/Logger';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GitService } from './GitService';
-import type { WorktreeEntry } from './GitService';
+import type { WorktreeEntry, PullMode } from './GitService';
 import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
 import type { Repository } from './git.d';
 import type { BranchInfo, CommitNode, RepoMeta, RepoStatus, WorkspaceStatus } from '../types/git';
@@ -85,6 +86,8 @@ export class WorkspaceGitManager implements vscode.Disposable {
   private reposListeners: BranchListener[] = [];
   private worktreeListeners: WorktreeListener[] = [];
   private orphanListeners: OrphanListener[] = [];
+  private periodicFetchListeners: Array<() => void> = [];
+  private autoFetchTimer: ReturnType<typeof setInterval> | undefined;
   /** Local branches already known to be missing their upstream, so re-fetching doesn't re-notify for the same branch every time. Cleared per-repo when the branch disappears or regains an upstream. */
   private knownOrphanBranches = new Map<string, Set<string>>();
   /**
@@ -125,7 +128,11 @@ export class WorkspaceGitManager implements vscode.Disposable {
   constructor(private readonly context: vscode.ExtensionContext) {
     let resolveStartupFetch!: () => void;
     this.startupFetchPromise = new Promise<void>(r => { resolveStartupFetch = r; });
+    this.restartAutoFetch();
     this.globalListeners.push(
+      vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('gitcharm.autoFetchInterval')) this.restartAutoFetch();
+      }),
       // Workspace folder changes → rebuild everything and push fresh status to listeners
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.scheduleReinitialize()),
 
@@ -1029,6 +1036,29 @@ export class WorkspaceGitManager implements vscode.Disposable {
   }
 
   /** Fires with only the branches that just became orphaned (upstream gone) by the most recent fetchAll(), not ones already known. */
+  /** Called after each periodic fetch (gitcharm.autoFetchInterval). */
+  onPeriodicFetch(listener: () => void): vscode.Disposable {
+    this.periodicFetchListeners.push(listener);
+    return new vscode.Disposable(() => {
+      this.periodicFetchListeners = this.periodicFetchListeners.filter(l => l !== listener);
+    });
+  }
+
+  /** (Re)starts the periodic fetch from gitcharm.autoFetchInterval, in minutes; 0 turns it off. */
+  private restartAutoFetch(): void {
+    if (this.autoFetchTimer) clearInterval(this.autoFetchTimer);
+    this.autoFetchTimer = undefined;
+    const minutes = vscode.workspace.getConfiguration('gitcharm').get<number>('autoFetchInterval', 0);
+    if (!minutes || minutes <= 0) return;
+    this.autoFetchTimer = setInterval(() => {
+      // Skipped while VS Code isn't focused: nobody is there to see the result, and it saves a fetch per interval.
+      if (!vscode.window.state.focused) return;
+      this.fetchAll()
+        .then(() => this.periodicFetchListeners.forEach(l => l()))
+        .catch(e => logWarn('auto-fetch', String(e)));
+    }, Math.max(1, minutes) * 60_000);
+  }
+
   onOrphanBranches(listener: OrphanListener): vscode.Disposable {
     this.orphanListeners.push(listener);
     return new vscode.Disposable(() => {
@@ -1179,7 +1209,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   /**
    * The status of every repo as the last sweep read it, reading only repos it hasn't seen
    * yet. Sweeps follow every working-tree event, so this is as current as what listeners
-   * were last sent — for views that show the status, like the Git Log's uncommitted row,
+   * were last sent — for views that show the status, like the Log Panel's uncommitted row,
    * and would otherwise run a status in each repo on every load.
    */
   async getLatestStatuses(): Promise<WorkspaceStatus> {
@@ -1307,12 +1337,13 @@ export class WorkspaceGitManager implements vscode.Disposable {
     if (newlyOrphaned.length > 0) this.orphanListeners.forEach(l => l(newlyOrphaned));
   }
 
-  async pullAll(rebase = false): Promise<Array<{ repoId: string; ok: boolean; message: string }>> {
+  /** `mode` left out: gitcharm.pullMode. */
+  async pullAll(mode?: PullMode): Promise<Array<{ repoId: string; ok: boolean; message: string }>> {
     const repos = Array.from(this.repos.values());
     const results: Array<{ repoId: string; ok: boolean; message: string }> = [];
     for (const r of repos) {
       try {
-        const message = rebase ? await r.pullRebase() : await r.pull();
+        const message = mode ? await r.pullWith(mode) : await r.pullWithDefault();
         results.push({ repoId: r.repoId, ok: true, message });
       } catch (e: unknown) {
         results.push({ repoId: r.repoId, ok: false, message: formatGitError(e) });
@@ -1363,6 +1394,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.autoFetchTimer) clearInterval(this.autoFetchTimer);
     this.disposeWatchers();
     this.gitInitWatchers.forEach(d => d.dispose());
     this.globalListeners.forEach(d => d.dispose());

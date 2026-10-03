@@ -22,6 +22,7 @@ import { Codicon } from '../shared/Codicon';
 import { ScrollArea } from '../shared/ScrollArea';
 import { handleTreeNavKeyDown } from '../shared/keyboardNav';
 import type { CommitToHostMsg, HostToCommitMsg, ShelveEntry, StashEntry, UnpushedCommit, WorktreeEntry, RepoPullRequests, ForgeProvider, PullRequestSummary } from '../shared/msgTypes';
+import type { CommitPanelConfig } from '../../host/types/messages';
 import type { FileStatus, RepoStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
@@ -102,7 +103,7 @@ const REPO_CONTEXT_ITEMS = (): ContextMenuEntry[] => [
   { id: 'stash',             label: l10n.t('Stash Changes'),          icon: 'git-stash' },
   { separator: true },
   { id: 'manage-repo',       label: l10n.t('Manage Repository'),      icon: 'git-branch' },
-  { id: 'view-git-log',      label: l10n.t('View Git Log'),           icon: 'git-commit' },
+  { id: 'view-git-log',      label: l10n.t('View Log Panel'),           icon: 'git-commit' },
   { separator: true },
   { id: 'reveal-explorer',   label: l10n.t('Reveal in Explorer'),     icon: 'list-tree' },
   { id: 'open-new-window',   label: l10n.t('Open in New Window'),     icon: 'multiple-windows' },
@@ -172,7 +173,7 @@ const VSCODE_REPO_STAGED_ITEMS = (): ContextMenuEntry[] => [
   { id: 'unstage-all',       label: l10n.t('Unstage All'),           icon: 'remove' },
   { separator: true },
   { id: 'manage-repo',       label: l10n.t('Manage Repository'),      icon: 'git-branch' },
-  { id: 'view-git-log',      label: l10n.t('View Git Log'),           icon: 'git-commit' },
+  { id: 'view-git-log',      label: l10n.t('View Log Panel'),           icon: 'git-commit' },
   { separator: true },
   { id: 'reveal-explorer',   label: l10n.t('Reveal in Explorer'),     icon: 'list-tree' },
   { id: 'open-new-window',   label: l10n.t('Open in New Window'),     icon: 'multiple-windows' },
@@ -190,7 +191,7 @@ const VSCODE_REPO_UNSTAGED_ITEMS = (): ContextMenuEntry[] => [
   { id: 'stash',             label: l10n.t('Stash Changes'),           icon: 'git-stash' },
   { separator: true },
   { id: 'manage-repo',       label: l10n.t('Manage Repository'),       icon: 'git-branch' },
-  { id: 'view-git-log',      label: l10n.t('View Git Log'),            icon: 'git-commit' },
+  { id: 'view-git-log',      label: l10n.t('View Log Panel'),            icon: 'git-commit' },
   { separator: true },
   { id: 'reveal-explorer',   label: l10n.t('Reveal in Explorer'),      icon: 'list-tree' },
   { id: 'open-new-window',   label: l10n.t('Open in New Window'),      icon: 'multiple-windows' },
@@ -262,6 +263,13 @@ function App() {
 
   // ── Tab ───────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('changes');
+  // The gitcharm.commitPanel.* settings: which tabs, in which order, labels and badges. Null until the host sends them.
+  const [panelConfig, setPanelConfig] = useState<CommitPanelConfig | null>(null);
+  const shownTabs: TabId[] = panelConfig?.tabs ?? ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
+  // A tab turned off while open hands over to Changes.
+  useEffect(() => {
+    if (!shownTabs.includes(activeTab)) setActiveTab('changes');
+  }, [activeTab, panelConfig]);
   const [tabBarCollapsed, setTabBarCollapsed] = useState(false);
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; width: number } | null>(null);
   const tabDropdownBtnRef = useRef<HTMLButtonElement>(null);
@@ -503,6 +511,7 @@ function App() {
           break;
         case 'COMMIT_STATUS_UPDATE':
           store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
+          if (msg.panelConfig) setPanelConfig(msg.panelConfig);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
             let hasNewChanges = false;
@@ -694,6 +703,10 @@ function App() {
 
         case 'PULLREQUEST_INVALIDATED':
           requestPullRequestList(true);
+          break;
+
+        case 'COMMIT_PANEL_CONFIG':
+          setPanelConfig(msg.config);
           break;
 
         case 'COMMIT_SWITCH_TAB':
@@ -918,6 +931,43 @@ function App() {
     if (activeTab === 'shelf') repos.forEach(r => { if (!(r.repoId in shelveMap) && !shelveLoading[r.repoId]) requestShelveList(r.repoId); });
     if (activeTab === 'stash') repos.forEach(r => { if (!(r.repoId in stashMap) && !stashLoading[r.repoId]) requestStashList(r.repoId); });
   }, [activeTab, repoIdsKey]);
+
+  // The first configuration from the host picks the tab to open on (gitcharm.commitPanel.defaultTab); from then
+  // on, every tab change is reported back, for the "last used" default.
+  const initialTabAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!panelConfig || initialTabAppliedRef.current) return;
+    initialTabAppliedRef.current = true;
+    const tab = panelConfig.initialTab;
+    if (tab === 'changes') return;
+    setActiveTab(tab);
+    if (tab === 'push') repos.forEach(r => requestUnpushedCommits(r.repoId));
+    if (tab === 'worktree') requestWorktreeList();
+    if (tab === 'pullrequests') requestPullRequestList();
+  }, [panelConfig]);
+  useEffect(() => {
+    if (initialTabAppliedRef.current) send({ type: 'COMMIT_ACTIVE_TAB', tab: activeTab });
+  }, [activeTab]);
+
+  // The Shelf and Stash badges (off by default) need every repo's list even with the tab closed. Shelves and stashes
+  // can change outside the panel (a terminal, another window), so the lists are asked for again, quietly and at most
+  // every few seconds, as the status changes. Worktrees come with every status change already.
+  const shelfBadge = !!panelConfig?.badges.shelf;
+  const stashBadge = !!panelConfig?.badges.stash;
+  const worktreeBadge = !!panelConfig?.badges.worktree;
+  useEffect(() => {
+    if (!shelfBadge && !stashBadge) return;
+    const timer = setTimeout(() => {
+      for (const r of repos) {
+        if (shelfBadge) send({ type: 'SHELVE_LIST', requestId: generateId(), repoId: r.repoId });
+        if (stashBadge) send({ type: 'STASH_LIST', requestId: generateId(), repoId: r.repoId });
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [shelfBadge, stashBadge, store.status]);
+  useEffect(() => {
+    if (worktreeBadge && worktreeRepos.length === 0) send({ type: 'WORKTREE_REQUEST_LIST' });
+  }, [worktreeBadge]);
   const worktreeBranchOf = (repoStatus: RepoStatus) => metaMap.get(repoStatus.repoId)?.isWorktree
     ? (repoStatus.branch.detachedTag ?? repoStatus.branch.detachedHash ?? repoStatus.branch.name)
     : undefined;
@@ -1398,6 +1448,10 @@ function App() {
         // Prefer each repo's provider-reported totalCount (exact, filter-aware, no extra pages fetched) over the
         // number of PRs actually downloaded so far — falls back to the downloaded count for providers/queries
         // where no cheap total is available (see ListPullRequestsResult.totalCount).
+        const totalShelves = repos.reduce((sum, r) => sum + (shelveMap[r.repoId]?.length ?? 0), 0);
+        const totalStashes = repos.reduce((sum, r) => sum + (stashMap[r.repoId]?.length ?? 0), 0);
+        // The linked worktrees: every repo has its main one.
+        const totalWorktrees = worktreeRepos.reduce((sum, r) => sum + r.worktrees.filter(w => !w.isMain).length, 0);
         const totalPullRequests = pullRequestRepos.reduce((sum, r) => sum + (r.totalCount ?? r.pullRequests.length), 0);
         const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode')
           ? l10n.t({ message: 'Commit', comment: ['Tab title: the tab with the commit form and changed files'] })
@@ -1405,7 +1459,9 @@ function App() {
         const tabMeta = (tab: TabId) => ({
           label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
           iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : 'cloud',
-          badge: tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests : 0,
+          badge: !(panelConfig ? panelConfig.badges[tab] : tab === 'changes' || tab === 'push' || tab === 'pullrequests') ? 0
+            : tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests
+            : tab === 'shelf' ? totalShelves : tab === 'stash' ? totalStashes : tab === 'worktree' ? totalWorktrees : 0,
         });
         const selectTab = (tab: TabId) => {
           setActiveTab(tab);
@@ -1417,11 +1473,15 @@ function App() {
           if (tab === 'worktree' && worktreeRepos.length === 0) requestWorktreeList();
           if (tab === 'pullrequests' && pullRequestRepos.length === 0) requestPullRequestList();
         };
-        const allTabs: TabId[] = ['changes', 'shelf', 'stash', 'worktree', 'pullrequests', 'push'];
+        const allTabs = shownTabs;
         const activeMeta = tabMeta(activeTab);
+        const labels = panelConfig?.labels ?? 'active';
+        const showsLabel = (tab: TabId) => labels === 'always' || (labels === 'active' && tab === activeTab);
         // Longest label among all tabs — used by the width probe below as the one tab whose label
         // gets expanded, since only one tab (the active one) is ever expanded at a time.
         const widestTab = allTabs.reduce((a, b) => displayWidth(tabMeta(b).label) > displayWidth(tabMeta(a).label) ? b : a);
+        // Which labels the probe expands: the worst case of the label setting.
+        const probeShowsLabel = (tab: TabId) => labels === 'always' || (labels === 'active' && tab === widestTab);
         return (
           <div ref={tabBarRefCb} style={css.tabBar}>
             {/* Real tab strip — hidden (not unmounted) when collapsed, so it keeps its state and re-appears instantly once space is available again. */}
@@ -1437,9 +1497,9 @@ function App() {
                   >
                     <Codicon
                       name={iconName}
-                      style={{ marginRight: activeTab === tab ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
+                      style={{ marginRight: showsLabel(tab) ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
                     />
-                    {activeTab === tab && (
+                    {showsLabel(tab) && (
                       <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
                         {label}
                       </span>
@@ -1465,11 +1525,11 @@ function App() {
             >
               {allTabs.map(tab => {
                 const { label, iconName, badge } = tabMeta(tab);
-                const isWidest = tab === widestTab;
+                const expanded = probeShowsLabel(tab);
                 return (
-                  <div key={tab} style={css.tab(isWidest)}>
-                    <Codicon name={iconName} style={{ marginRight: isWidest ? '5px' : '0', fontSize: '13px' }} />
-                    {isWidest && <span style={{ overflow: 'hidden', display: 'inline-block' }}>{label}</span>}
+                  <div key={tab} style={css.tab(expanded)}>
+                    <Codicon name={iconName} style={{ marginRight: expanded ? '5px' : '0', fontSize: '13px' }} />
+                    {expanded && <span style={{ overflow: 'hidden', display: 'inline-block' }}>{label}</span>}
                     {badge > 0 && (
                       <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
                     )}
@@ -1785,6 +1845,7 @@ function App() {
             changesViewMode={store.changesViewMode}
             defaultCommitAction={store.defaultCommitAction}
             defaultSaveAction={store.defaultSaveAction}
+            subjectMaxLength={panelConfig?.subjectMaxLength ?? 0}
             vscodeSelectedRepos={store.changesViewMode === 'vscode' ? vscodeSelectedRepos : undefined}
             getSelectedFilesForRepo={store.getSelectedFilesForRepo}
             onDeselectRepo={repoId => {
@@ -2161,7 +2222,7 @@ function App() {
             ...(hasCustomCls ? [{ id: 'move-to-cl', label: l10n.t('Move to Changelist…'), icon: 'list-unordered' } as ContextMenuEntry] : []),
             { separator: true },
             { id: 'manage-repo',      label: l10n.t('Manage Repository'),   icon: 'git-branch' },
-            { id: 'view-git-log',     label: l10n.t('View Git Log'),        icon: 'git-commit' },
+            { id: 'view-git-log',     label: l10n.t('View Log Panel'),        icon: 'git-commit' },
             { separator: true },
             { id: 'reveal-explorer',  label: l10n.t('Reveal in Explorer'),  icon: 'list-tree' },
             { id: 'open-new-window',  label: l10n.t('Open in New Window'),  icon: 'multiple-windows' },

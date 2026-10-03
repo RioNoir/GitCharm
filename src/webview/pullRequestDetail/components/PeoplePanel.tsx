@@ -1,8 +1,9 @@
 import React from 'react';
 import type { PullRequestUser } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
-import { avatarsEnabled, avatarColor, initials, initialsFontSize } from '../../shared/avatars';
+import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
 import * as l10n from '@vscode/l10n';
+import { ForgeAvatarImg } from '../../shared/ForgeAvatarImg';
 
 interface PeopleFieldProps {
   people: PullRequestUser[];
@@ -11,10 +12,7 @@ interface PeopleFieldProps {
 function PersonChip({ person }: { person: PullRequestUser }) {
   return (
     <span style={css.chip} title={person.username}>
-      {avatarsEnabled && person.avatarUrl
-        ? <img src={person.avatarUrl} alt={person.username} style={css.chipAvatarImg} />
-        : <span style={{ ...css.chipAvatarFallback, background: avatarColor(person.username) }}>{initials(person.username)}</span>
-      }
+      <ForgeAvatarImg url={person.avatarUrl} alt={person.username} style={css.chipAvatarImg} fallback={<span style={{ ...css.chipAvatarFallback, background: avatarColor(person.username) }}>{initials(person.username)}</span>} />
       {person.username}
     </span>
   );

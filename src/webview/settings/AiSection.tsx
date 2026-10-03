@@ -80,7 +80,7 @@ export function AiSection({ ctx, state, listModels, testAi, setApiKey }: AiSecti
         {provider.secret && (
           <div className={`gc-row${state.apiKeys[provider.secret] ? ' modified' : ''}`}>
             <div className="gc-row-title">
-              <span><span className="category">{ctx.categoryOf('ai.provider')}: </span><span className="label">{l10n.t('API key')}</span></span>
+              <span className="label">{l10n.t('API key')}</span>
             </div>
             <div className="gc-row-desc">
               {l10n.t('Kept in your system keychain through VS Code secure storage — never in settings.json, and not synced.')}
@@ -109,7 +109,7 @@ export function AiSection({ ctx, state, listModels, testAi, setApiKey }: AiSecti
 
         <div className="gc-row">
           <div className="gc-row-title">
-            <span><span className="category">{ctx.categoryOf('ai.provider')}: </span><span className="label">{l10n.t('Test connection')}</span></span>
+            <span className="label">{l10n.t('Test connection')}</span>
           </div>
           <div className="gc-row-desc">
             {l10n.t('Sends a one-word prompt with the saved settings. Current model: {0}', state.aiModelLabel)}
