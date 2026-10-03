@@ -195,6 +195,7 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_ADD_TO_GITIGNORE'; repoId: string; entryPath: string }
   | { type: 'COMMIT_SHOW_BRANCH_MENU'; repoId?: string }
   | { type: 'COMMIT_OPEN_MERGE_EDITOR'; repoId: string; filePath: string }
+  | { type: 'COMMIT_RESOLVE_CONFLICTS_AI'; repoId: string; filePath: string }
   | { type: 'COMMIT_GENERATE_MESSAGE'; requestId: string }
   | { type: 'COMMIT_SELECT_AI_MODEL' }
   | { type: 'COMMIT_OPEN_AI_SETTINGS' }
@@ -649,3 +650,23 @@ export type SettingsToHostMsg =
   | { type: 'SETTINGS_INTEGRATION_REMOVE'; accountId: string }
   | { type: 'SETTINGS_INTEGRATION_GITHUB_ADD' }
   | { type: 'SETTINGS_INTEGRATION_ASSIGN'; repoId: string; value: string };
+
+// ─── AI conflict resolution: live view ───────────────────────────────────────
+// A side panel following an AI conflict resolution as it happens: each conflict with its two sides, the
+// model's explanation and the resolved lines, streamed. `fileKey` identifies a file within one run.
+
+export type HostToConflictAiMsg =
+  | { type: 'CONFLICTAI_RESET'; modelLabel: string }
+  | { type: 'CONFLICTAI_FILE'; fileKey: string; path: string }
+  | {
+      type: 'CONFLICTAI_HUNK_START'; fileKey: string; index: number; line: number;
+      currentLabel: string; incomingLabel: string; current: string; incoming: string; base?: string;
+    }
+  | { type: 'CONFLICTAI_HUNK_PROGRESS'; fileKey: string; index: number; explanation: string; resolution: string }
+  | { type: 'CONFLICTAI_HUNK_DONE'; fileKey: string; index: number; explanation: string; resolution: string }
+  | { type: 'CONFLICTAI_HUNK_FAILED'; fileKey: string; index: number; error: string }
+  | { type: 'CONFLICTAI_FILE_DONE'; fileKey: string; resolved: number; failed: number; staged: boolean; error?: string }
+  | { type: 'CONFLICTAI_RUN_DONE'; cancelled: boolean };
+
+export type ConflictAiToHostMsg =
+  | { type: 'CONFLICTAI_OPEN_FILE'; path: string; line: number };

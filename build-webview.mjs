@@ -16,6 +16,7 @@ const apps = [
   { name: 'commitFullDetail',  entry: 'src/webview/commitFullDetail/main.tsx' },
   { name: 'aiExplainDetail',   entry: 'src/webview/aiExplainDetail/main.tsx' },
   { name: 'settings',          entry: 'src/webview/settings/main.tsx' },
+  { name: 'conflictAi',        entry: 'src/webview/conflictAi/main.tsx' },
 ];
 
 /** @returns {import('esbuild').BuildOptions} */

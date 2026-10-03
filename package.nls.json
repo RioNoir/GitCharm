@@ -163,5 +163,11 @@
   "config.pullRequests.defaultCheckoutAction.enum.pr": "Checkout Pull Request (creates/updates a local pr/{author}/{number} branch)",
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Checkout Branch (downloads or updates the PR's actual source branch)",
   "config.section.experimental.title": "Experimental",
-  "config.resetViewLocationsOnStartup.description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally."
+  "config.resetViewLocationsOnStartup.description": "Run VS Code's 'Reset View Locations' action on startup. Useful to clear stale GitCharm badge placement, but it resets view positions globally.",
+  "command.resolveConflictsWithAi.title": "Resolve Conflicts with AI",
+  "command.resolveAllConflictsWithAi.title": "Resolve All Conflicts with AI",
+  "command.resolveConflictHunkWithAi.title": "Resolve This Conflict with AI",
+  "config.ai.operationModels.markdownDescription": "Provider and model for each AI operation, in place of `#gitcharm.ai.provider#` and that provider's model. An operation left out uses them. Example: `{ \"resolveConflicts\": { \"provider\": \"claude-api\", \"model\": \"claude-opus-4-7\" } }`. Easier to set from **GitCharm: Settings** → AI.",
+  "config.ai.offerConflictResolution.description": "When a merge, rebase, pull or other git operation leaves conflicts, offer to resolve them with AI.",
+  "config.ai.prompts.resolveConflicts.markdownDescription": "Custom AI instructions for resolving a merge conflict. Leave empty to use the built-in default. `{language}` is replaced with the configured language; the conflict (both sides, the common ancestor when known, and the surrounding lines) is always appended after these instructions."
 }

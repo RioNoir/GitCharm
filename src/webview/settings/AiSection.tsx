@@ -6,6 +6,7 @@ import { ApiKeyField, ModelPicker } from './controls';
 import { settingLabel } from './layout';
 import type { RowContext } from './SettingRow';
 import { RowHeader, SettingRow } from './SettingRow';
+import { OperationModels } from './OperationModels';
 
 type SecretProvider = 'claude' | 'openai' | 'gemini';
 
@@ -133,6 +134,12 @@ export function AiSection({ ctx, state, listModels, testAi, setApiKey }: AiSecti
             )}
           </div>
         </div>
+
+        <h3 className="gc-subgroup-title">{l10n.t('Models per operation')}</h3>
+        <OperationModels ctx={ctx} state={state} providers={PROVIDERS} listModels={listModels} />
+
+        <h3 className="gc-subgroup-title">{l10n.t('Conflicts')}</h3>
+        <SettingRow ctx={ctx} settingKey="ai.offerConflictResolution" />
 
         <h3 className="gc-subgroup-title">{l10n.t('Output')}</h3>
         <SettingRow ctx={ctx} settingKey="ai.language" />

@@ -1,12 +1,16 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { getAiApiKey } from './aiSecrets';
+import { aiConfigFor } from './aiOperations';
+import type { AiOperation } from '../types/aiOperations';
 
 export interface GenerateOptions {
   /** Called with the whole text generated so far (not just the latest chunk), at most every
    * PROGRESS_INTERVAL_MS — for providers that can stream (all but the Codex and Gemini CLIs). The final text is
    * still the return value, cleaned up (see cleanModelOutput), which the partial text isn't. */
   onProgress?: (textSoFar: string) => void;
+  /** The answer is code: keep the leading indentation of its first line (only blank lines around it are dropped). */
+  preserveIndentation?: boolean;
 }
 
 const PROGRESS_INTERVAL_MS = 80;
@@ -28,18 +32,30 @@ export async function generateWithAI(
 ): Promise<string> {
   const progress = throttledProgress(options.onProgress);
   const text = await generateRaw(provider, prompt, cfg, progress);
-  const cleaned = cleanModelOutput(text);
+  const cleaned = cleanModelOutput(text, options.preserveIndentation);
   if (!cleaned) throw new Error(vscode.l10n.t('{0} returned an empty response', providerLabel(provider)));
   return cleaned;
 }
 
+/** Generates with the provider and model configured for `operation` (its own, else the default ones). */
+export function generateForOperation(
+  operation: AiOperation,
+  prompt: string,
+  cfg: vscode.WorkspaceConfiguration,
+  options: GenerateOptions = {},
+): Promise<string> {
+  const target = aiConfigFor(operation, cfg);
+  return generateWithAI(target.provider, prompt, target.cfg, options);
+}
+
 /** Strips what models wrap a whole answer in despite being told not to — a code fence, or (for a one-line
  * answer such as a title) backticks or quotes. */
-export function cleanModelOutput(text: string): string {
-  let t = text.trim();
-  const fenced = /^(```|~~~)[\w-]*\n([\s\S]*?)\n\1$/.exec(t);
-  if (fenced) t = fenced[2].trim();
-  if (!t.includes('\n')) t = t.replace(/^(["'`])(.*)\1$/, '$2').trim();
+export function cleanModelOutput(text: string, preserveIndentation = false): string {
+  const trim = (s: string) => (preserveIndentation ? s.replace(/^\s*\n/, '').trimEnd() : s.trim());
+  let t = trim(text);
+  const fenced = /^\s*(```|~~~)[\w-]*\n([\s\S]*?)\n\s*\1$/.exec(t);
+  if (fenced) t = trim(fenced[2]);
+  if (!preserveIndentation && !t.includes('\n')) t = t.replace(/^(["'`])(.*)\1$/, '$2').trim();
   return t;
 }
 

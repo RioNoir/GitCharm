@@ -33,7 +33,8 @@ interface Props {
   onFolderContextMenu: (e: React.MouseEvent, repoId: string, folderPath: string, files: FileStatus[], staged: boolean) => void;
   onOpenFile: (file: FileStatus) => void;
   onRollback: (files: FileStatus[]) => void;
-  onResolveMerge: (file: FileStatus) => void;
+  /** `withAi`: resolve the conflicts with the AI instead of opening the merge editor. */
+  onResolveMerge: (file: FileStatus, withAi?: boolean) => void;
   onStageFiles: (repoId: string, paths: string[]) => void;
   onUnstageFiles: (repoId: string, paths: string[]) => void;
   onStageAll: (repoId: string) => void;
@@ -101,7 +102,8 @@ interface RepoSubGroupProps {
   onFolderContextMenu: (e: React.MouseEvent, repoId: string, folderPath: string, files: FileStatus[]) => void;
   onOpenFile: (file: FileStatus) => void;
   onRollback: (files: FileStatus[]) => void;
-  onResolveMerge: (file: FileStatus) => void;
+  /** `withAi`: resolve the conflicts with the AI instead of opening the merge editor. */
+  onResolveMerge: (file: FileStatus, withAi?: boolean) => void;
   onStageFiles: (paths: string[]) => void;
   onUnstageFiles: (paths: string[]) => void;
   onRepoContextMenu: (e: React.MouseEvent) => void;
@@ -121,6 +123,7 @@ interface RepoSubGroupProps {
 }
 
 function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewMode, selectedFile, ctxFile, iconTheme, isCollapsed, toggleCollapsed, hasExpandedDirs, setDirsCollapsed, activeFolderPath, onSelectFile, onContextMenu, onFolderContextMenu, onOpenFile, onRollback, onResolveMerge, onStageFiles, onUnstageFiles, onRepoContextMenu, onBranchClick, onOpenChanges, isFirst = false, isLast = false, repoSelected, onToggleRepoSelection, singleRepo, isSubmodule, submodulePath, isWorktree, mainWorktreePath, onMultiSelect, multiSelectedFiles, headerOnly = false }: RepoSubGroupProps) {
+  const aiEnabled = useCommitStore(s => s.aiEnabled);
   const repoId = repoStatus.repoId;
   const changeSortMode = useCommitStore(s => s.viewAndSort.changeSortMode);
   const collapseKey = `vscode-repo-${staged ? 'staged' : 'unstaged'}:${repoId}`;
@@ -252,6 +255,9 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
               isDirContextActive={dirPath => activeFolderPath === dirPath}
               renderFileActions={(file, hovered) => file.status === 'submodule' ? null : (
                 <>
+                  {file.status === 'conflicted' && aiEnabled && (
+                    <InlineIconBtn icon="sparkle" title={l10n.t('Resolve Conflicts with AI')} visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file, true); }} />
+                  )}
                   {file.status === 'conflicted' && (
                     <InlineIconBtn icon="git-merge" title={l10n.t('Resolve Conflicts')} visible={hovered} onClick={e => { e.stopPropagation(); onResolveMerge(file); }} />
                   )}

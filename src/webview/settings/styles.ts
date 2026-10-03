@@ -214,6 +214,28 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 .gc-test-result.ok .codicon { color: var(--vscode-testing-iconPassed, var(--vscode-charts-green)); }
 .gc-test-result.error { color: var(--vscode-errorForeground); }
 
+.gc-operations { display: flex; flex-direction: column; gap: 6px; max-width: 780px; }
+.gc-operation { border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.35)); border-radius: 4px; background: var(--vscode-input-background); }
+.gc-operation.own { border-left: 2px solid var(--vscode-settings-modifiedItemIndicator, var(--vscode-focusBorder)); }
+.gc-operation-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
+.gc-operation-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gc-operation-name { font-weight: 600; }
+.gc-operation-model { font-size: 12px; color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-operation-editor { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px 36px; border-top: 1px solid var(--vscode-input-border, rgba(128,128,128,0.25)); }
+.gc-provider-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gc-provider-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 6px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer;
+  color: var(--vscode-foreground); background: transparent; border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.35));
+}
+.gc-provider-chip:hover { background: var(--vscode-list-hoverBackground); }
+.gc-provider-chip.selected { border-color: var(--vscode-focusBorder); background: color-mix(in srgb, var(--vscode-focusBorder) 15%, transparent); }
+.gc-provider-chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.gc-provider-chip .gc-ai-icon { width: 16px; height: 16px; }
+.gc-provider-chip .gc-ai-icon svg { width: 14px; height: 14px; }
+.gc-provider-chip .gc-ai-icon .codicon { font-size: 14px !important; }
+/* The chip's label already says CLI. */
+.gc-provider-chip .gc-ai-icon-badge { display: none; }
+
 /* ── Cloud Integrations ──────────────────────────────────────────────────── */
 .gc-integrations { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0 14px; max-width: 780px; }
 .gc-integration {

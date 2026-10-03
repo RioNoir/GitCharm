@@ -19,8 +19,16 @@ const SAMPLE_REPOS = [
   { name: 'shared-ui', color: '#ba68c8' },
 ];
 
-function effectiveRepos(repos: PreviewProps['repos'], colors: Record<string, string>) {
-  const list = repos.length > 0 ? repos.slice(0, 4) : SAMPLE_REPOS;
+/**
+ * The workspace's repositories (with their configured colors) for a mock-up that needs at least `min` of them:
+ * sample repositories fill in for the missing ones, so a single-repository workspace still gets a full scene.
+ */
+function effectiveRepos(repos: PreviewProps['repos'], colors: Record<string, string>, min = 1) {
+  const list = repos.slice(0, 4);
+  for (const sample of SAMPLE_REPOS) {
+    if (list.length >= min) break;
+    if (!list.some(r => r.name === sample.name)) list.push(sample);
+  }
   return list.map(r => ({ name: r.name, color: colors[r.name] ?? r.color }));
 }
 
@@ -41,7 +49,36 @@ function useLoop(length: number, intervalMs: number, restStep: number): number {
   return reducedMotion ? restStep : step % length;
 }
 
-export function Preview({ id, ...props }: PreviewProps & { id: PreviewId }) {
+/** A broken mock-up must never take the settings page down with it: it's dropped, the settings stay. */
+class PreviewBoundary extends React.Component<{ children: React.ReactNode; resetKey: string }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown): void {
+    console.error('GitCharm settings preview failed', error);
+  }
+
+  componentDidUpdate(prev: { resetKey: string }): void {
+    if (prev.resetKey !== this.props.resetKey && this.state.failed) this.setState({ failed: false });
+  }
+
+  render(): React.ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+export function Preview(props: PreviewProps & { id: PreviewId }) {
+  return (
+    <PreviewBoundary resetKey={props.id}>
+      <PreviewContent {...props} />
+    </PreviewBoundary>
+  );
+}
+
+function PreviewContent({ id, ...props }: PreviewProps & { id: PreviewId }) {
   return (
     <figure className="gc-preview" aria-label={l10n.t('Preview')}>
       <figcaption className="gc-preview-caption">{l10n.t('Preview')}</figcaption>
@@ -133,8 +170,7 @@ function ChangesViewPreview({ get, repos }: PreviewProps) {
   const mode = get<string>('changesViewMode');
   const commitAndPush = get<string>('defaultCommitAction') === 'commitAndPush';
   const shelve = get<string>('defaultSaveAction') === 'shelve';
-  const [front, back, companion] = effectiveRepos(repos, get<Record<string, string>>('projectColors'));
-  const third = companion ?? SAMPLE_REPOS[2];
+  const [front, back, third] = effectiveRepos(repos, get<Record<string, string>>('projectColors'), 3);
   const simplified = mode !== 'changelists' && mode !== 'vscode';
 
   const hover = step === 1;

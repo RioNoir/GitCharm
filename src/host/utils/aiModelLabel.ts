@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
+import { aiConfigFor } from '../ai/aiOperations';
+import type { AiOperation } from '../types/aiOperations';
 
 /** Short human label for the currently configured AI provider/model, e.g. "claude api · claude-sonnet-4-6". */
-export function getAiModelLabel(cfg: vscode.WorkspaceConfiguration): string {
-  const provider: string = cfg.get('ai.provider', 'vscode-lm');
+export function getAiModelLabel(config: vscode.WorkspaceConfiguration, operation?: AiOperation): string {
+  // An operation may have a provider and model of its own (gitcharm.ai.operationModels).
+  const { provider, cfg } = operation ? aiConfigFor(operation, config) : { provider: config.get<string>('ai.provider', 'vscode-lm'), cfg: config };
   switch (provider) {
     case 'claude-api': {
       const model: string = cfg.get('ai.claudeModel', 'claude-sonnet-4-6');

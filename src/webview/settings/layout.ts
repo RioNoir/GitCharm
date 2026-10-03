@@ -22,6 +22,7 @@ export const AI_PROMPT_KEYS = [
   'ai.prompts.pullRequestDescription',
   'ai.prompts.explainCommit',
   'ai.prompts.explainPullRequest',
+  'ai.prompts.resolveConflicts',
 ];
 
 /** Every `gitcharm.*` setting must be listed in exactly one category (except the API keys, kept in SecretStorage). */
@@ -74,7 +75,7 @@ export function getCategories(): CategoryDef[] {
       keys: [
         'ai.enabled', 'ai.provider', 'ai.modelId', 'ai.claudeModel', 'ai.claudePath', 'ai.openaiModel', 'ai.geminiModel',
         'ai.geminiPath', 'ai.codexModel', 'ai.codexPath', 'ai.ollamaModel', 'ai.ollamaUrl', 'ai.lmStudioModel', 'ai.lmStudioUrl',
-        'ai.language', 'ai.maxDiffChars',
+        'ai.language', 'ai.maxDiffChars', 'ai.operationModels', 'ai.offerConflictResolution',
       ],
     },
     {
@@ -147,6 +148,9 @@ export function settingLabel(key: string): string {
     case 'ai.ollamaUrl':
     case 'ai.lmStudioUrl': return l10n.t('Server URL');
     case 'ai.maxDiffChars': return l10n.t('Maximum diff size');
+    case 'ai.operationModels': return l10n.t('Models per operation');
+    case 'ai.offerConflictResolution': return l10n.t('Offer to resolve conflicts');
+    case 'ai.prompts.resolveConflicts': return l10n.t('Resolve conflicts');
     case 'ai.prompts.commitMessage': return l10n.t('Commit message');
     case 'ai.prompts.pullRequestTitle': return l10n.t('Pull request title');
     case 'ai.prompts.pullRequestDescription': return l10n.t('Pull request description');

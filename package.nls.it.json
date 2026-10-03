@@ -163,5 +163,11 @@
   "config.pullRequests.defaultCheckoutAction.enum.pr": "Checkout della Pull Request (crea o aggiorna un branch locale pr/{author}/{number})",
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Checkout del branch (scarica o aggiorna il branch sorgente effettivo della PR)",
   "config.section.experimental.title": "Sperimentale",
-  "config.resetViewLocationsOnStartup.description": "All'avvio, esegui l'azione 'Ripristina posizione delle viste' di VS Code. Utile per correggere la posizione del badge di GitCharm, ma ripristina la posizione di tutte le viste."
+  "config.resetViewLocationsOnStartup.description": "All'avvio, esegui l'azione 'Ripristina posizione delle viste' di VS Code. Utile per correggere la posizione del badge di GitCharm, ma ripristina la posizione di tutte le viste.",
+  "command.resolveConflictsWithAi.title": "Risolvi conflitti con l'AI",
+  "command.resolveAllConflictsWithAi.title": "Risolvi tutti i conflitti con l'AI",
+  "command.resolveConflictHunkWithAi.title": "Risolvi questo conflitto con l'AI",
+  "config.ai.operationModels.markdownDescription": "Provider e modello per ogni operazione AI, al posto di `#gitcharm.ai.provider#` e del modello di quel provider. Un'operazione non indicata usa quelli. Esempio: `{ \"resolveConflicts\": { \"provider\": \"claude-api\", \"model\": \"claude-opus-4-7\" } }`. Più semplice da impostare da **GitCharm: Impostazioni** → AI.",
+  "config.ai.offerConflictResolution.description": "Quando un merge, rebase, pull o altra operazione git lascia dei conflitti, proponi di risolverli con l'AI.",
+  "config.ai.prompts.resolveConflicts.markdownDescription": "Istruzioni AI personalizzate per risolvere un conflitto di merge. Lascia vuoto per usare il prompt predefinito. `{language}` viene sostituito con la lingua configurata; il conflitto (entrambi i lati, l'antenato comune quando è noto e le righe attorno) viene sempre aggiunto dopo queste istruzioni."
 }

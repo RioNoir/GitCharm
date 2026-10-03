@@ -163,5 +163,11 @@
   "config.pullRequests.defaultCheckoutAction.enum.pr": "簽出拉取請求（建立/更新本機 pr/{author}/{number} 分支）",
   "config.pullRequests.defaultCheckoutAction.enum.branch": "簽出分支（下載或更新該 PR 實際的來源分支）",
   "config.section.experimental.title": "實驗性",
-  "config.resetViewLocationsOnStartup.description": "啟動時執行 VS Code 的「重設檢視位置」動作。可用於清除過時的 GitCharm 徽章位置，但會全域重設檢視位置。"
+  "config.resetViewLocationsOnStartup.description": "啟動時執行 VS Code 的「重設檢視位置」動作。可用於清除過時的 GitCharm 徽章位置，但會全域重設檢視位置。",
+  "command.resolveConflictsWithAi.title": "使用 AI 解決衝突",
+  "command.resolveAllConflictsWithAi.title": "使用 AI 解決所有衝突",
+  "command.resolveConflictHunkWithAi.title": "使用 AI 解決此衝突",
+  "config.ai.operationModels.markdownDescription": "每個 AI 作業使用的提供者和模型，取代 `#gitcharm.ai.provider#` 及該提供者的模型。未列出的作業使用預設值。範例: `{ \"resolveConflicts\": { \"provider\": \"claude-api\", \"model\": \"claude-opus-4-7\" } }`。在 **GitCharm: 設定** → AI 中設定更方便。",
+  "config.ai.offerConflictResolution.description": "當合併、重訂基底、提取或其他 git 作業留下衝突時，提議使用 AI 解決。",
+  "config.ai.prompts.resolveConflicts.markdownDescription": "用於解決合併衝突的自訂 AI 指示。留空則使用內建預設值。`{language}` 會被取代為設定的語言；衝突內容(雙方、已知時的共同祖先以及周圍的行)一律附加在這些指示之後。"
 }

@@ -378,6 +378,7 @@ export function registerCommands(
         pullRequestDescription: { label: vscode.l10n.t('Pull request description'), icon: 'git-pull-request' },
         explainCommit: { label: vscode.l10n.t('Explain commit'), icon: 'sparkle' },
         explainPullRequest: { label: vscode.l10n.t('Explain pull request'), icon: 'sparkle' },
+        resolveConflicts: { label: vscode.l10n.t('Resolve conflicts'), icon: 'git-merge' },
       };
       const config = vscode.workspace.getConfiguration('gitcharm');
       const picked = await vscode.window.showQuickPick(

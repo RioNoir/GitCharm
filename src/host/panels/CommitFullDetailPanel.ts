@@ -213,7 +213,7 @@ async function setupPanel(
     iconTheme,
     activeProfile,
     aiEnabled: cfg.get('ai.enabled', true),
-    aiModelLabel: getAiModelLabel(cfg),
+    aiModelLabel: getAiModelLabel(cfg, 'explain'),
     autoExplain: opts.autoExplain ?? false,
   } satisfies HostToCommitFullDetailMsg);
 }
@@ -246,8 +246,8 @@ async function explainCommit(
       diff && `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\``,
     ], cfg);
 
-    const { cleanPartialModelOutput, generateWithAI } = await import('../ai/aiGenerate');
-    const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg, {
+    const { cleanPartialModelOutput, generateForOperation } = await import('../ai/aiGenerate');
+    const explanation = await generateForOperation('explain', prompt, cfg, {
       onProgress: text => onProgress(cleanPartialModelOutput(text)),
     });
     return { explanation };
@@ -275,7 +275,7 @@ async function handleMessage(
       openAiExplainDetail(
         extensionUri,
         { key: `commit:${msg.repoId}:${msg.hash}`, kind: 'commit', title: vscode.l10n.t('Commit {0}', shortHash) },
-        getAiModelLabel(cfg),
+        getAiModelLabel(cfg, 'explain'),
         onProgress => explainCommit(msg.hash, repo, onProgress),
       );
       return;

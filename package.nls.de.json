@@ -163,5 +163,11 @@
   "config.pullRequests.defaultCheckoutAction.enum.pr": "Pull-Request auschecken (erstellt/aktualisiert einen lokalen Branch pr/{author}/{number})",
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Branch auschecken (lädt den tatsächlichen Quell-Branch des PR herunter oder aktualisiert ihn)",
   "config.section.experimental.title": "Experimentell",
-  "config.resetViewLocationsOnStartup.description": "Beim Start die VS Code-Aktion „Ansichtspositionen zurücksetzen“ ausführen. Nützlich, um eine veraltete Platzierung des GitCharm-Badges zu korrigieren, setzt jedoch die Positionen aller Ansichten global zurück."
+  "config.resetViewLocationsOnStartup.description": "Beim Start die VS Code-Aktion „Ansichtspositionen zurücksetzen“ ausführen. Nützlich, um eine veraltete Platzierung des GitCharm-Badges zu korrigieren, setzt jedoch die Positionen aller Ansichten global zurück.",
+  "command.resolveConflictsWithAi.title": "Konflikte mit KI lösen",
+  "command.resolveAllConflictsWithAi.title": "Alle Konflikte mit KI lösen",
+  "command.resolveConflictHunkWithAi.title": "Diesen Konflikt mit KI lösen",
+  "config.ai.operationModels.markdownDescription": "Anbieter und Modell für jeden KI-Vorgang, anstelle von `#gitcharm.ai.provider#` und dem Modell dieses Anbieters. Ein nicht aufgeführter Vorgang verwendet diese. Beispiel: `{ \"resolveConflicts\": { \"provider\": \"claude-api\", \"model\": \"claude-opus-4-7\" } }`. Einfacher über **GitCharm: Einstellungen** → AI festzulegen.",
+  "config.ai.offerConflictResolution.description": "Wenn ein Merge, Rebase, Pull oder ein anderer Git-Vorgang Konflikte hinterlässt, anbieten, sie mit KI zu lösen.",
+  "config.ai.prompts.resolveConflicts.markdownDescription": "Eigene KI-Anweisungen zum Lösen eines Merge-Konflikts. Leer lassen, um die integrierte Vorgabe zu verwenden. `{language}` wird durch die konfigurierte Sprache ersetzt; der Konflikt (beide Seiten, der gemeinsame Vorfahr, sofern bekannt, und die umgebenden Zeilen) wird immer nach diesen Anweisungen angehängt."
 }

@@ -163,5 +163,11 @@
   "config.pullRequests.defaultCheckoutAction.enum.pr": "Faire un checkout de la pull request (crée ou met à jour une branche locale pr/{author}/{number})",
   "config.pullRequests.defaultCheckoutAction.enum.branch": "Faire un checkout de la branche (télécharge ou met à jour la branche source réelle de la PR)",
   "config.section.experimental.title": "Expérimental",
-  "config.resetViewLocationsOnStartup.description": "Exécuter l'action « Réinitialiser les emplacements des vues » de VS Code au démarrage. Utile pour corriger un placement obsolète du badge GitCharm, mais cela réinitialise la position de toutes les vues."
+  "config.resetViewLocationsOnStartup.description": "Exécuter l'action « Réinitialiser les emplacements des vues » de VS Code au démarrage. Utile pour corriger un placement obsolète du badge GitCharm, mais cela réinitialise la position de toutes les vues.",
+  "command.resolveConflictsWithAi.title": "Résoudre les conflits avec l'IA",
+  "command.resolveAllConflictsWithAi.title": "Résoudre tous les conflits avec l'IA",
+  "command.resolveConflictHunkWithAi.title": "Résoudre ce conflit avec l'IA",
+  "config.ai.operationModels.markdownDescription": "Fournisseur et modèle pour chaque opération d'IA, à la place de `#gitcharm.ai.provider#` et du modèle de ce fournisseur. Une opération absente utilise ceux-ci. Exemple : `{ \"resolveConflicts\": { \"provider\": \"claude-api\", \"model\": \"claude-opus-4-7\" } }`. Plus simple à définir depuis **GitCharm : Paramètres** → AI.",
+  "config.ai.offerConflictResolution.description": "Lorsqu'un merge, rebase, pull ou une autre opération git laisse des conflits, proposer de les résoudre avec l'IA.",
+  "config.ai.prompts.resolveConflicts.markdownDescription": "Instructions d'IA personnalisées pour résoudre un conflit de merge. Laissez vide pour utiliser celles par défaut. `{language}` est remplacé par la langue configurée ; le conflit (les deux côtés, l'ancêtre commun s'il est connu et les lignes autour) est toujours ajouté après ces instructions."
 }

@@ -18,6 +18,7 @@ import { PullRequestManager } from './pullRequests/PullRequestManager';
 import { IntegrationAccountStore } from './integrations/IntegrationAccountStore';
 import { IntegrationsService } from './integrations/IntegrationsService';
 import { SettingsPanel } from './panels/SettingsPanel';
+import { registerConflictAiCommands } from './commands/conflictAiCommands';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
 import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentProvider';
@@ -366,6 +367,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerCommands(context, commitPanel, logPanel, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, integrations);
+  registerConflictAiCommands(context, manager);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gitcharm.undock', () => {

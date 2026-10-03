@@ -76,8 +76,9 @@ const FILE_CONTEXT_ITEMS = (): ContextMenuEntry[] => [
   { id: 'refresh',         label: l10n.t('Refresh'),             icon: 'refresh' },
 ];
 
-const FILE_CONTEXT_ITEMS_CONFLICT = (): ContextMenuEntry[] => [
+const FILE_CONTEXT_ITEMS_CONFLICT = (aiEnabled: boolean): ContextMenuEntry[] => [
   { id: 'resolve',   label: l10n.t('Resolve Conflicts'),  icon: 'git-merge' },
+  ...(aiEnabled ? [{ id: 'resolveAi', label: l10n.t('Resolve Conflicts with AI'), icon: 'sparkle' }] : []),
   { separator: true },
   ...FILE_CONTEXT_ITEMS(),
 ];
@@ -967,6 +968,9 @@ function App() {
       case 'resolve':
         send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: file.repoId, filePath: file.path });
         break;
+      case 'resolveAi':
+        send({ type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: file.repoId, filePath: file.path });
+        break;
       case 'rollback':
         send({ type: 'COMMIT_DISCARD_FILE', requestId: generateId(), repoId: file.repoId, path: file.path });
         break;
@@ -1575,7 +1579,7 @@ function App() {
                     send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
                   }
                 }}
-                onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                onResolveMerge={(f, withAi) => send(withAi ? { type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: f.repoId, filePath: f.path } : { type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                 onStageFiles={(rid, paths) => send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths })}
                 onUnstageFiles={(rid, paths) => send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths })}
                 onStageAll={rid => send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid })}
@@ -1634,7 +1638,7 @@ function App() {
                     send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
                   }
                 }}
-                onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                onResolveMerge={(f, withAi) => send(withAi ? { type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: f.repoId, filePath: f.path } : { type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                 onHeaderContextMenu={(e, clId) => setClHeaderCtxMenu({ x: e.clientX, y: e.clientY, changelistId: clId })}
                 onRepoContextMenu={(e, rid, clId) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, changelistId: clId })}
                 onOpenChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
@@ -1725,7 +1729,7 @@ function App() {
                           send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
                         }
                       }}
-                      onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                      onResolveMerge={(f, withAi) => send(withAi ? { type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: f.repoId, filePath: f.path } : { type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                       onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
                       onRepoContextMenu={(e, rid) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid })}
                       onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
@@ -2025,7 +2029,7 @@ function App() {
         const isUntracked = file.status === 'untracked';
         const isSubmodule = file.status === 'submodule';
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
-        const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT() : FILE_CONTEXT_ITEMS();
+        const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT(store.aiEnabled) : FILE_CONTEXT_ITEMS();
         let items: ContextMenuEntry[] = baseItems;
         if (isSubmodule) {
           items = ctxMenuStaged ? SUBMODULE_FILE_STAGED_ITEMS() : SUBMODULE_FILE_UNSTAGED_ITEMS();

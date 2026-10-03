@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
-import { cleanPartialModelOutput, generateWithAI } from '../ai/aiGenerate';
+import { cleanPartialModelOutput, generateForOperation } from '../ai/aiGenerate';
 import { buildPrompt } from '../ai/prompts';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
@@ -1517,6 +1517,14 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_RESOLVE_CONFLICTS_AI': {
+        const repo = this.manager.getRepo(msg.repoId);
+        if (!repo) return;
+        // Saved right away: the file usually isn't open, and the Commit Panel then shows it as resolvable.
+        await vscode.commands.executeCommand('gitcharm.resolveConflictsWithAi', vscode.Uri.file(path.join(repo.rootPath, msg.filePath)), { save: true });
+        break;
+      }
+
       case 'COMMIT_SELECT_AI_MODEL': {
         await vscode.commands.executeCommand('gitcharm.selectAiModel');
         break;
@@ -1557,8 +1565,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const context = sections.join('\n\n');
           const prompt = buildPrompt('commitMessage', [context], cfg);
 
-          const provider: string = cfg.get('ai.provider', 'vscode-lm');
-          const message = await generateWithAI(provider, prompt, cfg, {
+          const message = await generateForOperation('commitMessage', prompt, cfg, {
             onProgress: text => this.post({ type: 'COMMIT_GENERATE_MESSAGE_PROGRESS', requestId: msg.requestId, message: cleanPartialModelOutput(text) }),
           });
           this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, message });

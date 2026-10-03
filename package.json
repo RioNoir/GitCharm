@@ -533,6 +533,23 @@
         "title": "%command.compareWith.title%",
         "category": "GitCharm",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "gitcharm.resolveConflictsWithAi",
+        "title": "%command.resolveConflictsWithAi.title%",
+        "category": "GitCharm",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "gitcharm.resolveAllConflictsWithAi",
+        "title": "%command.resolveAllConflictsWithAi.title%",
+        "category": "GitCharm",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "gitcharm.resolveConflictHunkWithAi",
+        "title": "%command.resolveConflictHunkWithAi.title%",
+        "category": "GitCharm"
       }
     ],
     "menus": {
@@ -836,6 +853,11 @@
           "command": "gitcharm.openSettings",
           "when": "activeWebviewPanelId == gitcharm.undocked",
           "group": "navigation@10"
+        },
+        {
+          "command": "gitcharm.resolveConflictsWithAi",
+          "when": "config.gitcharm.ai.enabled && (isMergeEditor || gitcharm.activeEditorHasConflicts)",
+          "group": "navigation"
         }
       ],
       "scm/sourceControl": [
@@ -1074,6 +1096,18 @@
         },
         {
           "command": "gitcharm.showBranchOptions",
+          "when": "false"
+        },
+        {
+          "command": "gitcharm.resolveConflictsWithAi",
+          "when": "config.gitcharm.ai.enabled"
+        },
+        {
+          "command": "gitcharm.resolveAllConflictsWithAi",
+          "when": "config.gitcharm.ai.enabled"
+        },
+        {
+          "command": "gitcharm.resolveConflictHunkWithAi",
           "when": "false"
         }
       ],
@@ -1435,6 +1469,115 @@
             "default": "vscode-lm",
             "description": "%config.ai.provider.description%"
           },
+          "gitcharm.ai.operationModels": {
+            "order": 2,
+            "type": "object",
+            "default": {},
+            "properties": {
+              "commitMessage": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "vscode-lm",
+                      "claude-api",
+                      "openai-api",
+                      "gemini-api",
+                      "claude-cli",
+                      "codex-cli",
+                      "gemini-cli",
+                      "ollama",
+                      "lmstudio"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              },
+              "pullRequest": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "vscode-lm",
+                      "claude-api",
+                      "openai-api",
+                      "gemini-api",
+                      "claude-cli",
+                      "codex-cli",
+                      "gemini-cli",
+                      "ollama",
+                      "lmstudio"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              },
+              "explain": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "vscode-lm",
+                      "claude-api",
+                      "openai-api",
+                      "gemini-api",
+                      "claude-cli",
+                      "codex-cli",
+                      "gemini-cli",
+                      "ollama",
+                      "lmstudio"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              },
+              "resolveConflicts": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "vscode-lm",
+                      "claude-api",
+                      "openai-api",
+                      "gemini-api",
+                      "claude-cli",
+                      "codex-cli",
+                      "gemini-cli",
+                      "ollama",
+                      "lmstudio"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "markdownDescription": "%config.ai.operationModels.markdownDescription%"
+          },
           "gitcharm.ai.modelId": {
             "order": 2,
             "type": "string",
@@ -1536,6 +1679,12 @@
             "maximum": 100000,
             "description": "%config.ai.maxDiffChars.description%"
           },
+          "gitcharm.ai.offerConflictResolution": {
+            "order": 13,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.ai.offerConflictResolution.description%"
+          },
           "gitcharm.ai.prompts.commitMessage": {
             "order": 14,
             "type": "string",
@@ -1570,6 +1719,13 @@
             "default": "",
             "editPresentation": "multilineText",
             "markdownDescription": "%config.ai.prompts.explainPullRequest.markdownDescription%"
+          },
+          "gitcharm.ai.prompts.resolveConflicts": {
+            "order": 19,
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "markdownDescription": "%config.ai.prompts.resolveConflicts.markdownDescription%"
           }
         }
       },

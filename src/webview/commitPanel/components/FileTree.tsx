@@ -25,7 +25,8 @@ interface Props {
   onFolderContextMenu: (e: React.MouseEvent, repoId: string, folderPath: string, files: FileStatus[]) => void;
   onOpenFile: (file: FileStatus) => void;
   onRollback: (files: FileStatus[]) => void;
-  onResolveMerge: (file: FileStatus) => void;
+  /** `withAi`: resolve the conflicts with the AI instead of opening the merge editor. */
+  onResolveMerge: (file: FileStatus, withAi?: boolean) => void;
   viewMode: ViewMode;
   basePad?: number;
   activeFolderPath?: string | null;
@@ -220,6 +221,7 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
   const letter = STATUS_LETTERS[file.status] ?? 'M';
   const fileName = file.path.split('/').pop() ?? file.path;
   const dir = (() => { const p = file.path.split('/'); return p.length > 1 ? p.slice(0, -1).join('/') : ''; })();
+  const aiEnabled = useCommitStore(s => s.aiEnabled);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
 
@@ -262,6 +264,9 @@ function FileRow({ file, depth = 0, ...shared }: { file: FileStatus; depth?: num
       </div>
       <div style={styles.rowActions}>
         {!isSubmodule && <>
+          {file.status === 'conflicted' && aiEnabled && (
+            <InlineIconBtn icon="sparkle" title={l10n.t('Resolve Conflicts with AI')} visible={hovered} onClick={(e) => { e.stopPropagation(); onResolveMerge(file, true); }} />
+          )}
           {file.status === 'conflicted' && (
             <InlineIconBtn icon="git-merge" title={l10n.t('Resolve Conflicts')} visible={hovered} onClick={(e) => { e.stopPropagation(); onResolveMerge(file); }} />
           )}

@@ -180,7 +180,7 @@ export class PullRequestDetailPanel {
     const gate = webviewReadyGate<HostToPrDetailMsg>(panel);
     gate.post({
       type: 'PRDETAIL_INIT', repoId, repoName: meta.name, number: pr.number, summary: pr, currentUsername,
-      aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg),
+      aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg, 'explain'),
       defaultMergeStrategy: cfg.get('pullRequests.defaultMergeStrategy', 'merge'),
       defaultCheckoutAction: cfg.get('pullRequests.defaultCheckoutAction', 'pr'),
     } satisfies HostToPrDetailMsg);
@@ -310,7 +310,7 @@ export class PullRequestDetailPanel {
         openAiExplainDetail(
           this.extensionUri,
           { key: `pr:${repoId}:${pr.number}`, kind: 'pull-request', title: vscode.l10n.t('PR #{0} — {1}', pr.number, pr.title), subtitle: `${pr.sourceBranch} → ${pr.targetBranch}` },
-          getAiModelLabel(cfg),
+          getAiModelLabel(cfg, 'explain'),
           onProgress => this.explainPullRequest(repoId, pr, onProgress),
         );
         break;
@@ -719,8 +719,8 @@ export class PullRequestDetailPanel {
         diffBlocks.length > 0 && `\n## Diffs\n${diffBlocks.join('\n\n')}`,
       ], cfg);
 
-      const { cleanPartialModelOutput, generateWithAI } = await import('../ai/aiGenerate');
-      const explanation = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg, {
+      const { cleanPartialModelOutput, generateForOperation } = await import('../ai/aiGenerate');
+      const explanation = await generateForOperation('explain', prompt, cfg, {
         onProgress: text => onProgress(cleanPartialModelOutput(text)),
       });
       return { explanation };

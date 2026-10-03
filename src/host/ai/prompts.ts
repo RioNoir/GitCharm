@@ -18,10 +18,11 @@ export type AiPromptId =
   | 'pullRequestTitle'
   | 'pullRequestDescription'
   | 'explainCommit'
-  | 'explainPullRequest';
+  | 'explainPullRequest'
+  | 'resolveConflicts';
 
 export const AI_PROMPT_IDS: readonly AiPromptId[] = [
-  'commitMessage', 'pullRequestTitle', 'pullRequestDescription', 'explainCommit', 'explainPullRequest',
+  'commitMessage', 'pullRequestTitle', 'pullRequestDescription', 'explainCommit', 'explainPullRequest', 'resolveConflicts',
 ];
 
 export const DEFAULT_PROMPTS: Record<AiPromptId, string> = {
@@ -87,6 +88,19 @@ export const DEFAULT_PROMPTS: Record<AiPromptId, string> = {
     '- Be concise but complete',
     '- The output is rendered as Markdown: use it (bold, lists, headings, inline code) where it helps readability',
     '- Output ONLY the explanation, no code fences wrapping the whole response, no preamble',
+  ].join('\n'),
+
+  resolveConflicts: [
+    'You are resolving one git merge conflict in a source file.',
+    'Below are the lines before the conflict, the current side, the common ancestor when it is known, the incoming side, and the lines after it.',
+    '',
+    'Rules:',
+    '- Write the lines that replace the whole conflict, combining both sides so that the intent of each change is kept',
+    '- When the two sides cannot be combined, keep the one that fits the surrounding code best',
+    '- Keep the code valid and consistent with the surrounding lines: same style, same indentation',
+    '- Do not repeat the lines before or after the conflict',
+    '- Never output conflict markers (<<<<<<<, |||||||, =======, >>>>>>>)',
+    '- Any comment you add is written in this language: {language}',
   ].join('\n'),
 };
 

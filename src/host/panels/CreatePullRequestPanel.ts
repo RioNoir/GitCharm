@@ -121,7 +121,7 @@ export class CreatePullRequestPanel {
     const cfg = vscode.workspace.getConfiguration('gitcharm');
     gate.post({
       type: 'PRCREATE_INIT', repoId, repoName: meta.name, provider: connection.provider,
-      aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg),
+      aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg, 'pullRequest'),
     } satisfies HostToPrCreateMsg);
 
     const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
@@ -295,8 +295,8 @@ export class CreatePullRequestPanel {
       template && `\n## Pull request template\n${template}`,
     ], cfg);
 
-    const { cleanPartialModelOutput, generateWithAI } = await import('../ai/aiGenerate');
-    const raw = await generateWithAI(cfg.get('ai.provider', 'vscode-lm'), prompt, cfg, {
+    const { cleanPartialModelOutput, generateForOperation } = await import('../ai/aiGenerate');
+    const raw = await generateForOperation('pullRequest', prompt, cfg, {
       onProgress: partial => {
         const cleaned = cleanPartialModelOutput(partial);
         onProgress(field === 'title' ? cleaned.split('\n')[0] : cleaned);
