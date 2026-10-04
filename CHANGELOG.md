@@ -2,12 +2,85 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.8.0
+
+Release bringing everything from the v0.7.0 pre-release, plus a settings page, issues, Azure DevOps, interactive rebase and AI conflict resolution.
+
+### ✨ New Features
+
+#### Settings and integrations
+- New **GitCharm Settings** page in an editor tab (**GitCharm: Settings**, or **Settings** in the Commit Panel's `···` menu), styled after VS Code's own: search, User/Workspace scopes, a categorized table of contents, a gear menu per setting and a live preview of each category. It's restored across restarts, and a note at the top links to GitCharm's Ko-fi page
+- **AI** page: a card per provider with its own fields, model lists fetched from the provider and **Test Connection**. API keys move from `settings.json` to VS Code's secret storage, automatically
+- **Cloud Integrations** page: manage GitHub (VS Code accounts), GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps accounts, self-hosted instances included, and pick the account each repository uses. **Manage Pull Request Credentials** opens it
+- **Azure DevOps** and **Azure DevOps Server 2020+**: remotes on `dev.azure.com`, `*.visualstudio.com` and `ssh.dev.azure.com` are recognized, and any host with `/_git/` is treated as Azure DevOps Server. Sign in with a Microsoft account signed into VS Code or a personal access token. Pull requests work as on the other forges — list, create (drafts too), detail, comments, files and diffs, commits, merge (merge, squash, rebase), abandon and reactivate, approve, reviewers, tags as labels, checks from build policies, checkout — and work items show in the Issues tab, with linked pull requests on both sides
+- New options, grouped in the settings page:
+  - **Commit Panel**: show, order and badge each tab, the tab to open on, when tab names show, the activity bar badge; an optional `Signed-off-by` line and a warning on long commit titles
+  - **Log Panel**: show or hide the author, avatar, date, hash and the inline branch/tag/stash badges
+  - **Safety**: protected branches (commits and pushes ask first, force pushes are refused) and turning off each kind of confirmation
+  - **Sync**: periodic fetch, prune on fetch, default pull mode (ask, merge, rebase, fast-forward only)
+  - **Pull Requests** and **Issues**: default filter and auto-refresh
+  - **Appearance**: date format (auto, absolute, relative) and which status bar items show
+- Avatars come from the repository's own forge and from GitHub, GitLab and Codeberg noreply addresses, sending no email address to third parties, and are now on by default. Gravatar is a separate, opt-in last fallback (`gitcharm.avatars.gravatar.enabled`); the previous choice is migrated
+
+#### Issues
+- New **Issues** tab in the Commit Panel for GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo and Azure DevOps, on the same connection as pull requests: per-repository list with infinite scroll, state/author/assignee/mention filters and text or number search
+- **Issue detail** in an editor tab: editable description, activity timeline (with the pull requests, issues and commits referencing it), comments, close/reopen, title, assignees, labels and linked pull requests. **New Issue** form, pre-filled from the repository's issue template
+- **Create Branch** from an issue (`gitcharm.issues.branchNameTemplate`), or **Create Branch with AI** for a short name written from the issue; **reference an issue** in the commit message (`gitcharm.issues.commitReferenceTemplate`)
+- **AI Explanation** of an issue, and **Resolve with AI (Beta)**: a fix shown as a plan with diffs before anything changes; **Apply** creates a branch from HEAD and writes the files, without committing. Claude Code and Codex work as agents in a throwaway worktree
+- Linked issues in the Pull Request detail panel
+
+#### AI
+- **Resolve conflicts with AI**: from the Commit Panel (inline button and context menu), from the editor (a CodeLens per conflict and a title-bar button, also in the merge editor), or from a notification when a merge, rebase, pull or other operation leaves conflicts (`gitcharm.ai.offerConflictResolution`). Each conflict is sent with both sides, the common ancestor when known and the surrounding lines; the **AI Conflict Resolution** panel streams the explanation and the resolved lines next to the original sides. A file left without conflicts is saved and staged. New prompt `gitcharm.ai.prompts.resolveConflicts`
+- **Models per operation** (`gitcharm.ai.operationModels`): a provider and model of their own for commit messages, pull requests, issues, explanations and conflict resolution
+- AI commit messages are written only from the files being committed: the selected files in the Simplified and Changelists views, the staged files in the VS Code view. With none, a warning is shown instead of calling the AI
+
+#### Log Panel and rebase
+- **Interactive rebase**, as in IntelliJ: **Interactively Rebase from Here…** on a commit in the Log Panel, **Interactively Rebase onto "…"…** on a branch in the sidebar, or **GitCharm: Interactive Rebase…** from the command palette. An editor lists the commits newest first: pick, reword, edit, squash, fixup or drop each one (or several at once, also with the P/R/E/S/F/D keys), and reorder them by dragging or with Alt+Up/Down. New messages are written in the editor before the rebase starts — a squash starts from the joined messages — so git never stops to ask for one; it stops only for **Edit** and on conflicts. Commits already pushed and merge commits flattened by the rebase are pointed out, and uncommitted changes are stashed and restored around it on request
+- A `git rebase -i` started in the terminal opens the same editor when git's sequence editor is VS Code (`git config --global sequence.editor "code --wait"`); **Start Rebasing** hands the plan back to git, **Abort Rebase** cancels it
+- While a rebase is in progress, the Commit Panel's **Continue Rebase** button shows how far it has got (e.g. 3/7), and its menu adds **Skip Commit**
+- Compare view modes: the icon between the compared refs cycles through commits only on the left ref, only on the right ref, or on either side but not both. A Venn icon shows the mode with each side's commit count; in the last mode every commit is marked with its side, in the side's color
+- Select several commits in the Log Panel — with Ctrl/Cmd+click, Shift+click, Shift+Up/Down or Shift+drag, also across repositories and with stashes — to see the **combined changes** they introduce, folded per file as IntelliJ does: renames are followed, a file that ends as it started is left out, and unselected commits in between don't count. Across several repositories the files are grouped per repository; with two commits of one repository, **Combined** / **Snapshots** tabs switch to the diff between the two snapshots. **View Combined Diff** opens them all in one multi-file diff ([#91](https://github.com/RioNoir/GitCharm/issues/91) by [@ripopov](https://github.com/ripopov))
+- Merged commits in a commit's detail open their full detail on click
+
+#### Commit Panel
+- The **Push** tab becomes **Sync**, for remote operations. It lists only the repositories out of sync with their remote — commits to push, a branch to publish, or commits to pull — with an empty state when everything is up to date. Hovering a repository shows **Fetch**, **Pull…** (merge or rebase) and **Push** / **Publish Branch**. The footer acts on the selected repositories: **Sync** when any of them is behind, **Push** when there's only pushing to do, **Fetch** otherwise (**Fetch All** with nothing selected), with Sync, Push, Pull (Merge), Pull (Rebase), Fetch and Force Push in its menu. With only one repository listed, the footer acts on it directly ([#92](https://github.com/RioNoir/GitCharm/issues/92) by [@vugi99](https://github.com/vugi99))
+- **Shelf** and **Stash** list only the repositories that have shelves or stashes, each collapsible with its count; empty Shelf, Stash and Sync tabs show a centered message with a hint
+- In the Changelists and VS Code views, repositories without changes move to an **Unchanged** section at the bottom, collapsed when it holds more than 5 repositories
+- **Create Pull Request** in the Git Menu's branch actions, on local branches: opens the New Pull Request form with that branch as the source
+- The Pull Requests and Issues lists show the author's name next to the avatar
+- The Pull Requests tab shows an empty state when a repository has no remote
+
+#### Submodules
+- In a workspace with more than 5 Git submodules, they're hidden until you ask: a notification offers **Show Submodules** or **Keep Hidden**, and **GitCharm: Show Submodules** / **Hide Submodules** switch it later, per workspace ([#90](https://github.com/RioNoir/GitCharm/issues/90) by [@ripopov](https://github.com/ripopov))
+- New `gitcharm.submoduleMaxDepth` setting (default 5): how deeply nested submodules are shown as repositories ([#90](https://github.com/RioNoir/GitCharm/issues/90))
+- Hovering a branch's or tag's repository dots lists every repository it's in; past 5 repositories a row shows 4 dots and a "+N" count ([#90](https://github.com/RioNoir/GitCharm/issues/90))
+- Submodules are marked with the package icon instead of the "SUB" badge in the Commit Panel
+
+### ⚡ Performance
+Large workspaces with many submodules, such as PX4-Autopilot with 44, load and refresh much faster ([#90](https://github.com/RioNoir/GitCharm/issues/90) by [@ripopov](https://github.com/ripopov)):
+- `git status` in a superproject no longer runs a status in every submodule (3–4.5s per call on PX4, about 150ms now)
+- A change refreshes only the repositories it touches, and only one refresh runs at a time
+- Background git commands no longer rewrite `.git/index`, which woke the file watchers into yet another refresh
+- Branches, tags, stashes, unpushed/incoming commits and the log are cached while a repository's refs are unchanged; the Log Panel loads commits alongside branches and tags, and reloads once per ref change instead of twice
+- Searching the Log Panel by hash prefix looks the commit up directly, and also finds older commits
+
+### 🐛 Bug Fixes
+- The Log Panel's repository tabs can be scrolled with the mouse wheel and a draggable scrollbar, and no longer snap back
+- The branch sidebar stars only main and master across submodules, and pins starred branches to the top of their section
+- Submodules no longer trigger the "branches have diverged" warning, and a detached HEAD no longer counts as a branch to publish in the Sync tab
+- Repository colors no longer repeat past the 8 palette colors, and a repository listed alone because the others are filtered out keeps its color
+- LM Studio's model and URL settings were read under the wrong key
+- Owners containing slashes (GitLab subgroups, Azure DevOps projects) no longer break the branch, member and label pickers
+- Images in pull request and issue descriptions and comments keep their aspect ratio and fit their container, tables included
+
+### 🔧 Other
+- "Git Log" is now called **Log Panel** throughout the UI and docs
+- Keyboard shortcuts are shown with the platform's labels: ⌘Enter, ⌥↑ on macOS, Ctrl+Enter, Alt+Up on Windows and Linux
+- Shorter labels in the translations, e.g. "Silently Stash this file" no longer adds "without confirmation"
+
 ## v0.7.0 (pre-release)
 
 ### ✨ New Features
-- **Interactive rebase**, as in IntelliJ: **Interactively Rebase from Here…** on a commit in the Git Log, **Interactively Rebase onto "…"…** on a branch in the sidebar, or **GitCharm: Interactive Rebase…** from the command palette. An editor lists the commits newest first: pick, reword, edit, squash, fixup or drop each one (or several at once, also with the P/R/E/S/F/D keys), and reorder them by dragging or with Alt+Up/Down. New messages are written in the editor before the rebase starts — a squash starts from the joined messages — so git never stops to ask for one; it stops only for **Edit** and on conflicts. Commits already pushed and merge commits flattened by the rebase are pointed out, and uncommitted changes are stashed and restored around it on request
-- A `git rebase -i` started in the terminal opens the same editor when git's sequence editor is VS Code (`git config --global sequence.editor "code --wait"`); **Start Rebasing** hands the plan back to git, **Abort Rebase** cancels it
-- While a rebase is in progress, the Commit Panel's **Continue Rebase** button shows how far it has got (e.g. 3/7), and its menu adds **Skip Commit**
 - Select several commits in the Git Log — with Ctrl/Cmd+click, Shift+click, Shift+Up/Down or Shift+drag, also across repositories and with stashes — to see the **combined changes** they introduce, folded per file as IntelliJ does: renames are followed, a file that ends as it started is left out, and unselected commits in between don't count. Each file's diff spans from before the first selected commit touching it to the last one. Across several repositories the files are grouped per repository; with two commits of one repository, **Combined** / **Snapshots** tabs switch to the diff between the two snapshots. **View Combined Diff** (context menu, Open Changes) opens them all in one multi-file diff ([#91](https://github.com/RioNoir/GitCharm/issues/91) by [@ripopov](https://github.com/ripopov))
 - Merged commits in a commit's detail open their full detail on click
 - The Commit Panel's **Push** tab becomes **Sync**, for remote operations. It lists only the repositories out of sync with their remote — commits to push, a branch to publish, or commits to pull — with an empty state when everything is up to date, and a repository opens by default only when it has commits to push. Hovering a repository shows **Fetch**, **Pull…** (merge or rebase) and **Push** / **Publish Branch**. The footer acts on the selected repositories: **Sync** when any of them is behind, **Push** when there's only pushing to do, **Fetch** otherwise (**Fetch All** with nothing selected), with Sync, Push, Pull (Merge), Pull (Rebase), Fetch and Force Push in its menu. When only one repository is listed, there's no checkbox and the footer acts on it directly ([#92](https://github.com/RioNoir/GitCharm/issues/92) by [@vugi99](https://github.com/vugi99))
@@ -37,7 +110,6 @@ Large workspaces with many submodules, such as PX4-Autopilot with 44, load and r
 - A repository listed alone because the others are filtered out (no changes, nothing shelved…) keeps its color and dot, and the Commit tab keeps the multi-repository layout; the neutral single-repository look is only for a workspace with one repository
 
 ### 🔧 Other
-- The **GitCharm Settings** page shows a note at the top: GitCharm is free and always will be, with a **Support GitCharm** button to its Ko-fi page
 - Shorter labels in the translations: e.g. "Silently Stash this file" no longer adds "without confirmation", and progress messages drop "in progress" before the ellipsis
 
 ## v0.6.2

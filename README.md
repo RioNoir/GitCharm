@@ -18,7 +18,7 @@
   <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
-GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Log Panel with graph and branch operations, multi-repository awareness, shelving/stashing tools, push helpers, multi-provider Pull Request and Issue management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo), AI-assisted commit messages and pull requests, and conflict resolution through VS Code's merge editor.
+GitCharm puts your whole Git workflow in one place, across every repository and submodule in the workspace: a focused Commit panel, a Log Panel with graph, branch operations and interactive rebase, multi-repository awareness, shelving/stashing tools, sync helpers, multi-provider Pull Request and Issue management (GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo, Azure DevOps), AI-assisted commit messages, pull requests and conflict resolution, all configured from its own settings page.
 
 It activates automatically when the opened workspace contains a Git repository.
 
@@ -37,7 +37,8 @@ It activates automatically when the opened workspace contains a Git repository.
 - Per-file actions: open, rollback, delete, add to `.gitignore`.
 - Commit selected files only, or all staged changes.
 - **Commit** and **Commit & Push** unified dropdown button; **Amend** and **Amend & Push** via the dropdown.
-- AI commit-message generation with multi-provider support: VS Code language models (e.g. GitHub Copilot), Anthropic API, OpenAI API, Claude CLI, Codex CLI, Gemini CLI, Gemini API, Ollama, and LM Studio. API keys and models configurable per provider. The message appears as it is written.
+- AI commit-message generation with multi-provider support: VS Code language models (e.g. GitHub Copilot), Anthropic API, OpenAI API, Claude CLI, Codex CLI, Gemini CLI, Gemini API, Ollama, and LM Studio. The message is written only from the files being committed (the selected files, or the staged ones in VS Code mode) and appears as it is written.
+- Providers, API keys (kept in VS Code's secret storage) and models are set on the **AI** page of the **GitCharm Settings** page, with **Test Connection** and model lists fetched from each provider. **Models per operation** gives commit messages, pull requests, issues, explanations and conflict resolution a provider and model of their own.
 - Every AI prompt can be customized with the `gitcharm.ai.prompts.*` settings; **GitCharm: Customize AI Prompts** starts from the default text or resets a prompt.
 - Commit message pre-filled automatically with `Merge branch 'X' into 'Y'` when merge conflicts are detected.
 - New and modified files are **not** automatically selected — only files that were already selected before the change are preserved.
@@ -100,10 +101,11 @@ The remote side of every repository: what to push and what to pull.
 
 ### 🔀 Pull Requests
 
-- Dedicated **Pull Requests** tab in the Commit Panel, with multi-provider support: GitHub, GitLab, Bitbucket Cloud, and Gitea/Forgejo — auto-detected from the repository's remote URL, with a manual override per host for self-hosted instances that can't be auto-detected.
-- Per-repository list with state icons (open, draft, merged, closed), author avatar, source → target branch, and total/loaded count; filter by state, author, assigned-to-me, review-requested-to-me, and mentions, plus free-text/PR-number search.
-- **Account picker**: connect a new account (GitHub via VS Code's built-in authentication, or a Personal Access Token for GitLab/Bitbucket/Gitea) or switch between already-saved accounts per repository — no more silent auto-selection of a single saved account.
-- **Manage Pull Request Credentials** command: a single account list grouped by provider, with rename and remove actions, and an entry to add a new account.
+- Dedicated **Pull Requests** tab in the Commit Panel, with multi-provider support: GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo, Azure DevOps and Azure DevOps Server 2020+ — auto-detected from the repository's remote URL, with a manual override per host for self-hosted instances that can't be auto-detected.
+- Per-repository list with state icons (open, draft, merged, closed), author avatar and name, source → target branch, and total/loaded count; filter by state, author, assigned-to-me, review-requested-to-me, and mentions, plus free-text/PR-number search. A repository without a remote shows an empty state.
+- **Account picker**: connect a new account (GitHub via VS Code's built-in authentication, Azure DevOps via a Microsoft account signed into VS Code, or a Personal Access Token for GitLab/Bitbucket/Gitea/Azure DevOps) or switch between already-saved accounts per repository.
+- Accounts are managed on the **Cloud Integrations** page of the settings page (also opened by **Manage Pull Request Credentials**).
+- **Create Pull Request** from a local branch in the Git Menu's branch actions, with that branch as the source.
 - Avatars (GitHub username avatar, or the account email's avatar resolved as for commit authors) shown next to accounts in the account pickers, falling back to a generic icon when no avatar can be resolved.
 - Checks shown per PR in the list, GitHub-style (e.g. "✓ 3/3").
 - **Create Pull Request**: two-column layout with native branch QuickPickers, a Markdown (TipTap) description editor, and a live commit/file diff preview against the selected branches.
@@ -115,21 +117,24 @@ The remote side of every repository: what to push and what to pull.
 - **Open Full Detail** opens the same rich detail view as a persistent editor tab, restored automatically across VS Code restarts.
 
 <br>
-<img src="media/screenshots/pull_requests.png" alt="GitCharm log panel">
+<img src="media/screenshots/pull_requests.png" alt="GitCharm pull requests">
 
 ### 🐞 Issues
 
-- Dedicated **Issues** tab in the Commit Panel, for the same four forges and on the same connection as Pull Requests — a repository connected once serves both tabs.
-- Per-repository list with state icons, author avatar, comment count and labels; filter by state, created by me, assigned to me and mentioning me (GitHub, Gitea), plus free-text/issue-number search, with infinite scroll.
-- **Issue detail** panel in an editor tab: description (editable in place), Activity timeline (comments, renames, label changes, close/reopen, assignments), assignees, labels, and the pull requests that reference or close the issue. Close, reopen, comment, and edit the title, assignees and labels directly; restored across VS Code restarts.
+- Dedicated **Issues** tab in the Commit Panel, for the same forges and on the same connection as Pull Requests — a repository connected once serves both tabs. On Azure DevOps the tab lists work items, of any process template, with their type shown as a label.
+- Per-repository list with state icons, author avatar and name, comment count and labels; filter by state, created by me, assigned to me and mentioning me (GitHub, Gitea), plus free-text/issue-number search, with infinite scroll.
+- **Issue detail** panel in an editor tab: description (editable in place), Activity timeline (comments, renames, label changes, close/reopen, assignments, and the pull requests, issues and commits that reference it), assignees, labels, and the pull requests that reference or close the issue. Close, reopen, comment, and edit the title, assignees and labels directly; restored across VS Code restarts.
 - **New Issue** form with a Markdown description (pre-filled from the repository's issue template), assignees and labels.
 - **Create Branch** from an issue: names it from `gitcharm.issues.branchNameTemplate` (e.g. `42-fix-login-redirect`), lets you edit the name, then creates and checks it out.
 - **Create Branch with AI** (under the Create Branch button): the AI reads the issue and suggests a short, related name, following your branch prefixes — still editable before the branch is created.
 - **AI Explanation** of an issue (✨ button, as for pull requests): what is asked, the decisions taken in the discussion, and where to start.
-- **Resolve with AI**: works out a fix and shows it before touching anything — the plan and every changed file with its diff. **Apply on New Branch** creates a branch from HEAD (AI-suggested name, editable) and writes the changes there, **without committing**, then opens the Commit Panel with a draft message. With Claude Code or Codex as the model, an agent explores the code and edits files itself in a throwaway worktree; with any other provider the model picks the files to read and answers with the edits. Uses the "Issues" AI operation, so it can have its own provider and model.
+- **Resolve with AI (Beta)**: works out a fix and shows it before touching anything — the plan and every changed file with its diff. **Apply on New Branch** creates a branch from HEAD (AI-suggested name, editable) and writes the changes there, **without committing**, then opens the Commit Panel with a draft message. With Claude Code or Codex as the model, an agent explores the code and edits files itself in a throwaway worktree; with any other provider the model picks the files to read and answers with the edits. Uses the "Issues" AI operation, so it can have its own provider and model.
 - **Reference an issue in the commit message**: from an issue row or the issue detail (or the **Reference an Issue in the Commit Message** command, which searches open issues), inserts `#42` — or `Fixes #42`, per `gitcharm.issues.commitReferenceTemplate` — at the cursor.
 - **Linked issues** in the Pull Request detail panel: the issues a PR closes once merged (from the forge's API on GitHub and GitLab, from "Fixes #123"-style keywords in the description on Gitea and Bitbucket).
 - Bitbucket Cloud: the issue tracker is optional (off by default) and the API token needs the `read:issue:bitbucket` / `write:issue:bitbucket` scopes; issues have a single assignee and their kind is shown as a label.
+
+<br>
+<img src="media/screenshots/issues.png" alt="GitCharm issues">
 
 ### 🗄️ Shelve & Stash
 
@@ -158,7 +163,8 @@ The remote side of every repository: what to push and what to pull.
 
 - Commit graph with branch visualization.
 - **Uncommitted changes** row on top of each repository's HEAD, updated live: select it to see the changed files against HEAD, click a file for its working-tree diff, or use **Open Changes** for a multi-file diff. Turn it off with `gitcharm.showUncommittedChangesInLog`.
-- **Compare Branches** (⇄ in the title bar) shows only the commits on one branch that aren't on another — by default, what the current branch has that the default branch doesn't yet (`main..HEAD`), per repository.
+- **Compare Branches** (⇄ in the title bar) shows only the commits on one branch that aren't on another — by default, what the current branch has that the default branch doesn't yet (`main..HEAD`), per repository. The Venn icon between the two refs cycles through commits only on the left, only on the right, or on either side but not both, with each side's commit count and color.
+- **Combined changes**: select several commits (Ctrl/Cmd+click, Shift+click, Shift+Up/Down or Shift+drag, also across repositories and with stashes) to see the changes they introduce together, folded per file as IntelliJ does. With two commits of one repository, **Snapshots** shows the diff between them; **View Combined Diff** opens everything in one multi-file diff.
 - Title bar actions: Fetch and Refresh, Compare Branches, Undock, Hide/Show Filters, Hide/Show Branch Sidebar, and Clear Filters whenever a filter is active. Whether the filters bar and the sidebar are shown is remembered separately for the bottom panel and the side bar.
 - When the list reaches the `gitcharm.graphMaxCommits` limit and older commits exist, a note at the bottom says so and links to the setting. Filters search the whole history, not just the loaded commits.
 - Branch sidebar: local branches, remote branches, tags; single-repo workspaces hide the repository list; sidebar is collapsible.
@@ -173,7 +179,7 @@ The remote side of every repository: what to push and what to pull.
 - Click a commit title to expand/collapse the message; if the commit has a body, it opens as a Markdown document in a VS Code tab.
 - Author avatars in commit rows and commit detail, from the forges: the repository's own GitHub, GitLab, Bitbucket or Gitea when it is connected, then GitHub, GitLab and Codeberg noreply addresses — no email address is sent to third parties. Gravatar can be turned on as a last fallback (off by default). Colored-initials fallback. Initials correctly handle names with parenthesized suffixes (e.g. "Name Surname (Tag)").
 - **Explain with AI** and **Open Full Detail** context menu actions; AI actions hidden when AI is disabled.
-- **Interactive rebase** from a commit (**Interactively Rebase from Here…**) or onto a branch: pick, reword, edit, squash, fixup or drop commits and reorder them by drag and drop or Alt+Up/Down, with new messages written up front. With `sequence.editor` set to `code --wait`, a `git rebase -i` from the terminal opens the same editor.
+- **Interactive rebase** from a commit or onto a branch — see **Interactive Rebase** below.
 - Branch operations from the sidebar: checkout, fetch, pull, push, merge, rebase, delete, rename, compare, create a new branch, and **New Branch from "…"** (created in every repository that has that branch).
 - **Tags section** in the sidebar: collapsible list with multi-repo dot indicators; tags with the same name across repos are merged into a single row; active tag highlighted when in detached HEAD state.
 - Tag context menu: checkout, merge into current, push to remote, and delete (local, remote, or both).
@@ -187,6 +193,18 @@ The remote side of every repository: what to push and what to pull.
 
 <br>
 <img src="media/screenshots/log_options.png" alt="GitCharm log panel">
+
+### 🔁 Interactive Rebase
+
+- Start it with **Interactively Rebase from Here…** on a commit in the Log Panel, **Interactively Rebase onto "…"…** on a branch in the sidebar, or **GitCharm: Interactive Rebase…** from the Command Palette.
+- An IntelliJ-style editor lists the commits newest first: **pick**, **reword**, **edit**, **squash**, **fixup** or **drop** each one (or several at once, also with the P/R/E/S/F/D keys), and reorder them by drag and drop or Alt+Up/Down.
+- New messages are written in the editor before the rebase starts — a squash starts from the joined messages — so git stops only for **Edit** and on conflicts.
+- Commits already pushed and merge commits flattened by the rebase are pointed out before you start; uncommitted changes can be stashed and restored around the rebase.
+- While a rebase is in progress, the Commit Panel's **Continue Rebase** button shows how far it has got (e.g. 3/7), and its menu adds **Skip Commit**.
+- With `git config --global sequence.editor "code --wait"`, a `git rebase -i` started in the terminal opens the same editor: **Start Rebasing** hands the plan back to git, **Abort Rebase** cancels it.
+
+<br>
+<img src="media/screenshots/interactive_rebase.png" alt="GitCharm interactive rebase">
 
 ### 🌿 Branch Status Bar & Git Menu
 
@@ -244,6 +262,18 @@ The remote side of every repository: what to push and what to pull.
 
 - Conflicted files open in VS Code's built-in 3-way merge editor, from the Commit Panel or with **GitCharm: Open Merge Editor**.
 - The commit message is pre-filled with `Merge branch 'X' into 'Y'`, and the GitCharm sidebar opens when a merge conflict is resolved (`gitcharm.openCommitPanelOnConflictResolved`).
+- **Resolve Conflicts with AI**: from the Commit Panel (inline button and context menu), from the editor (a CodeLens on each conflict and a title-bar button, also in the merge editor), or from the notification shown when a merge, rebase, pull or other operation leaves conflicts (`gitcharm.ai.offerConflictResolution`).
+- Each conflict is sent with both sides, the common ancestor when known, and the surrounding lines. The **AI Conflict Resolution** panel streams the model's explanation and the resolved lines next to the original sides; a file left without conflicts is saved and staged, so git sees it as resolved.
+
+### ⚙️ Settings Page & Cloud Integrations
+
+- **GitCharm: Settings** (also in the Commit Panel's `···` menu) opens GitCharm's own settings page in an editor tab, styled after VS Code's Settings editor: search, User/Workspace scopes, a categorized table of contents (Workflow, Views, AI, Integrations, Advanced), a gear menu on each setting, and a live preview of each category. It's restored across restarts.
+- **AI** page: a card per provider with its own fields, model lists fetched from the provider, **Test Connection**, and the models used for each operation.
+- **Cloud Integrations** page: connect GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo, Azure DevOps and Azure DevOps Server accounts — self-hosted instances included — and choose the account each repository of the workspace uses for pull requests and issues.
+- **Safety** page: protected branches (`gitcharm.protectedBranches`) where commits and pushes ask first and force pushes are refused, and a switch for each kind of confirmation.
+
+<br>
+<img src="media/screenshots/cloud_integrations.png" alt="GitCharm settings and cloud integrations">
 
 ## 📋 Requirements
 
@@ -303,6 +333,8 @@ Use the Log panel to browse history, filter commits, inspect changed files, open
 
 Use the Status Bar branch menu for fast project-wide actions such as updating all repositories, pushing, creating branches, switching branches, managing remotes, or handling merge/rebase states.
 
+Use **GitCharm: Settings** to configure GitCharm, set up an AI provider, and connect your GitHub, GitLab, Bitbucket, Gitea or Azure DevOps accounts for pull requests and issues.
+
 ## ⌨️ Commands
 
 | Command | Description |
@@ -316,7 +348,10 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Log Panel. |
 | `GitCharm: Branch Menu` | Opens the Status Bar branch menu. |
 | `GitCharm: Check for Orphaned Branches` | Fetches, then lists local branches whose remote branch was deleted. |
+| `GitCharm: Settings` | Opens the GitCharm settings page, with AI providers and Cloud Integrations. |
 | `GitCharm: Open Merge Editor` | Opens VS Code's merge editor for the active conflicted file. |
+| `GitCharm: Resolve Conflicts with AI` | Resolves the conflicts of the active file (or of every conflicted file) with AI. |
+| `GitCharm: Show Submodules` / `Hide Submodules` | Shows or hides Git submodules as repositories, per workspace. |
 | `GitCharm: Show File History` | Shows the Git history of the active file. |
 | `GitCharm: Interactive Rebase...` | Rebases the current branch interactively from a chosen commit or onto a branch. |
 | `GitCharm: Compare with...` | Diffs a file or folder against a chosen branch, tag, or commit. |
@@ -329,7 +364,7 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `GitCharm: Add Worktree` / `Prune Worktrees` | Creates a worktree, or removes stale worktree entries. |
 | `GitCharm: Select AI Model` | Opens a QuickPick to choose the AI provider and model. |
 | `GitCharm: Customize AI Prompts` | Edits or resets the prompts used by the AI features. |
-| `GitCharm: Manage Pull Request Credentials` | Opens the Pull Request account manager (add, rename, remove accounts). |
+| `GitCharm: Manage Pull Request Credentials` | Opens the Cloud Integrations page of the settings page, to add, rename and remove accounts. |
 | `GitCharm: Refresh Pull Requests` | Refreshes the Pull Requests tab, bypassing the cache. |
 | `GitCharm: Refresh Issues` | Refreshes the Issues tab, bypassing the cache. |
 | `GitCharm: Reference an Issue in the Commit Message` | Searches the open issues of the connected repositories and inserts a reference to the chosen one into the commit message. |
@@ -416,8 +451,10 @@ Use the Status Bar branch menu for fast project-wide actions such as updating al
 | `gitcharm.ai.provider` | `"vscode-lm"` | AI provider: `vscode-lm`, `claude-api`, `openai-api`, `gemini-api`, `claude-cli`, `codex-cli`, `gemini-cli`, `ollama`, or `lmstudio`. |
 | `gitcharm.ai.language` | `""` | Language for AI-generated text (e.g. `en`, `it`). Defaults to English when empty. |
 | `gitcharm.ai.maxDiffChars` | `8000` | Maximum characters of diff sent to the AI model. |
-| `gitcharm.ai.*` | | Per-provider API keys, models, CLI paths and local server URLs (e.g. `gitcharm.ai.claudeApiKey`, `gitcharm.ai.ollamaUrl`). **GitCharm: Select AI Model** picks the provider and model. |
-| `gitcharm.ai.prompts.*` | `""` | Custom instructions for each AI feature (`commitMessage`, `pullRequestTitle`, `pullRequestDescription`, `explainCommit`, `explainPullRequest`). Empty uses the default prompt. |
+| `gitcharm.ai.*` | | Per-provider models, CLI paths and local server URLs (e.g. `gitcharm.ai.ollamaUrl`). API keys are kept in VS Code's secret storage and set from the settings page. **GitCharm: Select AI Model** picks the provider and model. |
+| `gitcharm.ai.operationModels` | `{}` | A provider and model for each AI operation (`commitMessage`, `pullRequest`, `issues`, `explain`, `resolveConflicts`), in place of the default ones. Easier to set from the settings page. |
+| `gitcharm.ai.offerConflictResolution` | `true` | When a merge, rebase, pull or other operation leaves conflicts, offer to resolve them with AI. |
+| `gitcharm.ai.prompts.*` | `""` | Custom instructions for each AI feature (`commitMessage`, `pullRequestTitle`, `pullRequestDescription`, `explainCommit`, `explainPullRequest`, `resolveConflicts`, `issueBranchName`, `explainIssue`, `resolveIssue`). Empty uses the default prompt. |
 | `gitcharm.pullRequests.hostProviderOverrides` | `{}` | Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. `{ "git.mycompany.com": "gitea" }`. Valid values: `github`, `gitlab`, `bitbucket`, `gitea`. |
 | `gitcharm.pullRequests.defaultTargetBranch` | `""` | Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master). |
 | `gitcharm.pullRequests.defaultMergeStrategy` | `"merge"` | Default strategy pre-selected on the "Merge pull request" button in the Pull Request detail panel: `merge`, `squash`, `rebase`, or `fastForward`. Falls back to the first strategy the forge/provider supports if this one isn't available for a given PR. |
@@ -445,8 +482,10 @@ Example:
 ```text
 src/host/                 VS Code extension host code
 src/host/git/             Git, diff, conflict, blame, workspace, and shelve services
-src/host/panels/          Webview providers for Commit, Log, Undocked Panel, Pull Requests and Issues
-src/host/pullRequests/    Multi-provider Pull Request manager, per-provider API clients, and credential storage
+src/host/panels/          Webview providers for Commit, Log, Undocked Panel, Settings, Pull Requests, Issues and Interactive Rebase
+src/host/ai/              AI providers, prompts, model lists, secret storage and conflict resolver
+src/host/integrations/    Cloud Integrations accounts and credential storage
+src/host/pullRequests/    Multi-provider Pull Request manager and per-provider API clients
 src/host/issues/          Issue manager and per-provider issue API clients (on the Pull Requests connection)
 src/host/ui/              Status bar controllers, badge controller, and annotation controller
 src/webview/commitPanel/  React Commit panel
@@ -457,6 +496,10 @@ src/webview/pullRequestCreate/ React Create Pull Request panel
 src/webview/pullRequestDetail/ React Pull Request detail panel
 src/webview/issueDetail/  React Issue detail panel
 src/webview/issueCreate/  React New Issue panel
+src/webview/issueResolve/ React Resolve with AI panel
+src/webview/interactiveRebase/ React interactive rebase editor
+src/webview/conflictAi/   React AI Conflict Resolution panel
+src/webview/settings/     React GitCharm Settings page
 src/webview/shared/       Shared webview components, hooks, and message types
 media/                    Extension icons, codicons, and assets
 out/                      Built extension and webview bundles
