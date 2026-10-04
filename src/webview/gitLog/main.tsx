@@ -185,6 +185,7 @@ function App() {
           if (!match) break;
           loadingInFlightRef.current = false;
           store.appendCommits(msg.commits, msg.isLast, msg.limitReached ? (msg.maxCommits ?? msg.commits.length) : null);
+          if (msg.compareCounts) store.setCompareCounts(msg.compareCounts);
           break;
         }
         case 'LOG_COMMIT_FILES':
@@ -371,8 +372,21 @@ function App() {
       ? store.repos.filter(r => r.id === store.commitFilters.repoId)
       : store.repos;
     const { target, base } = compareLabels(compare, inView);
-    return { title: l10n.t("No commits on {0} that aren't on {1}", target, base) };
+    switch (compare.mode ?? 'ahead') {
+      case 'behind': return { title: l10n.t("No commits on {0} that aren't on {1}", base, target) };
+      case 'both': return { title: l10n.t('{0} and {1} point to the same commit', target, base) };
+      default: return { title: l10n.t("No commits on {0} that aren't on {1}", target, base) };
+    }
   }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos, store.commitFilters.text, store.commitFilters.author, store.commitFilters.dateFrom, store.commitFilters.dateTo]);
+
+  // Names for the side markers of a compare of both sides
+  const compareSideLabels = useMemo(() => {
+    const compare = store.commitFilters.compare;
+    if (compare?.mode !== 'both') return undefined;
+    const inView = store.commitFilters.repoId ? store.repos.filter(r => r.id === store.commitFilters.repoId) : store.repos;
+    const { target, base } = compareLabels(compare, inView);
+    return { target, base };
+  }, [store.commitFilters.compare, store.commitFilters.repoId, store.repos]);
 
   const currentBranchByRepo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -478,6 +492,9 @@ function App() {
   }, [reloadCommits]);
 
   const handleCompareChange = useCallback((compare: CompareRange | null) => {
+    // The counts don't depend on the mode: switching it keeps them until the new ones land
+    const prev = useLogStore.getState().commitFilters.compare;
+    if (!compare || !prev || compare.base !== prev.base || compare.target !== prev.target) store.setCompareCounts(null);
     store.setCommitFilters({ compare });
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits({ compare });
@@ -499,12 +516,13 @@ function App() {
   };
 
   // "Clear Filters" from the title bar: the repository tab stays, since it is always on screen.
-  // In compare mode it resets the compared branches to the defaults and stays in compare mode.
+  // In compare mode it resets the compared branches to the defaults and stays in compare mode, in the same compare mode.
   clearFiltersRef.current = () => {
-    const inCompare = !!useLogStore.getState().commitFilters.compare;
-    const cleared = inCompare
-      ? { text: '', author: '', dateFrom: '', dateTo: '', compare: { base: '', target: '' } }
+    const current = useLogStore.getState().commitFilters.compare;
+    const cleared = current
+      ? { text: '', author: '', dateFrom: '', dateTo: '', compare: { base: '', target: '', mode: current.mode } }
       : { text: '', author: '', branch: '', dateFrom: '', dateTo: '' };
+    if (current && (current.base || current.target)) store.setCompareCounts(null);
     store.setCommitFilters(cleared);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     reloadCommits(cleared);
@@ -584,6 +602,7 @@ function App() {
           repos={store.repos}
           onFilterChange={handleFilterChange}
           onCompareChange={handleCompareChange}
+          compareCounts={store.compareCounts}
         />
       )}
       <RepoTabs
@@ -697,6 +716,7 @@ function App() {
             themeVersion={themeVersion}
             activeProfile={store.activeProfile}
             emptyState={compareEmptyState}
+            compareSideLabels={compareSideLabels}
             commitLimitReached={store.hasMore ? null : store.commitLimitReached}
             hideDate={viewLocation === 'sideBar'}
             columns={columns}

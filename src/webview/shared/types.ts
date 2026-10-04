@@ -74,6 +74,8 @@ export interface CommitNode {
   stashHash?: string;
   stashBranch?: string;
   stashFiles?: Array<{ path: string; status: string; added?: number; removed?: number }>;
+  /** In a `both` compare: the side the commit is only on. */
+  compareSide?: 'target' | 'base';
   /** Synthetic row for a repo's uncommitted changes, drawn on top of its HEAD commit. */
   isWorkingTree?: boolean;
   /** The branch checked out in the working tree; unset on a detached HEAD. */

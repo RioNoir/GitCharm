@@ -26,10 +26,25 @@ export type {
   RepoIssues, IssueFilters, IssueDetail, IssueStateFilter, IssueSummary, LinkedIssue, LinkedPullRequest,
 };
 
-/** A Log Panel compare filter: commits reachable from `target` but not from `base`. Empty strings mean the defaults (HEAD / the repo's default branch). */
+/**
+ * Which commits a Log Panel compare shows:
+ * - `ahead`: on `target` but not on `base` (`base..target`)
+ * - `behind`: on `base` but not on `target` (`target..base`)
+ * - `both`: on either side but not both (`target...base`), each marked with its side
+ */
+export type CompareMode = 'ahead' | 'behind' | 'both';
+
+/** A Log Panel compare filter. Empty strings mean the defaults (HEAD / the repo's default branch); no `mode` means `ahead`. */
 export interface CompareRange {
   base: string;
   target: string;
+  mode?: CompareMode;
+}
+
+/** Commits only on each side of a compare, summed over the repos in view. */
+export interface CompareCounts {
+  target: number;
+  base: number;
 }
 
 /**
@@ -366,7 +381,8 @@ export type HostToLogMsg =
   | { type: 'LOG_CLEAR_FILTERS' }
   | { type: 'LOG_SET_COMPARE_MODE'; active: boolean }
   /** `limitReached`: the list stops at gitcharm.graphMaxCommits (`maxCommits`) though git has more. */
-  | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string; limitReached?: boolean; maxCommits?: number }
+  /** `compareCounts`: on the first batch of a compare view. */
+  | { type: 'LOG_COMMITS_BATCH'; commits: CommitNode[]; isLast: boolean; batchIndex: number; requestId?: string; limitReached?: boolean; maxCommits?: number; compareCounts?: CompareCounts }
   | { type: 'LOG_DIFF_RESULT'; requestId: string; files: Array<{ path: string; status: string }>; diff: FileDiff | null; error?: string }
   | { type: 'LOG_COMMIT_FILES'; requestId: string; files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>; error?: string }
   /** `orderedHashes`: the selected hashes of each repo, oldest first. */

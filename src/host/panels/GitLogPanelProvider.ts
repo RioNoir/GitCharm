@@ -4,7 +4,7 @@ import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { attachAvatarResolver } from '../utils/avatarResolver';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus, LogColumns } from '../types/messages';
+import type { LogToHostMsg, HostToLogMsg, CompareCounts, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus, LogColumns } from '../types/messages';
 import type { BranchInfo, FileStatus, GitFileStatus, RepoMeta, WorkspaceStatus } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
@@ -786,13 +786,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         // main/master; a repo where no base resolves is left out of the map.
         let compareByRepo: Record<string, CompareRange> | undefined;
         if (msg.compare) {
-          const { base, target } = msg.compare;
+          const { base, target, mode } = msg.compare;
           const metaById = new Map((await reposPromise).map(m => [m.id, m]));
           const resolved = await Promise.all(logRepoIds.map(async (repoId): Promise<[string, CompareRange] | null> => {
             const repo = this.manager.getRepo(repoId);
             if (!repo) return null;
             const repoBase = base || await pickLocalDefaultBranch(metaById.get(repoId)?.defaultBranch, name => repo.localBranchExists(name));
-            return repoBase ? [repoId, { base: repoBase, target: target || 'HEAD' }] : null;
+            return repoBase ? [repoId, { base: repoBase, target: target || 'HEAD', mode }] : null;
           }));
           compareByRepo = Object.fromEntries(resolved.filter((e): e is [string, CompareRange] => e !== null));
         }
@@ -800,6 +800,16 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         // A request that reaches the ceiling asks for one commit more, which tells a list that
         // stops at the ceiling apart from a history that just ends there
         const reachesCeiling = limit > 0 && msg.skip + limit >= maxCommits;
+        // The first page of a compare also carries how many commits each side has, in every
+        // repo of the range — a repo whose refs don't resolve counts for nothing, as in the log
+        const countsPromise: Promise<CompareCounts | undefined> = compareByRepo && msg.skip === 0
+          ? Promise.all(Object.entries(compareByRepo).map(([repoId, range]) =>
+            this.manager.getRepo(repoId)?.countCompareSides(range).catch(() => null) ?? null,
+          )).then(all => all.reduce<CompareCounts>(
+            (sum, c) => c ? { target: sum.target + c.target, base: sum.base + c.base } : sum,
+            { target: 0, base: 0 },
+          ))
+          : Promise.resolve(undefined);
         const fetched = limit > 0
           ? await this.manager.getInterleavedLog(logRepoIds, reachesCeiling ? limit + 1 : limit, msg.skip, {
             filterText: msg.filterText,
@@ -817,7 +827,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         // Last batch when git ran out of commits, or when the ceiling is reached — either
         // way there is nothing further to page in, and the client stops asking.
         const isLast = commits.length < limit || msg.skip + commits.length >= maxCommits;
-        post({ type: 'LOG_COMMITS_BATCH', commits, isLast, batchIndex: 0, requestId: msg.requestId, limitReached, maxCommits });
+        const compareCounts = await countsPromise;
+        post({ type: 'LOG_COMMITS_BATCH', commits, isLast, batchIndex: 0, requestId: msg.requestId, limitReached, maxCommits, compareCounts });
 
         // A freshly opened undocked panel is only ready once it has asked for commits.
         if (msg.skip === 0 && origin === 'undocked' && this.pendingUndocked) {

@@ -17,6 +17,7 @@ import { formatDateTime, formatDateOnly, formatDateCompact } from '../../shared/
 import * as l10n from '@vscode/l10n';
 import { plural } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
+import { CompareVennIcon } from './CompareVennIcon';
 
 
 interface Props {
@@ -41,6 +42,8 @@ interface Props {
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   /** Replaces the default "No commits yet" message, e.g. for an empty compare range. */
   emptyState?: { title: string; subtitle?: string };
+  /** Set in a compare of both sides: the refs a commit's `compareSide` stands for. */
+  compareSideLabels?: { target: string; base: string };
   /** Leave the date column out whatever the width (the hover popover still shows it). */
   hideDate?: boolean;
   /** What each row shows besides the graph and the message (the gitcharm.gitLog.show* settings). */
@@ -186,7 +189,7 @@ const DRAG_SCROLL_STEP = 8;
 /** Identifies a row across repos — the same hash can show up in several. */
 const commitKey = (c: { hash: string; repoId: string }) => `${c.hash}:${c.repoId}`;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, compareSideLabels, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -909,6 +912,15 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                     <Codicon name="diff-multiple" style={{ fontSize: '16px', lineHeight: 1 }} />
                   </button>
                 </div>
+              )}
+              {compareSideLabels && commit.compareSide && (
+                // The mode button's Venn icon, filled on this commit's side only
+                <CompareVennIcon
+                  target={commit.compareSide === 'target'}
+                  base={commit.compareSide === 'base'}
+                  size={14}
+                  title={l10n.t('Only on {0}', compareSideLabels[commit.compareSide])}
+                />
               )}
               {commit.incoming && (
                 <Codicon name="arrow-down" style={styles.incomingIcon} title={l10n.t('Not pulled')} />

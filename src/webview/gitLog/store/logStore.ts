@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { BranchInfo, CommitNode, FileDiff, RepoMeta, TagInfo } from '../../shared/types';
-import type { CompareRange, IconThemeData, LogWorkingTreeStatus } from '../../../host/types/messages';
+import type { CompareCounts, CompareRange, IconThemeData, LogWorkingTreeStatus } from '../../../host/types/messages';
 
 export interface CommitFilters {
   text: string;
@@ -9,7 +9,7 @@ export interface CommitFilters {
   dateFrom: string;
   dateTo: string;
   repoId: string | null;
-  /** Compare mode: commits on `target` not on `base`. Null when off; while set, `branch` is ignored. */
+  /** Compare mode (which commits: see CompareMode). Null when off; while set, `branch` is ignored. */
   compare: CompareRange | null;
 }
 
@@ -23,6 +23,8 @@ interface LogState {
   hasMore: boolean;
   /** The list stopped at gitcharm.graphMaxCommits (the number, when it did) though git has more. */
   commitLimitReached: number | null;
+  /** Commits only on each side of the current compare; null until the host reports them. */
+  compareCounts: CompareCounts | null;
   /** True between beginReload() and the first batch of the reload arriving. */
   reloading: boolean;
   selectedCommit: CommitNode | null;
@@ -66,6 +68,7 @@ interface LogState {
   setFilterRepoId: (id: string | null) => void;
   setBranchFilter: (filter: string) => void;
   setCommitFilters: (filters: Partial<CommitFilters>) => void;
+  setCompareCounts: (counts: CompareCounts | null) => void;
   updateBranches: (repoId: string, branches: BranchInfo[]) => void;
   setError: (err: string | null) => void;
   setPendingScrollTarget: (target: { hash: string; repoId: string } | null) => void;
@@ -139,6 +142,7 @@ export const useLogStore = create<LogState>((set, _get) => ({
   workingTree: {},
   hasMore: true,
   commitLimitReached: null,
+  compareCounts: null,
   reloading: false,
   selectedCommit: null,
   selectedFile: null,
@@ -210,6 +214,7 @@ export const useLogStore = create<LogState>((set, _get) => ({
   setFilterRepoId: (id) => set({ filterRepoId: id }),
   setBranchFilter: (filter) => set({ branchFilter: filter }),
   setCommitFilters: (filters) => set(s => ({ commitFilters: { ...s.commitFilters, ...filters } })),
+  setCompareCounts: (compareCounts) => set({ compareCounts }),
   updateBranches: (repoId, branches) => set(s => ({
     branches: [...s.branches.filter(b => b.repoId !== repoId), ...branches],
   })),

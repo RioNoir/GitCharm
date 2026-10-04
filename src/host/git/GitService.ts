@@ -15,9 +15,9 @@ import type {
   RepoStatus,
   SubmoduleEntry,
 } from '../types/git';
-import type { CompareRange, RangeFileEntry, RebaseCommit, RebasePlanEntry, StashEntry, UnpushedCommit } from '../types/messages';
+import type { CompareCounts, CompareRange, RangeFileEntry, RebaseCommit, RebasePlanEntry, StashEntry, UnpushedCommit } from '../types/messages';
 import { buildRebaseTodo, shQuote } from './rebaseTodo';
-import { isSafeCompareRef } from './compareRange';
+import { compareRangeArgs, isSafeCompareRef } from './compareRange';
 import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
 import { getVscodeRepository } from './VscodeGitApi';
@@ -661,8 +661,12 @@ export class GitService {
       if (!line.trim()) continue;
       const parts = line.split('\x00');
       if (parts.length < 9) continue;
-      const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message] = parts;
-      commits.push({ hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] });
+      const [hash, shortHash, parentsRaw, authorName, authorEmail, authorDate, committerDate, refsRaw, message, mark] = parts;
+      const commit: CommitNode = { hash, shortHash, repoId: this.repoId, message, authorName, authorEmail, authorDate, committerDate, parents: parentsRaw ? parentsRaw.split(' ').filter(Boolean) : [], refs: refsRaw ? refsRaw.split(',').map(r => r.trim()).filter(Boolean) : [] };
+      // %m of a --left-right compare log, appended after the subject
+      if (mark === '<') commit.compareSide = 'target';
+      else if (mark === '>') commit.compareSide = 'base';
+      commits.push(commit);
     }
     return commits;
   }
@@ -693,7 +697,7 @@ export class GitService {
    * Commits whose hash starts with `prefix`, looked up in the object database instead
    * of walking history, so a commit is found however far back it is. As with the log
    * itself, only commits the log could show count: reachable from a ref other than the
-   * stash or from HEAD — or, in compare mode, within `compare.base..compare.target`.
+   * stash or from HEAD — or, in compare mode, on the side(s) of the compare its mode shows.
    * `logArgs` (format and author/date filters) are applied to the matches.
    */
   private async findCommitsByHashPrefix(prefix: string, logArgs: string[], compare?: CompareRange): Promise<CommitNode[]> {
@@ -713,8 +717,21 @@ export class GitService {
 
     const isAncestor = (hash: string, of: string) =>
       this.git.raw(['merge-base', '--is-ancestor', hash, of]).then(() => true, () => false);
+    if (compare) {
+      const mode = compare.mode ?? 'ahead';
+      const sideOf = async (hash: string): Promise<'target' | 'base' | null> => {
+        const [onTarget, onBase] = await Promise.all([isAncestor(hash, compare.target), isAncestor(hash, compare.base)]);
+        return onTarget === onBase ? null : onTarget ? 'target' : 'base';
+      };
+      const sides = await Promise.all(matches.map(c => sideOf(c.hash)));
+      return matches.flatMap((c, i) => {
+        const side = sides[i];
+        if (!side) return [];
+        if (mode === 'both') return [{ ...c, compareSide: side }];
+        return side === (mode === 'ahead' ? 'target' : 'base') ? [c] : [];
+      });
+    }
     const isReachable = async (hash: string): Promise<boolean> => {
-      if (compare) return await isAncestor(hash, compare.target) && !await isAncestor(hash, compare.base);
       const refs = await this.git.raw(['for-each-ref', '--format=%(refname)', '--contains', hash]).catch(() => '');
       if (refs.split('\n').some(r => r.trim() && r.trim() !== 'refs/stash')) return true;
       return isAncestor(hash, 'HEAD');
@@ -723,29 +740,42 @@ export class GitService {
     return matches.filter((_, i) => reachable[i]);
   }
 
+  /**
+   * Compare refs are checked before anything is passed to git, so a ref can never be read
+   * as an option or a second range, and a ref missing from this repo throws here — the
+   * caller then drops this repo instead of the whole log.
+   */
+  private async verifyCompareRefs({ base, target }: CompareRange): Promise<void> {
+    if (!isSafeCompareRef(base) || !isSafeCompareRef(target)) {
+      throw new Error(`Invalid compare refs: ${JSON.stringify(base)}..${JSON.stringify(target)}`);
+    }
+    const verified = await Promise.all([base, target].map(ref =>
+      this.git.raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).catch(() => ''),
+    ));
+    if (verified.some(out => !out.trim())) {
+      throw new Error(`Compare ref not found: ${base}..${target}`);
+    }
+  }
+
+  /** Number of commits only on `target` and only on `base`, whatever the compare's mode. */
+  async countCompareSides(compare: CompareRange): Promise<CompareCounts> {
+    await this.verifyCompareRefs(compare);
+    const out = await this.git.raw(['rev-list', '--left-right', '--count', `${compare.target}...${compare.base}`]);
+    const [target, base] = out.trim().split(/\s+/).map(n => parseInt(n, 10) || 0);
+    return { target: target ?? 0, base: base ?? 0 };
+  }
+
   // Log uses raw git format for graph rendering — VS Code API's log() lacks graph parents/refs.
   async getLog(limit: number, skip: number, opts?: { filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange; worktreeServices?: GitService[] }): Promise<CommitNode[]> {
-    // Compare mode: both refs are checked before anything is passed to git log, so a ref
-    // can never be read as an option or a second range, and a ref missing from this repo
-    // fails here — the caller's allSettled then drops this repo instead of the whole log.
-    let compareRangeArg: string | null = null;
-    if (opts?.compare) {
-      const { base, target } = opts.compare;
-      if (!isSafeCompareRef(base) || !isSafeCompareRef(target)) {
-        throw new Error(`Invalid compare refs: ${JSON.stringify(base)}..${JSON.stringify(target)}`);
-      }
-      const verified = await Promise.all([base, target].map(ref =>
-        this.git.raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).catch(() => ''),
-      ));
-      if (verified.some(out => !out.trim())) {
-        throw new Error(`Compare ref not found: ${base}..${target}`);
-      }
-      compareRangeArg = `${base}..${target}`;
-    }
+    // A compare ref missing from this repo throws here: the caller's allSettled drops this repo, not the whole log
+    if (opts?.compare) await this.verifyCompareRefs(opts.compare);
+    const bothSides = opts?.compare?.mode === 'both';
     const isHashSearch = opts?.filterText && /^[0-9a-f]{4,40}$/i.test(opts.filterText.trim());
     // One fingerprint for the log and the unpushed/incoming reads that follow it.
     const fingerprint = this.refsFingerprint();
     const format = ['--format=%H%x00%h%x00%P%x00%an%x00%ae%x00%ai%x00%ci%x00%D%x00%s', '--decorate=full', '--date=iso-strict', '--abbrev=8'];
+    // A compare of both sides also reads each commit's side (%m, after the subject)
+    const logFormat = bothSides ? [`${format[0]}%x00%m`, ...format.slice(1)] : format;
     const filterArgs: string[] = [];
     if (opts?.filterAuthor) filterArgs.push(`--author=${opts.filterAuthor}`, '--regexp-ignore-case');
     if (opts?.filterDateFrom) filterArgs.push(`--after=${opts.filterDateFrom}`);
@@ -764,13 +794,13 @@ export class GitService {
         // still topological — a commit never precedes its own parent.
         '--date-order',
         `--max-count=${limit}`, `--skip=${skip}`,
-        ...format,
+        ...logFormat,
       ];
       if (opts?.filterText) args.push(`--grep=${opts.filterText}`, '--regexp-ignore-case');
       args.push(...filterArgs);
-      if (compareRangeArg) {
+      if (opts?.compare) {
         // Compare mode replaces the branch filter
-        args.push(compareRangeArg);
+        args.push(...compareRangeArgs(opts.compare));
       } else if (opts?.filterBranch) {
         args.push(opts.filterBranch);
       } else {

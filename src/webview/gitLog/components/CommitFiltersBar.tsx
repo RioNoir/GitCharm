@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { CommitFilters } from '../store/logStore';
-import type { CompareRange } from '../../../host/types/messages';
+import type { CompareCounts, CompareMode, CompareRange } from '../../../host/types/messages';
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import * as l10n from '@vscode/l10n';
@@ -8,6 +8,7 @@ import { dateLocale } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 import { ensureScrollbarHideStyle } from '../../shared/ScrollArea';
 import { RepoDots, type RepoDotInfo } from '../../shared/RepoDots';
+import { COMPARE_SIDE_COLORS, CompareVennIcon } from './CompareVennIcon';
 
 interface Props {
   filters: CommitFilters;
@@ -16,6 +17,7 @@ interface Props {
   repos: RepoMeta[];
   onFilterChange: (key: keyof CommitFilters, value: string) => void;
   onCompareChange: (compare: CompareRange | null) => void;
+  compareCounts: CompareCounts | null;
 }
 
 function useIsLightTheme() {
@@ -28,7 +30,7 @@ function useIsLightTheme() {
   return light;
 }
 
-export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onCompareChange }: Props) {
+export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChange, onCompareChange, compareCounts }: Props) {
   const isLight = useIsLightTheme();
   useEffect(() => {
     const id = 'gitcharm-filter-field-focus';
@@ -63,7 +65,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
           debounceMs={600}
         />
 
-        {/* Branch / Tag — or, in compare mode, target "not in" base */}
+        {/* Branch / Tag — or, in compare mode, the two compared refs */}
         {filters.compare ? (
           <CompareControls
             compare={filters.compare}
@@ -72,6 +74,7 @@ export function CommitFiltersBar({ filters, branches, tags, repos, onFilterChang
             repos={repos}
             reposInView={reposInView}
             isLight={isLight}
+            counts={compareCounts}
             onChange={onCompareChange}
           />
         ) : (
@@ -185,17 +188,30 @@ function groupByName(items: Array<{ name: string; repoId: string; isRemote?: boo
 
 /* ─── CompareControls ─────────────────────────────────────────────────────── */
 
-function CompareControls({ compare, branches, tags, repos, reposInView, isLight, onChange }: {
+const COMPARE_MODES: readonly CompareMode[] = ['ahead', 'behind', 'both'];
+
+function CompareControls({ compare, branches, tags, repos, reposInView, isLight, counts, onChange }: {
   compare: CompareRange;
   branches: NamedRef[];
   tags: NamedRef[];
   repos: RepoMeta[];
   reposInView: RepoMeta[];
   isLight: boolean;
+  counts: CompareCounts | null;
   onChange: (compare: CompareRange) => void;
 }) {
-  const { defaultName } = compareLabels(compare, reposInView);
+  const { target, base, defaultName } = compareLabels(compare, reposInView);
   const baseDefaultLabel = defaultName ? l10n.t('Default branch ({0})', defaultName) : l10n.t('Default branch');
+  const mode = compare.mode ?? 'ahead';
+  const showsCommitsOf = l10n.t('Show commits on this branch');
+  const notOn = l10n.t('…that aren\'t on this branch');
+  const titles: Record<CompareMode, [string, string]> = {
+    ahead: [showsCommitsOf, notOn],
+    behind: [notOn, showsCommitsOf],
+    both: [l10n.t('Compare this branch…'), l10n.t('…with this branch')],
+  };
+  const [targetTitle, baseTitle] = titles[mode];
+  const nextMode = COMPARE_MODES[(COMPARE_MODES.indexOf(mode) + 1) % COMPARE_MODES.length];
   return (
     <div style={styles.compareGroup}>
       <BranchTagPicker
@@ -207,9 +223,16 @@ function CompareControls({ compare, branches, tags, repos, reposInView, isLight,
         isLight={isLight}
         allLabel={l10n.t('HEAD (current branch)')}
         placeholder="HEAD"
-        titleText={l10n.t('Show commits on this branch')}
+        titleText={targetTitle}
+        accentColor={COMPARE_SIDE_COLORS.target}
       />
-      <NotInIcon title={l10n.t('not in')} />
+      <CompareModeButton
+        mode={mode}
+        target={target}
+        base={base}
+        counts={counts}
+        onClick={() => onChange({ ...compare, mode: nextMode })}
+      />
       <BranchTagPicker
         value={compare.base}
         branches={branches}
@@ -219,26 +242,57 @@ function CompareControls({ compare, branches, tags, repos, reposInView, isLight,
         isLight={isLight}
         allLabel={baseDefaultLabel}
         placeholder={baseDefaultLabel}
-        titleText={l10n.t('…that aren\'t on this branch')}
+        titleText={baseTitle}
+        accentColor={COMPARE_SIDE_COLORS.base}
       />
     </div>
   );
 }
 
-/** Codicons has no "not in" glyph: its arrow-right path with a slash through the shaft (↛), same 16px grid. */
-function NotInIcon({ title }: { title: string }) {
+/**
+ * Cycles the compare mode. The Venn icon fills the side(s) the mode shows; each side's
+ * count sits next to its own picker in that side's color, dimmed when the mode hides it.
+ */
+function CompareModeButton({ mode, target, base, counts, onClick }: {
+  mode: CompareMode;
+  target: string;
+  base: string;
+  counts: CompareCounts | null;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const description: Record<CompareMode, string> = {
+    ahead: l10n.t("Commits on {0} that aren't on {1}", target, base),
+    behind: l10n.t("Commits on {0} that aren't on {1}", base, target),
+    both: l10n.t('Commits on only one of {0} and {1}', target, base),
+  };
+  const countLines = counts
+    ? [l10n.t('{0} only on {1}', counts.target, target), l10n.t('{0} only on {1}', counts.base, base)]
+    : [];
+  const title = [description[mode], ...countLines, l10n.t('Click to switch the comparison mode')].join('\n');
+  const count = (n: number, side: 'target' | 'base', active: boolean) => (
+    <span style={{ ...styles.compareCount, color: COMPARE_SIDE_COLORS[side], opacity: active ? 1 : 0.45 }}>{n}</span>
+  );
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style={styles.compareSeparator} role="img" aria-label={title}>
-      <title>{title}</title>
-      <path d="M13.854 8.14576L8.854 3.14576C8.659 2.95076 8.342 2.95076 8.147 3.14576C7.952 3.34076 7.952 3.65776 8.147 3.85276L12.293 7.99876H2.5C2.224 7.99876 2 8.22276 2 8.49876C2 8.77476 2.224 8.99876 2.5 8.99876H12.293L8.147 13.1448C7.952 13.3398 7.952 13.6568 8.147 13.8518C8.245 13.9498 8.373 13.9978 8.501 13.9978C8.629 13.9978 8.757 13.9488 8.855 13.8518L13.855 8.85176C14.05 8.65676 14.05 8.33976 13.855 8.14476L13.854 8.14576Z" />
-      <path d="M4.5 12L7.5 5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" fill="none" />
-    </svg>
+    <button
+      type="button"
+      style={{ ...styles.compareModeBtn, ...(hover ? styles.compareModeBtnHover : null) }}
+      title={title}
+      aria-label={description[mode]}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {counts && count(counts.target, 'target', mode !== 'behind')}
+      <CompareVennIcon target={mode !== 'behind'} base={mode !== 'ahead'} />
+      {counts && count(counts.base, 'base', mode !== 'ahead')}
+    </button>
   );
 }
 
 /* ─── BranchTagPicker ─────────────────────────────────────────────────────── */
 
-function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLight, allLabel = l10n.t('All branches & tags'), placeholder = l10n.t('Branch / Tag…'), titleText = l10n.t('Filter by branch or tag') }: {
+function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLight, allLabel = l10n.t('All branches & tags'), placeholder = l10n.t('Branch / Tag…'), titleText = l10n.t('Filter by branch or tag'), accentColor }: {
   value: string;
   branches: NamedRef[];
   tags: NamedRef[];
@@ -249,6 +303,8 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
   allLabel?: string;
   placeholder?: string;
   titleText?: string;
+  /** Colors the icon and label: a compare side's color. */
+  accentColor?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -290,8 +346,13 @@ function BranchTagPicker({ value, branches, tags, repos, onChange, width, isLigh
         onClick={() => setOpen(o => !o)}
         title={value || titleText}
       >
-        <Codicon name={buttonIcon} style={styles.fieldIcon} />
-        <span style={value ? styles.pickerLabelActive : { ...styles.pickerLabelPlaceholder, opacity: isLight ? 0.8 : 0.4 }}>
+        <Codicon name={buttonIcon} style={accentColor ? { ...styles.fieldIcon, color: accentColor, opacity: 1 } : styles.fieldIcon} />
+        <span style={
+          value
+            ? (accentColor ? { ...styles.pickerLabelActive, color: accentColor } : styles.pickerLabelActive)
+            // A colored placeholder is the compare's default ref, not a hint: dimmed less
+            : { ...styles.pickerLabelPlaceholder, ...(accentColor ? { color: accentColor, opacity: 0.8 } : { opacity: isLight ? 0.8 : 0.4 }) }
+        }>
           {value || placeholder}
         </span>
         <Codicon name={open ? 'chevron-up' : 'chevron-down'} style={{ fontSize: '10px', opacity: 0.5, flexShrink: 0 }} />
@@ -1066,8 +1127,23 @@ const styles = {
     flex: 2,
     minWidth: 400,
   } as React.CSSProperties,
-  compareSeparator: {
-    opacity: 0.6,
+  compareModeBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
     flexShrink: 0,
+    padding: '2px 4px',
+    border: 'none',
+    borderRadius: '3px',
+    background: 'transparent',
+    color: 'var(--vscode-foreground)',
+    cursor: 'pointer',
+  } as React.CSSProperties,
+  compareModeBtnHover: {
+    background: 'var(--vscode-toolbar-hoverBackground)',
+  } as React.CSSProperties,
+  compareCount: {
+    fontSize: '11px',
+    fontVariantNumeric: 'tabular-nums',
   } as React.CSSProperties,
 };

@@ -65,6 +65,8 @@ export interface CommitNode {
   stashHash?: string;
   stashBranch?: string; // branch the stash was created on
   stashFiles?: Array<{ path: string; status: string; added?: number; removed?: number }>;
+  /** In a `both` compare: the side the commit is only on. */
+  compareSide?: 'target' | 'base';
 }
 
 export interface GraphLine {

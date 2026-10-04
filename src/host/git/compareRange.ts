@@ -3,6 +3,8 @@
  * can be exercised outside the extension host.
  */
 
+import type { CompareRange } from '../types/messages';
+
 /**
  * True when `ref` is safe to hand to git as one side of a `base..target` range: it must
  * not be parseable as an option, must not itself be a range, and must contain no
@@ -29,4 +31,18 @@ export async function pickLocalDefaultBranch(
     if (await localBranchExists(name)) return name;
   }
   return undefined;
+}
+
+/**
+ * The `git log` arguments selecting a compare's commits. Both refs must already have
+ * passed `isSafeCompareRef`. In `both` mode `--left-right` lets `%m` tell the sides
+ * apart: `<` for `target`, `>` for `base`.
+ */
+export function compareRangeArgs(compare: CompareRange): string[] {
+  const { base, target } = compare;
+  switch (compare.mode ?? 'ahead') {
+    case 'behind': return [`${target}..${base}`];
+    case 'both': return ['--left-right', `${target}...${base}`];
+    default: return [`${base}..${target}`];
+  }
 }
