@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import type { PullRequestUser } from '../../host/types/messages';
 
 /** A user offered by the editor's `@` autocomplete. `token` is the exact markdown text that mentions them on
- * the forge (`@octocat`, or Bitbucket's `@{account_id}`), `label` is what's shown in its place. */
+ * the forge (`@octocat`, or Bitbucket's `@{account_id}` — Azure DevOps' `@<id>` is turned into that form by its provider), `label` is what's shown in its place. */
 export interface MentionCandidate {
   token: string;
   label: string;

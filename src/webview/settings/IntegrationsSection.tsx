@@ -7,10 +7,11 @@ import type { RowContext } from './SettingRow';
 import { SettingRow } from './SettingRow';
 
 export interface IntegrationsActions {
-  add(integrationId: string, input: { host?: string; label?: string; email?: string; token: string }): Promise<{ ok: boolean; error?: string }>;
+  add(integrationId: string, input: { host?: string; label?: string; email?: string; organization?: string; token: string }): Promise<{ ok: boolean; error?: string }>;
   rename(accountId: string, label: string): void;
   remove(accountId: string): void;
   addGitHub(): void;
+  addMicrosoft(): void;
   assign(repoId: string, value: string): void;
   openUrl(url: string): void;
 }
@@ -18,6 +19,13 @@ export interface IntegrationsActions {
 /** Monochrome marks, drawn like codicons (16×16, currentColor). GitHub has a codicon of its own. */
 function ProviderIcon({ provider }: { provider: IntegrationDefinition['provider'] }) {
   if (provider === 'github') return <Codicon name="github" style={{ fontSize: 18 }} />;
+  if (provider === 'azure') {
+    return (
+      <svg className="gc-provider-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+        <path d="M0 8.877 2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v14.651l-5.753 4.9-9.303-3.057v3.056l-5.978-7.416 15.057 1.798V5.415z" />
+      </svg>
+    );
+  }
   const paths: Record<string, React.ReactNode> = {
     gitlab: <path d="M8 14.6 1.1 9.5a.6.6 0 0 1-.2-.6L2.6 2.3a.3.3 0 0 1 .6 0l1.6 4.4h6.4l1.6-4.4a.3.3 0 0 1 .6 0l1.7 6.6a.6.6 0 0 1-.2.6Z" />,
     bitbucket: <path fillRule="evenodd" d="M1.2 1.8a.5.5 0 0 0-.5.6l2 12a.7.7 0 0 0 .7.6h9.3a.5.5 0 0 0 .5-.4l2.1-12.2a.5.5 0 0 0-.5-.6Zm8.4 8.6H6.4l-.8-4.6h4.8Z" />,
@@ -57,7 +65,8 @@ export function IntegrationsSection({ ctx, state, actions }: { ctx: RowContext; 
             onConnect={() => {
               if (integration.auth === 'vscode') { actions.addGitHub(); return; }
               setExpanded(integration.id);
-              setAdding(integration.id);
+              // Two ways in (Microsoft account or token): show both instead of picking one.
+              setAdding(integration.auth === 'microsoftOrToken' ? null : integration.id);
             }}
             onAdding={on => setAdding(on ? integration.id : null)}
             actions={actions}
@@ -137,14 +146,26 @@ function IntegrationRow({ integration, accounts, expanded, adding, onToggle, onC
           {integration.auth === 'vscode' && (
             <div className="gc-row-desc">{l10n.t('Uses the GitHub accounts signed into VS Code. Sign out from the Accounts menu in the Activity Bar.')}</div>
           )}
+          {integration.auth === 'microsoftOrToken' && (
+            <div className="gc-row-desc">{l10n.t('Uses the Microsoft accounts signed into VS Code, or personal access tokens. Sign out of Microsoft accounts from the Accounts menu in the Activity Bar.')}</div>
+          )}
           <div className="gc-list-widget gc-accounts">
             {accounts.length === 0 && !adding && <div className="gc-muted gc-accounts-empty">{l10n.t('No accounts yet.')}</div>}
             {accounts.map(account => (
-              <AccountRow key={account.id} account={account} editable={integration.auth !== 'vscode'} actions={actions} />
+              <AccountRow key={account.id} account={account} editable={integration.auth !== 'vscode' && !account.vscodeAccount} actions={actions} />
             ))}
           </div>
           {adding ? (
             <AddAccountForm integration={integration} onDone={() => onAdding(false)} actions={actions} />
+          ) : integration.auth === 'microsoftOrToken' ? (
+            <div className="gc-inline gc-list-add">
+              <button type="button" className="gc-btn gc-btn-secondary" onClick={() => actions.addMicrosoft()}>
+                <Codicon name="account" /> {l10n.t('Sign in with Microsoft')}
+              </button>
+              <button type="button" className="gc-btn gc-btn-secondary" onClick={() => onAdding(true)}>
+                <Codicon name="key" /> {l10n.t('Add Token')}
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -201,6 +222,7 @@ function AccountRow({ account, editable, actions }: { account: IntegrationAccoun
 
 function AddAccountForm({ integration, onDone, actions }: { integration: IntegrationDefinition; onDone(): void; actions: IntegrationsActions }) {
   const [host, setHost] = useState(integration.host ?? '');
+  const [organization, setOrganization] = useState('');
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [label, setLabel] = useState('');
@@ -208,14 +230,21 @@ function AddAccountForm({ integration, onDone, actions }: { integration: Integra
   const [error, setError] = useState<string | undefined>();
 
   const effectiveHost = (integration.host ?? host.trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '')) || '';
-  const tokenUrl = integration.tokenUrl && effectiveHost ? integration.tokenUrl.replace('{host}', effectiveHost) : undefined;
-  const ready = !!token.trim() && !!effectiveHost && (integration.auth !== 'emailToken' || !!email.trim());
+  const serverUrl = host.trim().replace(/\/+$/, '');
+  const fullServerUrl = /^https?:\/\//i.test(serverUrl) ? serverUrl : `https://${serverUrl}`;
+  const org = organization.trim();
+  const tokenUrl = integration.tokenUrl && effectiveHost && (!integration.organizationField || org) && (!integration.urlField || serverUrl)
+    ? integration.tokenUrl.replace('{host}', effectiveHost).replace('{organization}', encodeURIComponent(org)).replace('{url}', fullServerUrl)
+    : undefined;
+  const ready = !!token.trim() && !!effectiveHost && (integration.auth !== 'emailToken' || !!email.trim()) && (!integration.organizationField || !!org);
 
   const submit = () => {
     if (!ready || busy) return;
     setBusy(true);
     setError(undefined);
-    actions.add(integration.id, { host: integration.host ? undefined : host, email: email || undefined, token, label: label || undefined }).then(
+    actions.add(integration.id, {
+      host: integration.host ? undefined : host, email: email || undefined, organization: org || undefined, token, label: label || undefined,
+    }).then(
       r => { setBusy(false); if (r.ok) onDone(); else setError(r.error ?? l10n.t('Failed to validate token')); },
       (e: unknown) => { setBusy(false); setError(e instanceof Error ? e.message : String(e)); },
     );
@@ -226,8 +255,16 @@ function AddAccountForm({ integration, onDone, actions }: { integration: Integra
       <div className="gc-add-account-title">{l10n.t('New {0} account', integration.label)}</div>
       {!integration.host && (
         <label className="gc-field">
-          <span>{l10n.t('Host')}</span>
+          <span>{integration.urlField ? l10n.t('Server URL') : l10n.t('Host')}</span>
           <input className="gc-input mono" autoFocus value={host} placeholder={integration.hostPlaceholder} onChange={e => setHost(e.target.value)} />
+          {integration.urlField && <span className="gc-field-hint">{l10n.t('The project collection URL, as in the address bar of the web portal.')}</span>}
+        </label>
+      )}
+      {integration.organizationField && (
+        <label className="gc-field">
+          <span>{l10n.t('Organization')}</span>
+          <input className="gc-input mono" autoFocus value={organization} placeholder="my-organization" onChange={e => setOrganization(e.target.value)} />
+          <span className="gc-field-hint">{l10n.t('Used to verify the token: dev.azure.com/{0}', org || '…')}</span>
         </label>
       )}
       {integration.auth === 'emailToken' && (
@@ -242,7 +279,7 @@ function AddAccountForm({ integration, onDone, actions }: { integration: Integra
           className="gc-input mono"
           type="password"
           autoComplete="off"
-          autoFocus={!!integration.host && integration.auth !== 'emailToken'}
+          autoFocus={!!integration.host && integration.auth !== 'emailToken' && !integration.organizationField}
           value={token}
           onChange={e => setToken(e.target.value)}
         />

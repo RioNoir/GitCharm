@@ -30,8 +30,8 @@ import { logInfo, logWarn, logError, notifyWithLogAction } from '../utils/Logger
 import { plural } from '../utils/plural';
 import { ViewAndSortSettingsService } from '../settings/ViewAndSortSettingsService';
 import type { ChangeSortMode, ViewAndSortSettings } from '../types/settings';
-import type { PullRequestManager } from '../pullRequests/PullRequestManager';
-import { forgeProviderLabel } from '../pullRequests/remoteUrlParser';
+import { AZURE_DEVOPS_SCOPES, type PullRequestManager } from '../pullRequests/PullRequestManager';
+import { AZURE_DEVOPS_CLOUD_HOST, forgeProviderLabel } from '../pullRequests/remoteUrlParser';
 import type { IntegrationAccount } from '../integrations/IntegrationAccountStore';
 import { resolveAvatarIconPath, resolveGitHubUsernameAvatarIconPath } from '../utils/avatarCache';
 import { attachAvatarResolver } from '../utils/avatarResolver';
@@ -499,7 +499,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       result = await this.pullRequestManager.connectBitbucket(repoId, email.trim(), { email: email.trim(), apiToken: apiToken.trim() });
     } else {
       const token = await vscode.window.showInputBox({
-        prompt: vscode.l10n.t('Enter a Personal Access Token for {0}', connection.host),
+        prompt: connection.provider === 'azure'
+          ? vscode.l10n.t('Enter an Azure DevOps Personal Access Token for {0} (scopes: Code, Work Items, Build, Project and Team, Identity)', connection.host)
+          : vscode.l10n.t('Enter a Personal Access Token for {0}', connection.host),
         placeHolder: vscode.l10n.t('Token is stored securely and never leaves this machine'),
         password: true,
         title: vscode.l10n.t('Connect to {0} — {1}', forgeProviderLabel(connection.provider), connection.host),
@@ -582,7 +584,12 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
     const options = await this.pullRequestManager.getAccountOptions(repoId);
     const accounts = options?.accounts ?? [];
+    if (connection.provider === 'azure' && connection.host === AZURE_DEVOPS_CLOUD_HOST) {
+      await this.openAzureDevOpsAccountPicker(repoId, accounts, options?.boundAccountId);
+      return;
+    }
     const avatars = await Promise.all(accounts.map(a => this.resolveAccountAvatar(a)));
+
     const picked = await vscode.window.showQuickPick(
       [
         ...accounts.map((a, i) => {
@@ -609,6 +616,63 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
       this.requestIssueRefresh();
     }
+  }
+
+  /**
+   * Azure DevOps Services takes a Microsoft account signed into VS Code or a personal access token: the picker
+   * offers both, and both ways to add one.
+   */
+  private async openAzureDevOpsAccountPicker(repoId: string, tokenAccounts: IntegrationAccount[], boundTokenAccountId: string | undefined): Promise<void> {
+    if (!this.pullRequestManager) return;
+    const manager = this.pullRequestManager;
+    type Choice = { kind: 'microsoft'; id: string; label: string } | { kind: 'token'; id: string } | { kind: 'signIn' } | { kind: 'newToken' };
+    const microsoftAccounts = await manager.listMicrosoftAccounts();
+    const boundMicrosoftId = manager.getMicrosoftAccountBinding(repoId);
+    const items: (vscode.QuickPickItem & { choice?: Choice })[] = [
+      ...(microsoftAccounts.length > 0 ? [{ label: vscode.l10n.t('Microsoft accounts'), kind: vscode.QuickPickItemKind.Separator }] : []),
+      ...microsoftAccounts.map(a => ({
+        label: `${a.id === boundMicrosoftId ? '$(check) ' : '$(account) '}${a.label}`,
+        description: a.id === boundMicrosoftId ? vscode.l10n.t('currently assigned') : undefined,
+        choice: { kind: 'microsoft' as const, id: a.id, label: a.label },
+      })),
+      ...(tokenAccounts.length > 0 ? [{ label: vscode.l10n.t('Personal access tokens'), kind: vscode.QuickPickItemKind.Separator }] : []),
+      ...tokenAccounts.map(a => ({
+        label: `${a.id === boundTokenAccountId ? '$(check) ' : '$(key) '}${a.label}`,
+        description: a.id === boundTokenAccountId ? vscode.l10n.t('currently assigned') : undefined,
+        choice: { kind: 'token' as const, id: a.id },
+      })),
+      { label: '', kind: vscode.QuickPickItemKind.Separator },
+      { label: `$(sign-in) ${vscode.l10n.t('Sign in with Microsoft…')}`, choice: { kind: 'signIn' } },
+      { label: `$(add) ${vscode.l10n.t('Connect with a personal access token…')}`, choice: { kind: 'newToken' } },
+    ];
+    const picked = await vscode.window.showQuickPick(items, {
+      title: vscode.l10n.t('Azure DevOps Account'), placeHolder: vscode.l10n.t('Select an account for {0}', AZURE_DEVOPS_CLOUD_HOST),
+    });
+    const choice = picked?.choice;
+    if (!choice) return;
+
+    if (choice.kind === 'newToken') {
+      await this.promptAndConnectPat(repoId);
+      return;
+    }
+    try {
+      if (choice.kind === 'token') {
+        await manager.assignAccount(repoId, choice.id);
+      } else {
+        // Asks for consent to Azure DevOps when the account hasn't granted it yet (or, for sign-in, which account to use).
+        const account = choice.kind === 'microsoft' ? microsoftAccounts.find(a => a.id === choice.id) : undefined;
+        const session = await vscode.authentication.getSession('microsoft', AZURE_DEVOPS_SCOPES, {
+          createIfNone: true, ...(account ? { account } : { clearSessionPreference: true }),
+        });
+        await manager.assignMicrosoftAccount(repoId, session.account.id);
+      }
+    } catch (e: unknown) {
+      logWarn('pullrequest-account-picker', formatGitError(e));
+      return;
+    }
+    const repos = await manager.getAllPullRequests(true);
+    this.post({ type: 'PULLREQUEST_LIST_RESULT', repos });
+    this.requestIssueRefresh();
   }
 
   /** Resolves an avatar for a saved PAT account — only Bitbucket accounts have a known email; other providers fall back to no avatar (codicon shown instead). */

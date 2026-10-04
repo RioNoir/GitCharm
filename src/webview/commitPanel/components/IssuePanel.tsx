@@ -213,8 +213,8 @@ export function noIssueRepoHasRemote(repos: RepoIssues[]): boolean {
 
 export function IssuesNoRemoteState({ repoCount }: { repoCount: number }) {
   return repoCount === 1
-    ? <EmptyTabState icon="cloud" message={l10n.t('The repository has no remote')} hint={l10n.t('Issues come from the Git forge hosting the remote (GitHub, GitLab, Bitbucket or Gitea). Once the repository has a remote, they show up here.')} />
-    : <EmptyTabState icon="cloud" message={l10n.t('No repository has a remote')} hint={l10n.t('Issues come from the Git forge hosting each remote (GitHub, GitLab, Bitbucket or Gitea). Repositories with a remote show up here.')} />;
+    ? <EmptyTabState icon="cloud" message={l10n.t('The repository has no remote')} hint={l10n.t('Issues come from the Git forge hosting the remote (GitHub, GitLab, Bitbucket, Gitea or Azure DevOps). Once the repository has a remote, they show up here.')} />
+    : <EmptyTabState icon="cloud" message={l10n.t('No repository has a remote')} hint={l10n.t('Issues come from the Git forge hosting each remote (GitHub, GitLab, Bitbucket, Gitea or Azure DevOps). Repositories with a remote show up here.')} />;
 }
 
 export function IssuePanel({ repos, loading, loadingMore, multiRepo, plainHeaders = false, expandedRepoIds, ...handlers }: Props) {

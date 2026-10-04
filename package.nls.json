@@ -1,5 +1,5 @@
 {
-  "extension.description": "Your whole Git workflow in one place — commit, shelve, stash, sync and review pull requests (GitHub, GitLab, Bitbucket, Gitea) across every repository, with a Log Panel that keeps up. Inspired by IntelliJ/JetBrains IDEs.",
+  "extension.description": "Your whole Git workflow in one place — commit, shelve, stash, sync and review pull requests (GitHub, GitLab, Bitbucket, Gitea, Azure DevOps) across every repository, with a Log Panel that keeps up. Inspired by IntelliJ/JetBrains IDEs.",
   "submenu.commitPanel.fileView.label": "File View",
   "submenu.commitPanel.sortRepos.label": "Sort Repository By",
   "submenu.commitPanel.sortChanges.label": "Sort Changes By",
@@ -189,7 +189,7 @@
   "config.ai.prompts.explainPullRequest.markdownDescription": "Custom AI instructions for generating the pull request explanation (\"Explain with AI\"). Leave empty to use the built-in default. `{language}` is replaced with the configured language; the changes (diff, files, commits…) are always appended after these instructions. Run **GitCharm: Customize AI Prompts** to start editing from the default text.",
   "config.section.pullRequests.title": "Pull Requests",
   "config.section.issues.title": "Issues",
-  "config.pullRequests.hostProviderOverrides.description": "Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. { \"git.mycompany.com\": \"gitea\" }. Valid values: github, gitlab, bitbucket, gitea.",
+  "config.pullRequests.hostProviderOverrides.description": "Manual forge-type override per Git host for self-hosted instances that can't be auto-detected, e.g. { \"git.mycompany.com\": \"gitea\" }. Valid values: github, gitlab, bitbucket, gitea, azure.",
   "config.pullRequests.defaultTargetBranch.description": "Default target branch for new pull requests when the repo's default branch can't be determined from the forge API (leave empty to auto-detect main/master).",
   "config.pullRequests.defaultMergeStrategy.description": "Default strategy pre-selected on the \"Merge pull request\" button in the Pull Request Detail panel. Falls back to the first strategy the forge/provider actually supports if this one isn't available for a given PR.",
   "config.pullRequests.defaultMergeStrategy.enum.merge": "Create a merge commit",

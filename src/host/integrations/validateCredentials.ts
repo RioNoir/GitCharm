@@ -6,9 +6,12 @@ import type { IntegrationProvider } from '../types/integrations';
 export interface TokenCredentials {
   apiToken: string;
   email?: string; // required for Bitbucket, which authenticates via Basic auth
+  /** Azure DevOps: the organization or project collection URL the token is checked against. */
+  baseUrl?: string;
 }
 
 export async function validateToken(provider: IntegrationProvider, host: string, credentials: TokenCredentials): Promise<{ ok: boolean; error?: string }> {
+  if (provider === 'azure') return validateAzureDevOpsToken(credentials);
   try {
     let url: string;
     let headers: Record<string, string>;
@@ -33,6 +36,31 @@ export async function validateToken(provider: IntegrationProvider, host: string,
     }
     const res = await fetch(url, { headers });
     if (!res.ok) return { ok: false, error: vscode.l10n.t('Token validation failed: HTTP {0} {1}', res.status, res.statusText) };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Azure DevOps answers a bad token with its sign-in page (HTTP 203) unless redirects are suppressed, and serves
+ * connectionData to anonymous callers too — so success means JSON naming a real user.
+ */
+async function validateAzureDevOpsToken(credentials: TokenCredentials): Promise<{ ok: boolean; error?: string }> {
+  if (!credentials.baseUrl) return { ok: false, error: vscode.l10n.t('Enter the organization or server URL.') };
+  try {
+    const res = await fetch(`${credentials.baseUrl.replace(/\/+$/, '')}/_apis/connectionData`, {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`:${credentials.apiToken}`).toString('base64')}`,
+        Accept: 'application/json',
+        'X-TFS-FedAuthRedirect': 'Suppress',
+      },
+    });
+    const isJson = (res.headers.get('content-type') ?? '').includes('json');
+    if (!res.ok || !isJson) return { ok: false, error: vscode.l10n.t('Token validation failed: HTTP {0} {1}', res.status, res.statusText) };
+    const data = await res.json() as { authenticatedUser?: { id?: string } };
+    const id = data.authenticatedUser?.id;
+    if (!id || id === '00000000-0000-0000-0000-000000000000') return { ok: false, error: vscode.l10n.t('Token validation failed: the token was not accepted.') };
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

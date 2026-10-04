@@ -760,10 +760,12 @@ export interface AiModelOptionMsg { id: string; label: string; detail?: string }
 
 /** A saved account of a cloud integration (GitHub: an account signed into VS Code). */
 export interface IntegrationAccountMsg {
-  /** For GitHub, `github:<VS Code account id>` — the same value a repository binding uses. */
+  /** For GitHub, `github:<VS Code account id>` (Microsoft: `microsoft:…`) — the same value a repository binding uses. */
   id: string;
   label: string;
   host: string;
+  /** An account signed into VS Code (GitHub, Microsoft): renamed and removed from VS Code's Accounts menu, not here. */
+  vscodeAccount?: boolean;
   /** Workspace repositories assigned to this account. */
   repoNames: string[];
 }
@@ -809,10 +811,11 @@ export type SettingsToHostMsg =
   | { type: 'SETTINGS_COPY'; text: string }
   | { type: 'SETTINGS_OPEN_URL'; url: string }
   | { type: 'SETTINGS_INTEGRATIONS_GET' }
-  | { type: 'SETTINGS_INTEGRATION_ADD'; requestId: string; integrationId: string; host?: string; label?: string; email?: string; token: string }
+  | { type: 'SETTINGS_INTEGRATION_ADD'; requestId: string; integrationId: string; host?: string; label?: string; email?: string; organization?: string; token: string }
   | { type: 'SETTINGS_INTEGRATION_RENAME'; accountId: string; label: string }
   | { type: 'SETTINGS_INTEGRATION_REMOVE'; accountId: string }
   | { type: 'SETTINGS_INTEGRATION_GITHUB_ADD' }
+  | { type: 'SETTINGS_INTEGRATION_MICROSOFT_ADD' }
   | { type: 'SETTINGS_INTEGRATION_ASSIGN'; repoId: string; value: string };
 
 // ─── AI conflict resolution: live view ───────────────────────────────────────

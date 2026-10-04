@@ -74,7 +74,7 @@ export function CreatePullRequestForm({
     document.head.appendChild(style);
   }, []);
 
-  const supportsDraft = provider === 'github' || provider === 'gitlab';
+  const supportsDraft = provider === 'github' || provider === 'gitlab' || provider === 'azure';
   const sameBranch = !!sourceBranch && !!targetBranch && sourceBranch === targetBranch;
   const canSubmit = sourceBranch.trim() && targetBranch.trim() && !sameBranch && title.trim() && !submitting;
   const canCompare = sourceBranch.trim() && targetBranch.trim() && !sameBranch;

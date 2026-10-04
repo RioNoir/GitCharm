@@ -189,7 +189,9 @@ export class SettingsPanel {
         await this.pushIntegrations();
         break;
       case 'SETTINGS_INTEGRATION_ADD': {
-        const result = await this.integrations.addAccount(msg.integrationId, { host: msg.host, label: msg.label, email: msg.email, token: msg.token });
+        const result = await this.integrations.addAccount(msg.integrationId, {
+          host: msg.host, label: msg.label, email: msg.email, organization: msg.organization, token: msg.token,
+        });
         this.post({ type: 'SETTINGS_INTEGRATION_ADDED', requestId: msg.requestId, ok: result.ok, error: result.error });
         if (result.ok) this.refreshPullRequests();
         break;
@@ -207,6 +209,14 @@ export class SettingsPanel {
           this.refreshPullRequests();
         } catch (err) {
           logWarn('SettingsPanel', `GitHub sign-in: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        break;
+      case 'SETTINGS_INTEGRATION_MICROSOFT_ADD':
+        try {
+          await this.integrations.addMicrosoftAccount();
+          this.refreshPullRequests();
+        } catch (err) {
+          logWarn('SettingsPanel', `Microsoft sign-in: ${err instanceof Error ? err.message : String(err)}`);
         }
         break;
       case 'SETTINGS_INTEGRATION_ASSIGN':

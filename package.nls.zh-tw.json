@@ -1,5 +1,5 @@
 {
-  "extension.description": "在一個地方完成整個 Git 工作流程 — 在每個儲存庫中提交、擱置、儲藏、同步並審查拉取請求 (GitHub, GitLab, Bitbucket, Gitea)，記錄面板始終跟得上。靈感來自 IntelliJ/JetBrains IDE。",
+  "extension.description": "在一個地方完成整個 Git 工作流程 — 在每個儲存庫中提交、擱置、儲藏、同步並審查拉取請求 (GitHub, GitLab, Bitbucket, Gitea, Azure DevOps)，記錄面板始終跟得上。靈感來自 IntelliJ/JetBrains IDE。",
   "submenu.commitPanel.fileView.label": "檔案檢視",
   "submenu.commitPanel.sortRepos.label": "儲存庫排序方式",
   "submenu.commitPanel.sortChanges.label": "變更排序方式",
@@ -189,7 +189,7 @@
   "config.ai.prompts.explainPullRequest.markdownDescription": "用於產生提取要求說明（「使用 AI 說明」）的自訂 AI 指示。留空則使用內建預設提示詞。`{language}` 會替換為設定的語言；變更內容（diff、檔案、提交…）一律附加在這些指示之後。執行 **GitCharm: 自訂 AI 提示詞** 以從預設文字開始編輯。",
   "config.section.pullRequests.title": "拉取請求",
   "config.section.issues.title": "議題",
-  "config.pullRequests.hostProviderOverrides.description": "針對無法自動偵測的自行託管執行個體，依 Git 主機手動覆寫程式碼託管平台類型，例如 { \"git.mycompany.com\": \"gitea\" }。有效值：github、gitlab、bitbucket、gitea。",
+  "config.pullRequests.hostProviderOverrides.description": "針對無法自動偵測的自行託管執行個體，依 Git 主機手動覆寫程式碼託管平台類型，例如 { \"git.mycompany.com\": \"gitea\" }。有效值：github、gitlab、bitbucket、gitea、azure。",
   "config.pullRequests.defaultTargetBranch.description": "無法透過程式碼託管平台 API 判斷儲存庫預設分支時，新拉取請求的預設目標分支（留空則自動偵測 main/master）。",
   "config.pullRequests.defaultMergeStrategy.description": "拉取請求詳細資料面板中「合併拉取請求」按鈕預先選取的預設策略。若某個 PR 不支援此策略，則改用程式碼託管平台/提供者實際支援的第一個策略。",
   "config.pullRequests.defaultMergeStrategy.enum.merge": "建立合併提交",

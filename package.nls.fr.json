@@ -1,5 +1,5 @@
 {
-  "extension.description": "Tout votre flux Git au même endroit — commit, Shelf, Stash, synchronisation et revue des pull requests (GitHub, GitLab, Bitbucket, Gitea) dans chaque dépôt, avec un Log Panel qui suit le rythme. Inspiré des IDE IntelliJ/JetBrains.",
+  "extension.description": "Tout votre flux Git au même endroit — commit, Shelf, Stash, synchronisation et revue des pull requests (GitHub, GitLab, Bitbucket, Gitea, Azure DevOps) dans chaque dépôt, avec un Log Panel qui suit le rythme. Inspiré des IDE IntelliJ/JetBrains.",
   "submenu.commitPanel.fileView.label": "Affichage des fichiers",
   "submenu.commitPanel.sortRepos.label": "Trier les dépôts par",
   "submenu.commitPanel.sortChanges.label": "Trier les modifications par",
@@ -189,7 +189,7 @@
   "config.ai.prompts.explainPullRequest.markdownDescription": "Instructions IA personnalisées pour générer : explication de la pull request (« Expliquer avec l'IA »). Laissez vide pour utiliser le prompt par défaut. `{language}` est remplacé par la langue configurée ; les modifications (diff, fichiers, commits…) sont toujours ajoutées après ces instructions. Exécutez **GitCharm : Personnaliser les prompts IA** pour partir du texte par défaut.",
   "config.section.pullRequests.title": "Pull requests",
   "config.section.issues.title": "Issues",
-  "config.pullRequests.hostProviderOverrides.description": "Type de forge défini manuellement par hôte Git, pour les instances auto-hébergées non détectables automatiquement, ex. { \"git.mycompany.com\": \"gitea\" }. Valeurs valides : github, gitlab, bitbucket, gitea.",
+  "config.pullRequests.hostProviderOverrides.description": "Type de forge défini manuellement par hôte Git, pour les instances auto-hébergées non détectables automatiquement, ex. { \"git.mycompany.com\": \"gitea\" }. Valeurs valides : github, gitlab, bitbucket, gitea, azure.",
   "config.pullRequests.defaultTargetBranch.description": "Branche cible par défaut des nouvelles pull requests lorsque la branche par défaut du dépôt ne peut pas être déterminée via l'API de la forge (laisser vide pour détecter automatiquement main/master).",
   "config.pullRequests.defaultMergeStrategy.description": "Stratégie présélectionnée sur le bouton « Fusionner la pull request » du panneau de détail de la pull request. Si elle n'est pas disponible pour une PR donnée, la première stratégie réellement prise en charge par la forge/le fournisseur est utilisée.",
   "config.pullRequests.defaultMergeStrategy.enum.merge": "Créer un commit de fusion",

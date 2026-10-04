@@ -127,6 +127,7 @@ function App() {
     rename: (accountId, label) => send({ type: 'SETTINGS_INTEGRATION_RENAME', accountId, label }),
     remove: accountId => send({ type: 'SETTINGS_INTEGRATION_REMOVE', accountId }),
     addGitHub: () => send({ type: 'SETTINGS_INTEGRATION_GITHUB_ADD' }),
+    addMicrosoft: () => send({ type: 'SETTINGS_INTEGRATION_MICROSOFT_ADD' }),
     assign: (repoId, value) => send({ type: 'SETTINGS_INTEGRATION_ASSIGN', repoId, value }),
     openUrl: url => send({ type: 'SETTINGS_OPEN_URL', url }),
   }), [send, request]);

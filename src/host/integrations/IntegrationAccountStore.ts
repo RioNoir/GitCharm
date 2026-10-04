@@ -15,6 +15,9 @@ export interface IntegrationAccount {
   provider: IntegrationProvider;
   host: string;
   label: string;
+  /** Azure DevOps Server: the collection URL the token was verified against — its scheme and port are reused for
+   * repositories cloned over SSH, whose remote doesn't carry them. */
+  url?: string;
 }
 
 const ACCOUNTS_INDEX_KEY = 'gitcharm.integrations.accounts';
@@ -65,10 +68,10 @@ export class IntegrationAccountStore {
   }
 
   /** Adds a new account (token already validated by the caller) and returns its generated id. */
-  async addAccount(provider: IntegrationProvider, host: string, label: string, token: string): Promise<string> {
+  async addAccount(provider: IntegrationProvider, host: string, label: string, token: string, url?: string): Promise<string> {
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     await this.secrets.store(this.key(provider, host, id), token);
-    await this.saveIndex([...this.index(), { id, provider, host, label }]);
+    await this.saveIndex([...this.index(), { id, provider, host, label, ...(url ? { url } : {}) }]);
     return id;
   }
 

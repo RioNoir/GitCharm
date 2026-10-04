@@ -128,7 +128,7 @@ export function getCategories(): CategoryDef[] {
     {
       id: 'integrations', group: integrations, icon: 'plug', custom: 'integrations',
       label: l10n.t('Cloud Integrations'),
-      description: l10n.t('Connect GitHub, GitLab, Bitbucket and Gitea accounts, and choose the account each repository uses.'),
+      description: l10n.t('Connect GitHub, GitLab, Bitbucket, Gitea and Azure DevOps accounts, and choose the account each repository uses.'),
       keys: ['pullRequests.hostProviderOverrides'],
     },
     {

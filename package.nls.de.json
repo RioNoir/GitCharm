@@ -1,5 +1,5 @@
 {
-  "extension.description": "Dein gesamter Git-Workflow an einem Ort — committen, zurückstellen, stashen, synchronisieren und Pull-Requests reviewen (GitHub, GitLab, Bitbucket, Gitea) in jedem Repository, mit einem Log Panel, das mithält. Inspiriert von IntelliJ/JetBrains-IDEs.",
+  "extension.description": "Dein gesamter Git-Workflow an einem Ort — committen, zurückstellen, stashen, synchronisieren und Pull-Requests reviewen (GitHub, GitLab, Bitbucket, Gitea, Azure DevOps) in jedem Repository, mit einem Log Panel, das mithält. Inspiriert von IntelliJ/JetBrains-IDEs.",
   "submenu.commitPanel.fileView.label": "Dateiansicht",
   "submenu.commitPanel.sortRepos.label": "Repositorys sortieren nach",
   "submenu.commitPanel.sortChanges.label": "Änderungen sortieren nach",
@@ -189,7 +189,7 @@
   "config.ai.prompts.explainPullRequest.markdownDescription": "Eigene KI-Anweisungen zum Erzeugen von: Pull-Request-Erklärung („Mit KI erklären\"). Leer lassen, um den integrierten Standard zu verwenden. `{language}` wird durch die konfigurierte Sprache ersetzt; die Änderungen (Diff, Dateien, Commits…) werden immer nach diesen Anweisungen angehängt. Führe **GitCharm: KI-Prompts anpassen** aus, um mit dem Standardtext zu beginnen.",
   "config.section.pullRequests.title": "Pull-Requests",
   "config.section.issues.title": "Issues",
-  "config.pullRequests.hostProviderOverrides.description": "Manuelle Festlegung des Forge-Typs pro Git-Host für selbst gehostete Instanzen, die nicht automatisch erkannt werden, z. B. { \"git.mycompany.com\": \"gitea\" }. Gültige Werte: github, gitlab, bitbucket, gitea.",
+  "config.pullRequests.hostProviderOverrides.description": "Manuelle Festlegung des Forge-Typs pro Git-Host für selbst gehostete Instanzen, die nicht automatisch erkannt werden, z. B. { \"git.mycompany.com\": \"gitea\" }. Gültige Werte: github, gitlab, bitbucket, gitea, azure.",
   "config.pullRequests.defaultTargetBranch.description": "Standard-Ziel-Branch für neue Pull-Requests, wenn der Standard-Branch des Repositorys nicht über die Forge-API ermittelt werden kann (leer lassen, um main/master automatisch zu erkennen).",
   "config.pullRequests.defaultMergeStrategy.description": "Standardstrategie, die auf der Schaltfläche „Pull-Request mergen“ im Pull-Request-Detailpanel vorausgewählt ist. Ist sie für einen PR nicht verfügbar, wird die erste Strategie verwendet, die die Forge bzw. der Anbieter tatsächlich unterstützt.",
   "config.pullRequests.defaultMergeStrategy.enum.merge": "Merge-Commit erstellen",

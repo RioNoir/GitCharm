@@ -301,8 +301,8 @@ export function ProjectColorsEditor({ value, repos, onChange, disabled }: {
   );
 }
 
-const FORGES = ['github', 'gitlab', 'bitbucket', 'gitea'] as const;
-const FORGE_LABEL: Record<string, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', gitea: 'Gitea' };
+const FORGES = ['github', 'gitlab', 'bitbucket', 'gitea', 'azure'] as const;
+const FORGE_LABEL: Record<string, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', gitea: 'Gitea', azure: 'Azure DevOps Server' };
 
 /** gitcharm.pullRequests.hostProviderOverrides: host → forge type, as a key/value table. */
 export function HostOverridesEditor({ value, onChange, disabled }: { value: Record<string, string>; onChange(v: Record<string, string>): void; disabled?: boolean }) {

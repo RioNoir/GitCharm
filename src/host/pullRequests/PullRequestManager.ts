@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import { parseRemoteUrl, resolveProvider, type ParsedRemote } from './remoteUrlParser';
+import { AZURE_DEVOPS_CLOUD_HOST, parseRemoteUrl, resolveProvider, type ParsedRemote } from './remoteUrlParser';
 import { createProvider, type ProviderFactoryDeps } from './PullRequestProviderFactory';
 import type { BitbucketCredentials, IntegrationAccount, IntegrationAccountStore } from '../integrations/IntegrationAccountStore';
 import { validateToken, type TokenCredentials } from '../integrations/validateCredentials';
@@ -75,6 +75,10 @@ interface CacheEntry {
 }
 
 const GITHUB_ACCOUNT_ID_PREFIX = 'github:';
+const MICROSOFT_ACCOUNT_ID_PREFIX = 'microsoft:';
+
+/** Azure DevOps' resource id: a Microsoft account token for it reaches every organization the account belongs to. */
+export const AZURE_DEVOPS_SCOPES = ['499b84ac-1321-427f-aa17-267ca6975798/.default'];
 
 /** `githubAccountId` is a raw `AuthenticationSessionAccountInformation.id` (not the `github:`-prefixed binding form). */
 async function getGitHubToken(githubAccountId?: string): Promise<string | undefined> {
@@ -86,6 +90,29 @@ async function getGitHubToken(githubAccountId?: string): Promise<string | undefi
   }
   const session = await vscode.authentication.getSession('github', ['repo'], options);
   return session?.accessToken;
+}
+
+/** `microsoftAccountId` is a raw `AuthenticationSessionAccountInformation.id` (not the `microsoft:`-prefixed binding form). */
+async function getMicrosoftToken(microsoftAccountId?: string): Promise<string | undefined> {
+  const options: vscode.AuthenticationGetSessionOptions = { createIfNone: false, silent: true };
+  if (microsoftAccountId) {
+    const accounts = await vscode.authentication.getAccounts('microsoft');
+    const account = accounts.find(a => a.id === microsoftAccountId);
+    if (account) options.account = account;
+  }
+  try {
+    const session = await vscode.authentication.getSession('microsoft', AZURE_DEVOPS_SCOPES, options);
+    return session?.accessToken;
+  } catch {
+    return undefined;
+  }
+}
+
+/** "owner/repo" → its parts. The owner may itself hold slashes (GitLab subgroups, Azure DevOps' organization/project). */
+function splitFullName(fullName: string): { owner: string; repo: string } | undefined {
+  const slash = fullName.lastIndexOf('/');
+  if (slash <= 0 || slash === fullName.length - 1) return undefined;
+  return { owner: fullName.slice(0, slash), repo: fullName.slice(slash + 1) };
 }
 
 function getHostProviderOverrides(): Record<string, string> {
@@ -231,6 +258,26 @@ export class PullRequestManager {
     this.invalidate(repoId);
   }
 
+  /** Microsoft accounts signed into VS Code — Azure DevOps Services can use them instead of a token. */
+  async listMicrosoftAccounts(): Promise<vscode.AuthenticationSessionAccountInformation[]> {
+    try {
+      return [...await vscode.authentication.getAccounts('microsoft')];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Which VS Code Microsoft account (if any) this repo is explicitly bound to. */
+  getMicrosoftAccountBinding(repoId: string): string | undefined {
+    const bound = this.bindings()[repoId];
+    return bound?.startsWith(MICROSOFT_ACCOUNT_ID_PREFIX) ? bound.slice(MICROSOFT_ACCOUNT_ID_PREFIX.length) : undefined;
+  }
+
+  async assignMicrosoftAccount(repoId: string, microsoftAccountId: string | undefined): Promise<void> {
+    await this.setBinding(repoId, microsoftAccountId ? `${MICROSOFT_ACCOUNT_ID_PREFIX}${microsoftAccountId}` : undefined);
+    this.invalidate(repoId);
+  }
+
   async assignAccount(repoId: string, accountId: string | undefined): Promise<void> {
     await this.setBinding(repoId, accountId);
     this.invalidate(repoId);
@@ -262,10 +309,15 @@ export class PullRequestManager {
   private providerDeps(repoId: string, parsed: ParsedRemote): ProviderFactoryDeps {
     const accountId = this.resolveAccountId(repoId, parsed.provider, parsed.host);
     const githubAccountId = this.getGitHubAccountBinding(repoId);
+    // Azure DevOps Services repos without a token use a Microsoft account: the one assigned, else VS Code's default.
+    const usesMicrosoft = parsed.provider === 'azure' && parsed.host === AZURE_DEVOPS_CLOUD_HOST && !accountId;
+    const microsoftAccountId = this.getMicrosoftAccountBinding(repoId);
     return {
       getGitHubToken: () => getGitHubToken(githubAccountId),
       getPatToken: () => accountId ? this.patStore.get(accountId) : Promise.resolve(undefined),
       getBitbucketCredentials: () => accountId ? this.patStore.getBitbucketCredentials(accountId) : Promise.resolve(undefined),
+      getMicrosoftToken: () => usesMicrosoft ? getMicrosoftToken(microsoftAccountId) : Promise.resolve(undefined),
+      azureApiBase: azureApiBaseFor(parsed, accountId ? this.patStore.getAccount(accountId)?.url : undefined),
     };
   }
 
@@ -432,12 +484,15 @@ export class PullRequestManager {
     }
     const { provider: forgeProvider, host } = resolved.provider;
     if (forgeProvider === 'bitbucket') return { ok: false, error: vscode.l10n.t('Bitbucket requires an account email in addition to the API token') };
-    const valid = await validateToken(forgeProvider, host, { apiToken: token });
+    const baseUrl = forgeProvider === 'azure' ? resolved.provider.apiBase : undefined;
+    const valid = await validateToken(forgeProvider, host, { apiToken: token, baseUrl });
     if (!valid.ok) {
       logWarn('pullrequest-connect-pat', `Token validation failed for ${host}`, valid.error);
       return valid;
     }
-    const accountId = await this.patStore.addAccount(forgeProvider, host, label, token);
+    // A server's collection URL is kept unless it was only guessed from an SSH remote.
+    const accountUrl = forgeProvider === 'azure' && host !== AZURE_DEVOPS_CLOUD_HOST && !resolved.provider.apiBaseGuessed ? baseUrl : undefined;
+    const accountId = await this.patStore.addAccount(forgeProvider, host, label, token, accountUrl);
     await this.setBinding(repoId, accountId);
     this.invalidate(repoId);
     return { ok: true };
@@ -480,9 +535,10 @@ export class PullRequestManager {
       logWarn('pullrequest-add-account', `Token validation failed for ${host}`, valid.error);
       return valid;
     }
+    const accountUrl = provider === 'azure' && host !== AZURE_DEVOPS_CLOUD_HOST ? credentials.baseUrl : undefined;
     const accountId = provider === 'bitbucket'
       ? await this.patStore.addBitbucketAccount(host, label, { email: credentials.email!, apiToken: credentials.apiToken })
-      : await this.patStore.addAccount(provider, host, label, credentials.apiToken);
+      : await this.patStore.addAccount(provider, host, label, credentials.apiToken, accountUrl);
     return { ok: true, accountId };
   }
 
@@ -554,10 +610,10 @@ export class PullRequestManager {
   async listTargetBranches(repoId: string, targetRepoFullName: string): Promise<{ items: string[]; error?: string }> {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
-    const [owner, repo] = targetRepoFullName.split('/');
-    if (!owner || !repo) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
+    const parts = splitFullName(targetRepoFullName);
+    if (!parts) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
     try {
-      return { items: await target.provider.listBranches(owner, repo) };
+      return { items: await target.provider.listBranches(parts.owner, parts.repo) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('pullrequest-list-branches', `Failed to load branches for ${targetRepoFullName}`, message);
@@ -569,10 +625,10 @@ export class PullRequestManager {
   async listCollaborators(repoId: string, targetRepoFullName: string): Promise<{ items: PullRequestUser[]; error?: string }> {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
-    const [owner, repo] = targetRepoFullName.split('/');
-    if (!owner || !repo) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
+    const parts = splitFullName(targetRepoFullName);
+    if (!parts) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
     try {
-      return { items: await target.provider.listCollaborators(owner, repo) };
+      return { items: await target.provider.listCollaborators(parts.owner, parts.repo) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('pullrequest-list-collaborators', `Failed to load collaborators for ${targetRepoFullName}`, message);
@@ -619,10 +675,10 @@ export class PullRequestManager {
   async listAvailableLabels(repoId: string, targetRepoFullName: string): Promise<{ items: PullRequestLabel[]; error?: string }> {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { items: [], error: target.error };
-    const [owner, repo] = targetRepoFullName.split('/');
-    if (!owner || !repo) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
+    const parts = splitFullName(targetRepoFullName);
+    if (!parts) return { items: [], error: vscode.l10n.t('Invalid repository name: {0}', targetRepoFullName) };
     try {
-      return { items: await target.provider.listAvailableLabels(owner, repo) };
+      return { items: await target.provider.listAvailableLabels(parts.owner, parts.repo) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('pullrequest-list-labels', `Failed to load labels for ${targetRepoFullName}`, message);
@@ -842,6 +898,22 @@ export class PullRequestManager {
       const message = err instanceof Error ? err.message : String(err);
       return { ok: false, error: redactCredentialsInUrls(message) };
     }
+  }
+}
+
+/**
+ * The Azure DevOps API root for a repo: the one parsed from its remote, except that a server remote cloned over SSH
+ * doesn't tell the web scheme and port — the account's own server URL does, when it's on the same host.
+ */
+function azureApiBaseFor(parsed: ParsedRemote, accountUrl: string | undefined): string | undefined {
+  if (parsed.provider !== 'azure' || !parsed.apiBaseGuessed || !parsed.apiBase || !accountUrl) return undefined;
+  try {
+    const account = new URL(accountUrl);
+    const guessed = new URL(parsed.apiBase);
+    if (account.hostname !== guessed.hostname) return undefined;
+    return `${account.protocol}//${account.host}${guessed.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return undefined;
   }
 }
 

@@ -1,5 +1,5 @@
 {
-  "extension.description": "在一个地方完成整个 Git 工作流 — 在每个仓库中提交、搁置、储藏、同步并评审拉取请求 (GitHub, GitLab, Bitbucket, Gitea)，日志面板始终跟得上。灵感来自 IntelliJ/JetBrains IDE。",
+  "extension.description": "在一个地方完成整个 Git 工作流 — 在每个仓库中提交、搁置、储藏、同步并评审拉取请求 (GitHub, GitLab, Bitbucket, Gitea, Azure DevOps)，日志面板始终跟得上。灵感来自 IntelliJ/JetBrains IDE。",
   "submenu.commitPanel.fileView.label": "文件视图",
   "submenu.commitPanel.sortRepos.label": "仓库排序方式",
   "submenu.commitPanel.sortChanges.label": "更改排序方式",
@@ -189,7 +189,7 @@
   "config.ai.prompts.explainPullRequest.markdownDescription": "用于生成拉取请求说明（“使用 AI 解释”）的自定义 AI 指令。留空则使用内置默认提示词。`{language}` 会被替换为配置的语言；更改内容（diff、文件、提交…）始终附加在这些指令之后。运行 **GitCharm: 自定义 AI 提示词** 以从默认文本开始编辑。",
   "config.section.pullRequests.title": "拉取请求",
   "config.section.issues.title": "议题",
-  "config.pullRequests.hostProviderOverrides.description": "针对无法自动检测的自托管实例，按 Git 主机手动覆盖代码托管平台类型，例如 { \"git.mycompany.com\": \"gitea\" }。有效值：github、gitlab、bitbucket、gitea。",
+  "config.pullRequests.hostProviderOverrides.description": "针对无法自动检测的自托管实例，按 Git 主机手动覆盖代码托管平台类型，例如 { \"git.mycompany.com\": \"gitea\" }。有效值：github、gitlab、bitbucket、gitea、azure。",
   "config.pullRequests.defaultTargetBranch.description": "无法通过代码托管平台 API 确定仓库默认分支时，新拉取请求的默认目标分支（留空则自动检测 main/master）。",
   "config.pullRequests.defaultMergeStrategy.description": "拉取请求详细信息面板中“合并拉取请求”按钮预选的默认策略。如果某个 PR 不支持此策略，则回退到代码托管平台/提供商实际支持的第一个策略。",
   "config.pullRequests.defaultMergeStrategy.enum.merge": "创建合并提交",
