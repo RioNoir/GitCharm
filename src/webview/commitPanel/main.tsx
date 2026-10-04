@@ -1391,10 +1391,20 @@ function App() {
 
   const doAutopilot = useCallback(() => {
     if (generatingMessage) return;
+    // Same files doCommit would commit: staged ones in vscode mode, the selected ones otherwise
+    const freshState = useCommitStore.getState();
+    const currentRepos = freshState.status?.repos ?? [];
+    const repos = freshState.changesViewMode === 'vscode'
+      ? currentRepos
+          .filter(r => vscodeSelectedRepos.has(r.repoId))
+          .map(r => ({ repoId: r.repoId, paths: r.stagedFiles.map(f => f.path), stagedOnly: true }))
+      : currentRepos
+          .filter(r => freshState.repoSelections[r.repoId] !== false)
+          .map(r => ({ repoId: r.repoId, paths: freshState.getSelectedFilesForRepo(r.repoId), stagedOnly: false }));
     setGeneratingMessage(true);
-    messageBeforeGenerate.current = useCommitStore.getState().commitMessage;
-    send({ type: 'COMMIT_GENERATE_MESSAGE', requestId: generateId() });
-  }, [generatingMessage, send]);
+    messageBeforeGenerate.current = freshState.commitMessage;
+    send({ type: 'COMMIT_GENERATE_MESSAGE', requestId: generateId(), repos: repos.filter(r => r.paths.length > 0) });
+  }, [generatingMessage, send, vscodeSelectedRepos]);
 
   const doAutopilotContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

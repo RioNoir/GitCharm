@@ -1219,6 +1219,7 @@
   "Select which .gitignore to update": "Seleziona il .gitignore da aggiornare",
   "\"{0}\" is already in {1}": "\"{0}\" è già presente in {1}",
   "Added \"{0}\" to {1}": "\"{0}\" aggiunto a {1}",
+  "No files to commit: select or stage some changes to generate a commit message.": "Nessun file da committare: seleziona o metti in stage delle modifiche per generare un messaggio di commit.",
   "Delete this shelved changelist? This cannot be undone.": "Eliminare questa changelist dallo Shelf? L'operazione non può essere annullata.",
   "Rename Shelf": "Rinomina Shelf",
   "Enter a new name for the shelf": "Inserisci un nuovo nome per lo Shelf",

@@ -1219,6 +1219,7 @@
   "Select which .gitignore to update": "选择要更新的 .gitignore",
   "\"{0}\" is already in {1}": "“{0}”已在 {1} 中",
   "Added \"{0}\" to {1}": "已将“{0}”添加到 {1}",
+  "No files to commit: select or stage some changes to generate a commit message.": "没有要提交的文件：请选择或暂存一些更改以生成提交消息。",
   "Delete this shelved changelist? This cannot be undone.": "要删除此搁置的更改列表吗？此操作无法撤销。",
   "Rename Shelf": "重命名搁置",
   "Enter a new name for the shelf": "输入搁置的新名称",

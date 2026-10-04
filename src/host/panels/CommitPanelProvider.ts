@@ -13,7 +13,7 @@ import { ShelveService } from '../git/ShelveService';
 import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
 import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId, IssueStateFilter, IssueSummary } from '../types/messages';
-import type { WorkspaceStatus } from '../types/git';
+import type { FileStatus, WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
@@ -1785,18 +1785,34 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           const ws = await this.manager.getAllStatuses();
           const cfg = vscode.workspace.getConfiguration('gitcharm');
           const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
-          const multiRepo = ws.repos.length > 1;
+
+          // Only the files that would be committed: the selected ones, or what's staged in VS Code mode
+          const targets = msg.repos.flatMap(t => {
+            const repo = ws.repos.find(r => r.repoId === t.repoId);
+            if (!repo) return [];
+            const wanted = new Set(t.paths);
+            const byPath = new Map<string, FileStatus>();
+            for (const f of t.stagedOnly ? repo.stagedFiles : [...repo.stagedFiles, ...repo.unstagedFiles]) {
+              if (wanted.has(f.path) && !byPath.has(f.path)) byPath.set(f.path, f);
+            }
+            return byPath.size > 0 ? [{ repoId: repo.repoId, stagedOnly: t.stagedOnly, files: [...byPath.values()] }] : [];
+          });
+          if (targets.length === 0) {
+            void vscode.window.showWarningMessage(vscode.l10n.t('No files to commit: select or stage some changes to generate a commit message.'));
+            this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId });
+            break;
+          }
+          const multiRepo = targets.length > 1;
 
           // Collect file summary + diff per repo
           const sections: string[] = [];
-          for (const repo of ws.repos) {
+          for (const repo of targets) {
             const repoName = path.basename(repo.repoId);
-            const files = [...repo.stagedFiles, ...repo.unstagedFiles];
-            if (files.length === 0) continue;
+            const files = repo.files;
 
             const fileLines = files.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`);
             const svc = this.manager.getRepo(repo.repoId);
-            const diff = svc ? await svc.getFullStagedDiff(maxDiffChars) : '';
+            const diff = svc ? await svc.getCommitDiffForPaths(files.map(f => f.path), repo.stagedOnly, maxDiffChars) : '';
 
             const block = [
               multiRepo ? `### Repository: ${repoName}` : '',

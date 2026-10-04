@@ -225,7 +225,8 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_SHOW_BRANCH_MENU'; repoId?: string }
   | { type: 'COMMIT_OPEN_MERGE_EDITOR'; repoId: string; filePath: string }
   | { type: 'COMMIT_RESOLVE_CONFLICTS_AI'; repoId: string; filePath: string }
-  | { type: 'COMMIT_GENERATE_MESSAGE'; requestId: string }
+  /** `repos`: the files that would be committed — the selected ones, or (stagedOnly) what's staged in VS Code mode. */
+  | { type: 'COMMIT_GENERATE_MESSAGE'; requestId: string; repos: { repoId: string; paths: string[]; stagedOnly: boolean }[] }
   | { type: 'COMMIT_SELECT_AI_MODEL' }
   | { type: 'COMMIT_OPEN_AI_SETTINGS' }
   | { type: 'SHELVE_LIST'; requestId: string; repoId: string }

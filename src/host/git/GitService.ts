@@ -1166,14 +1166,23 @@ export class GitService {
     }
   }
 
-  async getFullStagedDiff(maxChars = 8000): Promise<string> {
+  /**
+   * Diff of the given paths as they would be committed: only the index when `stagedOnly`,
+   * otherwise index + working tree against HEAD (untracked files have no diff).
+   */
+  async getCommitDiffForPaths(paths: string[], stagedOnly: boolean, maxChars = 8000): Promise<string> {
+    if (paths.length === 0) return '';
     try {
-      const vsRepo = this.vsRepo();
-      const raw = vsRepo ? await vsRepo.diff(true) : await this.git.diff(['--staged']);
-      if (!raw) {
-        // Nothing staged — fall back to unstaged diff
-        const unstaged = vsRepo ? await vsRepo.diff(false) : await this.git.diff([]);
-        return unstaged.length > maxChars ? unstaged.slice(0, maxChars) + '\n...[diff truncated]' : unstaged;
+      let raw: string;
+      if (stagedOnly) {
+        raw = await this.git.raw(['diff', '--cached', '--', ...paths]);
+      } else {
+        raw = await this.git.raw(['diff', 'HEAD', '--', ...paths]).catch(async () => {
+          // No HEAD yet (initial commit): combine staged and unstaged changes
+          const staged = await this.git.raw(['diff', '--cached', '--', ...paths]).catch(() => '');
+          const unstaged = await this.git.raw(['diff', '--', ...paths]).catch(() => '');
+          return staged + unstaged;
+        });
       }
       return raw.length > maxChars ? raw.slice(0, maxChars) + '\n...[diff truncated]' : raw;
     } catch { return ''; }
