@@ -1,5 +1,6 @@
 import React from 'react';
 import * as l10n from '@vscode/l10n';
+import { shortcut } from '../../shared/shortcut';
 import { plural } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 
@@ -88,7 +89,7 @@ export function CommitForm({
           style={styles.commitBtn(canCommit && !loading, false)}
           onClick={onCommit}
           disabled={!canCommit || loading}
-          title={l10n.t('Commit staged changes (⌘Enter)')}
+          title={l10n.t('Commit staged changes ({0})', shortcut(['mod'], 'Enter'))}
         >
           {l10n.t('Commit')}
         </button>

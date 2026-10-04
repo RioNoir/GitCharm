@@ -11,6 +11,7 @@ import TurndownService from 'turndown';
 import { Codicon } from './Codicon';
 import { focusableFieldStyle, generatingFieldStyle } from './inputStyles';
 import * as l10n from '@vscode/l10n';
+import { shortcut } from './shortcut';
 import { isImeComposing } from './ime';
 import { decorateMentions, useMentionCandidates, type MentionCandidate } from './mentions';
 import { ForgeAvatarImg } from './ForgeAvatarImg';
@@ -304,8 +305,8 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
         </div>
         <div style={css.toolbarDivider} />
         <div style={css.toolbarGroup}>
-          <ToolbarButton icon="bold" title={l10n.t('Bold (Ctrl+B)')} active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
-          <ToolbarButton icon="italic" title={l10n.t('Italic (Ctrl+I)')} active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
+          <ToolbarButton icon="bold" title={l10n.t('Bold ({0})', shortcut(['mod'], 'B'))} active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
+          <ToolbarButton icon="italic" title={l10n.t('Italic ({0})', shortcut(['mod'], 'I'))} active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
           <ToolbarButton icon="code" title={l10n.t('Inline code')} active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} />
         </div>
         <div style={css.toolbarDivider} />

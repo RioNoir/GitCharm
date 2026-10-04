@@ -1,4 +1,5 @@
 import * as l10n from '@vscode/l10n';
+import { shortcut } from '../shared/shortcut';
 import React, { useEffect, useState } from 'react';
 import { Codicon } from '../shared/Codicon';
 import { GitCharmIcon } from '../shared/GitCharmIcon';
@@ -288,7 +289,7 @@ function ChangesViewPreview({ get, repos }: PreviewProps) {
           ) : typed > 0 ? (
             <span>{COMMIT_MESSAGE.slice(0, typed)}{typed < COMMIT_MESSAGE.length && <span className="pv-caret" />}</span>
           ) : (
-            <span className="pv-muted">Commit message (Cmd+Enter to commit)</span>
+            <span className="pv-muted">{l10n.t('Commit message ({0} to commit)', shortcut(['mod'], 'Enter'))}</span>
           )}
           <Codicon name="sparkle" style={{ fontSize: 11, marginLeft: 'auto', opacity: 0.7 }} />
         </div>

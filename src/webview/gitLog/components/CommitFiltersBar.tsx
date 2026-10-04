@@ -4,6 +4,7 @@ import type { CompareCounts, CompareMode, CompareRange } from '../../../host/typ
 import type { BranchInfo, RepoMeta, TagInfo } from '../../shared/types';
 import { Codicon } from '../../shared/Codicon';
 import * as l10n from '@vscode/l10n';
+import { shortcut } from '../../shared/shortcut';
 import { dateLocale } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 import { ensureScrollbarHideStyle } from '../../shared/ScrollArea';
@@ -520,7 +521,7 @@ export function RepoTabs({ value, repos, onChange }: {
           aria-selected={value === null}
           style={styles.repoTab(value === null)}
           onClick={() => onChange(null)}
-          title={l10n.t('All repositories ({0})', 'Ctrl/Cmd+Alt+0')}
+          title={l10n.t('All repositories ({0})', shortcut(['mod', 'alt'], '0'))}
         >
           <Codicon name="repo" style={{ fontSize: '12px', opacity: 0.65 }} />
           <span>{l10n.t({ message: 'All', comment: ['Repository tab: show commits of all repositories'] })}</span>
@@ -534,7 +535,7 @@ export function RepoTabs({ value, repos, onChange }: {
             aria-selected={value === repo.id}
             style={styles.repoTab(value === repo.id)}
             onClick={() => onChange(repo.id)}
-            title={`${repo.name}${index < 9 ? ` (Ctrl/Cmd+Alt+${index + 1})` : ''}`}
+            title={`${repo.name}${index < 9 ? ` (${shortcut(['mod', 'alt'], String(index + 1))})` : ''}`}
           >
             <span style={{ ...styles.repoDot, background: repo.color }} />
             <span style={styles.repoTabLabel}>{repo.name}</span>

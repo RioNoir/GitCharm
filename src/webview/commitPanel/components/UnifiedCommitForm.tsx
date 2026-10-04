@@ -4,6 +4,7 @@ import { Codicon } from '../../shared/Codicon';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { computeSyncState, hasWorkingChanges, type SyncAction } from '../syncState';
 import * as l10n from '@vscode/l10n';
+import { shortcut } from '../../shared/shortcut';
 import { plural } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 
@@ -516,7 +517,7 @@ export function UnifiedCommitForm({
           onFocus={() => setTextareaFocused(true)}
           onBlur={() => { rememberCaret(); setTextareaFocused(false); }}
           onSelect={rememberCaret}
-          placeholder={generatingMessage ? l10n.t('Generating commit message…') : l10n.t('Commit message (Cmd+Enter to commit)')}
+          placeholder={generatingMessage ? l10n.t('Generating commit message…') : l10n.t('Commit message ({0} to commit)', shortcut(['mod'], 'Enter'))}
           readOnly={generatingMessage}
           rows={2}
           onContextMenu={handleCtxMenu}
@@ -656,7 +657,7 @@ export function UnifiedCommitForm({
             enabled={canCommit}
             icon={defaultCommitAction === 'commitAndPush' ? 'cloud-upload' : 'check'}
             label={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push') : l10n.t('Commit')}
-            title={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push (Cmd+Enter)') : l10n.t('Commit (Cmd+Enter)')}
+            title={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push ({0})', shortcut(['mod'], 'Enter')) : l10n.t('Commit ({0})', shortcut(['mod'], 'Enter'))}
             disabledTitle={l10n.t('Stage files and write a message first')}
             items={commitDropdownItems}
             onMainClick={defaultCommitAction === 'commitAndPush' ? onCommitAndPush : onCommit}

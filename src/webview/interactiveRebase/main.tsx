@@ -1,5 +1,6 @@
 import { plural } from '../shared/l10n';
 import * as l10n from '@vscode/l10n';
+import { shortcut } from '../shared/shortcut';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Codicon } from '../shared/Codicon';
@@ -330,11 +331,11 @@ function App() {
           </button>
         ))}
         <span className="ir-tool-sep" />
-        <button type="button" className="ir-tool" disabled={busy} title={l10n.t('Move Up (Alt+Up)')} aria-label={l10n.t('Move Up')}
+        <button type="button" className="ir-tool" disabled={busy} title={l10n.t('Move Up ({0})', shortcut(['alt'], 'Up'))} aria-label={l10n.t('Move Up')}
           onClick={() => setRows(rs => moveBy(rs, selected, -1))}>
           <Codicon name="arrow-up" />
         </button>
-        <button type="button" className="ir-tool" disabled={busy} title={l10n.t('Move Down (Alt+Down)')} aria-label={l10n.t('Move Down')}
+        <button type="button" className="ir-tool" disabled={busy} title={l10n.t('Move Down ({0})', shortcut(['alt'], 'Down'))} aria-label={l10n.t('Move Down')}
           onClick={() => setRows(rs => moveBy(rs, selected, 1))}>
           <Codicon name="arrow-down" />
         </button>
@@ -461,7 +462,7 @@ function App() {
           {managed ? l10n.t('Cancel') : l10n.t('Abort Rebase')}
         </button>
         <button type="button" className="ir-btn primary" disabled={busy || problems.length > 0} onClick={start}
-          title={l10n.t('Start Rebasing (Ctrl+Enter)')}>
+          title={l10n.t('Start Rebasing ({0})', shortcut(['mod'], 'Enter'))}>
           {busy ? <><Codicon name="loading" className="codicon-modifier-spin" /> {l10n.t('Rebasing…')}</> : l10n.t('Start Rebasing')}
         </button>
       </footer>
