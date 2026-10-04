@@ -76,6 +76,18 @@ export function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl?: st
   );
 }
 
+/** Author names longer than this are cut, with an ellipsis; the full name is in the tooltip. */
+const AUTHOR_NAME_MAX_CHARS = 16;
+
+/** The author's name next to their avatar in a list row — shared by the Pull Requests and Issues tabs. */
+export function AuthorName({ name }: { name: string }) {
+  if (!name) return null;
+  // By code point, so an emoji or other astral character is never split in half
+  const chars = Array.from(name);
+  const shown = chars.length > AUTHOR_NAME_MAX_CHARS ? chars.slice(0, AUTHOR_NAME_MAX_CHARS - 1).join('').trimEnd() + '…' : name;
+  return <span style={row.authorName} title={name}>{shown}</span>;
+}
+
 /** GitHub-style "✓ 3/3" — the icon reflects the worst state (any failure wins over pending), the count is passed/total. */
 function ChecksBadge({ checks }: { checks: NonNullable<PullRequestSummary['checks']> }) {
   const { icon, color } = checks.failed > 0
@@ -117,6 +129,7 @@ function PullRequestRow({ pr, repoId, suppressBorder = false, onOpenInBrowser, o
         </span>
         <span style={row.meta}>
           <AuthorAvatar name={pr.authorName} avatarUrl={pr.authorAvatarUrl} />
+          <AuthorName name={pr.authorName} />
           {(pr.sourceBranch || pr.targetBranch) && (
             <span style={row.branch} title={`${pr.sourceBranch} → ${pr.targetBranch}`}>
               <Codicon name="git-branch" style={{ fontSize: '10px', marginRight: '3px', opacity: 0.6, flexShrink: 0 }} />
@@ -427,6 +440,10 @@ export const row = {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0, flexShrink: 1,
   } as React.CSSProperties,
   meta: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', minWidth: 0 } as React.CSSProperties,
+  authorName: {
+    fontSize: '10px', whiteSpace: 'nowrap' as const, flexShrink: 0,
+    color: 'var(--vscode-descriptionForeground)',
+  } as React.CSSProperties,
   branch: {
     fontSize: '10px', opacity: 0.55, display: 'flex', alignItems: 'center',
     overflow: 'hidden', whiteSpace: 'nowrap' as const, minWidth: 0,

@@ -3,7 +3,7 @@ import type { RepoIssues, IssueSummary, ForgeProvider } from '../../shared/msgTy
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { EmptyTabState } from './EmptyTabState';
-import { AuthorAvatar, ConnectPrompt, RepoSkeleton, css, row, useSkeletonStyle } from './PullRequestPanel';
+import { AuthorAvatar, AuthorName, ConnectPrompt, RepoSkeleton, css, row, useSkeletonStyle } from './PullRequestPanel';
 import * as l10n from '@vscode/l10n';
 import { plural } from '../../shared/l10n';
 
@@ -76,6 +76,7 @@ function IssueRow({ issue, repoId, suppressBorder = false, onOpenInBrowser, onOp
         </span>
         <span style={row.meta}>
           <AuthorAvatar name={issue.authorName} avatarUrl={issue.authorAvatarUrl} />
+          <AuthorName name={issue.authorName} />
           {!!issue.commentCount && (
             <span style={rowExtra.comments} title={plural(issue.commentCount, l10n.t('1 comment'), l10n.t('{0} comments', issue.commentCount))}>
               <Codicon name="comment" style={{ fontSize: '11px' }} />
