@@ -783,6 +783,10 @@ export function registerCommands(
     vscode.commands.registerCommand('gitcharm.pullRequests.manageCredentials', () =>
       vscode.commands.executeCommand('gitcharm.openSettings', 'integrations')),
 
+    // From a branch's actions in the Git Menu
+    vscode.commands.registerCommand('gitcharm.createPullRequestFromBranch', (repoId: string, branchName: string) =>
+      commitPanel.createPullRequestFromBranch(repoId, branchName)),
+
     // ── Issue commands ────────────────────────────────────────────────────────
 
     vscode.commands.registerCommand('gitcharm.issues.refresh', () => {

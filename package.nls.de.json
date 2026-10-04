@@ -59,6 +59,7 @@
   "command.worktree.add.title": "Worktree hinzufügen",
   "command.worktree.prune.title": "Worktrees bereinigen",
   "command.pullRequests.manageCredentials.title": "Pull-Request-Anmeldedaten verwalten",
+  "command.createPullRequestFromBranch.title": "Pull-Request erstellen",
   "command.pullRequests.refresh.title": "Pull-Requests aktualisieren",
   "command.issues.refresh.title": "Issues aktualisieren",
   "command.issues.insertReference.title": "Issue in der Commit-Nachricht referenzieren",

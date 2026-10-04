@@ -70,9 +70,12 @@ export class CreatePullRequestPanel {
     private readonly onCreated: () => void,
   ) {}
 
-  async open(repoId: string): Promise<void> {
-    if (this.panels.has(repoId)) {
-      this.panels.get(repoId)!.reveal();
+  /** `sourceBranch`: preselected as the PR's source, instead of the checked-out branch — also in a form already open. */
+  async open(repoId: string, sourceBranch?: string): Promise<void> {
+    const existing = this.panels.get(repoId);
+    if (existing) {
+      existing.reveal();
+      if (sourceBranch) void existing.webview.postMessage({ type: 'PRCREATE_SET_SOURCE', branch: sourceBranch } satisfies HostToPrCreateMsg);
       return;
     }
 
@@ -122,7 +125,7 @@ export class CreatePullRequestPanel {
 
     const cfg = vscode.workspace.getConfiguration('gitcharm');
     gate.post({
-      type: 'PRCREATE_INIT', repoId, repoName: meta.name, provider: connection.provider,
+      type: 'PRCREATE_INIT', repoId, repoName: meta.name, provider: connection.provider, sourceBranch,
       aiEnabled: cfg.get('ai.enabled', true), aiModelLabel: getAiModelLabel(cfg, 'pullRequest'),
     } satisfies HostToPrCreateMsg);
 

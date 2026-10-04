@@ -493,7 +493,9 @@ export type LogToHostMsg =
 // ─── Create Pull Request: Host → WebView ─────────────────────────────────────
 
 export type HostToPrCreateMsg =
-  | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider; aiEnabled: boolean; aiModelLabel: string }
+  /** `sourceBranch`: preselected source; otherwise the checked-out branch. */
+  | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider; aiEnabled: boolean; aiModelLabel: string; sourceBranch?: string }
+  | { type: 'PRCREATE_SET_SOURCE'; branch: string }
   | { type: 'PRCREATE_BRANCHES_RESULT'; branches: BranchInfo[]; error?: string }
   | { type: 'PRCREATE_ICON_THEME'; iconTheme: IconThemeData }
   | { type: 'PRCREATE_BRANCH_PICKED'; requestId: string; role: 'source' | 'target'; branch?: string }

@@ -59,6 +59,7 @@
   "command.worktree.add.title": "添加工作树",
   "command.worktree.prune.title": "清理工作树",
   "command.pullRequests.manageCredentials.title": "管理拉取请求凭据",
+  "command.createPullRequestFromBranch.title": "创建拉取请求",
   "command.pullRequests.refresh.title": "刷新拉取请求",
   "command.issues.refresh.title": "刷新议题",
   "command.issues.insertReference.title": "在提交消息中引用议题",

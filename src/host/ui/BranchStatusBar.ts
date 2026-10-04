@@ -869,6 +869,11 @@ export class BranchStatusBar implements vscode.Disposable {
       },
     ];
 
+    // A pull request belongs to one repository: only offered when the workspace has just this one
+    if (metas.length === 1 && !isRemote) {
+      items.push(this.createPullRequestItem(branchName, metas[0]!));
+    }
+
     // These act against a single "current branch" ref, which is ambiguous across repositories
     // that aren't all on the same branch — only offer them when every repo agrees on one.
     if (!isCurrent && !hasDivergence) {
@@ -1608,6 +1613,8 @@ export class BranchStatusBar implements vscode.Disposable {
       });
     }
 
+    if (!isRemote) items.push(this.createPullRequestItem(branchName, meta));
+
     if (!isCurrent) {
       items.push(
         { label: '', kind: vscode.QuickPickItemKind.Separator, action: async () => {} },
@@ -1660,6 +1667,17 @@ export class BranchStatusBar implements vscode.Disposable {
     }) as ActionItem | undefined;
 
     if (pick) await pick.action();
+  }
+
+  /**
+   * Opens the New Pull Request form with a local branch as its source. Remote branches aren't
+   * offered: the form would send "origin/name" to the forge as the source branch.
+   */
+  private createPullRequestItem(branchName: string, meta: RepoMeta): vscode.QuickPickItem & { action: () => Promise<void> } {
+    return {
+      label: `$(git-pull-request) ${vscode.l10n.t('Create Pull Request…')}`,
+      action: async () => { await vscode.commands.executeCommand('gitcharm.createPullRequestFromBranch', meta.id, branchName); },
+    };
   }
 
   private async newBranchSingleRepo(meta: RepoMeta): Promise<void> {

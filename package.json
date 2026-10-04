@@ -452,6 +452,12 @@
         "category": "GitCharm"
       },
       {
+        "command": "gitcharm.createPullRequestFromBranch",
+        "title": "%command.createPullRequestFromBranch.title%",
+        "category": "GitCharm",
+        "icon": "$(git-pull-request)"
+      },
+      {
         "command": "gitcharm.issues.refresh",
         "title": "%command.issues.refresh.title%",
         "category": "GitCharm"
@@ -927,6 +933,10 @@
         },
         {
           "command": "gitcharm.refreshCommitPanel"
+        },
+        {
+          "command": "gitcharm.createPullRequestFromBranch",
+          "when": "false"
         },
         {
           "command": "gitcharm.setFileViewFlat",

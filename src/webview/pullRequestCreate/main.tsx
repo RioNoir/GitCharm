@@ -102,6 +102,7 @@ function App() {
           setProvider(msg.provider);
           setAiEnabled(msg.aiEnabled);
           setAiModelLabel(msg.aiModelLabel);
+          if (msg.sourceBranch) setSourceBranch(msg.sourceBranch);
           send({ type: 'PRCREATE_REQUEST_BRANCHES' });
           send({ type: 'PRCREATE_REQUEST_MENTION_CANDIDATES' });
           break;
@@ -131,6 +132,9 @@ function App() {
           setBranchesLoading(false);
           setBranches(msg.branches);
           setBranchesError(msg.error);
+          break;
+        case 'PRCREATE_SET_SOURCE':
+          setSourceBranch(msg.branch);
           break;
         case 'PRCREATE_ICON_THEME':
           setIconTheme(msg.iconTheme);

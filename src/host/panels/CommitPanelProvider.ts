@@ -531,6 +531,23 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
    * detected provider, or connect a new one. Shown both for a first-time connection and
    * to switch the account an already-connected repo uses.
    */
+  /** Opens the New Pull Request form with `branchName` as its source, once the repo is connected to its forge. */
+  async createPullRequestFromBranch(repoId: string, branchName: string): Promise<void> {
+    if (!this.pullRequestManager || !this.createPullRequestPanel) return;
+    const connection = await this.pullRequestManager.getConnectionStatus(repoId);
+    if (!connection.connected) {
+      if (connection.noRemote) {
+        vscode.window.showWarningMessage(vscode.l10n.t('This repository has no remote to open a pull request on.'));
+        return;
+      }
+      const connect = vscode.l10n.t('Connect…');
+      const pick = await vscode.window.showWarningMessage(vscode.l10n.t('Connect an account to this repository\'s Git hosting service to create pull requests.'), connect);
+      if (pick === connect) await this.openPullRequestAccountPicker(repoId);
+      return;
+    }
+    await this.createPullRequestPanel.open(repoId, branchName);
+  }
+
   private async openPullRequestAccountPicker(repoId: string): Promise<void> {
     if (!this.pullRequestManager) return;
     const connection = await this.pullRequestManager.getConnectionStatus(repoId);
