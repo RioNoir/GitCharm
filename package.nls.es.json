@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "Abrir en la pestaña Issues.",
   "config.commitPanel.defaultTab.sync": "Abrir en la pestaña Sync.",
   "config.commitPanel.defaultTab.lastUsed": "Abrir en la última pestaña usada en esta área de trabajo.",
-  "config.commitPanel.tabLabels.description": "Qué pestañas muestran su nombre junto al icono. Si los nombres no caben, las pestañas pasan a ser un desplegable de todos modos.",
+  "config.commitPanel.tabLabels.description": "Qué pestañas muestran su nombre junto al icono. Si las pestañas no caben, solo la pestaña activa conserva su nombre, y las que aun así no caben pasan a un menú Más pestañas.",
   "config.commitPanel.tabLabels.active": "Solo la pestaña activa.",
   "config.commitPanel.tabLabels.always": "Todas las pestañas.",
   "config.commitPanel.tabLabels.never": "Ninguna: solo iconos.",

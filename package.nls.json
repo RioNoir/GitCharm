@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "Open on the Issues tab.",
   "config.commitPanel.defaultTab.sync": "Open on the Sync tab.",
   "config.commitPanel.defaultTab.lastUsed": "Open on the tab last used in this workspace.",
-  "config.commitPanel.tabLabels.description": "Which tabs show their name next to the icon. When the names don't fit, the tabs become a dropdown either way.",
+  "config.commitPanel.tabLabels.description": "Which tabs show their name next to the icon. When the tabs don't fit, only the active tab keeps its name, and the tabs that still don't fit move to a More Tabs menu.",
   "config.commitPanel.tabLabels.active": "Only the active tab.",
   "config.commitPanel.tabLabels.always": "Every tab.",
   "config.commitPanel.tabLabels.never": "None: icons only.",

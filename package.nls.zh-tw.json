@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "開啟「議題」索引標籤。",
   "config.commitPanel.defaultTab.sync": "開啟「同步」索引標籤。",
   "config.commitPanel.defaultTab.lastUsed": "開啟此工作區中上次使用的索引標籤。",
-  "config.commitPanel.tabLabels.description": "哪些索引標籤在圖示旁顯示名稱。名稱放不下時，索引標籤一律會變成下拉式選單。",
+  "config.commitPanel.tabLabels.description": "哪些索引標籤在圖示旁顯示名稱。索引標籤放不下時，只有作用中的索引標籤保留名稱；仍然放不下的索引標籤會移到「更多索引標籤」選單中。",
   "config.commitPanel.tabLabels.active": "僅作用中的索引標籤。",
   "config.commitPanel.tabLabels.always": "所有索引標籤。",
   "config.commitPanel.tabLabels.never": "無：僅顯示圖示。",

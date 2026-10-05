@@ -1,7 +1,7 @@
 import { plural } from '../shared/l10n';
 import * as l10n from '@vscode/l10n';
 import { isImeComposing } from '../shared/ime';
-import React, { useEffect, useCallback, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { isEmbedded } from '../shared/embedded';
 import { useCommitStore } from './store/commitStore';
@@ -10,6 +10,7 @@ import { ChangelistView } from './components/ChangelistView';
 import { VscodeView } from './components/VscodeView';
 import { UnifiedCommitForm } from './components/UnifiedCommitForm';
 import type { SyncAction } from './syncState';
+import { layoutTabBar, type TabBarWidths } from './tabBarLayout';
 import { ContextMenu, type ContextMenuEntry } from './components/ContextMenu';
 import { ShelvePanel } from './components/ShelvePanel';
 import { EmptyTabState } from './components/EmptyTabState';
@@ -28,7 +29,6 @@ import type { FileStatus, RepoStatus } from '../shared/types';
 import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../shared/types';
 import type { ViewAndSortUserPrefs } from '../../host/types/settings';
 import { sortRepos } from './repoSort';
-import { displayWidth } from '../../host/utils/displayWidth';
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -271,9 +271,11 @@ function App() {
   useEffect(() => {
     if (!shownTabs.includes(activeTab)) setActiveTab('changes');
   }, [activeTab, panelConfig]);
-  const [tabBarCollapsed, setTabBarCollapsed] = useState(false);
-  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; width: number } | null>(null);
+  const [tabBarWidths, setTabBarWidths] = useState<TabBarWidths<TabId> | null>(null);
+  // `dropdown`: the collapsed bar's menu, as wide as its button; `overflow`: the tabs left out of a partial strip.
+  const [tabMenu, setTabMenu] = useState<{ kind: 'dropdown' | 'overflow'; x: number; y: number; width?: number } | null>(null);
   const tabDropdownBtnRef = useRef<HTMLButtonElement>(null);
+  const tabOverflowBtnRef = useRef<HTMLButtonElement>(null);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
   const tabBarContentRef = useRef<HTMLDivElement | null>(null);
 
@@ -428,21 +430,34 @@ function App() {
     document.head.appendChild(s);
   }, []);
 
-  // Collapse the tab bar into a single dropdown button once it no longer fits in the
-  // available width. The width check is driven by a hidden probe strip with every tab's
-  // label expanded at once (see tabBarContentRefCb usage below), not by the real strip —
-  // that keeps the collapse threshold constant regardless of which tab is active. The tab
-  // bar only mounts once the loading/empty-state early returns below have passed, so the
-  // observer is (re)installed via callback refs rather than a mount-only useEffect —
-  // otherwise it would run once against null refs (during the loading state) and never again.
+  // Measure the room the tab bar has and the width of each tab, for layoutTabBar to drop labels,
+  // then tabs, as the bar narrows. The widths come from a hidden probe strip (see
+  // tabBarContentRefCb usage below), not from the real strip, whose tabs come and go with the
+  // layout it is laid out from. The tab bar only mounts once the loading/empty-state early
+  // returns below have passed, so the observer is (re)installed via callback refs rather than a
+  // mount-only useEffect — otherwise it would run once against null refs (during the loading
+  // state) and never again.
   const tabBarObserverRef = useRef<ResizeObserver | null>(null);
+  const measureTabBarRef = useRef<() => void>(() => {});
   const setTabBarRefs = useCallback(() => {
     const bar = tabBarRef.current;
     const content = tabBarContentRef.current;
     tabBarObserverRef.current?.disconnect();
     tabBarObserverRef.current = null;
+    measureTabBarRef.current = () => {};
     if (!bar || !content) return;
-    const check = () => setTabBarCollapsed(content.scrollWidth > bar.clientWidth);
+    const width = (el: Element) => Math.ceil(el.getBoundingClientRect().width);
+    const check = () => {
+      const icon: Partial<Record<TabId, number>> = {};
+      const label: Partial<Record<TabId, number>> = {};
+      content.querySelectorAll<HTMLElement>('[data-probe-tab]').forEach(el => {
+        (el.dataset.probeLabel ? label : icon)[el.dataset.probeTab as TabId] = width(el);
+      });
+      const moreEl = content.querySelector('[data-probe-more]');
+      const next: TabBarWidths<TabId> = { bar: bar.clientWidth, icon, label, more: moreEl ? width(moreEl) : 0 };
+      setTabBarWidths(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+    };
+    measureTabBarRef.current = check;
     check();
     const observer = new ResizeObserver(check);
     observer.observe(bar);
@@ -457,6 +472,9 @@ function App() {
     tabBarContentRef.current = el;
     setTabBarRefs();
   }, [setTabBarRefs]);
+  // A tab swapped for another of the same width leaves the probe's size, which the observer watches, unchanged.
+  const shownTabsKey = shownTabs.join(',');
+  useLayoutEffect(() => { measureTabBarRef.current(); }, [shownTabsKey]);
 
   // ── Autopilot ─────────────────────────────────────────────────────────────
   const [generatingMessage, setGeneratingMessage]   = useState(false);
@@ -1585,87 +1603,118 @@ function App() {
         const allTabs = shownTabs;
         const activeMeta = tabMeta(activeTab);
         const labels = panelConfig?.labels ?? 'active';
-        const showsLabel = (tab: TabId) => labels === 'always' || (labels === 'active' && tab === activeTab);
-        // Longest label among all tabs — used by the width probe below as the one tab whose label
-        // gets expanded, since only one tab (the active one) is ever expanded at a time.
-        const widestTab = allTabs.reduce((a, b) => displayWidth(tabMeta(b).label) > displayWidth(tabMeta(a).label) ? b : a);
-        // Which labels the probe expands: the worst case of the label setting.
-        const probeShowsLabel = (tab: TabId) => labels === 'always' || (labels === 'active' && tab === widestTab);
+        // When tabs have to go, the ones with a count stay longest — Changes and Sync, the counts
+        // watched most, ahead of the rest. Until the first measurement, every tab as the label setting says.
+        const tabRank = (tab: TabId) => tabMeta(tab).badge === 0 ? 2 : tab === 'changes' || tab === 'push' ? 0 : 1;
+        const layout = tabBarWidths
+          ? layoutTabBar(allTabs, activeTab, labels, tabBarWidths, tabRank)
+          : { kind: 'strip' as const, visible: allTabs, overflow: [] as TabId[], labels: labels === 'always' ? 'all' as const : labels === 'never' ? 'none' as const : 'active' as const };
+        const strip = layout.kind === 'strip' ? layout : null;
+        const showsLabel = (tab: TabId) => strip?.labels === 'all' || (strip?.labels === 'active' && tab === activeTab);
+        const overflowHasBadge = !!strip?.overflow.some(tab => tabMeta(tab).badge > 0);
+        const dropdownHasBadge = !strip && allTabs.some(tab => tab !== activeTab && tabMeta(tab).badge > 0);
+        const openTabMenu = (kind: 'dropdown' | 'overflow', el: HTMLElement) => {
+          if (tabMenu) { setTabMenu(null); return; }
+          const rect = el.getBoundingClientRect();
+          setTabMenu({ kind, x: rect.left, y: rect.bottom, width: kind === 'dropdown' ? rect.width : undefined });
+        };
+        // Lists the tabs not on the bar: all but the active one in the dropdown, the overflow in a partial strip.
+        const menuTabs = tabMenu?.kind === 'overflow' ? (strip?.overflow ?? []) : allTabs.filter(tab => tab !== activeTab);
         return (
           <div ref={tabBarRefCb} style={css.tabBar}>
-            {/* Real tab strip — hidden (not unmounted) when collapsed, so it keeps its state and re-appears instantly once space is available again. */}
-            <div style={tabBarCollapsed ? { display: 'none' } : { display: 'flex', minWidth: 0 }}>
-              {allTabs.map(tab => {
-                const { label, iconName, badge } = tabMeta(tab);
-                return (
-                  <button
-                    key={tab}
-                    style={css.tab(activeTab === tab)}
-                    title={label}
-                    onClick={() => selectTab(tab)}
-                  >
-                    <Codicon
-                      name={iconName}
-                      style={{ marginRight: showsLabel(tab) ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
-                    />
-                    {showsLabel(tab) && (
-                      <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
-                        {label}
-                      </span>
-                    )}
-                    {badge > 0 && (
-                      <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {strip && (
+              <div style={{ display: 'flex', minWidth: 0 }}>
+                {strip.visible.map(tab => {
+                  const { label, iconName, badge } = tabMeta(tab);
+                  return (
+                    <button
+                      key={tab}
+                      style={css.tab(activeTab === tab)}
+                      title={label}
+                      onClick={() => selectTab(tab)}
+                    >
+                      <Codicon
+                        name={iconName}
+                        style={{ marginRight: showsLabel(tab) ? '5px' : '0', fontSize: '13px', transition: 'margin 0.15s' }}
+                      />
+                      {showsLabel(tab) && (
+                        <span style={{ animation: 'gs-tab-label-in 0.18s ease-out both', overflow: 'hidden', display: 'inline-block' }}>
+                          {label}
+                        </span>
+                      )}
+                      {badge > 0 && (
+                        <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
+                      )}
+                    </button>
+                  );
+                })}
+                {strip.overflow.length > 0 && (
+                  <span style={css.tabOverflowSlot}>
+                    <button
+                      ref={tabOverflowBtnRef}
+                      data-action-btn
+                      style={css.tabOverflowBtn}
+                      title={l10n.t('More Tabs')}
+                      aria-label={l10n.t('More Tabs')}
+                      onClick={e => openTabMenu('overflow', e.currentTarget)}
+                    >
+                      <Codicon name="ellipsis" style={{ fontSize: '16px' }} />
+                      {/* Some tab out of sight has a count to show. */}
+                      {overflowHasBadge && <span style={css.tabOverflowDot} />}
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
 
-            {/* Width probe — always mounted off-screen. Only ever one tab has its label expanded at a
-                time (the active one), so the worst case is the widest label among all tabs expanded
-                alongside the rest icon-only — not every label expanded at once, which would reserve far
-                more space than any real state ever needs. This keeps the collapse threshold constant
-                regardless of which tab is active (activating "Pull Requests", the longest label, no
-                longer collapses the bar at a width where a shorter-labeled tab like "Changes" still fit). */}
+            {/* Width probe — always mounted off-screen, measured by setTabBarRefs: each tab once
+                icon-only and once as the active tab with its label, and the overflow button. The real
+                strip can't be measured instead, as which tabs it shows depends on these widths. */}
             <div
               ref={tabBarContentRefCb}
               aria-hidden="true"
-              style={{ display: 'flex', position: 'fixed', left: '-9999px', top: '-9999px', visibility: 'hidden' }}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', position: 'fixed', left: '-9999px', top: '-9999px', visibility: 'hidden' }}
             >
-              {allTabs.map(tab => {
-                const { label, iconName, badge } = tabMeta(tab);
-                const expanded = probeShowsLabel(tab);
-                return (
-                  <div key={tab} style={css.tab(expanded)}>
-                    <Codicon name={iconName} style={{ marginRight: expanded ? '5px' : '0', fontSize: '13px' }} />
-                    {expanded && <span style={{ overflow: 'hidden', display: 'inline-block' }}>{label}</span>}
-                    {badge > 0 && (
-                      <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
-                    )}
-                  </div>
-                );
-              })}
+              {[false, true].map(expanded => (
+                <div key={String(expanded)} style={{ display: 'flex' }}>
+                  {allTabs.map(tab => {
+                    const { label, iconName, badge } = tabMeta(tab);
+                    return (
+                      <div key={tab} data-probe-tab={tab} data-probe-label={expanded ? '1' : undefined} style={css.tab(expanded)}>
+                        <Codicon name={iconName} style={{ marginRight: expanded ? '5px' : '0', fontSize: '13px' }} />
+                        {expanded && <span style={{ overflow: 'hidden', display: 'inline-block' }}>{label}</span>}
+                        {badge > 0 && (
+                          <span style={css.pushBadge}>{formatBadgeCount(badge)}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              <span data-probe-more style={css.tabOverflowSlot}>
+                <span style={css.tabOverflowBtn}><Codicon name="ellipsis" style={{ fontSize: '16px' }} /></span>
+              </span>
             </div>
 
             {/* Collapsed fallback — single dropdown button showing the active tab. */}
-            {tabBarCollapsed && (
+            {!strip && (
               <button
                 ref={tabDropdownBtnRef}
                 data-tab-dropdown-btn
                 style={css.tabDropdownBtn}
                 title={activeMeta.label}
-                onClick={e => {
-                  if (tabMenu) { setTabMenu(null); return; }
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setTabMenu({ x: rect.left, y: rect.bottom, width: rect.width });
-                }}
+                onClick={e => openTabMenu('dropdown', e.currentTarget)}
               >
                 <span style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
                   <Codicon name={activeMeta.iconName} style={{ marginRight: '5px', fontSize: '13px', flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{activeMeta.label}</span>
                 </span>
                 {activeMeta.badge > 0 && <span style={{ ...css.pushBadge, flexShrink: 0 }}>{formatBadgeCount(activeMeta.badge)}</span>}
-                <Codicon name="chevron-down" style={{ marginLeft: 'auto', paddingLeft: '5px', fontSize: '13px', flexShrink: 0 }} />
+                <span style={{ position: 'relative', display: 'flex', marginLeft: 'auto', paddingLeft: '5px', flexShrink: 0 }}>
+                  <Codicon name="chevron-down" style={{ fontSize: '13px' }} />
+                  {/* Some other tab, listed in the menu, has a count to show. */}
+                  {dropdownHasBadge && <span style={{ ...css.tabOverflowDot, top: '-4px', right: '-3px' }} />}
+                </span>
               </button>
             )}
 
@@ -1674,10 +1723,9 @@ function App() {
                 x={tabMenu.x}
                 y={tabMenu.y}
                 width={tabMenu.width}
-                anchor={tabDropdownBtnRef.current}
-                menuStyle={css.tabDropdownMenu}
-                // The active tab is already shown on the button itself, so the menu only lists the others.
-                items={allTabs.filter(tab => tab !== activeTab).map(tab => {
+                anchor={tabMenu.kind === 'overflow' ? tabOverflowBtnRef.current : tabDropdownBtnRef.current}
+                menuStyle={tabMenu.kind === 'dropdown' ? css.tabDropdownMenu : undefined}
+                items={menuTabs.map(tab => {
                   const { label, iconName, badge } = tabMeta(tab);
                   return { id: tab, label, icon: iconName, badge: badge > 0 ? formatBadgeCount(badge) : undefined };
                 })}
@@ -2550,6 +2598,21 @@ const css = {
     borderBottom: '2px solid transparent',
     fontFamily: 'var(--vscode-font-family)', fontWeight: '600',
     color: 'var(--vscode-foreground)', transition: 'background 0.1s',
+  } as React.CSSProperties,
+  // Full tab-bar height around the overflow button, which is a compact icon button like InlineIconBtn.
+  tabOverflowSlot: {
+    display: 'flex', alignItems: 'center', flexShrink: 0, padding: '0 4px',
+  } as React.CSSProperties,
+  tabOverflowBtn: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' as const,
+    padding: '2px', borderRadius: '3px',
+    cursor: 'pointer', background: 'transparent', border: 'none',
+    color: 'var(--vscode-foreground)', opacity: 0.7, transition: 'opacity 0.1s',
+  } as React.CSSProperties,
+  tabOverflowDot: {
+    position: 'absolute' as const, top: '-1px', right: '1px',
+    width: '6px', height: '6px', borderRadius: '50%',
+    background: 'var(--vscode-badge-background)',
   } as React.CSSProperties,
   // Reads as a continuation of the dropdown button above it: the tab bar's own background, only a bottom edge.
   tabDropdownMenu: {

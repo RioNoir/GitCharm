@@ -148,7 +148,7 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 | `gitcharm.commitPanel.showSyncTab` | `true` | Show the Sync tab (commits to push and to pull). |
 | `gitcharm.commitPanel.tabOrder` | all tabs | The order of the tabs. Tabs left out of the list keep their place at the end; hidden tabs stay hidden. |
 | `gitcharm.commitPanel.defaultTab` | `changes` | The tab the Commit Panel opens on: `changes`, `shelf`, `stash`, `worktrees`, `issues`, `pullRequests`, `sync`, or `lastUsed`. A hidden tab falls back to the first one. |
-| `gitcharm.commitPanel.tabLabels` | `active` | Which tabs show their name next to the icon: `active`, `always` or `never`. When the names don't fit, the tabs become a dropdown. |
+| `gitcharm.commitPanel.tabLabels` | `active` | Which tabs show their name next to the icon: `active`, `always` or `never`. When the tabs don't fit, only the active tab keeps its name, and the tabs that still don't fit move to a **More Tabs** (`⋯`) menu; in a very narrow panel the tabs become a dropdown. |
 | `gitcharm.commitPanel.showChangesBadge` | `true` | Show the number of changed files on the Changes tab. |
 | `gitcharm.commitPanel.showShelfBadge` | `false` | Show the number of shelved changes on the Shelf tab. |
 | `gitcharm.commitPanel.showStashBadge` | `false` | Show the number of stashes on the Stash tab. |

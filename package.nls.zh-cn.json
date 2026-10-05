@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "打开“议题”选项卡。",
   "config.commitPanel.defaultTab.sync": "打开“同步”选项卡。",
   "config.commitPanel.defaultTab.lastUsed": "打开此工作区中上次使用的选项卡。",
-  "config.commitPanel.tabLabels.description": "哪些选项卡在图标旁显示名称。名称放不下时，选项卡始终会变为下拉菜单。",
+  "config.commitPanel.tabLabels.description": "哪些选项卡在图标旁显示名称。选项卡放不下时，只有活动选项卡保留名称；仍然放不下的选项卡会移到“更多选项卡”菜单中。",
   "config.commitPanel.tabLabels.active": "仅活动选项卡。",
   "config.commitPanel.tabLabels.always": "所有选项卡。",
   "config.commitPanel.tabLabels.never": "无：仅显示图标。",
