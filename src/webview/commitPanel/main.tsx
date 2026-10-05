@@ -1088,6 +1088,20 @@ function App() {
     noUpstreamKey.split(',').forEach(id => requestUnpushedCommits(id));
   }, [noUpstreamKey]);
 
+  // While the Sync tab is open, reload a repo's commits to push when its branch, upstream or
+  // ahead/behind counts change — a commit, pull, fetch or push made outside the panel (terminal,
+  // VS Code's Source Control) only reaches it as a status update. Switching to the tab reloads all.
+  const syncKeys = new Map(repos.map(r => [r.repoId, [r.branch.name, r.branch.upstream ?? '', r.branch.aheadBehind?.ahead ?? '', r.branch.aheadBehind?.behind ?? ''].join('\n')]));
+  const syncKey = [...syncKeys].map(([id, key]) => `${id}\n${key}`).join('\n\n');
+  const prevSyncKeysRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const prev = prevSyncKeysRef.current;
+    prevSyncKeysRef.current = syncKeys;
+    // The first status has nothing to compare against; opening the tab loads every repo anyway.
+    if (activeTab !== 'push' || prev.size === 0) return;
+    syncKeys.forEach((key, id) => { if (prev.get(id) !== key) requestUnpushedCommits(id); });
+  }, [syncKey]);
+
   // ── Context menu handlers ─────────────────────────────────────────────────
 
   const doStash = useCallback((repoId: string, message: string, paths?: string[]) => {
