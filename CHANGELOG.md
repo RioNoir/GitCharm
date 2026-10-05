@@ -6,6 +6,8 @@ All notable changes to GitCharm are documented in this file.
 
 ### 🐛 Bug Fixes
 - Repositories cloned into a gitignored folder (build outputs, fetched dependencies) are no longer picked up by the nested-repository scan. Their submodules counted towards the limit above which submodules are hidden, so the build dependencies showed up while the project's own submodules were hidden. A repository created in a gitignored folder no longer reloads the repository list either, closes [#95](https://github.com/RioNoir/GitCharm/issues/95) by [@ripopov](https://github.com/ripopov)
+- The Sync tab updates while it's open: a commit, pull, fetch or push made outside the Commit Panel (terminal, VS Code's Source Control) now shows in its list of commits to push without switching to another tab and back, closes [#96](https://github.com/RioNoir/GitCharm/issues/96) by [@vugi99](https://github.com/vugi99)
+- The Commit Panel's tab counts stay in sight in a narrow panel: when the tabs don't fit, the bar no longer turns into a dropdown right away. The active tab keeps its name and the tabs that don't fit move to a **More Tabs** (`⋯`) menu; tabs with a count stay longest, Changes and Sync first. The `⋯` button, and the dropdown still used in very narrow panels, show a dot when a tab in their menu has a count, closes [#97](https://github.com/RioNoir/GitCharm/issues/97) by [@vugi99](https://github.com/vugi99)
 
 ## v0.8.0
 
