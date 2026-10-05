@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.8.1
+
+### 🐛 Bug Fixes
+- Repositories cloned into a gitignored folder (build outputs, fetched dependencies) are no longer picked up by the nested-repository scan. Their submodules counted towards the limit above which submodules are hidden, so the build dependencies showed up while the project's own submodules were hidden. A repository created in a gitignored folder no longer reloads the repository list either, closes [#95](https://github.com/RioNoir/GitCharm/issues/95) by [@ripopov](https://github.com/ripopov)
+
 ## v0.8.0
 
 Release bringing everything from the v0.7.0 pre-release, plus a settings page, issues, Azure DevOps, interactive rebase and AI conflict resolution.
