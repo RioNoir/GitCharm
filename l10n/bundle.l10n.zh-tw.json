@@ -372,6 +372,7 @@
   "Conflicts in {0} files — merge editor opened": "{0} 個檔案有衝突 — 已開啟合併編輯器",
   "Loading repositories…": "正在載入儲存庫…",
   "No changes in workspace": "工作區中沒有變更",
+  "More Tabs": "更多索引標籤",
   "Commit/Tab title: the tab with the commit form and changed files": "提交",
   "Changes/Tab title: list of changed files": "變更",
   "Shelf": "擱置區",

@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "Mit dem Tab „Issues“ öffnen.",
   "config.commitPanel.defaultTab.sync": "Mit dem Tab „Sync“ öffnen.",
   "config.commitPanel.defaultTab.lastUsed": "Mit dem zuletzt in diesem Arbeitsbereich verwendeten Tab öffnen.",
-  "config.commitPanel.tabLabels.description": "Welche Tabs ihren Namen neben dem Symbol anzeigen. Passen die Namen nicht, werden die Tabs in jedem Fall zu einem Dropdown.",
+  "config.commitPanel.tabLabels.description": "Welche Tabs ihren Namen neben dem Symbol anzeigen. Passen die Tabs nicht, behält nur der aktive Tab seinen Namen, und Tabs, die dann noch nicht passen, wandern in ein Menü „Weitere Tabs“.",
   "config.commitPanel.tabLabels.active": "Nur der aktive Tab.",
   "config.commitPanel.tabLabels.always": "Alle Tabs.",
   "config.commitPanel.tabLabels.never": "Keiner: nur Symbole.",

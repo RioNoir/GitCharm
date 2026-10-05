@@ -951,6 +951,7 @@
   },
   "Loading repositories…": "Loading repositories…",
   "No changes in workspace": "No changes in workspace",
+  "More Tabs": "More Tabs",
   "No repositories with changes": "No repositories with changes",
   "Show all repositories": "Show all repositories",
   "{0} is in detached HEAD ({1}). Checkout a branch to commit.": "{0} is in detached HEAD ({1}). Checkout a branch to commit.",

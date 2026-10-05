@@ -372,6 +372,7 @@
   "Conflicts in {0} files — merge editor opened": "Conflictos en {0} archivos — editor de fusión abierto",
   "Loading repositories…": "Cargando repositorios…",
   "No changes in workspace": "No hay cambios en el área de trabajo",
+  "More Tabs": "Más pestañas",
   "Commit/Tab title: the tab with the commit form and changed files": "Commit",
   "Changes/Tab title: list of changed files": "Cambios",
   "Shelf": "Shelf",

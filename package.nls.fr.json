@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "Ouvrir sur l'onglet Issues.",
   "config.commitPanel.defaultTab.sync": "Ouvrir sur l'onglet Sync.",
   "config.commitPanel.defaultTab.lastUsed": "Ouvrir sur le dernier onglet utilisé dans cet espace de travail.",
-  "config.commitPanel.tabLabels.description": "Les onglets qui affichent leur nom à côté de l'icône. Si les noms ne tiennent pas, les onglets deviennent de toute façon une liste déroulante.",
+  "config.commitPanel.tabLabels.description": "Les onglets qui affichent leur nom à côté de l'icône. Si les onglets ne tiennent pas, seul l'onglet actif garde son nom, et ceux qui ne tiennent toujours pas passent dans un menu Plus d'onglets.",
   "config.commitPanel.tabLabels.active": "Seulement l'onglet actif.",
   "config.commitPanel.tabLabels.always": "Tous les onglets.",
   "config.commitPanel.tabLabels.never": "Aucun : icônes seulement.",

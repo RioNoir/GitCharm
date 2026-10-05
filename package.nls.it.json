@@ -133,7 +133,7 @@
   "config.commitPanel.defaultTab.issues": "Apri sulla tab Issue.",
   "config.commitPanel.defaultTab.sync": "Apri sulla tab Sync.",
   "config.commitPanel.defaultTab.lastUsed": "Apri sull'ultima tab usata in questo workspace.",
-  "config.commitPanel.tabLabels.description": "Quali tab mostrano il nome accanto all'icona. Quando i nomi non ci stanno, le tab diventano comunque un menu a tendina.",
+  "config.commitPanel.tabLabels.description": "Quali tab mostrano il nome accanto all'icona. Quando le tab non ci stanno, solo la tab attiva mantiene il nome, e quelle che ancora non ci stanno finiscono in un menu Altre tab.",
   "config.commitPanel.tabLabels.active": "Solo la tab attiva.",
   "config.commitPanel.tabLabels.always": "Tutte le tab.",
   "config.commitPanel.tabLabels.never": "Nessuna: solo icone.",
