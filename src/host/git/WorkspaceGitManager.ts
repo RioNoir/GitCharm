@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { logWarn } from '../utils/Logger';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFile, spawnSync } from 'child_process';
 import { GitService } from './GitService';
 import type { WorktreeEntry, PullMode } from './GitService';
 import { getVscodeGitApi, getVscodeRepository } from './VscodeGitApi';
@@ -490,6 +491,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     colorIdx: { value: number },
     customColors: Record<string, string>,
   ): void {
+    const found: string[] = [];
     const visit = (parentPath: string, parentDepth: number) => {
       if (parentDepth >= maxDepth) return;
 
@@ -509,7 +511,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
         const childDepth = parentDepth + 1;
         const gitDir = path.join(childPath, '.git');
         if (fs.existsSync(gitDir)) {
-          this.registerScannedRepository(childPath, workspaceRoot, colorIdx, customColors);
+          found.push(childPath);
           continue;
         }
 
@@ -520,6 +522,41 @@ export class WorkspaceGitManager implements vscode.Disposable {
     };
 
     visit(workspaceRoot, 0);
+
+    // Repos cloned into a gitignored folder (build outputs, fetched dependencies) aren't
+    // part of the project — and their own submodules would push the real ones out.
+    const ignored = this.getGitIgnoredPaths(workspaceRoot, found);
+    for (const repoPath of found) {
+      if (!ignored.has(repoPath)) this.registerScannedRepository(repoPath, workspaceRoot, colorIdx, customColors);
+    }
+  }
+
+  /**
+   * Which of `candidatePaths` are ignored by the repository containing `workspaceRoot` —
+   * the workspace folder itself or a parent-folder repo. One `git check-ignore` for all of
+   * them; outside a repository, or if git fails, nothing counts as ignored.
+   */
+  private getGitIgnoredPaths(workspaceRoot: string, candidatePaths: string[]): Set<string> {
+    if (candidatePaths.length === 0) return new Set();
+    // Exit code 0 = some ignored, 1 = none, 128 = not a repository (or another error).
+    const result = spawnSync('git', ['check-ignore', '-z', '--stdin'], {
+      cwd: workspaceRoot,
+      input: candidatePaths.join('\0') + '\0',
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    if (result.status !== 0 || typeof result.stdout !== 'string') return new Set();
+    // Paths are echoed back exactly as given.
+    return new Set(result.stdout.split('\0').filter(Boolean));
+  }
+
+  /** Async single-path variant of getGitIgnoredPaths, for watcher callbacks. */
+  private isGitIgnored(workspaceRoot: string, candidatePath: string): Promise<boolean> {
+    return new Promise(resolve => {
+      execFile('git', ['check-ignore', '-q', '--', candidatePath], { cwd: workspaceRoot, timeout: 5000 }, err => {
+        resolve(!err);
+      });
+    });
   }
 
   private registerScannedRepository(
@@ -1381,11 +1418,13 @@ export class WorkspaceGitManager implements vscode.Disposable {
       const w = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(folder.uri, maxDepth > 0 ? '**/.git' : '.git')
       );
-      const onGitCreated = (gitUri: vscode.Uri) => {
+      const onGitCreated = async (gitUri: vscode.Uri) => {
         const repoPath = path.dirname(gitUri.fsPath);
         const depth = this.repositoryScanDepth(folder.uri.fsPath, repoPath);
         if (depth < 0 || depth > maxDepth) return;
         if (this.isRepositoryScanIgnored(repoPath, folder.uri.fsPath)) return;
+        // A build cloning into a gitignored folder would otherwise reinitialize once per clone.
+        if (depth > 0 && await this.isGitIgnored(folder.uri.fsPath, repoPath)) return;
         this.scheduleReinitialize();
       };
       w.onDidCreate(onGitCreated);
