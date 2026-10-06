@@ -2172,7 +2172,7 @@
     "@tiptap/extension-link": "^3.31.3",
     "@tiptap/extension-mention": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
-    "@tiptap/extension-table": "^3.31.3",
+    "@tiptap/extension-table": "^3.31.4",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
