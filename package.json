@@ -2171,7 +2171,7 @@
     "@simple-git/argv-parser": "^1.1.1",
     "@tiptap/extension-link": "^3.31.3",
     "@tiptap/extension-mention": "^3.31.3",
-    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.4",
     "@tiptap/extension-table": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
