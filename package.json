@@ -2176,7 +2176,7 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
-    "@tiptap/suggestion": "^3.31.3",
+    "@tiptap/suggestion": "^3.31.4",
     "@vscode/l10n": "^0.0.18",
     "dompurify": "^3.4.14",
     "marked": "^18.0.11",
