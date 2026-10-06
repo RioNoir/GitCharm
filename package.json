@@ -2201,7 +2201,7 @@
     "eslint": "^10.11.0",
     "fantasticon": "^4.1.0",
     "globals": "^17.0.0",
-    "material-icon-theme": "^5.34.0",
+    "material-icon-theme": "^5.39.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^6.0.3",
