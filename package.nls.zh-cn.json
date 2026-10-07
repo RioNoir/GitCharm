@@ -92,6 +92,7 @@
   "config.gitLog.showInlineBranches.description": "在 日志面板 提交列表中，在分支、标签和储藏所指向的提交旁显示其徽章。",
   "config.repositoryScanMaxDepth.description": "扫描 Git 仓库时工作区子文件夹的最大深度（0 = 仅扫描工作区文件夹）。",
   "config.repositoryScanIgnoredFolders.description": "扫描嵌套 Git 仓库时要跳过的文件夹名称或相对于工作区的路径。",
+  "config.repositoryScanRespectGitignore.description": "跳过父仓库忽略（.gitignore）的文件夹中的嵌套 Git 仓库，例如构建输出或下载的依赖项。关闭后也会列出有意放在被忽略文件夹中的仓库，例如 packages/*。",
   "config.submoduleMaxDepth.description": "作为仓库显示的 Git 子模块的最大嵌套深度（1 = 仅直接子模块，0 = 不显示）。在包含大量嵌套子模块的大型工作区中调低此值，可减少每次刷新时的 Git 工作量。",
   "config.branchNameModels.description": "创建新分支时建议的分支名称前缀（例如 \"feature/\"、\"bugfix/\"、\"revert-\"）。存储时会规范化为以 \"*\" 结尾（例如 \"feature/*\"）；已包含通配符的条目（例如 \"feature/**\"）保持不变。",
   "config.fetchOnStartup.description": "扩展激活时自动获取所有远程",

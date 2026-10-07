@@ -158,6 +158,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
         if (
           e.affectsConfiguration('gitcharm.repositoryScanMaxDepth') ||
           e.affectsConfiguration('gitcharm.repositoryScanIgnoredFolders') ||
+          e.affectsConfiguration('gitcharm.repositoryScanRespectGitignore') ||
           e.affectsConfiguration('gitcharm.submoduleMaxDepth') ||
           e.affectsConfiguration('gitcharm.projectColors')
         ) {
@@ -400,6 +401,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
       : DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS;
   }
 
+  private getRepositoryScanRespectGitignore(): boolean {
+    return vscode.workspace.getConfiguration('gitcharm').get<boolean>('repositoryScanRespectGitignore', true) !== false;
+  }
+
   private detectLinkedWorktree(rootPath: string): { isWorktree: boolean; mainWorktreePath?: string } {
     const gitDir = path.join(rootPath, '.git');
     let mainWorktreePath: string | undefined;
@@ -525,7 +530,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
     // Repos cloned into a gitignored folder (build outputs, fetched dependencies) aren't
     // part of the project — and their own submodules would push the real ones out.
-    const ignored = this.getGitIgnoredPaths(workspaceRoot, found);
+    // Opt out for repos kept in a gitignored folder on purpose (e.g. packages/*, #107).
+    const ignored = this.getRepositoryScanRespectGitignore()
+      ? this.getGitIgnoredPaths(workspaceRoot, found)
+      : new Set<string>();
     for (const repoPath of found) {
       if (!ignored.has(repoPath)) this.registerScannedRepository(repoPath, workspaceRoot, colorIdx, customColors);
     }
@@ -1424,7 +1432,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
         if (depth < 0 || depth > maxDepth) return;
         if (this.isRepositoryScanIgnored(repoPath, folder.uri.fsPath)) return;
         // A build cloning into a gitignored folder would otherwise reinitialize once per clone.
-        if (depth > 0 && await this.isGitIgnored(folder.uri.fsPath, repoPath)) return;
+        if (depth > 0 && this.getRepositoryScanRespectGitignore() && await this.isGitIgnored(folder.uri.fsPath, repoPath)) return;
         this.scheduleReinitialize();
       };
       w.onDidCreate(onGitCreated);

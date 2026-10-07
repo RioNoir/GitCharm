@@ -1317,6 +1317,12 @@
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
           },
+          "gitcharm.repositoryScanRespectGitignore": {
+            "order": 71,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.repositoryScanRespectGitignore.description%"
+          },
           "gitcharm.submoduleMaxDepth": {
             "order": 72,
             "type": "number",

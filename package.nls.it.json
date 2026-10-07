@@ -92,6 +92,7 @@
   "config.gitLog.showInlineBranches.description": "Mostra i badge di branch, tag e stash accanto ai commit a cui puntano nella lista dei commit del Log Panel.",
   "config.repositoryScanMaxDepth.description": "Profondità massima delle sottocartelle del workspace in cui cercare repository Git (0 = solo le cartelle del workspace).",
   "config.repositoryScanIgnoredFolders.description": "Nomi di cartelle o percorsi relativi al workspace da saltare durante la ricerca di repository Git annidati.",
+  "config.repositoryScanRespectGitignore.description": "Salta i repository Git annidati in cartelle ignorate dal repository padre (.gitignore), come output di build o dipendenze scaricate. Disattiva per elencare anche i repository tenuti di proposito in una cartella ignorata, ad es. packages/*.",
   "config.submoduleMaxDepth.description": "Profondità massima dei submodule Git mostrati come repository (1 = solo i submodule diretti, 0 = nessuno). Riducila nei workspace grandi con molti submodule annidati per diminuire il lavoro di Git a ogni aggiornamento.",
   "config.branchNameModels.description": "Prefissi suggeriti per il nome dei nuovi branch (es. \"feature/\", \"bugfix/\", \"revert-\"). Vengono salvati normalizzati con un \"*\" finale (es. \"feature/*\"); le voci che contengono già un carattere jolly (es. \"feature/**\") restano invariate.",
   "config.fetchOnStartup.description": "Esegui automaticamente il fetch di tutti i remote all'attivazione dell'estensione",

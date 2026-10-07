@@ -92,6 +92,7 @@
   "config.gitLog.showInlineBranches.description": "Show branch, tag and stash badges next to the commits they point to in the Log Panel commit list.",
   "config.repositoryScanMaxDepth.description": "Maximum depth of workspace subfolders to scan for Git repositories (0 = only workspace folders).",
   "config.repositoryScanIgnoredFolders.description": "Folder names or workspace-relative paths to skip while scanning for nested Git repositories.",
+  "config.repositoryScanRespectGitignore.description": "Skip nested Git repositories in folders the parent repository ignores (.gitignore), such as build outputs or fetched dependencies. Turn off to also list repositories kept in a gitignored folder on purpose, e.g. packages/*.",
   "config.submoduleMaxDepth.description": "Maximum nesting depth of Git submodules shown as repositories (1 = only direct submodules, 0 = none). Lower it in large workspaces with many nested submodules to reduce Git work on every refresh.",
   "config.branchNameModels.description": "Branch name prefixes suggested when creating a new branch (e.g. \"feature/\", \"bugfix/\", \"revert-\"). Stored normalized with a trailing \"*\" (e.g. \"feature/*\"); entries already containing a wildcard (e.g. \"feature/**\") are kept as-is.",
   "config.fetchOnStartup.description": "Automatically fetch all remotes when the extension activates",
