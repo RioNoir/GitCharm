@@ -1508,6 +1508,7 @@
   "Show uncommitted changes": "显示未提交的更改",
   "Repository scan depth": "仓库扫描深度",
   "Folders ignored by the scan": "扫描时忽略的文件夹",
+  "Skip gitignored repositories": "跳过被 Git 忽略的仓库",
   "Submodule depth": "子模块深度",
   "Repository colors": "仓库颜色",
   "Git annotations": "Git 注释",

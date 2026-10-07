@@ -236,6 +236,7 @@
   "Show inline branches": "Show inline branches",
   "Repository scan depth": "Repository scan depth",
   "Folders ignored by the scan": "Folders ignored by the scan",
+  "Skip gitignored repositories": "Skip gitignored repositories",
   "Submodule depth": "Submodule depth",
   "Repository colors": "Repository colors",
   "Git annotations": "Git annotations",

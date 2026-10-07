@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## Unreleased
+
+### ✨ New Features
+- New **Skip gitignored repositories** setting (`gitcharm.repositoryScanRespectGitignore`, on by default). Turn it off to list nested repositories kept in a gitignored folder on purpose again (e.g. independent repositories under a `packages/*` the parent ignores), which the nested-repository scan skips since v0.8.1. Folders in `repositoryScanIgnoredFolders` stay skipped either way, closes [#107](https://github.com/RioNoir/GitCharm/issues/107) by [@AlexHL02](https://github.com/AlexHL02)
+
 ## v0.8.1
 
 ### 🐛 Bug Fixes

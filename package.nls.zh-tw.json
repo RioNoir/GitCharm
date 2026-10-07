@@ -92,6 +92,7 @@
   "config.gitLog.showInlineBranches.description": "在 記錄面板 提交清單中，於分支、標籤和儲藏所指向的提交旁顯示其徽章。",
   "config.repositoryScanMaxDepth.description": "掃描 Git 儲存庫時工作區子資料夾的最大深度（0 = 僅掃描工作區資料夾）。",
   "config.repositoryScanIgnoredFolders.description": "掃描巢狀 Git 儲存庫時要略過的資料夾名稱或相對於工作區的路徑。",
+  "config.repositoryScanRespectGitignore.description": "略過父儲存庫忽略（.gitignore）的資料夾中的巢狀 Git 儲存庫，例如建置輸出或下載的相依套件。關閉後也會列出刻意放在被忽略資料夾中的儲存庫，例如 packages/*。",
   "config.submoduleMaxDepth.description": "作為儲存庫顯示的 Git 子模組的最大巢狀深度（1 = 僅直接子模組，0 = 不顯示）。在包含大量巢狀子模組的大型工作區中調低此值，可減少每次重新整理時的 Git 工作量。",
   "config.branchNameModels.description": "建立新分支時建議的分支名稱前置詞（例如 \"feature/\"、\"bugfix/\"、\"revert-\"）。儲存時會正規化為以 \"*\" 結尾（例如 \"feature/*\"）；已包含萬用字元的項目（例如 \"feature/**\"）維持不變。",
   "config.fetchOnStartup.description": "擴充功能啟動時自動擷取所有遠端",

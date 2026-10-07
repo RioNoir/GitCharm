@@ -135,7 +135,7 @@ export function getCategories(): CategoryDef[] {
       id: 'discovery', group: advanced, icon: 'search', preview: 'discovery',
       label: l10n.t('Repository Discovery'),
       description: l10n.t('Which repositories and submodules GitCharm finds in the workspace.'),
-      keys: ['repositoryScanMaxDepth', 'repositoryScanIgnoredFolders', 'submoduleMaxDepth'],
+      keys: ['repositoryScanMaxDepth', 'repositoryScanIgnoredFolders', 'repositoryScanRespectGitignore', 'submoduleMaxDepth'],
     },
     {
       id: 'experimental', group: advanced, icon: 'beaker',
@@ -209,6 +209,7 @@ export function settingLabel(key: string): string {
     case 'gitLog.showInlineBranches': return l10n.t('Show inline branches');
     case 'repositoryScanMaxDepth': return l10n.t('Repository scan depth');
     case 'repositoryScanIgnoredFolders': return l10n.t('Folders ignored by the scan');
+    case 'repositoryScanRespectGitignore': return l10n.t('Skip gitignored repositories');
     case 'submoduleMaxDepth': return l10n.t('Submodule depth');
     case 'projectColors': return l10n.t('Repository colors');
     case 'gitAnnotations.enabled': return l10n.t('Git annotations');

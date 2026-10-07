@@ -1508,6 +1508,7 @@
   "Show uncommitted changes": "Nicht committete Änderungen anzeigen",
   "Repository scan depth": "Scantiefe für Repositorys",
   "Folders ignored by the scan": "Vom Scan ignorierte Ordner",
+  "Skip gitignored repositories": "Von Git ignorierte Repositorys überspringen",
   "Submodule depth": "Submodul-Tiefe",
   "Repository colors": "Repository-Farben",
   "Git annotations": "Git-Annotationen",
