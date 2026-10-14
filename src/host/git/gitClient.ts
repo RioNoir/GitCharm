@@ -14,6 +14,9 @@ const GIT_ENV: Record<string, string> = {
   // schedules another status run — in a workspace with many submodules, a refresh that keeps
   // feeding itself. Only optional locks are skipped; commands that modify the repo still lock.
   GIT_OPTIONAL_LOCKS: '0',
+  // There's no terminal to prompt on: without this, a remote that needs credentials no
+  // credential helper has fails with "could not read Username …: Device not configured".
+  GIT_TERMINAL_PROMPT: '0',
 };
 
 // simple-git vets any env passed via .env() and rejects variables like GIT_SSH_COMMAND or

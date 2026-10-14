@@ -582,6 +582,7 @@
   "Push rejected — the remote has commits you don't have locally. Pull or fetch first.": "推送遭拒 — 遠端包含本機沒有的提交。請先拉取或擷取。",
   "Force push rejected — the remote branch changed since you last fetched.": "強制推送遭拒 — 自上次擷取以來遠端分支已變更。",
   "Authentication failed — check your git credentials.": "驗證失敗 — 請檢查 git 認證。",
+  "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.": "驗證失敗 — git 找不到此遠端的認證。請設定認證輔助程式或使用 SSH。",
   "Could not connect to the remote repository.": "無法連線至遠端儲存庫。",
   "Could not access the remote repository.": "無法存取遠端儲存庫。",
   "Remote repository not found.": "找不到遠端儲存庫。",
