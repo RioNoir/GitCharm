@@ -152,6 +152,8 @@ export interface CommitPanelConfig {
   badges: Record<CommitPanelTabId, boolean>;
   /** Characters past which the commit message's first line is flagged; 0: never. */
   subjectMaxLength: number;
+  /** Leave the commit message in the box after a commit, to reuse it (#109). */
+  keepCommitMessage: boolean;
 }
 
 export type HostToCommitMsg =

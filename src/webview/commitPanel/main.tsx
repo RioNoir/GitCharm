@@ -266,6 +266,9 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>('changes');
   // The gitcharm.commitPanel.* settings: which tabs, in which order, labels and badges. Null until the host sends them.
   const [panelConfig, setPanelConfig] = useState<CommitPanelConfig | null>(null);
+  // Read from the message handler, registered once.
+  const keepCommitMessageRef = useRef(false);
+  keepCommitMessageRef.current = !!panelConfig?.keepCommitMessage;
   const shownTabs: TabId[] = panelConfig?.tabs ?? ['changes', 'shelf', 'stash', 'worktree', 'issues', 'pullrequests', 'push'];
   // A tab turned off while open hands over to Changes.
   useEffect(() => {
@@ -572,7 +575,7 @@ function App() {
             // rejecting hook or missing identity in one repo of a multi-repo commit
             // must not cost the user what they typed for the repos that did succeed.
             if (msg.ok) {
-              store.setCommitMessage('');
+              if (!keepCommitMessageRef.current) store.setCommitMessage('');
               repoIds.forEach(id => store.clearAmend(id));
             } else if (msg.succeededRepoIds?.length) {
               msg.succeededRepoIds.forEach(id => store.clearAmend(id));

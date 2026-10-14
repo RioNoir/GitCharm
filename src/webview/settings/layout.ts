@@ -81,7 +81,7 @@ export function getCategories(): CategoryDef[] {
       description: l10n.t('How the Commit Panel lists your changes, what its main buttons do, and which tabs it shows.'),
       keys: [
         'changesViewMode', 'defaultCommitAction', 'defaultSaveAction', 'openCommitPanelOnConflictResolved',
-        'commitSignoff', 'commitPanel.subjectMaxLength',
+        'commitSignoff', 'commitPanel.subjectMaxLength', 'commitPanel.keepCommitMessage',
         'commitPanel.showShelfTab', 'commitPanel.showStashTab', 'commitPanel.showWorktreesTab', 'commitPanel.showPullRequestsTab', 'commitPanel.showIssuesTab',
         'commitPanel.showSyncTab', 'commitPanel.tabOrder', 'commitPanel.defaultTab', 'commitPanel.tabLabels',
         'commitPanel.showChangesBadge', 'commitPanel.showShelfBadge', 'commitPanel.showStashBadge', 'commitPanel.showWorktreesBadge',
@@ -175,6 +175,7 @@ export function settingLabel(key: string): string {
     case 'commitPanel.tabOrder': return l10n.t('Tab order');
     case 'commitSignoff': return l10n.t('Sign off commits');
     case 'commitPanel.subjectMaxLength': return l10n.t('Commit title length');
+    case 'commitPanel.keepCommitMessage': return l10n.t('Keep commit message');
     case 'protectedBranches': return l10n.t('Protected branches');
     case 'confirm.discardChanges': return l10n.t('Confirm discarding changes');
     case 'confirm.dropStashesAndShelves': return l10n.t('Confirm dropping stashes and shelves');

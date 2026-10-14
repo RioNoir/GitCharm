@@ -1531,6 +1531,12 @@
             "minimum": 0,
             "description": "%config.commitPanel.subjectMaxLength.description%"
           },
+          "gitcharm.commitPanel.keepCommitMessage": {
+            "order": 59,
+            "type": "boolean",
+            "default": false,
+            "description": "%config.commitPanel.keepCommitMessage.description%"
+          },
           "gitcharm.dateFormat": {
             "order": 60,
             "type": "string",

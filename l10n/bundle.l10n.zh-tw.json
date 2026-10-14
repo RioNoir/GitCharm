@@ -1746,6 +1746,7 @@
   "How GitCharm shows dates and commit authors, tells repositories apart, and what it puts in the status bar.": "GitCharm 如何顯示日期與提交作者、區分各個存放庫，以及在狀態列中顯示什麼。",
   "Sign off commits": "為提交簽署（sign-off）",
   "Commit title length": "提交標題長度",
+  "Keep commit message": "保留提交訊息",
   "Protected branches": "受保護的分支",
   "Confirm discarding changes": "捨棄變更前確認",
   "Confirm dropping stashes and shelves": "刪除儲藏與擱置前確認",
