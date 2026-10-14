@@ -277,7 +277,10 @@ export function activate(context: vscode.ExtensionContext): void {
   initAiSecrets(context);
   const integrationAccounts = new IntegrationAccountStore(context.secrets, context.globalState);
   const pullRequestManager = new PullRequestManager(manager, integrationAccounts, context.workspaceState);
-  avatarResolver.setForgeLookup((repoId, email, sha) => pullRequestManager.getCommitAuthorAvatar(repoId, email, sha));
+  avatarResolver.setForgeLookup(
+    (repoId, email, sha) => pullRequestManager.getCommitAuthorAvatar(repoId, email, sha),
+    () => manager.getRepoMetas().map(m => m.id),
+  );
   const integrations = new IntegrationsService(integrationAccounts, pullRequestManager, manager);
 
   const commitPanel = new CommitPanelProvider(context.extensionUri, manager, context.globalStorageUri.fsPath, shelveDocProvider, profileService, context.globalState, context.workspaceState, pullRequestManager);
