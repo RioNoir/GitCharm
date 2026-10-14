@@ -204,6 +204,7 @@
   "Tab order": "Tab order",
   "Sign off commits": "Sign off commits",
   "Commit title length": "Commit title length",
+  "Keep commit message": "Keep commit message",
   "Protected branches": "Protected branches",
   "Confirm discarding changes": "Confirm discarding changes",
   "Confirm dropping stashes and shelves": "Confirm dropping stashes and shelves",

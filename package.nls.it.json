@@ -227,6 +227,7 @@
   "config.pullMode.ffOnly": "Solo fast-forward: rifiuta il pull quando il branch è divergente.",
   "config.commitSignoff.description": "Aggiungi una riga Signed-off-by a ogni commit (git commit --signoff).",
   "config.commitPanel.subjectMaxLength.description": "Avvisa quando la prima riga del messaggio di commit supera questo numero di caratteri. 0 disattiva l'avviso.",
+  "config.commitPanel.keepCommitMessage.description": "Mantieni il messaggio di commit nel Commit Panel dopo il commit, per riusarlo nel commit successivo.",
   "config.dateFormat.description": "Come vengono mostrate le date nel Log Panel, nel Commit Panel e nelle pull request. Ha effetto dopo aver ricaricato la finestra.",
   "config.dateFormat.auto": "Lo stile di ogni vista: assoluto nel Log Panel, relativo altrove per le date recenti.",
   "config.dateFormat.absolute": "Data e ora ovunque.",

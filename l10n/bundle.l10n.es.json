@@ -1738,6 +1738,7 @@
   "How GitCharm shows dates and commit authors, tells repositories apart, and what it puts in the status bar.": "Cómo muestra GitCharm las fechas y los autores de los commits, distingue los repositorios y qué pone en la barra de estado.",
   "Sign off commits": "Firmar commits (sign-off)",
   "Commit title length": "Longitud del título del commit",
+  "Keep commit message": "Conservar el mensaje de commit",
   "Protected branches": "Ramas protegidas",
   "Confirm discarding changes": "Confirmar al descartar cambios",
   "Confirm dropping stashes and shelves": "Confirmar al eliminar stashes y shelves",

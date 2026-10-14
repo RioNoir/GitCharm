@@ -227,6 +227,7 @@
   "config.pullMode.ffOnly": "仅快进：分支已分叉时拒绝拉取。",
   "config.commitSignoff.description": "为每个提交添加 Signed-off-by 行（git commit --signoff）。",
   "config.commitPanel.subjectMaxLength.description": "当提交消息的第一行超过这么多字符时发出警告。0 表示关闭警告。",
+  "config.commitPanel.keepCommitMessage.description": "提交后在 Commit Panel 中保留提交消息，以便在下一次提交时重复使用。",
   "config.dateFormat.description": "日志面板、Commit Panel 和拉取请求中日期的显示方式。重新加载窗口后生效。",
   "config.dateFormat.auto": "每个视图自己的样式：日志面板中为绝对时间，其他地方对较近的日期使用相对时间。",
   "config.dateFormat.absolute": "所有地方都显示日期和时间。",

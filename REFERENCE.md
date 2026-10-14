@@ -113,6 +113,7 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 | `gitcharm.defaultSaveAction` | `stash` | Main action of the Save button: `stash` or `shelve`. |
 | `gitcharm.commitSignoff` | `false` | Add a Signed-off-by line to every commit (`git commit --signoff`). |
 | `gitcharm.commitPanel.subjectMaxLength` | `0` | Warn when the commit message's first line is longer than this many characters (`0`: off). |
+| `gitcharm.commitPanel.keepCommitMessage` | `false` | Keep the commit message in the Commit Panel after committing, to reuse it for the next commit. |
 | `gitcharm.promptAddUntrackedToGit` | `true` | Offer to add new untracked files to Git. |
 | `gitcharm.pullMode` | `ask` | How GitCharm pulls: `ask` (merge/rebase picker where offered, merge elsewhere), `merge`, `rebase` or `ffOnly`. |
 | `gitcharm.fetchOnStartup` | `true` | Fetch all remotes when GitCharm activates. |

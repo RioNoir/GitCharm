@@ -62,5 +62,6 @@ export function getCommitPanelConfig(lastTab: CommitPanelTabId | undefined): Com
       push: cfg.get<boolean>('showSyncBadge', true),
     },
     subjectMaxLength: Math.max(0, cfg.get<number>('subjectMaxLength', 0)),
+    keepCommitMessage: cfg.get<boolean>('keepCommitMessage', false) === true,
   };
 }

@@ -227,6 +227,7 @@
   "config.pullMode.ffOnly": "僅快轉：分支已分歧時拒絕提取。",
   "config.commitSignoff.description": "為每個提交加入 Signed-off-by 行（git commit --signoff）。",
   "config.commitPanel.subjectMaxLength.description": "當提交訊息的第一行超過這麼多字元時發出警告。0 表示關閉警告。",
+  "config.commitPanel.keepCommitMessage.description": "提交後在 Commit Panel 中保留提交訊息，以便在下一次提交時重複使用。",
   "config.dateFormat.description": "記錄面板、Commit Panel 與拉取請求中日期的顯示方式。重新載入視窗後生效。",
   "config.dateFormat.auto": "每個檢視自己的樣式：記錄面板中為絕對時間，其他地方對較近的日期使用相對時間。",
   "config.dateFormat.absolute": "所有地方都顯示日期與時間。",
