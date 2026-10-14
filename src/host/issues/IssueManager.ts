@@ -3,6 +3,7 @@ import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { PullRequestManager } from '../pullRequests/PullRequestManager';
 import type { ActionResult, PostCommentResult, PullRequestConnectionStatus, PullRequestLabel, PullRequestUser, UnsupportedResult } from '../pullRequests/types';
 import { logError, logWarn } from '../utils/Logger';
+import { describeAccessError } from '../pullRequests/formatApiError';
 import { createIssueProvider } from './IssueProviderFactory';
 import {
   IssueTrackerDisabledError,
@@ -174,7 +175,8 @@ export class IssueManager {
           } else {
             const message = err instanceof Error ? err.message : String(err);
             logError('issue-list', `Failed to list issues for ${repoName}`, message);
-            result = { repoId, repoName, repoColor, connection, issues: [], hasMore: false, error: message };
+            const friendly = describeAccessError(err, `${target.owner}/${target.repo}`);
+            result = { repoId, repoName, repoColor, connection, issues: [], hasMore: false, error: friendly ?? message };
           }
         }
       }
@@ -206,7 +208,8 @@ export class IssueManager {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('issue-load-more', `Failed to load more issues for ${cached.data.repoName}`, message);
-      const result: RepoIssues = { ...cached.data, error: message };
+      const friendly = describeAccessError(err, `${target.owner}/${target.repo}`);
+      const result: RepoIssues = { ...cached.data, error: friendly ?? message };
       this.cache.set(repoId, { data: result, filters, expiresAt: Date.now() + CACHE_TTL_MS });
       return result;
     }

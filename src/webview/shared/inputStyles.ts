@@ -1,5 +1,16 @@
 import type React from 'react';
 
+/**
+ * An error shown as a row inside a Commit Panel tab: the theme's input-validation error
+ * colors, a pair each theme picks to be readable together. errorForeground is meant for text
+ * on the panel background — on errorBackground it's red on red in many themes.
+ */
+export const errorRowStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
+  color: 'var(--vscode-inputValidation-errorForeground, var(--vscode-foreground))',
+  background: 'var(--vscode-inputValidation-errorBackground)',
+};
+
 /** Focus-ring style shared with the commit message editor (UnifiedCommitForm) — border switches to the theme's focus color plus a soft outer glow when focused. */
 export function focusableFieldStyle(focused: boolean): React.CSSProperties {
   return {

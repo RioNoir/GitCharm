@@ -11,6 +11,7 @@ import { GenericFileTree } from '../../shared/GenericFileTree';
 import { handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import * as l10n from '@vscode/l10n';
 import { plural } from '../../shared/l10n';
+import { errorRowStyle } from '../../shared/inputStyles';
 
 interface Props {
   repoId: string;
@@ -252,9 +253,6 @@ export function ShelvePanel({ repoId, repoName, repoColor, multiRepo, singleRepo
 
 const css = {
   root: { display: 'flex', flexDirection: 'column' as const, borderBottom: '1px solid var(--vscode-panel-border)' },
-  errorRow: {
-    display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
-    color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',
-  } as React.CSSProperties,
+  errorRow: errorRowStyle,
   empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
 };

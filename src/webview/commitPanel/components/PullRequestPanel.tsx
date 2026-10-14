@@ -6,6 +6,7 @@ import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { EmptyTabState } from './EmptyTabState';
 import { ForgeAvatarImg } from '../../shared/ForgeAvatarImg';
 import * as l10n from '@vscode/l10n';
+import { errorRowStyle } from '../../shared/inputStyles';
 
 export function useSkeletonStyle() {
   useEffect(() => {
@@ -203,6 +204,17 @@ export function ConnectPrompt({ repo, onOpenAccountPicker, onSetHostOverride }: 
   );
 }
 
+/** A repo's list error. Shared with the Issues tab. */
+export function ApiErrorRow({ error }: { error?: string }) {
+  if (!error) return null;
+  return (
+    <div style={css.errorRow}>
+      <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
+      {error}
+    </div>
+  );
+}
+
 function SkeletonRow() {
   return (
     <div style={{ ...row.header, cursor: 'default' }}>
@@ -282,16 +294,12 @@ function RepoSection({ repo, multiRepo, singleRepo, plain = false, isLast = fals
             <RepoSkeleton />
           ) : (
             <>
-              {repo.error && (
-                <div style={css.errorRow}>
-                  <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
-                  {repo.error}
-                </div>
-              )}
+              <ApiErrorRow error={repo.error} />
               {!connected ? (
                 <ConnectPrompt repo={repo} onOpenAccountPicker={onOpenAccountPicker} onSetHostOverride={onSetHostOverride} />
               ) : repo.pullRequests.length === 0 ? (
-                <div style={css.empty}>{l10n.t('No pull requests match the current filters')}</div>
+                // With an error the list is empty because it couldn't load, not because of the filters.
+                !repo.error && <div style={css.empty}>{l10n.t('No pull requests match the current filters')}</div>
               ) : (
                 <>
                   {repo.pullRequests.map((pr, idx) => (
@@ -409,10 +417,7 @@ export const css = {
     display: 'flex', alignItems: 'center', fontSize: '11px', padding: '3px 8px',
   } as React.CSSProperties,
   empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
-  errorRow: {
-    display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
-    color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',
-  } as React.CSSProperties,
+  errorRow: errorRowStyle,
   connectBox: {
     display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
     padding: '20px 12px', textAlign: 'center' as const,

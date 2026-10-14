@@ -3,7 +3,7 @@ import type { RepoIssues, IssueSummary, ForgeProvider } from '../../shared/msgTy
 import { Codicon } from '../../shared/Codicon';
 import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { EmptyTabState } from './EmptyTabState';
-import { AuthorAvatar, AuthorName, ConnectPrompt, RepoSkeleton, css, row, useSkeletonStyle } from './PullRequestPanel';
+import { ApiErrorRow, AuthorAvatar, AuthorName, ConnectPrompt, RepoSkeleton, css, row, useSkeletonStyle } from './PullRequestPanel';
 import * as l10n from '@vscode/l10n';
 import { plural } from '../../shared/l10n';
 
@@ -147,12 +147,7 @@ function RepoSection({ repo, multiRepo, singleRepo, plain = false, isLast = fals
             <RepoSkeleton />
           ) : (
             <>
-              {repo.error && (
-                <div style={css.errorRow}>
-                  <Codicon name="warning" style={{ marginRight: '4px', flexShrink: 0 }} />
-                  {repo.error}
-                </div>
-              )}
+              <ApiErrorRow error={repo.error} />
               {!connected ? (
                 <ConnectPrompt repo={repo} onOpenAccountPicker={handlers.onOpenAccountPicker} onSetHostOverride={handlers.onSetHostOverride} />
               ) : repo.trackerDisabled ? (
@@ -161,7 +156,8 @@ function RepoSection({ repo, multiRepo, singleRepo, plain = false, isLast = fals
                   <div style={{ ...css.connectText, marginBottom: 0 }}>{l10n.t('The issue tracker is turned off for this repository.')}</div>
                 </div>
               ) : repo.issues.length === 0 ? (
-                <div style={css.empty}>{l10n.t('No issues match the current filters')}</div>
+                // With an error the list is empty because it couldn't load, not because of the filters.
+                !repo.error && <div style={css.empty}>{l10n.t('No issues match the current filters')}</div>
               ) : (
                 <>
                   {repo.issues.map((issue, idx) => (
