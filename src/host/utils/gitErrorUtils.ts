@@ -59,6 +59,9 @@ function meaningfulLines(text: string, maxLines: number): string {
 // mapping — the raw output is the actual reason the operation failed.
 const HOOK_FAILURE_PATTERN = /\bhook\b|pre-(?:push|commit)|husky|lint-staged|✖\s*\d+\s*problems?/i;
 
+// git's wording when a remote needs credentials and GIT_TERMINAL_PROMPT=0 (or no tty) stops the prompt.
+const NO_CREDENTIALS_PATTERN = /terminal prompts disabled|could not read (?:Username|Password)/i;
+
 /**
  * Formats an error thrown by a git operation (either VS Code's built-in git API or
  * simple-git) into a single human-readable line, stripping ANSI codes and mapping
@@ -73,6 +76,12 @@ export function formatGitError(e: unknown, maxLines = 3): string {
 
   const friendly = err.gitErrorCode ? friendlyMessages()[err.gitErrorCode as GitErrorCodes] : undefined;
   if (friendly) return friendly;
+
+  // Plain git (not VS Code's API) asked for a username/password it can't prompt for.
+  // simple-git puts git's stderr in the message, VS Code's API in `stderr`.
+  if (NO_CREDENTIALS_PATTERN.test(stderr || err.message || '')) {
+    return vscode.l10n.t('Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.');
+  }
 
   if (stderr) return capitalizeFirst(meaningfulLines(stderr, maxLines));
 

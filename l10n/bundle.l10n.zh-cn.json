@@ -581,6 +581,7 @@
   "Push rejected — the remote has commits you don't have locally. Pull or fetch first.": "推送被拒绝 — 远程包含本地没有的提交。请先拉取或获取。",
   "Force push rejected — the remote branch changed since you last fetched.": "强制推送被拒绝 — 自上次获取以来远程分支已更改。",
   "Authentication failed — check your git credentials.": "身份验证失败 — 请检查 git 凭据。",
+  "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.": "身份验证失败 — git 未找到此远程的凭据。请配置凭据助手或使用 SSH。",
   "Could not connect to the remote repository.": "无法连接到远程仓库。",
   "Could not access the remote repository.": "无法访问远程仓库。",
   "Remote repository not found.": "未找到远程仓库。",

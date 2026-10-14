@@ -20,7 +20,7 @@ import { buildRebaseTodo, shQuote } from './rebaseTodo';
 import { compareRangeArgs, isSafeCompareRef } from './compareRange';
 import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
-import { getVscodeRepository } from './VscodeGitApi';
+import { getOrOpenVscodeRepository, getVscodeRepository } from './VscodeGitApi';
 import { ForcePushMode, Status, RefType } from './git.d';
 
 const STATUS_MAP: Record<string, GitFileStatus> = {
@@ -167,6 +167,23 @@ export class GitService {
 
   private vsRepo() {
     return getVscodeRepository(this.rootPath);
+  }
+
+  /**
+   * VS Code's repository for a network operation (push, pull, fetch), so it authenticates
+   * with VS Code's credentials: opened in VS Code when it doesn't know the repo yet, and
+   * refreshed when it lists no remotes while git has some (a remote added after VS Code
+   * opened the repo). Undefined when VS Code still lists no remotes: plain git is used then.
+   */
+  private async remoteVsRepo() {
+    const vsRepo = await getOrOpenVscodeRepository(this.rootPath);
+    if (!vsRepo) return undefined;
+    if (vsRepo.state.remotes.length === 0) {
+      const remotes = await this.git.getRemotes(false).catch(() => []);
+      if (remotes.length === 0) return undefined;
+      await vsRepo.status().catch(() => undefined);
+    }
+    return vsRepo.state.remotes.length > 0 ? vsRepo : undefined;
   }
 
   async isGitRepo(): Promise<boolean> {
@@ -1695,7 +1712,7 @@ export class GitService {
   async pushBranch(branchName: string, remote: string, remoteBranchName: string, setUpstream: boolean): Promise<void> {
     await guardProtectedBranch('push', this.rootPath, remoteBranchName);
     const refspec = `refs/heads/${branchName}:refs/heads/${remoteBranchName}`;
-    const vsRepo = this.vsRepo();
+    const vsRepo = await this.remoteVsRepo();
     if (vsRepo?.state.remotes.some(item => item.name === remote)) {
       await vsRepo.push(remote, refspec, setUpstream);
       return;
@@ -1748,12 +1765,10 @@ export class GitService {
 
   async push(force = false, remote?: string): Promise<string> {
     await guardProtectedBranch(force ? 'forcePush' : 'push', this.rootPath, await this.headBranchName());
-    const vsRepo = this.vsRepo();
     // Only use VS Code API when it actually knows the remotes for this repo.
     // If remotes are empty VS Code would push to an unknown remote (exit 128).
-    // Repos where VS Code lists no remotes are typically SSH-keyed or use a
-    // system credential helper, so falling back to simple-git is safe there.
-    if (vsRepo && vsRepo.state.remotes.length > 0) {
+    const vsRepo = await this.remoteVsRepo();
+    if (vsRepo) {
       const hasUpstream = !!vsRepo.state.HEAD?.upstream;
       // Nothing ahead of upstream means a push would be a silent no-op — skip it
       // so callers (e.g. the push-all notification) don't count it as pushed.
@@ -1795,8 +1810,8 @@ export class GitService {
   }
 
   async pull(): Promise<string> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo && vsRepo.state.remotes.length > 0) {
+    const vsRepo = await this.remoteVsRepo();
+    if (vsRepo) {
       if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       await vsRepo.pull();
       return vscode.l10n.t('pulled');
@@ -1828,8 +1843,8 @@ export class GitService {
   }
 
   async pullRebase(): Promise<string> {
-    const vsRepo = this.vsRepo();
-    if (vsRepo && vsRepo.state.remotes.length > 0) {
+    const vsRepo = await this.remoteVsRepo();
+    if (vsRepo) {
       if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       const upstream = vsRepo.state.HEAD.upstream;
       await vsRepo.fetch();
@@ -1844,8 +1859,8 @@ export class GitService {
 
   async fetchAll(): Promise<void> {
     const prune = vscode.workspace.getConfiguration('gitcharm').get<boolean>('fetchPrune', true);
-    const vsRepo = this.vsRepo();
-    if (vsRepo && vsRepo.state.remotes.length > 0) { await vsRepo.fetch({ prune }); return; }
+    const vsRepo = await this.remoteVsRepo();
+    if (vsRepo) { await vsRepo.fetch({ prune }); return; }
     await this.git.fetch(['--all', ...(prune ? ['--prune'] : [])]);
   }
 
@@ -2256,10 +2271,21 @@ export class GitService {
   }
 
   async pushTag(name: string, remote: string): Promise<void> {
+    const vsRepo = await this.remoteVsRepo();
+    if (vsRepo?.state.remotes.some(item => item.name === remote)) {
+      await vsRepo.push(remote, `refs/tags/${name}`);
+      return;
+    }
     await this.git.raw(['push', remote, `refs/tags/${name}`]);
   }
 
   async deleteTagRemote(name: string, remote: string): Promise<void> {
+    const vsRepo = await this.remoteVsRepo();
+    if (vsRepo?.state.remotes.some(item => item.name === remote)) {
+      // An empty source deletes the remote ref, like `git push --delete`.
+      await vsRepo.push(remote, `:refs/tags/${name}`);
+      return;
+    }
     await this.git.raw(['push', remote, `--delete`, `refs/tags/${name}`]);
   }
 

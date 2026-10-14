@@ -1180,6 +1180,7 @@
   "Push rejected — the remote has commits you don't have locally. Pull or fetch first.": "Push rejected — the remote has commits you don't have locally. Pull or fetch first.",
   "Force push rejected — the remote branch changed since you last fetched.": "Force push rejected — the remote branch changed since you last fetched.",
   "Authentication failed — check your git credentials.": "Authentication failed — check your git credentials.",
+  "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.": "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.",
   "Could not connect to the remote repository.": "Could not connect to the remote repository.",
   "Could not access the remote repository.": "Could not access the remote repository.",
   "Remote repository not found.": "Remote repository not found.",

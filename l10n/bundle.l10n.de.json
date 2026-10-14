@@ -581,6 +581,7 @@
   "Push rejected — the remote has commits you don't have locally. Pull or fetch first.": "Push abgelehnt — das Remote enthält Commits, die lokal nicht vorhanden sind. Zuerst pullen oder fetchen.",
   "Force push rejected — the remote branch changed since you last fetched.": "Force-Push abgelehnt — der Remote-Branch hat sich seit dem letzten Fetch geändert.",
   "Authentication failed — check your git credentials.": "Authentifizierung fehlgeschlagen — Git-Anmeldedaten prüfen.",
+  "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.": "Authentifizierung fehlgeschlagen — Git hat keine Anmeldedaten für dieses Remote gefunden. Richte einen Credential Helper ein oder verwende SSH.",
   "Could not connect to the remote repository.": "Verbindung zum Remote-Repository nicht möglich.",
   "Could not access the remote repository.": "Zugriff auf das Remote-Repository nicht möglich.",
   "Remote repository not found.": "Remote-Repository nicht gefunden.",

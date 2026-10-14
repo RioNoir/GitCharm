@@ -30,3 +30,22 @@ export function getVscodeRepository(rootPath: string): Repository | undefined {
   const requested = rootPath.replace(/[/\\]+$/, '');
   return repoRoot === requested ? repo : undefined;
 }
+
+/**
+ * Like getVscodeRepository, but asks VS Code's git extension to open the repository when
+ * it doesn't know it yet — e.g. a repo created with `git init` after startup, or one deeper
+ * than git.repositoryScanMaxDepth that GitCharm found on its own. Network operations go
+ * through it so they get VS Code's credentials (askpass, GitHub sign-in).
+ */
+export async function getOrOpenVscodeRepository(rootPath: string): Promise<Repository | undefined> {
+  const known = getVscodeRepository(rootPath);
+  if (known) return known;
+  const api = getApi();
+  if (!api) return undefined;
+  try {
+    await api.openRepository(vscode.Uri.file(rootPath));
+  } catch {
+    return undefined;
+  }
+  return getVscodeRepository(rootPath);
+}
