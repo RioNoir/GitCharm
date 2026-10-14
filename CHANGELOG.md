@@ -2,6 +2,23 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.8.2
+
+### ✨ New Features
+- New **Folders always scanned** setting (`gitcharm.repositoryScanIncludedFolders`): repositories kept on purpose in a folder the parent repository ignores, e.g. independent repositories under a gitignored `packages/*`, are listed again. Since v0.8.1 the scan skips gitignored folders; the folders listed here (or their direct subfolders) are always scanned, also deeper than the scan depth, like VS Code's `git.scanRepositories`, while every other gitignored folder stays skipped, closes [#107](https://github.com/RioNoir/GitCharm/issues/107) by [@AlexHL02](https://github.com/AlexHL02) ([#108](https://github.com/RioNoir/GitCharm/pull/108) by [@gaganyadav80](https://github.com/gaganyadav80))
+- New **Keep commit message** setting (`gitcharm.commitPanel.keepCommitMessage`, off by default): the message stays in the Commit Panel after a commit, to reuse it for the next one, closes [#109](https://github.com/RioNoir/GitCharm/issues/109) by [@aloz77](https://github.com/aloz77)
+
+### 🐛 Bug Fixes
+- The Log Panel's side panels have no fixed maximum width any more: the branch sidebar and the commit details can grow until the commit list reaches its minimum width, so on a wide screen every panel can sit on one side. Side panels shrink instead of being cut off when the window narrows, and the commit details keep the width they were dragged to when reopened. The same goes for the Commit Panel's splitter in the undocked window, closes [#106](https://github.com/RioNoir/GitCharm/issues/106) by [@ripopov](https://github.com/ripopov)
+- Push, pull and fetch use VS Code's credentials for repositories VS Code's Source Control hadn't opened yet, e.g. one created with `git init` after startup, or with a remote added later. They used to run plain git, which failed with "could not read Username: Device not configured" on an HTTPS remote until VS Code was restarted. When git still finds no credentials, the error now says so
+- Error messages in the Commit Panel's tabs are readable in every theme: in many themes they were red on red
+- The Pull Requests and Issues tabs explain why a repository can't be listed instead of showing the forge's raw answer: e.g. a private repository the connected account has no access to, rather than "HTTP 404 Not Found". "No pull requests match the current filters" no longer shows under an error
+- The active Git profile shows its account's avatar from the connected forge (GitHub, GitLab, Bitbucket, Gitea) in the commit form, the Log Panel's Uncommitted Changes and stash rows, the status bar and the profile picker, as commit authors already did
+
+### 🔧 Other
+- simple-git updated to v4 to fix critical security advisories: its guard against unsafe git options could be bypassed. Git still gets the same environment, e.g. a `GIT_SSH_COMMAND` choosing an SSH key
+- Development dependencies updated to fix security advisories (concurrently/shell-quote, fantasticon/handlebars, vite/source-map-js); they aren't part of the published extension
+
 ## v0.8.1
 
 ### 🐛 Bug Fixes
