@@ -1317,11 +1317,14 @@
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
           },
-          "gitcharm.repositoryScanRespectGitignore": {
+          "gitcharm.repositoryScanIncludedFolders": {
             "order": 71,
-            "type": "boolean",
-            "default": true,
-            "description": "%config.repositoryScanRespectGitignore.description%"
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "%config.repositoryScanIncludedFolders.description%"
           },
           "gitcharm.submoduleMaxDepth": {
             "order": 72,

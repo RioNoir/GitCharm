@@ -158,7 +158,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
         if (
           e.affectsConfiguration('gitcharm.repositoryScanMaxDepth') ||
           e.affectsConfiguration('gitcharm.repositoryScanIgnoredFolders') ||
-          e.affectsConfiguration('gitcharm.repositoryScanRespectGitignore') ||
+          e.affectsConfiguration('gitcharm.repositoryScanIncludedFolders') ||
           e.affectsConfiguration('gitcharm.submoduleMaxDepth') ||
           e.affectsConfiguration('gitcharm.projectColors')
         ) {
@@ -269,11 +269,9 @@ export class WorkspaceGitManager implements vscode.Disposable {
     });
 
     const repositoryScanMaxDepth = this.getRepositoryScanMaxDepth();
-    if (repositoryScanMaxDepth > 0) {
-      folders.forEach((folder) => {
-        this.discoverNestedRepositories(folder.uri.fsPath, repositoryScanMaxDepth, colorIdx, customColors);
-      });
-    }
+    folders.forEach((folder) => {
+      this.discoverNestedRepositories(folder.uri.fsPath, repositoryScanMaxDepth, colorIdx, customColors);
+    });
 
     // Pick up repositories VS Code's built-in Git extension already discovered but that
     // this scan missed — most notably a parent-folder repo found via
@@ -401,8 +399,25 @@ export class WorkspaceGitManager implements vscode.Disposable {
       : DEFAULT_REPOSITORY_SCAN_IGNORED_FOLDERS;
   }
 
-  private getRepositoryScanRespectGitignore(): boolean {
-    return vscode.workspace.getConfiguration('gitcharm').get<boolean>('repositoryScanRespectGitignore', true) !== false;
+  /**
+   * Absolute paths of the `repositoryScanIncludedFolders` entries (workspace-relative) under
+   * `workspaceRoot`. Repositories in these folders are registered even when the parent repo
+   * gitignores them (e.g. independent repos under `packages/*`, #107) or they sit deeper
+   * than `repositoryScanMaxDepth`, like VS Code's `git.scanRepositories`.
+   */
+  private getRepositoryScanIncludedFolders(workspaceRoot: string): string[] {
+    const value = vscode.workspace.getConfiguration('gitcharm').get<string[]>('repositoryScanIncludedFolders', []);
+    if (!Array.isArray(value)) return [];
+    return value.flatMap(entry => {
+      if (typeof entry !== 'string') return [];
+      const rel = entry.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      if (!rel || rel.split('/').includes('..')) return [];
+      return [path.join(workspaceRoot, rel)];
+    });
+  }
+
+  private isInRepositoryScanIncludedFolder(candidatePath: string, includedFolders: string[]): boolean {
+    return includedFolders.some(folder => candidatePath === folder || candidatePath.startsWith(folder + path.sep));
   }
 
   private detectLinkedWorktree(rootPath: string): { isWorktree: boolean; mainWorktreePath?: string } {
@@ -528,12 +543,35 @@ export class WorkspaceGitManager implements vscode.Disposable {
 
     visit(workspaceRoot, 0);
 
+    // Included folders are scanned whatever their depth: the folder itself, or its direct children.
+    const included = this.getRepositoryScanIncludedFolders(workspaceRoot);
+    for (const folder of included) {
+      if (this.isRepositoryScanIgnored(folder, workspaceRoot)) continue;
+      if (fs.existsSync(path.join(folder, '.git'))) {
+        found.push(folder);
+        continue;
+      }
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(folder, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+        const childPath = path.join(folder, entry.name);
+        if (this.isRepositoryScanIgnored(childPath, workspaceRoot)) continue;
+        if (fs.existsSync(path.join(childPath, '.git'))) found.push(childPath);
+      }
+    }
+
     // Repos cloned into a gitignored folder (build outputs, fetched dependencies) aren't
     // part of the project — and their own submodules would push the real ones out.
-    // Opt out for repos kept in a gitignored folder on purpose (e.g. packages/*, #107).
-    const ignored = this.getRepositoryScanRespectGitignore()
-      ? this.getGitIgnoredPaths(workspaceRoot, found)
-      : new Set<string>();
+    // Repos in an included folder are kept there on purpose, so they skip the check.
+    const ignored = this.getGitIgnoredPaths(
+      workspaceRoot,
+      found.filter(p => !this.isInRepositoryScanIncludedFolder(p, included)),
+    );
     for (const repoPath of found) {
       if (!ignored.has(repoPath)) this.registerScannedRepository(repoPath, workspaceRoot, colorIdx, customColors);
     }
@@ -1418,21 +1456,26 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const maxDepth = this.getRepositoryScanMaxDepth();
 
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      const included = this.getRepositoryScanIncludedFolders(folder.uri.fsPath);
+      const watchNested = maxDepth > 0 || included.length > 0;
       // At depth 0 only the workspace root can become a repo; if it already is
       // one, its normal repo watcher is enough. At depth > 0, still watch known
       // roots so newly cloned/git-init'ed child repositories are detected.
-      if (maxDepth === 0 && this.repos.has(folder.uri.fsPath)) continue;
+      if (!watchNested && this.repos.has(folder.uri.fsPath)) continue;
 
       const w = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(folder.uri, maxDepth > 0 ? '**/.git' : '.git')
+        new vscode.RelativePattern(folder.uri, watchNested ? '**/.git' : '.git')
       );
       const onGitCreated = async (gitUri: vscode.Uri) => {
         const repoPath = path.dirname(gitUri.fsPath);
         const depth = this.repositoryScanDepth(folder.uri.fsPath, repoPath);
-        if (depth < 0 || depth > maxDepth) return;
+        if (depth < 0) return;
+        // Same reach as the scan: up to maxDepth, or an included folder and its direct children.
+        const inIncluded = included.some(f => repoPath === f || path.dirname(repoPath) === f);
+        if (depth > maxDepth && !inIncluded) return;
         if (this.isRepositoryScanIgnored(repoPath, folder.uri.fsPath)) return;
         // A build cloning into a gitignored folder would otherwise reinitialize once per clone.
-        if (depth > 0 && this.getRepositoryScanRespectGitignore() && await this.isGitIgnored(folder.uri.fsPath, repoPath)) return;
+        if (depth > 0 && !this.isInRepositoryScanIncludedFolder(repoPath, included) && await this.isGitIgnored(folder.uri.fsPath, repoPath)) return;
         this.scheduleReinitialize();
       };
       w.onDidCreate(onGitCreated);

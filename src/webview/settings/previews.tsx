@@ -476,6 +476,7 @@ function DiscoveryPreview({ get, repos }: PreviewProps) {
   const depth = get<number>('repositoryScanMaxDepth');
   const subDepth = get<number>('submoduleMaxDepth');
   const ignored = get<string[]>('repositoryScanIgnoredFolders');
+  const included = get<string[]>('repositoryScanIncludedFolders');
   return (
     <div className="pv-stack">
       <div className="pv-tree">
@@ -483,6 +484,9 @@ function DiscoveryPreview({ get, repos }: PreviewProps) {
         <div className="pv-tree-row pv-lit" style={{ paddingLeft: 16 }}><Codicon name="repo" /> {list[0].name}</div>
         <div className={`pv-tree-row${depth < 1 ? ' off' : ' pv-lit'}`} style={{ paddingLeft: 16 }}><Codicon name="folder" /> packages/<Codicon name="repo" /> {list[1]?.name ?? 'api'} <span className="pv-muted">{l10n.t('depth {0}', 1)}</span></div>
         <div className={`pv-tree-row${subDepth < 1 ? ' off' : ' pv-lit'}`} style={{ paddingLeft: 32 }}><Codicon name="package" /> {list[2]?.name ?? 'vendor/lib'} <span className="pv-muted">{l10n.t('submodule')}</span></div>
+        <div className={`pv-tree-row${included.length > 0 ? ' pv-lit' : ' off'}`} style={{ paddingLeft: 16 }}>
+          <Codicon name="folder" /> {included[0]?.replace(/^\/+|\/+$/g, '') || 'libs'}/<Codicon name="repo" /> shared <span className="pv-muted">{l10n.t('gitignored')}{included.length > 0 && ` · ${l10n.t('always scanned')}`}</span>
+        </div>
         {ignored.slice(0, 2).map(f => (
           <div key={f} className="pv-tree-row off" style={{ paddingLeft: 16 }}><Codicon name="folder" /> {f} <span className="pv-muted">{l10n.t('ignored')}</span></div>
         ))}
