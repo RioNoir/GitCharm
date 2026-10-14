@@ -1648,6 +1648,15 @@ export class GitService {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
+  /** The newest pushed commit (on a remote-tracking branch) by this author email, for forges that match authors by commit. */
+  async findPushedCommitByAuthor(email: string): Promise<string | undefined> {
+    // --fixed-strings: an address like a+b@c.com is no pattern; <…> keeps a@c.com from matching xa@c.com.
+    const out = await this.git
+      .raw(['log', '-1', '--format=%H', '--remotes', '--fixed-strings', '--regexp-ignore-case', `--author=<${email}>`])
+      .catch(() => '');
+    return out.trim() || undefined;
+  }
+
   async getRemotes(): Promise<string[]> {
     const vsRepo = this.vsRepo();
     if (vsRepo) {

@@ -361,7 +361,10 @@ export class PullRequestManager {
     if (!resolved?.provider) return undefined;
     const provider = this.makeProvider(repoId, resolved.provider);
     if (!provider || !(await provider.hasCredentials())) return undefined;
-    return provider.getCommitAuthorAvatar(resolved.owner, resolved.repo, email, sha);
+    // Without a commit (e.g. the active Git profile's own avatar), one of theirs already on the forge: GitHub,
+    // Gitea and Bitbucket only match authors by commit.
+    const commit = sha ?? await this.manager.getRepo(repoId)?.findPushedCommitByAuthor(email);
+    return provider.getCommitAuthorAvatar(resolved.owner, resolved.repo, email, commit);
   }
 
   /** Loads the first page for a repo under its own persisted filters, replacing any cached pages for that repo. */

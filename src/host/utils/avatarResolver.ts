@@ -146,18 +146,24 @@ export interface AvatarRequest {
 
 type ForgeLookup = (repoId: string, email: string, sha?: string) => Promise<string | undefined>;
 
+/** Repos whose forge is asked when a request names none (a Git profile's avatar), at most this many. */
+const MAX_FALLBACK_REPOS = 5;
+
 /** At most this many avatar lookups run at once: a Log Panel can ask for hundreds of authors in one go. */
 const MAX_CONCURRENT = 4;
 
 class AvatarResolver {
   private forgeLookup: ForgeLookup | undefined;
+  private workspaceRepoIds: () => string[] = () => [];
   /** Keyed by repo and email: a repo's forge may know an author another forge doesn't. */
   private readonly cache = new Map<string, { promise: Promise<string | null>; withSha: boolean }>();
   private running = 0;
   private readonly queue: (() => void)[] = [];
 
-  setForgeLookup(lookup: ForgeLookup): void {
+  /** `repoIds`: the workspace's repositories, whose forges are asked for an author no request ties to a repo. */
+  setForgeLookup(lookup: ForgeLookup, repoIds: () => string[]): void {
     this.forgeLookup = lookup;
+    this.workspaceRepoIds = repoIds;
   }
 
   clear(): void {
@@ -179,9 +185,13 @@ class AvatarResolver {
   }
 
   private async lookup({ email, repoId, sha }: AvatarRequest): Promise<string | null> {
-    if (repoId && this.forgeLookup) {
-      const fromForge = await checkAvatarUrl(await this.forgeLookup(repoId, email, sha).catch(() => undefined));
-      if (fromForge) return fromForge;
+    if (this.forgeLookup) {
+      // No repo named (the Git profile's avatar, outside any commit): any workspace repo on a forge may know the author.
+      const repoIds = repoId ? [repoId] : this.workspaceRepoIds().slice(0, MAX_FALLBACK_REPOS);
+      for (const id of repoIds) {
+        const fromForge = await checkAvatarUrl(await this.forgeLookup(id, email, sha).catch(() => undefined));
+        if (fromForge) return fromForge;
+      }
     }
     const fromNoreply = await checkAvatarUrl(await noreplyAvatarUrl(email));
     if (fromNoreply) return fromNoreply;
