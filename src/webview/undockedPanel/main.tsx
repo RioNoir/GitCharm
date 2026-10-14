@@ -35,7 +35,7 @@ import { useResize } from '../shared/useResize';
 declare const window: Window & { __INITIAL_CONFIG__?: { showCommit?: boolean } };
 
 function UndockedApp() {
-  const { panelRef: commitRef, onMouseDown: onCommitResize } = useResize('right', 420, 280, 700);
+  const { panelRef: commitRef, onMouseDown: onCommitResize } = useResize('right', 420, 280);
   const showCommit = window.__INITIAL_CONFIG__?.showCommit !== false;
 
   return (
@@ -73,7 +73,8 @@ const logPane: React.CSSProperties = {
   overflow: 'hidden',
   display: 'flex',
   flexDirection: 'column',
-  minWidth: 0,
+  // Lower bound for the commit panel's splitter (see useResize).
+  minWidth: '300px',
 };
 
 const commitPane: React.CSSProperties = {

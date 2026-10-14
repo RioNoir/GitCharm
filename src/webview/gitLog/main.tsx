@@ -51,8 +51,8 @@ function detectViewLocation(): LogViewLocation {
 function App() {
   const store = useLogStore();
   const pendingRef = useRef<Map<string, (msg: HostToLogMsg) => void>>(new Map());
-  const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 250, 120, 400);
-  const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200, 600);
+  const { panelRef: sidebarRef, onMouseDown: onSidebarResize } = useResize('right', 250, 120);
+  const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [layoutByLocation, setLayoutByLocation] = useState(initialLayout);
   const [columns, setColumns] = useState<LogColumns>({ author: true, avatar: true, date: true, hash: true, refs: true });
@@ -790,7 +790,8 @@ const commitColumn: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   flex: 1,
-  minWidth: 0,
+  // Lower bound for the side panels' splitters (see useResize).
+  minWidth: '150px',
   overflow: 'hidden',
 };
 
