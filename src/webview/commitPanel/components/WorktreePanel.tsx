@@ -5,6 +5,7 @@ import { InlineIconBtn } from '../../shared/InlineIconBtn';
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu';
 import { useCommitStore } from '../store/commitStore';
 import * as l10n from '@vscode/l10n';
+import { errorRowStyle } from '../../shared/inputStyles';
 
 const SECTION_COLLAPSE_THRESHOLD = 5;
 
@@ -318,10 +319,7 @@ const css = {
     display: 'flex', alignItems: 'center', fontSize: '11px', padding: '3px 8px',
   } as React.CSSProperties,
   empty: { padding: '16px 12px', fontSize: '12px', opacity: 0.45, textAlign: 'center' as const },
-  errorRow: {
-    display: 'flex', alignItems: 'flex-start', padding: '4px 8px', fontSize: '11px',
-    color: 'var(--vscode-errorForeground)', background: 'var(--vscode-inputValidation-errorBackground)',
-  } as React.CSSProperties,
+  errorRow: errorRowStyle,
 };
 
 const row = {

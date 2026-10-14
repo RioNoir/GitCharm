@@ -78,3 +78,31 @@ export function formatApiError(err: unknown): string {
 
   return err.message;
 }
+
+/**
+ * A forge refusing a repository's list request because of the account it's made with, as a
+ * message that says so — instead of e.g. GitHub's raw `HTTP 404 Not Found: {...}`, its answer
+ * for a private repository the account can't see. Undefined for any other error, rate limits
+ * (GitHub answers those with a 403 too) included.
+ */
+export function describeAccessError(err: unknown, repoFullName: string): string | undefined {
+  if (!(err instanceof HttpJsonError)) return undefined;
+  const bodyMessage = typeof (err.body as { message?: unknown } | undefined)?.message === 'string'
+    ? (err.body as { message: string }).message
+    : '';
+  if (/rate limit/i.test(bodyMessage) || /rate limit/i.test(err.message)) return undefined;
+  switch (err.status) {
+    case 401:
+      return vscode.l10n.t('The account\'s credentials were rejected: the token may be expired or revoked. Sign in again or switch account.');
+    case 403:
+      return vscode.l10n.t('The account doesn\'t have permission to access {0}. Switch to an account that does.', repoFullName);
+    case 422:
+      // GitHub's search API (filtered lists) on a repo the account can't see.
+      if (!/cannot be searched/i.test(err.message)) return undefined;
+      // falls through
+    case 404:
+      return vscode.l10n.t('{0} wasn\'t found, or the account can\'t see it: a private repository needs an account with access to it.', repoFullName);
+    default:
+      return undefined;
+  }
+}

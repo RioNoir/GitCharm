@@ -6,6 +6,7 @@ import type { BitbucketCredentials, IntegrationAccount, IntegrationAccountStore 
 import { validateToken, type TokenCredentials } from '../integrations/validateCredentials';
 import type { IntegrationProvider } from '../types/integrations';
 import { logError, logWarn } from '../utils/Logger';
+import { describeAccessError } from './formatApiError';
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs, ForgeProvider,
   ListPullRequestsOptions, MergeStrategy, PostCommentResult, PullRequestAuthorFilter, PullRequestCapabilities,
@@ -387,7 +388,8 @@ export class PullRequestManager {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logError('pullrequest-list', `Failed to list pull requests for ${repoName}`, message);
-          result = { repoId, repoName, repoColor, connection, pullRequests: [], page: 1, hasMore: false, error: message };
+          const friendly = describeAccessError(err, `${resolved.owner}/${resolved.repo}`);
+          result = { repoId, repoName, repoColor, connection, pullRequests: [], page: 1, hasMore: false, error: friendly ?? message };
         }
       }
     }
@@ -421,7 +423,8 @@ export class PullRequestManager {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logError('pullrequest-load-more', `Failed to load more pull requests for ${cached.data.repoName}`, message);
-      const result: RepoPullRequests = { ...cached.data, error: message };
+      const friendly = describeAccessError(err, `${resolved.owner}/${resolved.repo}`);
+      const result: RepoPullRequests = { ...cached.data, error: friendly ?? message };
       this.cache.set(repoId, { data: result, filters, expiresAt: Date.now() + CACHE_TTL_MS });
       return result;
     }
