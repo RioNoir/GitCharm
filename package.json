@@ -1317,6 +1317,15 @@
             },
             "description": "%config.repositoryScanIgnoredFolders.description%"
           },
+          "gitcharm.repositoryScanIncludedFolders": {
+            "order": 71,
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "%config.repositoryScanIncludedFolders.description%"
+          },
           "gitcharm.submoduleMaxDepth": {
             "order": 72,
             "type": "number",

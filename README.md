@@ -190,6 +190,7 @@ All settings are easiest to change from **GitCharm: Settings**. A selection of t
 | `gitcharm.graphMaxCommits` | `1000` | Commits loaded into the Log graph (100–10000). |
 | `gitcharm.gitLogDefaultLocation` | `panel` | Where the Log opens: `panel`, `editorTab` or `newWindow`. |
 | `gitcharm.repositoryScanMaxDepth` | `1` | How deep to look for nested repositories in the workspace. |
+| `gitcharm.repositoryScanIncludedFolders` | `[]` | Folders whose repositories are always listed, even if gitignored, e.g. `packages`. |
 | `gitcharm.submoduleMaxDepth` | `5` | How deep to show nested submodules (`0`: none). |
 | `gitcharm.projectColors` | `{}` | A color for each repository in multi-repo views. |
 | `gitcharm.commitPanel.tabOrder` | all tabs | Order of the Commit Panel tabs; each one can also be hidden. |

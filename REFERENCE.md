@@ -192,6 +192,7 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 |:--|:--|:--|
 | `gitcharm.repositoryScanMaxDepth` | `1` | Maximum depth of workspace subfolders to scan for Git repositories. `0` only checks workspace folders. |
 | `gitcharm.repositoryScanIgnoredFolders` | `["node_modules"]` | Folder names or workspace-relative paths skipped while scanning for nested Git repositories. |
+| `gitcharm.repositoryScanIncludedFolders` | `[]` | Workspace-relative folders whose repositories are always listed: the folder itself or its direct subfolders, even when the parent repository ignores them (`.gitignore`) or they sit deeper than `repositoryScanMaxDepth`. Since v0.8.1 the scan skips repositories in gitignored folders (build outputs, fetched dependencies); list here the ones kept there on purpose, e.g. `packages` for independent repositories under a gitignored `packages/*`. `repositoryScanIgnoredFolders` still wins. |
 | `gitcharm.submoduleMaxDepth` | `5` | Maximum nesting depth of Git submodules shown as repositories. `1` only shows direct submodules, `0` none. In a workspace with more than 5 submodules they start hidden: a notification offers to show them, and **GitCharm: Show Submodules** / **Hide Submodules** switch it later, per workspace. |
 
 ### Pull Requests
