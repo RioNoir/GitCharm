@@ -267,7 +267,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
     // rename on GitHub/GitLab) — drop the cache so it's re-resolved, not stale.
     this.defaultBranchCache.clear();
     const [repos, branches] = await Promise.all([
-      this.getVisibleReposWithDefaultBranch(),
+      this.getVisibleReposWithDefaultBranch({ allowNetwork: true }),
       this.getFilteredBranches(),
     ]);
     this.broadcast({ type: 'LOG_INIT_DATA', repos, branches });
@@ -677,10 +677,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
   /**
    * Same as getVisibleRepos(), but with each RepoMeta's `defaultBranch` resolved to the
    * remote's actual default branch — the source of truth the webview's "primary branch"
-   * star/delete-protection should use instead of its own naming heuristic. Cached per repoId
-   * since the remote symref rarely changes and a miss falls back to a network round trip.
+   * star/delete-protection should use instead of its own naming heuristic. Network discovery
+   * is reserved for explicit fetches; passive loads use only local metadata. Results are
+   * cached per repository until an explicit fetch clears them.
    */
-  private async getVisibleReposWithDefaultBranch(): Promise<RepoMeta[]> {
+  private async getVisibleReposWithDefaultBranch(options: { allowNetwork?: boolean } = {}): Promise<RepoMeta[]> {
     const repos = this.getVisibleRepos();
     return Promise.all(repos.map(async meta => {
       if (this.defaultBranchCache.has(meta.id)) {
@@ -690,7 +691,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       if (!repo) return meta;
       const remotes = await repo.getRemotes().catch(() => [] as string[]);
       const remote = remotes.includes('origin') ? 'origin' : remotes[0];
-      const defaultBranch = remote ? await repo.getRemoteDefaultBranch(remote).catch(() => undefined) : undefined;
+      const defaultBranch = remote ? await repo.getRemoteDefaultBranch(remote, options).catch(() => undefined) : undefined;
       this.defaultBranchCache.set(meta.id, defaultBranch);
       return { ...meta, defaultBranch };
     }));
@@ -1330,7 +1331,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         if (branchInfo?.isRemote) {
           const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
           const bareName = msg.branchName.slice(remote.length + 1);
-          const defaultBranch = await repo.getRemoteDefaultBranch(remote);
+          const defaultBranch = await repo.getRemoteDefaultBranch(remote, { allowNetwork: true });
           if (defaultBranch && bareName === defaultBranch) {
             const warnMsg = `"${bareName}" is the default branch on "${remote}" — it can't be deleted from the remote.`;
             vscode.window.showWarningMessage(vscode.l10n.t('"{0}" is the default branch on "{1}" — it can\'t be deleted from the remote.', bareName, remote));
@@ -1399,7 +1400,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           if (branchInfo?.isRemote) {
             const remote = branchInfo.remoteName ?? msg.branchName.split('/')[0];
             const bareName = msg.branchName.slice(remote.length + 1);
-            const defaultBranch = await repo.getRemoteDefaultBranch(remote);
+            const defaultBranch = await repo.getRemoteDefaultBranch(remote, { allowNetwork: true });
             if (defaultBranch && bareName === defaultBranch) return { repoId, isDefaultOnRemote: true };
           }
           return { repoId, isDefaultOnRemote: false };
