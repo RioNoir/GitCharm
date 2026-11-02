@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## Unreleased
+
+### 🐛 Bug Fixes
+- Git Log no longer loads indefinitely when the local remote-HEAD pointer is missing and SSH authentication requires a passphrase.
+
 ## v0.8.2
 
 ### ✨ New Features

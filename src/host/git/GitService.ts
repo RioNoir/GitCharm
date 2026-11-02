@@ -1996,17 +1996,19 @@ export class GitService {
   /**
    * Resolves the remote's actual default branch (bare name, e.g. "main") via the
    * `refs/remotes/<remote>/HEAD` symref — the same pointer `git clone` sets up and that
-   * GitHub/GitLab/etc. report as the repository's default branch. Falls back to asking the
-   * remote directly (`ls-remote --symref`, no local state changed) when the symref hasn't
-   * been set up locally (e.g. a shallow clone, or after `git remote add` without a fetch).
-   * Returns undefined if neither resolves (offline, remote unreachable, no such remote).
+   * GitHub/GitLab/etc. report as the repository's default branch. Passive UI reads stay
+   * local so missing metadata cannot block on network authentication. Explicit network
+   * operations can opt into `ls-remote --symref` when the local pointer is absent.
+   * Returns undefined when the branch cannot be resolved; no local state is changed.
    */
-  async getRemoteDefaultBranch(remote: string): Promise<string | undefined> {
+  async getRemoteDefaultBranch(remote: string, { allowNetwork = false }: { allowNetwork?: boolean } = {}): Promise<string | undefined> {
     try {
       const raw = await this.git.raw(['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]);
       const ref = raw.trim();
       if (ref.startsWith(`${remote}/`)) return ref.slice(remote.length + 1);
-    } catch { /* symref not set up locally — fall through to asking the remote */ }
+    } catch { /* A missing local pointer is valid, especially for remotes added after cloning. */ }
+
+    if (!allowNetwork) return undefined;
 
     try {
       const raw = await this.git.raw(['ls-remote', '--symref', remote, 'HEAD']);
