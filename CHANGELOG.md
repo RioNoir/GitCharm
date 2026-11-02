@@ -2,8 +2,10 @@
 
 All notable changes to GitCharm are documented in this file.
 
-## Unreleased
+## v0.8.3
 
+### ✨ New Features
+- Branch badges in Git Log, including attached HEAD markers, now open the sidebar's branch actions on right-click. Actions apply only to the badge's repository; remote-only badges shared by several remotes ask which remote to use.
 ### 🐛 Bug Fixes
 - Git Log no longer loads indefinitely when the local remote-HEAD pointer is missing and SSH authentication requires a passphrase.
 

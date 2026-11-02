@@ -691,6 +691,7 @@ function App() {
             selectedHash={store.selectedCommit ? `${store.selectedCommit.hash}:${store.selectedCommit.repoId}` : null}
             repoColors={repoColors}
             repos={store.repos}
+            branches={store.branches}
             activeRepoId={store.commitFilters.repoId}
             currentBranchByRepo={currentBranchByRepo}
             headHashByRepo={headHashByRepo}

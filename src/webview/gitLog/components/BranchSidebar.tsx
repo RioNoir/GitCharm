@@ -507,8 +507,8 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
         const localInstances = contextMenu.merged.instances.filter(instance => !instance.isRemote);
         const localRepoIds = localInstances.map(instance => instance.repoId);
         return (
-          <ContextMenu
-            merged={contextMenu.merged}
+          <BranchContextMenu
+            branchName={contextMenu.merged.baseName}
             x={contextMenu.x}
             y={contextMenu.y}
             canDelete={!contextMenu.merged.isHead && !(inst.isRemote && contextMenu.merged.isDefault)}
@@ -1024,8 +1024,8 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   );
 }
 
-function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onPull, onPush }: {
-  merged: MergedBranch;
+export function BranchContextMenu({ branchName, x, y, canDelete, onClose, onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onPull, onPush }: {
+  branchName: string;
   x: number; y: number;
   canDelete: boolean;
   onClose: () => void;
@@ -1038,6 +1038,37 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onNewBranch
   onDelete: () => void;
   onPull?: () => void;
   onPush?: () => void;
+}) {
+  const copyName = () => {
+    navigator.clipboard.writeText(branchName).catch(() => {});
+    onClose();
+  };
+  const items: MenuItem[] = [
+    { icon: 'arrow-right', label: l10n.t('Checkout "{0}"', branchName), action: onCheckout },
+    { icon: 'git-branch', label: l10n.t('New Branch from "{0}"...', branchName), action: onNewBranch },
+    { sep: true },
+    { icon: 'git-merge', label: l10n.t('Merge into current'), action: onMerge },
+    { icon: 'repo-forked', label: l10n.t('Rebase onto "{0}"', branchName), action: onRebase },
+    ...(onInteractiveRebase ? [{ icon: 'list-ordered', label: l10n.t('Interactively Rebase onto "{0}"...', branchName), action: onInteractiveRebase }] : []),
+    ...(onPull || onPush ? [
+      { sep: true as const },
+      ...(onPull ? [{ icon: 'cloud-download', label: l10n.t('Pull "{0}"', branchName), action: onPull }] : []),
+      ...(onPush ? [{ icon: 'cloud-upload', label: l10n.t('Push "{0}"...', branchName), action: onPush }] : []),
+    ] : []),
+    { sep: true },
+    ...(onRename ? [{ icon: 'edit', label: l10n.t('Rename…'), action: onRename }] : []),
+    { icon: 'copy', label: l10n.t('Copy Branch Name'), action: copyName },
+    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: l10n.t('Delete branch'), action: onDelete, danger: true }] : []),
+  ];
+
+  return <BranchMenuPopup x={x} y={y} onClose={onClose} items={items} />;
+}
+
+export function BranchMenuPopup({ x, y, onClose, items }: {
+  x: number;
+  y: number;
+  onClose: () => void;
+  items: MenuItem[];
 }) {
   const { ref, pos } = useClampedPosition(x, y);
   useEffect(() => {
@@ -1053,28 +1084,6 @@ function ContextMenu({ merged, x, y, canDelete, onClose, onCheckout, onNewBranch
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [onClose]);
-  const copyName = () => {
-    navigator.clipboard.writeText(merged.baseName).catch(() => {});
-    onClose();
-  };
-  const items: MenuItem[] = [
-    { icon: 'arrow-right', label: l10n.t('Checkout "{0}"', merged.baseName), action: onCheckout },
-    { icon: 'git-branch', label: l10n.t('New Branch from "{0}"...', merged.baseName), action: onNewBranch },
-    { sep: true },
-    { icon: 'git-merge', label: l10n.t('Merge into current'), action: onMerge },
-    { icon: 'repo-forked', label: l10n.t('Rebase onto "{0}"', merged.baseName), action: onRebase },
-    ...(onInteractiveRebase ? [{ icon: 'list-ordered', label: l10n.t('Interactively Rebase onto "{0}"...', merged.baseName), action: onInteractiveRebase }] : []),
-    ...(onPull || onPush ? [
-      { sep: true as const },
-      ...(onPull ? [{ icon: 'cloud-download', label: l10n.t('Pull "{0}"', merged.baseName), action: onPull }] : []),
-      ...(onPush ? [{ icon: 'cloud-upload', label: l10n.t('Push "{0}"...', merged.baseName), action: onPush }] : []),
-    ] : []),
-    { sep: true },
-    ...(onRename ? [{ icon: 'edit', label: l10n.t('Rename…'), action: onRename }] : []),
-    { icon: 'copy', label: l10n.t('Copy Branch Name'), action: copyName },
-    ...(canDelete ? [{ sep: true as const }, { icon: 'trash', label: l10n.t('Delete branch'), action: onDelete, danger: true }] : []),
-  ];
-
   return (
     <>
       <div style={styles.backdrop} onClick={onClose} />

@@ -4,7 +4,10 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { LaidOutCommit, GraphLayout } from '../utils/graphLayout';
 import { GraphOverlay, CommitDot, laneX } from './CommitGraph';
 import { ROW_HEIGHT, LANE_WIDTH, getRowMaxX } from '../utils/graphLayout';
-import type { RepoMeta } from '../../shared/types';
+import type { BranchInfo, RepoMeta } from '../../shared/types';
+import { isPrimaryBranch } from '../../shared/branchUtils';
+import { BranchContextMenu, BranchMenuPopup } from './BranchSidebar';
+import { RefBadge, getBadgeBranches } from './RefBadge';
 import { groupRefs, branchColor, tagColor, headColor } from '../utils/refs';
 import type { RefGroup } from '../utils/refs';
 import { Codicon } from '../../shared/Codicon';
@@ -25,6 +28,7 @@ interface Props {
   selectedHash: string | null;
   repoColors: Record<string, string>;
   repos: RepoMeta[];
+  branches: BranchInfo[];
   activeRepoId?: string | null;
   currentBranchByRepo: Record<string, string>;
   headHashByRepo: Record<string, string>;
@@ -189,7 +193,7 @@ const DRAG_SCROLL_STEP = 8;
 /** Identifies a row across repos — the same hash can show up in several. */
 const commitKey = (c: { hash: string; repoId: string }) => `${c.hash}:${c.repoId}`;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, compareSideLabels, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, branches, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, compareSideLabels, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -242,11 +246,20 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ commit: LaidOutCommit; x: number; y: number; multiSelected: LaidOutCommit[] } | null>(null);
+  const [branchMenu, setBranchMenu] = useState<{ repoId: string; group: RefGroup; x: number; y: number } | null>(null);
   const [popover, setPopover] = useState<{ commit: LaidOutCommit; rowTop: number; listRect: DOMRect; mouseX: number } | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popoverHoveredRef = useRef(false);
   const closePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openBranchMenu = (event: React.MouseEvent<HTMLSpanElement>, repoId: string, group?: RefGroup) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setPopover(null);
+    setContextMenu(null);
+    setBranchMenu(group && getBadgeBranches(group, repoId, branches).length > 0
+      ? { repoId, group, x: event.clientX, y: event.clientY }
+      : null);
+  };
   const [multiSelectHashes, setMultiSelectHashes] = useState<Set<string>>(new Set());
   const multiSelectedCommits = useMemo(
     () => commits.filter(c => multiSelectHashes.has(`${c.hash}:${c.repoId}`)),
@@ -783,6 +796,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                   ? commits.filter(c => multiSelectHashes.has(`${c.hash}:${c.repoId}`))
                   : [];
                 if (!isInMulti) setMultiSelectHashes(new Set());
+                setBranchMenu(null);
                 setContextMenu({ commit, x: e.clientX, y: e.clientY, multiSelected });
               }}
             >
@@ -824,22 +838,28 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                       ? `HEAD → ${headBranchGroup!.label} (${remoteHeadGroup!.remoteName}/HEAD)`
                       : `HEAD → ${headBranchGroup!.label}`;
                     return (
-                      <span key={key} style={styles.refBadge(hc, false, true, isSelected)} title={title}>
+                      <RefBadge key={key} style={styles.refBadge(hc, false, true, isSelected)} title={title}
+                        onBranchContextMenu={event => openBranchMenu(event, commit.repoId, headBranchGroup)}>
                         {headAndRemoteHead
                           ? <Codicon name="milestone" style={{ fontSize: '11px', flexShrink: 0, lineHeight: 1 }} />
                           : <Codicon name="arrow-right" style={{ fontSize: '9px', flexShrink: 0, lineHeight: 1 }} />}
                         <span style={styles.refBadgeLabel}>{headAndRemoteHead ? `${remoteHeadGroup!.remoteName} & HEAD` : 'HEAD'}</span>
-                      </span>
+                      </RefBadge>
                     );
                   }
                   const color = badgeColor(item, commit.repoId, refColors);
                   return (
-                    <span key={key} style={styles.refBadge(color, item.isTag, (item.isHead || item.isDetached) && !item.isRemoteHead, isSelected)} title={badgeTitle(item)}>
+                    <RefBadge
+                      key={key}
+                      style={styles.refBadge(color, item.isTag, (item.isHead || item.isDetached) && !item.isRemoteHead, isSelected)}
+                      title={badgeTitle(item)}
+                      onBranchContextMenu={event => openBranchMenu(event, commit.repoId, item)}
+                    >
                       <RefBadgeIcon group={item} />
                       <span style={styles.refBadgeLabel}>
                         {item.isRemoteHead ? `${item.remoteName}/HEAD` : item.isLocal && item.isRemote ? `${item.remoteName || 'remote'} & ${item.label}` : item.isRemote ? remoteLabel(item) : item.label}
                       </span>
-                    </span>
+                    </RefBadge>
                   );
                 };
 
@@ -857,7 +877,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                       const totalShift = layers.length * STEP;
                       const frontColor = overflowColor(overflow[0]);
                       return (
-                        <span
+                        <RefBadge
                           style={{ ...styles.overflowWrapper, marginRight: totalShift }}
                           title={overflow.map(g => g === HEAD_SENTINEL ? `HEAD → ${headBranchGroup!.label}` : badgeTitle(g as RefGroup)).join('\n')}
                         >
@@ -865,7 +885,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                             <span key={i} style={styles.overflowStackLayer(overflowColor(g), (layers.length - i) * STEP, isSelected)} />
                           ))}
                           <span style={styles.overflowLabel(frontColor, isSelected)}>{visible.length === 0 ? `${overflow.length}` : `+${overflow.length}`}</span>
-                        </span>
+                        </RefBadge>
                       );
                     })()}
                   </div>
@@ -873,10 +893,10 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
               })()}
               <div style={styles.info}>
                 {columns.refs && commit.isStash && (
-                  <span style={{ ...styles.refBadge(commit.dotColor, false, false, isSelected), marginRight: '4px' }}>
+                  <RefBadge style={{ ...styles.refBadge(commit.dotColor, false, false, isSelected), marginRight: '4px' }}>
                     <Codicon name="git-stash" style={{ fontSize: '10px', flexShrink: 0, lineHeight: 1 }} />
                     <span style={styles.refBadgeLabel}>{commit.stashRef}</span>
-                  </span>
+                  </RefBadge>
                 )}
                 <span style={{ ...styles.message, ...(isCurrentHead ? { fontWeight: 700 } : {}), ...(commit.parents.length >= 2 ? { opacity: 0.5 } : {}), ...(commit.isWorkingTree ? { fontStyle: 'italic', opacity: 0.5 } : {}) }}>{commit.message.split('\n')[0]}</span>
               </div>
@@ -977,6 +997,47 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
           activeProfile={activeProfile}
         />
       )}
+
+      {branchMenu && (() => {
+        const { repoId, group, x, y } = branchMenu;
+        const isRemote = group.isRemote && !group.isLocal;
+        const remoteNames = group.remoteName.split(' & ');
+        const candidates = getBadgeBranches(group, repoId, branches);
+        if (candidates.length === 0) return null;
+        if (isRemote && remoteNames.length > 1) {
+          return <BranchMenuPopup x={x} y={y} onClose={() => setBranchMenu(null)} items={candidates.map(branch => ({
+            icon: 'git-branch',
+            label: branch.name,
+            action: () => setBranchMenu({ ...branchMenu, group: { ...group, remoteName: branch.remoteName ?? branch.name.slice(0, -group.label.length - 1) } }),
+          }))} />;
+        }
+        const branch = candidates[0];
+        const refName = branch.name;
+        const defaultBranch = repos.find(r => r.id === repoId)?.defaultBranch;
+        const isDefault = defaultBranch ? group.label === defaultBranch : isPrimaryBranch(group.label);
+        const post = (msg: LogToHostMsg) => {
+          getVsCodeApi().postMessage(msg);
+          setBranchMenu(null);
+        };
+        return (
+          <BranchContextMenu
+            branchName={group.label}
+            x={x}
+            y={y}
+            canDelete={!branch.isHead && !(isRemote && isDefault)}
+            onClose={() => setBranchMenu(null)}
+            onCheckout={() => post({ type: 'LOG_CHECKOUT', requestId: generateId(), repoId, branchName: refName })}
+            onNewBranch={() => post({ type: 'LOG_NEW_BRANCH_FROM', repoIds: [repoId], fromBranch: refName })}
+            onMerge={() => post({ type: 'LOG_MERGE', requestId: generateId(), repoId, from: refName })}
+            onRebase={() => post({ type: 'LOG_REBASE', requestId: generateId(), repoId, onto: refName })}
+            onInteractiveRebase={!branch.isHead ? () => post({ type: 'LOG_INTERACTIVE_REBASE', repoId, onto: refName }) : undefined}
+            onRename={!isRemote ? () => post({ type: 'LOG_RENAME_BRANCH_MULTI', requestId: generateId(), repoIds: [repoId], oldName: group.label }) : undefined}
+            onPull={!isRemote ? () => post({ type: 'LOG_PULL_BRANCH_PICK', repoIds: [repoId], branchName: group.label }) : undefined}
+            onPush={!isRemote ? () => post({ type: 'LOG_PUSH_BRANCH_PICK', repoIds: [repoId], branchName: group.label }) : undefined}
+            onDelete={() => post({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds: [repoId], branchName: refName })}
+          />
+        );
+      })()}
 
       {contextMenu && (
         <CommitContextMenu
