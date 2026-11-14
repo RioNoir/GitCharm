@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "提交面板中提交按钮的默认操作。",
   "config.defaultCommitAction.enum.commit": "主按钮仅提交，不推送",
   "config.defaultCommitAction.enum.commitAndPush": "主按钮提交并立即推送",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "主按钮会提交并推送，然后以刚推送的分支打开新建拉取请求表单（一次一个存储库：选中多个时只提交并推送）",
   "config.defaultSaveAction.description": "提交面板中“保存”按钮的默认操作。",
   "config.defaultSaveAction.enum.stash": "主“保存”按钮储藏所选更改",
   "config.defaultSaveAction.enum.shelve": "主“保存”按钮搁置所选更改",

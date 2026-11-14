@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "Standardaktion der Commit-Schaltfläche im Commit-Panel.",
   "config.defaultCommitAction.enum.commit": "Die Hauptschaltfläche committet ohne zu pushen",
   "config.defaultCommitAction.enum.commitAndPush": "Die Hauptschaltfläche committet und pusht sofort",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "Die Hauptschaltfläche committet, pusht und öffnet dann das Formular für einen neuen Pull Request mit dem gepushten Branch (jeweils ein Repository: bei mehreren wird committet und gepusht)",
   "config.defaultSaveAction.description": "Standardaktion der Schaltfläche „Speichern“ im Commit-Panel.",
   "config.defaultSaveAction.enum.stash": "Die Hauptschaltfläche „Speichern“ stasht die ausgewählten Änderungen",
   "config.defaultSaveAction.enum.shelve": "Die Hauptschaltfläche „Speichern“ stellt die ausgewählten Änderungen zurück (Shelf)",

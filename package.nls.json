@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "Default action for the commit button in the Commit Panel.",
   "config.defaultCommitAction.enum.commit": "The main button commits without pushing",
   "config.defaultCommitAction.enum.commitAndPush": "The main button commits and pushes immediately",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "The main button commits, pushes, then opens the New Pull Request form on the pushed branch (one repository at a time: with several, it commits and pushes)",
   "config.defaultSaveAction.description": "Default action for the Save button in the Commit Panel.",
   "config.defaultSaveAction.enum.stash": "The main Save button stashes selected changes",
   "config.defaultSaveAction.enum.shelve": "The main Save button shelves selected changes",

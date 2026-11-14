@@ -453,6 +453,8 @@
   "Continue the rebase in {0}": "在 {0} 中繼續重定基底",
   "Abort Rebase": "中止重定基底",
   "Commit & Push ({0})": "提交並推送 ({0})",
+  "Commit, Push & Open PR": "提交、推送並開啟 PR",
+  "Commit, Push & Open PR ({0})": "提交、推送並開啟 PR ({0})",
   "Commit ({0})": "提交 ({0})",
   "Stage files and write a message first": "請先暫存檔案並填寫提交訊息",
   "Pop (apply & drop)": "彈出（套用並捨棄）",

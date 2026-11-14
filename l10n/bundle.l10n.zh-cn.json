@@ -453,6 +453,8 @@
   "Continue the rebase in {0}": "在 {0} 中继续变基",
   "Abort Rebase": "中止变基",
   "Commit & Push ({0})": "提交并推送 ({0})",
+  "Commit, Push & Open PR": "提交、推送并打开 PR",
+  "Commit, Push & Open PR ({0})": "提交、推送并打开 PR ({0})",
   "Commit ({0})": "提交 ({0})",
   "Stage files and write a message first": "请先暂存文件并填写提交信息",
   "Pop (apply & drop)": "弹出（应用并丢弃）",

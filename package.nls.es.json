@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "Acción predeterminada del botón de commit en el panel Commit.",
   "config.defaultCommitAction.enum.commit": "El botón principal hace commit sin push",
   "config.defaultCommitAction.enum.commitAndPush": "El botón principal hace commit y push inmediatamente",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "El botón principal hace commit y push, y luego abre el formulario de nueva pull request con la rama publicada (un repositorio a la vez: con varios, hace commit y push)",
   "config.defaultSaveAction.description": "Acción predeterminada del botón Guardar en el panel Commit.",
   "config.defaultSaveAction.enum.stash": "El botón Guardar principal guarda los cambios seleccionados en stash",
   "config.defaultSaveAction.enum.shelve": "El botón Guardar principal archiva los cambios seleccionados en el Shelf",

@@ -1685,11 +1685,13 @@
             "type": "string",
             "enum": [
               "commit",
-              "commitAndPush"
+              "commitAndPush",
+              "commitPushAndOpenPullRequest"
             ],
             "enumDescriptions": [
               "%config.defaultCommitAction.enum.commit%",
-              "%config.defaultCommitAction.enum.commitAndPush%"
+              "%config.defaultCommitAction.enum.commitAndPush%",
+              "%config.defaultCommitAction.enum.commitPushAndOpenPullRequest%"
             ],
             "default": "commit",
             "description": "%config.defaultCommitAction.description%"
