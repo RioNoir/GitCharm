@@ -1390,6 +1390,16 @@ export class WorkspaceGitManager implements vscode.Disposable {
     return allCommits.slice(pageStart, pageStart + limit);
   }
 
+  /**
+   * Keeps the orphaned-branch notification quiet about a branch whose remote branch is about to go away on
+   * purpose — the user is already asked about it, e.g. after merging its pull request.
+   */
+  ignoreOrphanBranch(repoId: string, branchName: string): void {
+    const known = this.knownOrphanBranches.get(repoId) ?? new Set<string>();
+    known.add(branchName);
+    this.knownOrphanBranches.set(repoId, known);
+  }
+
   async fetchAll(): Promise<void> {
     const repos = Array.from(this.repos.values());
     await Promise.allSettled(repos.map(r => r.fetchAll()));

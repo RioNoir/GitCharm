@@ -7,6 +7,7 @@ import type {
 } from '../types';
 import type { BitbucketCredentials } from '../../integrations/IntegrationAccountStore';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { branchPath, isBranchGone } from '../branchPath';
 import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
 
@@ -782,6 +783,17 @@ export class BitbucketProvider implements PullRequestProvider {
       url = data.next;
     }
     return files;
+  }
+
+  async deleteBranch(owner: string, repo: string, branch: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repositories/${owner}/${repo}/refs/branches/${branchPath(branch)}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      if (isBranchGone(err)) return { ok: true };
+      return { ok: false, error: formatApiError(err) };
+    }
   }
 
   async mergePullRequest(owner: string, repo: string, number: number, strategy: MergeStrategy): Promise<ActionResult> {

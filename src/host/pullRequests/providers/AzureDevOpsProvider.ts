@@ -676,6 +676,27 @@ export class AzureDevOpsProvider implements PullRequestProvider {
     return files;
   }
 
+  /** Azure DevOps deletes a branch by updating its ref to the zero id, from the commit it points to now. */
+  async deleteBranch(owner: string, repo: string, branch: string): Promise<ActionResult> {
+    const name = `refs/heads/${branch}`;
+    try {
+      // The filter matches by prefix: pick the exact ref.
+      const params = new URLSearchParams({ filter: `heads/${branch}` });
+      const { data: refs } = await this.client.request<{ value: { name: string; objectId: string }[] }>(`${this.repoUrl(owner, repo)}/refs?${params.toString()}`);
+      const ref = refs.value.find(r => r.name === name);
+      if (!ref) return { ok: true };
+      const { data } = await this.client.request<{ value: { success: boolean; customMessage?: string; updateStatus?: string }[] }>(`${this.repoUrl(owner, repo)}/refs`, {
+        method: 'POST',
+        body: JSON.stringify([{ name, oldObjectId: ref.objectId, newObjectId: '0000000000000000000000000000000000000000' }]),
+      });
+      const result = data.value[0];
+      if (result && !result.success) return { ok: false, error: result.customMessage || result.updateStatus || vscode.l10n.t('The branch could not be deleted') };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }
+
   async mergePullRequest(owner: string, repo: string, number: number, strategy: MergeStrategy): Promise<ActionResult> {
     try {
       const { data } = await this.client.request<RawPullRequest>(this.prUrl(owner, repo, number));

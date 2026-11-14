@@ -2104,8 +2104,28 @@
             "default": "merge",
             "description": "%config.pullRequests.defaultMergeStrategy.description%"
           },
-          "gitcharm.pullRequests.defaultCheckoutAction": {
+          "gitcharm.pullRequests.deleteBranchAfterMerge": {
             "order": 4,
+            "type": "string",
+            "enum": [
+              "ask",
+              "localAndRemote",
+              "remote",
+              "local",
+              "never"
+            ],
+            "enumDescriptions": [
+              "%config.pullRequests.deleteBranchAfterMerge.enum.ask%",
+              "%config.pullRequests.deleteBranchAfterMerge.enum.localAndRemote%",
+              "%config.pullRequests.deleteBranchAfterMerge.enum.remote%",
+              "%config.pullRequests.deleteBranchAfterMerge.enum.local%",
+              "%config.pullRequests.deleteBranchAfterMerge.enum.never%"
+            ],
+            "default": "ask",
+            "markdownDescription": "%config.pullRequests.deleteBranchAfterMerge.markdownDescription%"
+          },
+          "gitcharm.pullRequests.defaultCheckoutAction": {
+            "order": 5,
             "type": "string",
             "enum": [
               "pr",

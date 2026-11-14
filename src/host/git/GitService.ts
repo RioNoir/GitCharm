@@ -1990,6 +1990,11 @@ export class GitService {
   /** Deletes a branch on the remote itself (`git push <remote> --delete <branch>`), not just
    * the local remote-tracking ref — `branchName` is the bare branch name, without the
    * `<remote>/` prefix a remote-tracking BranchInfo carries in its `name`. */
+  /** Runs git in this repository, for the helpers that take a GitRunner (branchCleanup.ts). */
+  run(args: string[]): Promise<string> {
+    return this.git.raw(args);
+  }
+
   async deleteRemoteBranch(remote: string, branchName: string): Promise<void> {
     await this.git.raw(['push', remote, '--delete', `refs/heads/${branchName}`]);
   }

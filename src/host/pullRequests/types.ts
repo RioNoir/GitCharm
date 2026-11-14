@@ -361,6 +361,8 @@ export interface PullRequestProvider {
   listCommits(owner: string, repo: string, number: number): Promise<PullRequestCommit[]>;
   listCommitFiles(owner: string, repo: string, sha: string): Promise<ChangedFile[]>;
   mergePullRequest(owner: string, repo: string, number: number, strategy: MergeStrategy): Promise<ActionResult>;
+  /** Deletes a branch of the repo — the source branch of a merged pull request. A branch that is already gone counts as deleted. */
+  deleteBranch(owner: string, repo: string, branch: string): Promise<ActionResult>;
   closePullRequest(owner: string, repo: string, number: number): Promise<ActionResult>;
   reopenPullRequest(owner: string, repo: string, number: number): Promise<ActionResult | UnsupportedResult>;
   submitReview(owner: string, repo: string, number: number, input: SubmitReviewInput): Promise<ActionResult | UnsupportedResult>;
