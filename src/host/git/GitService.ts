@@ -17,6 +17,7 @@ import type {
 } from '../types/git';
 import type { CompareCounts, CompareRange, RangeFileEntry, RebaseCommit, RebasePlanEntry, StashEntry, UnpushedCommit } from '../types/messages';
 import { buildRebaseTodo, shQuote } from './rebaseTodo';
+import { planDrop, planSquash, readSquashGroups, type Rewrite, type SquashGroup } from './historyRewrite';
 import { compareRangeArgs, isSafeCompareRef } from './compareRange';
 import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
@@ -2175,9 +2176,17 @@ export class GitService {
     await this.git.raw(['rebase', '--onto', `${hash}^`, hash]);
   }
 
-  async squashCommits(oldestHash: string, message: string): Promise<void> {
-    await this.git.raw(['reset', '--soft', `${oldestHash}^`]);
-    await this.git.raw(['commit', '-m', message]);
+  /** The runs of adjacent commits that squashing `hashes` makes into one commit each, oldest first. */
+  async getSquashGroups(hashes: string[]): Promise<string[][]> {
+    return readSquashGroups(args => this.git.raw(args), hashes);
+  }
+
+  /**
+   * Squashes each group of adjacent commits into one with its message, replaying the commits after them as
+   * they were — the groups need not reach HEAD. Uncommitted changes are stashed and restored.
+   */
+  async squashCommits(groups: SquashGroup[]): Promise<void> {
+    await this.rewriteHistory(await planSquash(args => this.git.raw(args), groups));
   }
 
   async cherryPickMulti(hashes: string[]): Promise<void> {
@@ -2192,8 +2201,19 @@ export class GitService {
     }
   }
 
-  async dropCommits(oldestHash: string): Promise<void> {
-    await this.git.raw(['reset', '--hard', `${oldestHash}^`]);
+  /** Drops the commits, replaying the ones after them. Uncommitted changes are stashed and restored. */
+  async dropCommits(hashes: string[]): Promise<void> {
+    await this.rewriteHistory(await planDrop(args => this.git.raw(args), hashes));
+  }
+
+  /** Carries out a rewrite; one that stops (a conflict) is aborted, leaving the branch as it was. */
+  private async rewriteHistory({ upstream, plan }: Rewrite): Promise<void> {
+    try {
+      await this.interactiveRebase(upstream, plan, new Map(), true);
+    } catch (e: unknown) {
+      if (await this.getMergeRebaseState() === 'rebase') await this.abortRebase().catch(() => undefined);
+      throw e;
+    }
   }
 
   async undoCommit(): Promise<void> {

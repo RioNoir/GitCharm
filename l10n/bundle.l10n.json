@@ -1615,6 +1615,7 @@
   "Unable to identify the signed-in Azure DevOps user": "Unable to identify the signed-in Azure DevOps user",
   "Squash 1 commit": "Squash 1 commit",
   "Squash {0} commits": "Squash {0} commits",
+  "No two of the selected commits are adjacent: there is nothing to squash.": "No two of the selected commits are adjacent: there is nothing to squash.",
   "Edit the combined commit message below, then confirm.": "Edit the combined commit message below, then confirm.",
   "Commits being squashed": "Commits being squashed",
   "Confirm Squash": "Confirm Squash",

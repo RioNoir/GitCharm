@@ -26,8 +26,8 @@ interface Props {
   onSync: (repoIds: string[]) => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
-  onSquash: (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => void;
-  onDropCommits: (repoId: string, hashes: string[], oldestHash: string) => void;
+  onSquash: (repoId: string, hashes: string[]) => void;
+  onDropCommits: (repoId: string, hashes: string[]) => void;
   onRevertCommits: (repoId: string, hashes: string[]) => void;
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
@@ -364,8 +364,8 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   onToggle: (repoId: string) => void;
   onOpenInLog: (hash: string, repoId: string) => void;
   onUndoCommit: (repoId: string) => void;
-  onSquash: (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => void;
-  onDropCommits: (repoId: string, hashes: string[], oldestHash: string) => void;
+  onSquash: (repoId: string, hashes: string[]) => void;
+  onDropCommits: (repoId: string, hashes: string[]) => void;
   onRevertCommits: (repoId: string, hashes: string[]) => void;
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
@@ -457,7 +457,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
 
   const handleDropSingle = () => {
     if (!ctxMenu?.singleHash) return;
-    onDropCommits(repoStatus.repoId, [ctxMenu.singleHash], ctxMenu.singleHash);
+    onDropCommits(repoStatus.repoId, [ctxMenu.singleHash]);
   };
 
   const handleViewInLog = () => {
@@ -480,39 +480,27 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
     onExplainCommit(repoStatus.repoId, ctxMenu.singleHash);
   };
 
-  const getOrderedSelection = () => {
-    const hashes = ctxMenu?.selectedHashes ?? [];
-    const ordered = [...commits].filter(c => hashes.includes(c.hash));
-    const oldestHash = ordered[ordered.length - 1]?.hash ?? hashes[hashes.length - 1];
-    return { hashes, ordered, oldestHash };
-  };
-
   const handleSquash = () => {
     if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
-    const { hashes, ordered, oldestHash } = getOrderedSelection();
-    const combinedMessage = ordered.map(c => c.message).join('\n\n');
-    onSquash(repoStatus.repoId, hashes, oldestHash, combinedMessage, ordered.map(c => ({ hash: c.hash, shortHash: c.shortHash, message: c.message })));
+    onSquash(repoStatus.repoId, ctxMenu.selectedHashes);
     setMultiSelectHashes(new Set());
   };
 
   const handleDropCommits = () => {
     if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
-    const { hashes, oldestHash } = getOrderedSelection();
-    onDropCommits(repoStatus.repoId, hashes, oldestHash);
+    onDropCommits(repoStatus.repoId, ctxMenu.selectedHashes);
     setMultiSelectHashes(new Set());
   };
 
   const handleRevertCommits = () => {
     if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
-    const { hashes } = getOrderedSelection();
-    onRevertCommits(repoStatus.repoId, hashes);
+    onRevertCommits(repoStatus.repoId, ctxMenu.selectedHashes);
     setMultiSelectHashes(new Set());
   };
 
   const handleViewCombinedDiff = () => {
     if (!ctxMenu || ctxMenu.selectedHashes.length < 2) return;
-    const { hashes } = getOrderedSelection();
-    onViewCombinedDiff(repoStatus.repoId, hashes);
+    onViewCombinedDiff(repoStatus.repoId, ctxMenu.selectedHashes);
   };
 
   // Clear selection when clicking outside commit list

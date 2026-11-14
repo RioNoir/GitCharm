@@ -10,6 +10,7 @@ tsconfig*.json
 esbuild.mjs
 build-webview.mjs
 test-build.mjs
+test/**
 vite.config.ts
 MEMORY.md
 .claude/**

@@ -973,6 +973,7 @@
   "Bitbucket Cloud has no concept of hiding a comment.": "Bitbucket Cloud no permite ocultar comentarios.",
   "Bitbucket does not support reopening a declined pull request. This is a permanent platform limitation.": "Bitbucket no permite reabrir una pull request rechazada. Es una limitación permanente de la plataforma.",
   "Squash 1 commit": "Hacer squash de 1 commit",
+  "No two of the selected commits are adjacent: there is nothing to squash.": "Ninguno de los commits seleccionados es adyacente a otro: no hay nada a lo que hacer squash.",
   "Squash {0} commits": "Hacer squash de {0} commits",
   "Edit the combined commit message below, then confirm.": "Edita a continuación el mensaje de commit combinado y confirma.",
   "Commits being squashed": "Commits que se combinarán con squash",

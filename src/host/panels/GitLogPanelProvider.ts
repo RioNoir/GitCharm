@@ -11,7 +11,7 @@ import type { CommitPanelProvider } from './CommitPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import type { BranchStatusBar } from '../ui/BranchStatusBar';
 import type { GitProfileService } from '../git/GitProfileService';
-import { openSquashEditor } from './SquashEditorPanel';
+import { promptSquashGroups } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import type { RebaseTarget } from './InteractiveRebasePanel';
 import { openInteractiveRebase } from '../commands/interactiveRebaseCommands';
@@ -1753,7 +1753,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           return;
         }
         try {
-          await repo.dropCommits(msg.oldestHash);
+          await repo.dropCommits(msg.hashes);
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {
@@ -1823,16 +1823,13 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_SQUASH_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Repo not found' }); return; }
-        const fullMessages = await Promise.all(msg.hashes.map(h => repo.getFullCommitMessage(h).then(m => m.trim())));
-        const fullCombined = fullMessages.join('\n\n');
-        const fullCommits = msg.commits.map((c, i) => ({ ...c, message: fullMessages[i] ?? c.message }));
-        const result = await openSquashEditor(this.extensionUri, msg.hashes.length, fullCombined, fullCommits);
-        if (!result.confirmed) {
-          post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
-          return;
-        }
         try {
-          await repo.squashCommits(msg.oldestHash, result.message);
+          const groups = await promptSquashGroups(this.extensionUri, repo, msg.hashes);
+          if (!groups) {
+            post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+            return;
+          }
+          await repo.squashCommits(groups);
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
         } catch (e: unknown) {

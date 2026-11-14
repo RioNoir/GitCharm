@@ -1338,12 +1338,12 @@ function App() {
     send({ type: 'COMMIT_PUSH_REPO', requestId: generateId(), repoId, remote, force: true });
   };
 
-  const doSquash = (repoId: string, hashes: string[], oldestHash: string, combinedMessage: string, commits: { hash: string; shortHash: string; message: string }[]) => {
-    send({ type: 'PUSH_SQUASH_COMMITS', requestId: generateId(), repoId, hashes, oldestHash, message: combinedMessage, commits } satisfies CommitToHostMsg);
+  const doSquash = (repoId: string, hashes: string[]) => {
+    send({ type: 'PUSH_SQUASH_COMMITS', requestId: generateId(), repoId, hashes } satisfies CommitToHostMsg);
   };
 
-  const doDropCommits = (repoId: string, hashes: string[], oldestHash: string) => {
-    send({ type: 'PUSH_DROP_COMMITS', requestId: generateId(), repoId, hashes, oldestHash } satisfies CommitToHostMsg);
+  const doDropCommits = (repoId: string, hashes: string[]) => {
+    send({ type: 'PUSH_DROP_COMMITS', requestId: generateId(), repoId, hashes } satisfies CommitToHostMsg);
   };
 
   const doRevertCommits = (repoId: string, hashes: string[]) => {
