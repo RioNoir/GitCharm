@@ -131,7 +131,7 @@ export class ProfileStatusBar implements vscode.Disposable {
         description: localCreds
           ? `${localCreds.gitName} <${localCreds.gitEmail}>  ·  ${vscode.l10n.t('from {0}', '.git/config')}`
           : repoPath ? vscode.l10n.t('No local git identity in this repo') : vscode.l10n.t('No repo open'),
-        action: () => this.showBuiltInActionMenu('local', localCreds),
+        action: () => this.showBuiltInActionMenu('local', localCreds, repoPath),
       });
     }
 
@@ -145,7 +145,7 @@ export class ProfileStatusBar implements vscode.Disposable {
         description: globalCreds
           ? `${globalCreds.gitName} <${globalCreds.gitEmail}>  ·  ${vscode.l10n.t('from {0}', '~/.gitconfig')}`
           : vscode.l10n.t('No global git identity configured'),
-        action: () => this.showBuiltInActionMenu('global', globalCreds),
+        action: () => this.showBuiltInActionMenu('global', globalCreds, repoPath),
       });
     }
 
@@ -167,6 +167,7 @@ export class ProfileStatusBar implements vscode.Disposable {
   private async showBuiltInActionMenu(
     type: 'local' | 'global',
     creds: { gitName: string; gitEmail: string } | undefined,
+    repoPath: string | undefined,
   ): Promise<void> {
     const id = type === 'local' ? LOCAL_PROFILE_ID : GLOBAL_PROFILE_ID;
     const isLocal = type === 'local';
@@ -201,6 +202,17 @@ export class ProfileStatusBar implements vscode.Disposable {
           ? vscode.l10n.t('Local is the active profile for this workspace')
           : vscode.l10n.t('Global is the active profile for this workspace'),
         action: async () => { await this.showMenu(); },
+      });
+    }
+
+    // Local needs a repository to write its .git/config.
+    if (!isLocal || repoPath) {
+      items.push(sep(), {
+        label: `$(edit) ${vscode.l10n.t('Edit…')}`,
+        description: isLocal
+          ? vscode.l10n.t('Set the name and email in {0}', '.git/config')
+          : vscode.l10n.t('Set the name and email in {0}', '~/.gitconfig'),
+        action: () => this.editBuiltIn(type, creds, repoPath),
       });
     }
 
@@ -337,6 +349,46 @@ export class ProfileStatusBar implements vscode.Disposable {
     await this.profileService.saveProfile({ ...profile, name: displayName.trim(), gitName: gitName.trim(), gitEmail: gitEmail.trim() });
     this.refresh();
     vscode.window.showInformationMessage(vscode.l10n.t('Profile "{0}" updated.', displayName));
+  }
+
+  /** Edits the identity of Local (the repository's .git/config) or Global (~/.gitconfig) in git config itself. */
+  private async editBuiltIn(
+    type: 'local' | 'global',
+    creds: { gitName: string; gitEmail: string } | undefined,
+    repoPath: string | undefined,
+  ): Promise<void> {
+    const isLocal = type === 'local';
+    if (isLocal && !repoPath) return;
+    const label = isLocal ? vscode.l10n.t('Local') : vscode.l10n.t('Global');
+
+    const gitName = await vscode.window.showInputBox({
+      title: vscode.l10n.t('Edit {0} — Git Name', label),
+      prompt: vscode.l10n.t('Value for git {0}', 'user.name'),
+      placeHolder: vscode.l10n.t('John Doe'),
+      value: creds?.gitName ?? '',
+    });
+    if (gitName === undefined) return;
+
+    const gitEmail = await vscode.window.showInputBox({
+      title: vscode.l10n.t('Edit {0} — Git Email', label),
+      prompt: vscode.l10n.t('Value for git {0}', 'user.email'),
+      placeHolder: 'john@example.com',
+      value: creds?.gitEmail ?? '',
+      validateInput: v => (v.trim() ? undefined : vscode.l10n.t('Email cannot be empty')),
+    });
+    if (!gitEmail) return;
+
+    try {
+      if (!isLocal) await this.profileService.writeGlobalCreds({ gitName, gitEmail });
+      else if (repoPath) await this.profileService.writeLocalCreds(repoPath, { gitName, gitEmail });
+    } catch (e: unknown) {
+      vscode.window.showErrorMessage(vscode.l10n.t('Could not update the {0} Git identity: {1}', label, e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    this.refresh();
+    vscode.window.showInformationMessage(isLocal
+      ? vscode.l10n.t('Local Git identity updated in {0}.', '.git/config')
+      : vscode.l10n.t('Global Git identity updated in {0}.', '~/.gitconfig'));
   }
 
   private async deleteProfile(profile: GitProfile): Promise<void> {

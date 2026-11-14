@@ -279,7 +279,9 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     const result = await this.profileService.getEffectiveProfile(resolvedPath);
     if (!result) {
       logWarn('commit-credentials', 'No Git identity configured');
-      vscode.window.showWarningMessage(vscode.l10n.t('No Git identity configured. Set a profile before committing.'));
+      const openProfiles = vscode.l10n.t('Open Profiles');
+      void vscode.window.showWarningMessage(vscode.l10n.t('No Git identity configured. Set a profile before committing.'), openProfiles)
+        .then(picked => { if (picked === openProfiles) void vscode.commands.executeCommand('gitcharm.manageProfiles'); });
       return undefined;
     }
     if (result.source === 'local' || result.source === 'global') return undefined;

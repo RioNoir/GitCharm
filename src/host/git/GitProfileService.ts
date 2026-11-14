@@ -130,6 +130,25 @@ export class GitProfileService implements vscode.Disposable {
     return undefined;
   }
 
+  /** Sets user.name and user.email in the repository's .git/config; an empty value unsets the key. */
+  async writeLocalCreds(repoPath: string, creds: { gitName: string; gitEmail: string }): Promise<void> {
+    await this.writeCreds(createGit(repoPath), '--local', creds);
+  }
+
+  /** Sets user.name and user.email in the global git config (~/.gitconfig); an empty value unsets the key. */
+  async writeGlobalCreds(creds: { gitName: string; gitEmail: string }): Promise<void> {
+    await this.writeCreds(createGit(), '--global', creds);
+  }
+
+  private async writeCreds(git: ReturnType<typeof createGit>, scope: '--local' | '--global', creds: { gitName: string; gitEmail: string }): Promise<void> {
+    for (const [key, value] of [['user.name', creds.gitName.trim()], ['user.email', creds.gitEmail.trim()]] as const) {
+      if (value) await git.raw(['config', scope, key, value]);
+      // Unsetting a key that isn't set exits with 5: nothing to do.
+      else await git.raw(['config', scope, '--unset-all', key]).catch(() => undefined);
+    }
+    this._onProfileChange.fire();
+  }
+
   // ── Effective profile resolution ──────────────────────────────────────────────
   //
   // Priority: active (per-workspace) → local .git/config → global ~/.gitconfig
