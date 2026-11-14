@@ -2230,6 +2230,8 @@
     "@rollup/rollup-darwin-arm64": "^4.60.4"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.1"
   }
 }

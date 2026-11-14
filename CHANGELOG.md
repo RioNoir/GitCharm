@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## Unreleased
+
+### 🔧 Other
+- Dependencies updated to fix security advisories: DOMPurify, which sanitizes the Markdown shown in the panels, to 3.4.17 (critical advisories), and in the development tooling glob, minimatch, markdown-it, ip-address and the Azure identity libraries used by vsce; glob and minimatch are pinned to their fixed releases with npm overrides
+
 ## v0.8.3
 
 ### ✨ New Features
