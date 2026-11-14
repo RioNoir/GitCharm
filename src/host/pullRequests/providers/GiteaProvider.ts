@@ -6,6 +6,7 @@ import type {
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { branchPath, isBranchGone } from '../branchPath';
 import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
 
@@ -696,6 +697,17 @@ export class GiteaProvider implements PullRequestProvider {
       additions: f.additions,
       deletions: f.deletions,
     }));
+  }
+
+  async deleteBranch(owner: string, repo: string, branch: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/branches/${branchPath(branch)}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      if (isBranchGone(err)) return { ok: true };
+      return { ok: false, error: formatApiError(err) };
+    }
   }
 
   async mergePullRequest(owner: string, repo: string, number: number, strategy: MergeStrategy): Promise<ActionResult> {

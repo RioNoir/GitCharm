@@ -848,6 +848,21 @@ export class PullRequestManager {
     return result;
   }
 
+  /** The local remote of the repo pull requests are listed for: `origin`, else the first remote. */
+  async getPullRequestRemote(repoId: string): Promise<string | undefined> {
+    const remotes = await this.manager.getRepo(repoId)?.getRemotesWithUrls();
+    return (remotes?.find(r => r.name === 'origin') ?? remotes?.[0])?.name;
+  }
+
+  /** Deletes a branch of the repo pull requests are listed for, through the forge — e.g. a merged pull request's source. */
+  async deleteRemoteBranch(repoId: string, branch: string): Promise<ActionResult> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return { ok: false, error: target.error };
+    const result = await target.provider.deleteBranch(target.owner, target.repo, branch);
+    if (!result.ok) logError('pullrequest-delete-branch', `Failed to delete branch ${branch}`, result.error);
+    return result;
+  }
+
   async closePullRequest(repoId: string, number: number): Promise<ActionResult> {
     const target = await this.resolveProviderAndTarget(repoId);
     if ('error' in target) return { ok: false, error: target.error };

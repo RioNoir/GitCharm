@@ -47,7 +47,8 @@ export function getCategories(): CategoryDef[] {
       label: l10n.t('Pull Requests'),
       description: l10n.t('Defaults for creating, merging and checking out pull requests, and how the list is filtered and refreshed.'),
       keys: [
-        'pullRequests.defaultTargetBranch', 'pullRequests.defaultMergeStrategy', 'pullRequests.defaultCheckoutAction',
+        'pullRequests.defaultTargetBranch', 'pullRequests.defaultMergeStrategy', 'pullRequests.deleteBranchAfterMerge',
+        'pullRequests.defaultCheckoutAction',
         'pullRequests.defaultFilter', 'pullRequests.autoRefreshInterval',
       ],
     },
@@ -246,6 +247,7 @@ export function settingLabel(key: string): string {
     case 'ai.prompts.explainPullRequest': return l10n.t('Explain pull request');
     case 'pullRequests.defaultTargetBranch': return l10n.t('Default target branch');
     case 'pullRequests.defaultMergeStrategy': return l10n.t('Default merge strategy');
+    case 'pullRequests.deleteBranchAfterMerge': return l10n.t('Delete branch after merge');
     case 'pullRequests.defaultCheckoutAction': return l10n.t('Default checkout action');
     case 'pullRequests.hostProviderOverrides': return l10n.t('Self-hosted forges');
     case 'resetViewLocationsOnStartup': return l10n.t('Reset view locations on startup');
@@ -300,6 +302,11 @@ export function enumLabel(key: string, value: string): string {
     case 'pullRequests.defaultMergeStrategy=squash': return 'Squash';
     case 'pullRequests.defaultMergeStrategy=rebase': return 'Rebase';
     case 'pullRequests.defaultMergeStrategy=fastForward': return 'Fast-forward';
+    case 'pullRequests.deleteBranchAfterMerge=ask': return l10n.t('Ask');
+    case 'pullRequests.deleteBranchAfterMerge=localAndRemote': return l10n.t('Local and remote');
+    case 'pullRequests.deleteBranchAfterMerge=remote': return l10n.t('Remote only');
+    case 'pullRequests.deleteBranchAfterMerge=local': return l10n.t('Local only');
+    case 'pullRequests.deleteBranchAfterMerge=never': return l10n.t('Never');
     case 'pullRequests.defaultCheckoutAction=pr': return 'Checkout Pull Request';
     case 'pullRequests.defaultCheckoutAction=branch': return 'Checkout Branch';
     case 'ai.provider=vscode-lm': return 'VS Code LM';

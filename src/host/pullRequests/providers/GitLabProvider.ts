@@ -6,6 +6,7 @@ import type {
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { isBranchGone } from '../branchPath';
 import { summarizeChecksPerPr } from '../checksSummary';
 import { formatApiError } from '../formatApiError';
 
@@ -792,6 +793,19 @@ export class GitLabProvider implements PullRequestProvider {
     const projectId = this.projectId(owner, repo);
     const { data } = await httpJson<RawGitLabDiff[]>(`${this.apiBase()}/projects/${projectId}/repository/commits/${sha}/diff`, { headers });
     return data.map(mapDiff);
+  }
+
+  async deleteBranch(owner: string, repo: string, branch: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    const projectId = this.projectId(owner, repo);
+    try {
+      // GitLab takes the branch as one path segment, its slashes encoded.
+      await httpJson(`${this.apiBase()}/projects/${projectId}/repository/branches/${encodeURIComponent(branch)}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      if (isBranchGone(err)) return { ok: true };
+      return { ok: false, error: formatApiError(err) };
+    }
   }
 
   async mergePullRequest(owner: string, repo: string, number: number, strategy: MergeStrategy): Promise<ActionResult> {
