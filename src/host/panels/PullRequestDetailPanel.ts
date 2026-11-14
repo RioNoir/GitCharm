@@ -14,6 +14,7 @@ import { panelIcon } from '../utils/panelIcon';
 import { webviewReadyGate } from '../utils/webviewReadyGate';
 import type { IssueManager } from '../issues/IssueManager';
 import type { IssueDetailPanel } from './IssueDetailPanel';
+import { cleanUpAfterMerge } from '../pullRequests/deleteBranchAfterMerge';
 
 const TAB_TITLE_MAX_LENGTH = 40;
 
@@ -357,8 +358,10 @@ export class PullRequestDetailPanel {
             this.onChanged();
             // The merge happened remotely (via the provider's API), so the local repo's
             // remote-tracking refs are stale until we fetch — without this the Log panel
-            // keeps showing the PR's branch as unmerged.
-            void this.manager.fetchAll();
+            // keeps showing the PR's branch as unmerged. Then the source branch is deleted,
+            // as gitcharm.pullRequests.deleteBranchAfterMerge says.
+            void cleanUpAfterMerge(this.manager, this.pullRequestManager, repoId, pr)
+              .catch(e => logError('pullrequest-delete-branch', formatGitError(e), getRawErrorDetail(e)));
           }
         } catch (e: unknown) {
           logError('pullrequest-merge', formatGitError(e), getRawErrorDetail(e));

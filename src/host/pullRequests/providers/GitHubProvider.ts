@@ -6,6 +6,7 @@ import type {
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult, UpdatePullRequestInput,
 } from '../types';
 import { httpJson, HttpJsonError } from '../httpJson';
+import { branchPath, isBranchGone } from '../branchPath';
 import { formatApiError } from '../formatApiError';
 
 const PAGE_SIZE = 30;
@@ -887,6 +888,18 @@ export class GitHubProvider implements PullRequestProvider {
       additions: f.additions,
       deletions: f.deletions,
     }));
+  }
+
+  async deleteBranch(owner: string, repo: string, branch: string): Promise<ActionResult> {
+    const headers = await this.headers();
+    try {
+      await httpJson(`${this.apiBase()}/repos/${owner}/${repo}/git/refs/heads/${branchPath(branch)}`, { method: 'DELETE', headers });
+      return { ok: true };
+    } catch (err) {
+      // GitHub answers 422 "Reference does not exist" for a branch that is already gone.
+      if (isBranchGone(err, [404, 422])) return { ok: true };
+      return { ok: false, error: formatApiError(err) };
+    }
   }
 
   async mergePullRequest(owner: string, repo: string, number: number, strategy: MergeStrategy): Promise<ActionResult> {
