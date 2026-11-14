@@ -262,8 +262,8 @@ export type CommitToHostMsg =
   | { type: 'STASH_RENAME'; requestId: string; repoId: string; stashRef: string; currentMessage: string }
   | { type: 'STASH_OPEN_FILE_DIFF'; repoId: string; stashRef: string; filePath: string }
   | { type: 'PUSH_GET_UNPUSHED'; requestId: string; repoId: string }
-  | { type: 'PUSH_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string; message: string; commits: { hash: string; shortHash: string; message: string }[] }
-  | { type: 'PUSH_DROP_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string }
+  | { type: 'PUSH_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[] }
+  | { type: 'PUSH_DROP_COMMITS'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'PUSH_REVERT_COMMITS'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'PUSH_EDIT_COMMIT_MSG'; requestId: string; repoId: string; hash: string; currentMessage: string }
   | { type: 'PUSH_OPEN_DETAIL'; repoId: string; hash: string }
@@ -442,10 +442,10 @@ export type LogToHostMsg =
   | { type: 'LOG_CREATE_PATCH'; requestId: string; repoId: string; hash: string }
   | { type: 'LOG_REQUEST_MERGE_COMMITS'; requestId: string; repoId: string; hash: string; parents: string[] }
   | { type: 'LOG_DROP_COMMIT'; requestId: string; repoId: string; hash: string }
-  | { type: 'LOG_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string; message: string; commits: { hash: string; shortHash: string; message: string }[] }
+  | { type: 'LOG_SQUASH_COMMITS'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_CHERRY_PICK_MULTI'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_REVERT_COMMITS'; requestId: string; repoId: string; hashes: string[] }
-  | { type: 'LOG_DROP_COMMITS'; requestId: string; repoId: string; hashes: string[]; oldestHash: string }
+  | { type: 'LOG_DROP_COMMITS'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_CREATE_PATCH_MULTI'; requestId: string; repoId: string; hashes: string[] }
   | { type: 'LOG_UNDO_COMMIT'; requestId: string; repoId: string }
   | { type: 'LOG_EDIT_COMMIT_MESSAGE'; requestId: string; repoId: string; hash: string; currentMessage: string }

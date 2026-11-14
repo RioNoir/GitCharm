@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { generateNonce } from '../utils/webviewHtml';
 import { plural } from '../utils/plural';
+import type { GitService } from '../git/GitService';
+import type { SquashGroup } from '../git/historyRewrite';
 
 export interface SquashEditorResult {
   confirmed: boolean;
@@ -60,6 +62,27 @@ export async function openSquashEditor(
 
     panel.onDidDispose(() => settle({ confirmed: false, message: '' }));
   });
+}
+
+/**
+ * The squashes that squashing `hashes` makes — one per run of adjacent commits, which need not reach HEAD — each
+ * with the message asked for in the squash editor. Undefined when one of the editors is cancelled; throws when
+ * no two of the commits are adjacent.
+ */
+export async function promptSquashGroups(extensionUri: vscode.Uri, repo: GitService, hashes: string[]): Promise<SquashGroup[] | undefined> {
+  const runs = await repo.getSquashGroups(hashes);
+  if (runs.length === 0) throw new Error(vscode.l10n.t('No two of the selected commits are adjacent: there is nothing to squash.'));
+  const groups: SquashGroup[] = [];
+  for (const run of runs) {
+    // Newest first, as the commits are listed in the panels.
+    const newestFirst = [...run].reverse();
+    const messages = await Promise.all(newestFirst.map(h => repo.getFullCommitMessage(h).then(m => m.trim())));
+    const commits = newestFirst.map((hash, i) => ({ hash, shortHash: hash.slice(0, 8), message: messages[i] }));
+    const result = await openSquashEditor(extensionUri, run.length, messages.join('\n\n'), commits);
+    if (!result.confirmed) return undefined;
+    groups.push({ hashes: run, message: result.message });
+  }
+  return groups;
 }
 
 function escapeHtml(s: string): string {

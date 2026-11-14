@@ -973,6 +973,7 @@
   "Bitbucket Cloud has no concept of hiding a comment.": "Bitbucket Cloud 不支援隱藏留言。",
   "Bitbucket does not support reopening a declined pull request. This is a permanent platform limitation.": "Bitbucket 不支援重新開啟已拒絕的拉取請求。這是平台的永久限制。",
   "Squash 1 commit": "壓縮 1 個提交",
+  "No two of the selected commits are adjacent: there is nothing to squash.": "所選提交中沒有相鄰的兩個提交：沒有可壓縮的內容。",
   "Squash {0} commits": "壓縮 {0} 個提交",
   "Edit the combined commit message below, then confirm.": "在下方編輯合併後的提交訊息，然後確認。",
   "Commits being squashed": "要壓縮的提交",

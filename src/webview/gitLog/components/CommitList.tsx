@@ -1052,20 +1052,11 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
           onClose={() => setContextMenu(null)}
           onSquash={(selected) => {
             setContextMenu(null);
-            let maxIdx = -1;
-            let oldestHash = selected[0].hash;
-            for (const c of selected) {
-              const idx = commits.findIndex(x => x.hash === c.hash);
-              if (idx > maxIdx) { maxIdx = idx; oldestHash = c.hash; }
-            }
             getVsCodeApi().postMessage({
               type: 'LOG_SQUASH_COMMITS',
               requestId: generateId(),
               repoId: selected[0].repoId,
               hashes: selected.map(c => c.hash),
-              oldestHash,
-              message: selected.map(c => c.message).join('\n\n'),
-              commits: selected.map(c => ({ hash: c.hash, shortHash: c.hash.slice(0, 8), message: c.message })),
             } satisfies LogToHostMsg);
             setMultiSelectHashes(new Set());
           }}
@@ -1451,7 +1442,6 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   const sortedNewestFirst = [...multiSelected].sort((a, b) => (indexMap.get(a.hash) ?? 0) - (indexMap.get(b.hash) ?? 0));
 
   const repoId = isMulti ? multiSelected[0].repoId : commit.repoId;
-  const oldestHash = sortedOldestFirst[0]?.hash ?? commit.hash;
 
   const hasStashInMulti = isMulti && multiSelected.some(c => c.isStash);
 
@@ -1512,7 +1502,7 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
                   <div style={ctxStyles.separator} />
                   <div
                     data-ctx-item="" style={{ ...ctxStyles.item, color: 'var(--vscode-errorForeground)' }}
-                    onClick={() => send({ type: 'LOG_DROP_COMMITS', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash), oldestHash })}
+                    onClick={() => send({ type: 'LOG_DROP_COMMITS', requestId: generateId(), repoId, hashes: multiSelected.map(c => c.hash) })}
                   >
                     <Codicon name="trash" style={ctxStyles.icon} />
                     <span>{l10n.t('Drop Commits')}</span>
