@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "提交面板中提交按鈕的預設動作。",
   "config.defaultCommitAction.enum.commit": "主按鈕僅提交，不推送",
   "config.defaultCommitAction.enum.commitAndPush": "主按鈕提交並立即推送",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "主按鈕會提交並推送，然後以剛推送的分支開啟新增提取要求表單（一次一個存放庫：選取多個時只提交並推送）",
   "config.defaultSaveAction.description": "提交面板中「儲存」按鈕的預設動作。",
   "config.defaultSaveAction.enum.stash": "主「儲存」按鈕儲藏所選變更",
   "config.defaultSaveAction.enum.shelve": "主「儲存」按鈕擱置所選變更",

@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "Azione predefinita del pulsante di commit nel pannello Commit.",
   "config.defaultCommitAction.enum.commit": "Il pulsante principale esegue il commit senza push",
   "config.defaultCommitAction.enum.commitAndPush": "Il pulsante principale esegue il commit e subito dopo il push",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "Il pulsante principale esegue commit e push, poi apre il modulo di nuova Pull Request sul branch appena pubblicato (un repository alla volta: con più repository esegue commit e push)",
   "config.defaultSaveAction.description": "Azione predefinita del pulsante Salva nel pannello Commit.",
   "config.defaultSaveAction.enum.stash": "Il pulsante Salva principale mette le modifiche selezionate in stash",
   "config.defaultSaveAction.enum.shelve": "Il pulsante Salva principale mette le modifiche selezionate nello Shelf",

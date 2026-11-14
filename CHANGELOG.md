@@ -7,6 +7,7 @@ All notable changes to GitCharm are documented in this file.
 ### ✨ New Features
 - The Local and Global entries of the Git profiles menu can be edited: **Edit…** sets the name and email in the repository's `.git/config` or in `~/.gitconfig`
 - When a repository has no Git identity at all (no profile, and no name or email in its `.git/config` or in `~/.gitconfig`), a notification at startup offers to open the Git profiles menu, since commits would fail. The warning shown when committing without an identity opens the menu too
+- New **Commit, Push & Open PR** action in the Commit Panel's commit button: after the push, the New Pull Request form opens with the pushed branch as its source (a new branch is published first). It works on one repository at a time, and can be made the main button with `gitcharm.defaultCommitAction`
 
 ### 🐛 Bug Fixes
 - Squashing commits squashes only the selected ones: the commits after them, up to HEAD, are replayed as they were instead of being folded into the squash. A selection of several runs of adjacent commits squashes each run into its own commit, with a message for each; uncommitted changes are no longer committed into the squash, closes [#123](https://github.com/RioNoir/GitCharm/issues/123) by [@tribbloid](https://github.com/tribbloid)

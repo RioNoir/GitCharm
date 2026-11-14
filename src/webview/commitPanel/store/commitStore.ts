@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ChangelistData, FileDiff, RepoMeta, RepoStatus, WorkspaceStatus } from '../../shared/types';
-import type { IconThemeData } from '../../../host/types/messages';
+import type { CommitAction, IconThemeData } from '../../../host/types/messages';
 import { DEFAULT_VIEW_AND_SORT_SETTINGS, type ViewAndSortSettings } from '../../../host/types/settings';
 
 export type ViewMode = 'flat' | 'tree';
@@ -33,13 +33,13 @@ export interface CommitState {
   error: string | null;
   changelists: ChangelistData[];
   changesViewMode: 'simplified' | 'changelists' | 'vscode';
-  defaultCommitAction: 'commit' | 'commitAndPush';
+  defaultCommitAction: CommitAction;
   defaultSaveAction: 'stash' | 'shelve';
   hasWorkspaceFolder: boolean;
   aiEnabled: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 
-  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, defaultCommitAction?: 'commit' | 'commitAndPush', defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
+  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, defaultCommitAction?: CommitAction, defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
   isPushSelected: (repoId: string) => boolean;
   setPushSelection: (repoId: string, selected: boolean) => void;

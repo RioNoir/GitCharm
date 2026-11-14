@@ -149,6 +149,7 @@
   "config.defaultCommitAction.description": "Action par défaut du bouton de commit dans le panneau Commit.",
   "config.defaultCommitAction.enum.commit": "Le bouton principal commite sans pousser",
   "config.defaultCommitAction.enum.commitAndPush": "Le bouton principal commite et pousse immédiatement",
+  "config.defaultCommitAction.enum.commitPushAndOpenPullRequest": "Le bouton principal commite, pousse, puis ouvre le formulaire de nouvelle pull request sur la branche poussée (un dépôt à la fois : avec plusieurs, il commite et pousse)",
   "config.defaultSaveAction.description": "Action par défaut du bouton Enregistrer dans le panneau Commit.",
   "config.defaultSaveAction.enum.stash": "Le bouton Enregistrer principal met les modifications sélectionnées en stash",
   "config.defaultSaveAction.enum.shelve": "Le bouton Enregistrer principal met les modifications sélectionnées de côté (Shelf)",

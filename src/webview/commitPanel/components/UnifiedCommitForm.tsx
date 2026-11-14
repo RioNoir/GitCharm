@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { RepoMeta, RepoStatus } from '../../shared/types';
+import type { CommitAction } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { AuthorAvatar } from '../../shared/AuthorAvatar';
 import { computeSyncState, hasWorkingChanges, type SyncAction } from '../syncState';
@@ -20,7 +21,7 @@ interface Props {
   amendFlags: Record<string, boolean>;
   loading: boolean;
   changesViewMode?: 'simplified' | 'changelists' | 'vscode';
-  defaultCommitAction?: 'commit' | 'commitAndPush';
+  defaultCommitAction?: CommitAction;
   defaultSaveAction?: 'stash' | 'shelve';
   vscodeSelectedRepos?: Set<string>;
   getSelectedFilesForRepo: (repoId: string) => string[];
@@ -29,6 +30,8 @@ interface Props {
   onAmendToggle: (repoId: string) => void;
   onCommit: () => void;
   onCommitAndPush: () => void;
+  /** Commit, push, then open the New Pull Request form on the pushed branch — one repository at a time. */
+  onCommitPushAndOpenPullRequest: () => void;
   onShelve: () => void;
   onStash: () => void;
   onPush: (repoId: string) => void;
@@ -218,7 +221,7 @@ function syncDropdownItems(
 
 export function UnifiedCommitForm({
   message, repoStatuses, syncRepoStatuses, repoMetas, amendFlags,
-  loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onShelve, onStash,
+  loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onCommitPushAndOpenPullRequest, onShelve, onStash,
   onSyncAction, onPullRepos, onPushRepos, onForcePushRepos,
   aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
   activeProfile, onOpenProfiles, onRebaseAction, subjectMaxLength = 0, insertRequest, onInsertHandled,
@@ -428,17 +431,25 @@ export function UnifiedCommitForm({
         { icon: 'git-stash', label: l10n.t('Stash Changes'), onSelect: onStash, separatorAfter: true },
       ]
     : [];
-  const commitDropdownItems: DropdownButtonItem[] = defaultCommitAction === 'commitAndPush'
-    ? [
-        ...stashDropdownItems,
-        { icon: 'cloud-upload', label: l10n.t('Commit & Push'), onSelect: onCommitAndPush },
-        { icon: 'check',        label: l10n.t('Commit'),        onSelect: onCommit        },
-      ]
-    : [
-        ...stashDropdownItems,
-        { icon: 'check',        label: l10n.t('Commit'),        onSelect: onCommit        },
-        { icon: 'cloud-upload', label: l10n.t('Commit & Push'), onSelect: onCommitAndPush },
-      ];
+  // The pull request form is one panel: Commit, Push & Open PR works on one repository at a time. With several,
+  // the main button falls back to Commit & Push when it is the default.
+  const pullRequestAvailable = commitTargets.length <= 1;
+  const mainAction: CommitAction = defaultCommitAction === 'commitPushAndOpenPullRequest' && !pullRequestAvailable ? 'commitAndPush' : defaultCommitAction;
+  const commitActions: Record<CommitAction, { icon: string; label: string; title: string; run: () => void }> = {
+    commit: { icon: 'check', label: l10n.t('Commit'), title: l10n.t('Commit ({0})', shortcut(['mod'], 'Enter')), run: onCommit },
+    commitAndPush: { icon: 'cloud-upload', label: l10n.t('Commit & Push'), title: l10n.t('Commit & Push ({0})', shortcut(['mod'], 'Enter')), run: onCommitAndPush },
+    commitPushAndOpenPullRequest: {
+      icon: 'git-pull-request-create', label: l10n.t('Commit, Push & Open PR'),
+      title: l10n.t('Commit, Push & Open PR ({0})', shortcut(['mod'], 'Enter')), run: onCommitPushAndOpenPullRequest,
+    },
+  };
+  // The main button's action first, then the others in their usual order.
+  const commitActionOrder = ([mainAction, 'commit', 'commitAndPush', 'commitPushAndOpenPullRequest'] as const)
+    .filter((a, i, all) => all.indexOf(a) === i && (a !== 'commitPushAndOpenPullRequest' || pullRequestAvailable));
+  const commitDropdownItems: DropdownButtonItem[] = [
+    ...stashDropdownItems,
+    ...commitActionOrder.map(a => ({ icon: commitActions[a].icon, label: commitActions[a].label, onSelect: commitActions[a].run })),
+  ];
 
   return (
     <div style={styles.container}>
@@ -525,7 +536,7 @@ export function UnifiedCommitForm({
             if (isImeComposing(e)) return;
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canCommit) {
               e.preventDefault();
-              if (defaultCommitAction === 'commitAndPush') onCommitAndPush(); else onCommit();
+              commitActions[mainAction].run();
             }
           }}
         />
@@ -655,12 +666,12 @@ export function UnifiedCommitForm({
             fullWidth
             dropdownAlign="right"
             enabled={canCommit}
-            icon={defaultCommitAction === 'commitAndPush' ? 'cloud-upload' : 'check'}
-            label={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push') : l10n.t('Commit')}
-            title={defaultCommitAction === 'commitAndPush' ? l10n.t('Commit & Push ({0})', shortcut(['mod'], 'Enter')) : l10n.t('Commit ({0})', shortcut(['mod'], 'Enter'))}
+            icon={commitActions[mainAction].icon}
+            label={commitActions[mainAction].label}
+            title={commitActions[mainAction].title}
             disabledTitle={l10n.t('Stage files and write a message first')}
             items={commitDropdownItems}
-            onMainClick={defaultCommitAction === 'commitAndPush' ? onCommitAndPush : onCommit}
+            onMainClick={commitActions[mainAction].run}
           />
           )}
         </div>

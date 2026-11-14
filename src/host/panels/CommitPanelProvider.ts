@@ -12,7 +12,7 @@ import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
-import type { CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId, IssueStateFilter, IssueSummary } from '../types/messages';
+import type { CommitAction, CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId, IssueStateFilter, IssueSummary } from '../types/messages';
 import type { FileStatus, WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
@@ -408,7 +408,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private enrichCommitMsg(msg: HostToCommitMsg): void {
     if (msg.type === 'COMMIT_STATUS_UPDATE') {
-      const m = msg as typeof msg & { defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean };
+      const m = msg as typeof msg & { defaultCommitAction?: CommitAction; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean };
       if (m.defaultCommitAction === undefined) m.defaultCommitAction = this.getDefaultCommitAction();
       if (m.defaultSaveAction === undefined) m.defaultSaveAction = this.getDefaultSaveAction();
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
@@ -548,6 +548,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     await this.createPullRequestPanel.open(repoId, branchName);
+  }
+
+  /** Commit, Push & Open PR: the New Pull Request form, with the branch just pushed as its source. */
+  private async openPullRequestForCurrentBranch(repoId: string): Promise<void> {
+    const branch = await this.manager.getRepo(repoId)?.getCurrentBranch().catch(() => undefined);
+    if (!branch?.name || branch.detachedHash) return;
+    await this.createPullRequestFromBranch(repoId, branch.name);
   }
 
   private async openPullRequestAccountPicker(repoId: string): Promise<void> {
@@ -866,8 +873,8 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
     this.viewAndSortSettings.updatePrefs({ hideReposWithoutChanges: value }).then(() => this.postViewAndSortSettings());
   }
 
-  private getDefaultCommitAction(): 'commit' | 'commitAndPush' {
-    return vscode.workspace.getConfiguration('gitcharm').get<'commit' | 'commitAndPush'>('defaultCommitAction', 'commit');
+  private getDefaultCommitAction(): CommitAction {
+    return vscode.workspace.getConfiguration('gitcharm').get<CommitAction>('defaultCommitAction', 'commit');
   }
 
   private getDefaultSaveAction(): 'stash' | 'shelve' {
@@ -1188,6 +1195,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             return;
           }
         }
+        let pullRequestRepoId: string | undefined;
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: plural(msg.repos.length, vscode.l10n.t('Committing 1 repository'), vscode.l10n.t('Committing {0} repositories', msg.repos.length)), cancellable: false },
           async () => {
@@ -1229,8 +1237,11 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             const status = await this.manager.getAllStatusesFresh();
             this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
             this.postChangelistsUpdate(status);
+            if (msg.andPush && msg.openPullRequest && errors.length === 0 && succeededRepoIds.length === 1) pullRequestRepoId = succeededRepoIds[0];
           }
         );
+        // After the progress notification is gone: the form opens on the branch just pushed.
+        if (pullRequestRepoId) await this.openPullRequestForCurrentBranch(pullRequestRepoId);
         break;
       }
 

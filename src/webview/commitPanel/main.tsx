@@ -1497,7 +1497,7 @@ function App() {
 
   // ── Commit action ─────────────────────────────────────────────────────────
 
-  const doCommit = (andPush: boolean) => {
+  const doCommit = (andPush: boolean, openPullRequest = false) => {
     if (!store.commitMessage.trim()) return;
     // Read fresh state at commit time to avoid stale closure values
     const freshState = useCommitStore.getState();
@@ -1531,7 +1531,7 @@ function App() {
 
       const requestId = generateId();
       pendingCommitRef.current = { requestId, repoIds: targets.map(t => t.repoId) };
-      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush } satisfies CommitToHostMsg);
+      getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush, openPullRequest } satisfies CommitToHostMsg);
       return;
     }
 
@@ -1566,7 +1566,7 @@ function App() {
     store.setError(null);
     const requestId = generateId();
     pendingCommitRef.current = { requestId, repoIds: targets.map(t => t.repoId) };
-    getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush } satisfies CommitToHostMsg);
+    getVsCodeApi().postMessage({ type: 'COMMIT_DO_COMMIT_MULTI', requestId, repos: targets, andPush, openPullRequest } satisfies CommitToHostMsg);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -2044,6 +2044,7 @@ function App() {
             }}
             onCommit={() => doCommit(false)}
             onCommitAndPush={() => doCommit(true)}
+            onCommitPushAndOpenPullRequest={() => doCommit(true, true)}
             onPush={doPush}
             onPushAll={doPushAll}
             syncRepoStatuses={repos}

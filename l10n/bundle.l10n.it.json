@@ -453,6 +453,8 @@
   "Continue the rebase in {0}": "Continua il rebase in {0}",
   "Abort Rebase": "Interrompi rebase",
   "Commit & Push ({0})": "Commit e Push ({0})",
+  "Commit, Push & Open PR": "Commit, Push e apri PR",
+  "Commit, Push & Open PR ({0})": "Commit, Push e apri PR ({0})",
   "Commit ({0})": "Commit ({0})",
   "Stage files and write a message first": "Aggiungi prima i file allo stage e scrivi un messaggio",
   "Pop (apply & drop)": "Pop (applica ed elimina)",

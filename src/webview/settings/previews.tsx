@@ -206,7 +206,8 @@ function CommitTabs({ get, changesLabel, changesCount }: { get: PreviewProps['ge
 function ChangesViewPreview({ get, repos }: PreviewProps) {
   const step = useLoop(11, 650, 6);
   const mode = get<string>('changesViewMode');
-  const commitAndPush = get<string>('defaultCommitAction') === 'commitAndPush';
+  const commitAction = get<string>('defaultCommitAction');
+  const commitAndPush = commitAction === 'commitAndPush' || commitAction === 'commitPushAndOpenPullRequest';
   const shelve = get<string>('defaultSaveAction') === 'shelve';
   const [front, back, third] = effectiveRepos(repos, get<Record<string, string>>('projectColors'), 3);
   const simplified = mode !== 'changelists' && mode !== 'vscode';
@@ -296,7 +297,7 @@ function ChangesViewPreview({ get, repos }: PreviewProps) {
         <div className="pv-buttons">
           <span className="pv-btn"><Codicon name={shelve ? 'archive' : 'git-stash'} style={{ fontSize: 11 }} />{shelve ? 'Shelve' : 'Stash'}<span className="pv-btn-split"><Codicon name="chevron-down" style={{ fontSize: 10 }} /></span></span>
           <span className={`pv-btn primary pv-grow${pressed ? ' pv-pressed' : ''}`}>
-            <span className="pv-grow pv-center"><Codicon name="check" style={{ fontSize: 11 }} /> {commitAndPush ? 'Commit and Push' : 'Commit'}</span>
+            <span className="pv-grow pv-center"><Codicon name={commitAction === 'commitPushAndOpenPullRequest' ? 'git-pull-request-create' : commitAndPush ? 'cloud-upload' : 'check'} style={{ fontSize: 11 }} /> {commitAction === 'commitPushAndOpenPullRequest' ? 'Commit, Push and Open PR' : commitAndPush ? 'Commit and Push' : 'Commit'}</span>
             <span className="pv-btn-split"><Codicon name="chevron-down" style={{ fontSize: 10 }} /></span>
           </span>
         </div>

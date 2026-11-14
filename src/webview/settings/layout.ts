@@ -261,6 +261,7 @@ export function enumLabel(key: string, value: string): string {
     case 'changesViewMode=vscode': return 'VS Code';
     case 'defaultCommitAction=commit': return 'Commit';
     case 'defaultCommitAction=commitAndPush': return 'Commit and Push';
+    case 'defaultCommitAction=commitPushAndOpenPullRequest': return 'Commit, Push and Open PR';
     case 'defaultSaveAction=stash': return 'Stash';
     case 'defaultSaveAction=shelve': return 'Shelve';
     case 'commitPanel.defaultTab=changes': return l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });

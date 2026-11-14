@@ -18,6 +18,9 @@ import type {
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput, TimelineCommitReference, TimelineReference,
 } from '../pullRequests/types';
 
+/** The Commit Panel's commit actions — gitcharm.defaultCommitAction picks the main button's. */
+export type CommitAction = 'commit' | 'commitAndPush' | 'commitPushAndOpenPullRequest';
+
 export type {
   RepoPullRequests, CreatePullRequestInput, ForgeProvider, PullRequestConnectionStatus, PullRequestSummary,
   PullRequestFilters, PullRequestStateFilter, PullRequestAuthorFilter, PullRequestDetail, ChangedFile,
@@ -157,7 +160,7 @@ export interface CommitPanelConfig {
 }
 
 export type HostToCommitMsg =
-  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: 'commit' | 'commitAndPush'; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; panelConfig?: CommitPanelConfig }
+  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: CommitAction; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; panelConfig?: CommitPanelConfig }
   | { type: 'COMMIT_PANEL_CONFIG'; config: CommitPanelConfig }
   | { type: 'COMMIT_PERSISTED_MESSAGE_RESULT'; message: string }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
@@ -218,7 +221,8 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_UNSTAGE_ALL'; requestId: string; repoId: string }
   | { type: 'COMMIT_DO_COMMIT'; requestId: string; repoId: string; message: string; amend: boolean }
   | { type: 'COMMIT_DO_COMMIT_PUSH'; requestId: string; repoId: string; message: string; amend: boolean }
-  | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean }
+  /** `openPullRequest` (with `andPush`, one repo): the New Pull Request form opens on the pushed branch. */
+  | { type: 'COMMIT_DO_COMMIT_MULTI'; requestId: string; repos: Array<{ repoId: string; message: string; amend: boolean; filesToStage: string[]; filesToUnstage: string[] }>; andPush: boolean; openPullRequest?: boolean }
   | { type: 'COMMIT_REBASE_ACTION'; requestId: string; repoId: string; action: 'continue' | 'skip' | 'abort' }
   | { type: 'COMMIT_PULL_ALL' }
   // rebase: omitted, the user picks merge or rebase, as in the branch menu's Pull…
