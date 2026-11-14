@@ -166,6 +166,36 @@ async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPa
   }
 }
 
+/**
+ * Offers to set a Git identity when a repository has none: no active profile, and no user.name/user.email in
+ * its .git/config or in the global git config — where a commit would fail. Shown at startup only.
+ */
+async function maybeNotifyMissingGitIdentity(
+  manager: WorkspaceGitManager,
+  profileService: GitProfileService,
+  profilesReady: Promise<void>,
+  globalState: vscode.Memento,
+): Promise<void> {
+  const DO_NOT_SHOW_KEY = 'doNotShowMissingGitIdentityNotification';
+  if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
+  // Legacy profiles are migrated first: they may hold the identity.
+  await profilesReady.catch(() => undefined);
+  // Submodules commit with their parent's identity.
+  const repos = manager.getRepoMetas().filter(m => !m.isSubmodule);
+  const missing = await Promise.all(repos.map(m => profileService.getEffectiveProfile(m.rootPath).then(r => !r, () => false)));
+  if (!missing.some(Boolean)) return;
+
+  const openProfiles = vscode.l10n.t('Open Profiles');
+  const doNotShow = vscode.l10n.t('Do Not Show Again');
+  const picked = await vscode.window.showWarningMessage(
+    vscode.l10n.t('No Git identity is configured, so commits will fail. Create a Git profile, or set a name and email for Local or Global.'),
+    openProfiles,
+    doNotShow,
+  );
+  if (picked === openProfiles) await vscode.commands.executeCommand('gitcharm.manageProfiles');
+  else if (picked === doNotShow) await globalState.update(DO_NOT_SHOW_KEY, true);
+}
+
 /** Incoming commits last told about: a periodic fetch only speaks up when there are more than that. */
 let lastNotifiedBehind = 0;
 
@@ -251,6 +281,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // DEV ONLY: uncomment to reset the support notification
   //context.globalState.update('doNotShowSupportNotification', false);
   //context.globalState.update('supportNotificationLastShown', 0);
+  // DEV ONLY: uncomment to reset the missing Git identity notification
+  //context.globalState.update('doNotShowMissingGitIdentityNotification', false);
   // DEV ONLY: uncomment to reset the incoming commits notification flag
   //context.globalState.update('doNotShowIncomingCommitsNotification', false);
   showViewModeQuickpick(context.globalState);
@@ -272,7 +304,7 @@ export function activate(context: vscode.ExtensionContext): void {
   badge.startLoading();
 
   const profileService = new GitProfileService(context, log);
-  profileService.autoInitIfEmpty();
+  const profilesReady = profileService.autoInitIfEmpty();
 
   initAiSecrets(context);
   const integrationAccounts = new IntegrationAccountStore(context.secrets, context.globalState);
@@ -291,6 +323,8 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!startupNotificationsDone) {
       startupNotificationsDone = true;
       startupDisposable.dispose();
+      // Not awaited: the incoming-commits check waits for the startup fetch.
+      void maybeNotifyMissingGitIdentity(manager, profileService, profilesReady, context.globalState);
       await maybeNotifyIncomingCommits(manager, context.globalState);
       await maybeNotifyUnpushedCommits(manager, commitPanel);
     }
