@@ -51,6 +51,16 @@ npm run lint
 
 Please make sure these pass before opening a pull request.
 
+### Tests
+
+```bash
+npm test
+```
+
+Runs the acceptance tests in `test/` with Node's built-in test runner (Node 22.6 or later: the
+TypeScript sources are run directly, by stripping their types). They drive real git in temporary
+repositories, so `git` must be on the PATH.
+
 ## Making changes
 
 1. Fork the repository and create a branch off `main`:
@@ -58,7 +68,7 @@ Please make sure these pass before opening a pull request.
 2. Make your changes, keeping commits focused and descriptive.
 3. Update [CHANGELOG.md](CHANGELOG.md) under an "Unreleased" section if your
    change is user-facing.
-4. Run typecheck and lint locally (see above).
+4. Run typecheck, lint and tests locally (see above).
 5. Push your branch and open a pull request against `main`.
 
 ### Pull request guidelines

@@ -18,7 +18,7 @@ import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
-import { openSquashEditor } from './SquashEditorPanel';
+import { promptSquashGroups } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
 import { compareFileWithRef, compareFolderWithRef } from './CompareWithCommand';
 import { pickRefQuickPick } from '../utils/refPicker';
@@ -2217,16 +2217,13 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       case 'PUSH_SQUASH_COMMITS': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) { logWarn('squash', 'Repo not found'); this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: vscode.l10n.t('Repo not found') }); return; }
-        const fullMessages = await Promise.all(msg.hashes.map(h => repo.getFullCommitMessage(h).then(m => m.trim())));
-        const fullCombined = fullMessages.join('\n\n');
-        const fullCommits = msg.commits.map((c, i) => ({ ...c, message: fullMessages[i] ?? c.message }));
-        const result = await openSquashEditor(this.extensionUri, msg.hashes.length, fullCombined, fullCommits);
-        if (!result.confirmed) {
-          this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
-          return;
-        }
         try {
-          await repo.squashCommits(msg.oldestHash, result.message);
+          const groups = await promptSquashGroups(this.extensionUri, repo, msg.hashes);
+          if (!groups) {
+            this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' });
+            return;
+          }
+          await repo.squashCommits(groups);
           this.post({ type: 'PUSH_SQUASH_RESULT', requestId: msg.requestId, ok: true });
           logInfo('squash', `Squashed ${msg.hashes.length} commits in ${msg.repoId}`);
           const commits = await repo.getUnpushedCommits();
@@ -2249,7 +2246,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         );
         if (confirm !== drop) { this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: false, error: 'Cancelled' }); return; }
         try {
-          await repo.dropCommits(msg.oldestHash);
+          await repo.dropCommits(msg.hashes);
           this.post({ type: 'PUSH_DROP_RESULT', requestId: msg.requestId, ok: true });
           logInfo('drop-commits', `Dropped ${msg.hashes.length} commits in ${msg.repoId}`);
           const commits = await repo.getUnpushedCommits();

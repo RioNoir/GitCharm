@@ -2176,6 +2176,7 @@
     "package": "vsce package",
     "publish": "vsce publish",
     "lint": "eslint src",
+    "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.host.json",
     "typecheck:webview": "tsc --noEmit -p tsconfig.webview.json",
     "l10n:export": "vscode-l10n-dev export --outDir ./l10n ./src",
