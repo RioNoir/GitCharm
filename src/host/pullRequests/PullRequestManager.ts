@@ -9,7 +9,7 @@ import { logError, logWarn } from '../utils/Logger';
 import { describeAccessError } from './formatApiError';
 import type {
   ActionResult, ChangedFile, CiCheck, CreatePullRequestInput, CreatePullRequestResult, FileDiffContent, FileDiffRefs, ForgeProvider,
-  ListPullRequestsOptions, MergeStrategy, PostCommentResult, PullRequestAuthorFilter, PullRequestCapabilities,
+  ListPullRequestsOptions, ListPullRequestsResult, MergeStrategy, PostCommentResult, PullRequestAuthorFilter, PullRequestCapabilities,
   PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
   PullRequestProvider, PullRequestStateFilter, PullRequestSummary, PullRequestUser, SubmitReviewInput, UnsupportedResult,
   UpdatePullRequestInput,
@@ -846,6 +846,17 @@ export class PullRequestManager {
     if (result.ok) this.invalidate(repoId);
     else logError('pullrequest-merge', `Failed to merge PR #${number}`, result.error);
     return result;
+  }
+
+  /** One page of the repo's pull requests, with the given filters rather than the panel's saved ones — for the MCP tools. */
+  async queryPullRequests(repoId: string, options: ListPullRequestsOptions): Promise<ListPullRequestsResult | { error: string }> {
+    const target = await this.resolveProviderAndTarget(repoId);
+    if ('error' in target) return target;
+    try {
+      return await target.provider.listPullRequests(target.owner, target.repo, options);
+    } catch (err) {
+      return { error: describeAccessError(err, `${target.owner}/${target.repo}`) ?? (err instanceof Error ? err.message : String(err)) };
+    }
   }
 
   /** The local remote of the repo pull requests are listed for: `origin`, else the first remote. */

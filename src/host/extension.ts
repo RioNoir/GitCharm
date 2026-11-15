@@ -31,6 +31,7 @@ import { IssueResolvePanel } from './panels/IssueResolvePanel';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 import { avatarResolver } from './utils/avatarResolver';
 import { initAiSecrets } from './ai/aiSecrets';
+import { McpService } from './mcp/McpService';
 
 /**
  * Before avatars and Gravatar were two settings, `avatars.enabled` (off by default) meant Gravatar, and users were
@@ -358,6 +359,14 @@ export function activate(context: vscode.ExtensionContext): void {
     void issueDetailPanel.open(repoId, issue);
   });
   issueDetailPanel.setPullRequestDetailPanel(pullRequestDetailPanel);
+
+  // GitCharm's MCP server for coding agents: off until gitcharm.mcp.enabled is turned on.
+  const mcpService = new McpService(context, { manager, profileService, pullRequestManager, issueManager });
+  SettingsPanel.setMcpService(mcpService);
+  context.subscriptions.push(
+    mcpService,
+    vscode.commands.registerCommand('gitcharm.mcp.installInAgents', () => mcpService.pickAgents()),
+  );
   const issueResolvePanel = new IssueResolvePanel(context.extensionUri, manager, issueManager, prDocProvider, (_repoId, _issue, commitDraft) => {
     void commitPanel.showCommitDraft(commitDraft);
   });

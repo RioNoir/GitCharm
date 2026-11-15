@@ -9,7 +9,7 @@ import {
   IssueTrackerDisabledError,
   type CreateIssueInput, type CreateIssueResult, type IssueAuthorFilter, type IssueCapabilities, type IssueComment, type IssueDetail,
   type IssueEvent, type IssueProvider, type IssueStateFilter, type IssueSummary, type LinkedIssue, type LinkedPullRequest,
-  type ListIssuesOptions, type UpdateIssueInput,
+  type ListIssuesOptions, type ListIssuesResult, type UpdateIssueInput,
 } from './types';
 
 const CACHE_TTL_MS = 45_000;
@@ -264,6 +264,17 @@ export class IssueManager {
       const message = err instanceof Error ? err.message : String(err);
       logWarn('issue-search', `Failed to search issues`, message);
       return { items: [], error: message };
+    }
+  }
+
+  /** One page of the repo's issues, with the given filters rather than the panel's saved ones — for the MCP tools. */
+  async queryIssues(repoId: string, options: ListIssuesOptions): Promise<ListIssuesResult | { error: string }> {
+    const target = await this.resolveTarget(repoId);
+    if ('error' in target) return target;
+    try {
+      return await target.provider.listIssues(target.owner, target.repo, options);
+    } catch (err) {
+      return { error: describeAccessError(err, `${target.owner}/${target.repo}`) ?? (err instanceof Error ? err.message : String(err)) };
     }
   }
 

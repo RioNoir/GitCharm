@@ -41,6 +41,7 @@ import { issueCommitReference, type IssueManager } from '../issues/IssueManager'
 import type { IssueDetailPanel } from './IssueDetailPanel';
 import type { CreateIssuePanel } from './CreateIssuePanel';
 import { createBranchForIssue } from './IssueDetailPanel';
+import { resolveCommitCredentials } from '../git/commitCredentials';
 
 type DivergedStrategy = 'merge' | 'rebase' | 'force';
 
@@ -268,26 +269,15 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
    */
   private async getCommitCredentials(repoPath: string): Promise<{ gitName: string; gitEmail: string } | undefined> {
     if (!this.profileService) return undefined;
-
-    // For submodules, resolve the profile using the parent repo path so they
-    // inherit the same identity as the parent.
-    const meta = this.manager.getRepoMetas().find(m => m.rootPath === repoPath);
-    const resolvedPath = (meta?.isSubmodule && meta.parentRepoId)
-      ? meta.parentRepoId
-      : repoPath;
-
-    const result = await this.profileService.getEffectiveProfile(resolvedPath);
-    if (!result) {
+    const { credentials, noIdentity } = await resolveCommitCredentials(this.manager, this.profileService, repoPath);
+    if (noIdentity) {
       logWarn('commit-credentials', 'No Git identity configured');
       const openProfiles = vscode.l10n.t('Open Profiles');
       void vscode.window.showWarningMessage(vscode.l10n.t('No Git identity configured. Set a profile before committing.'), openProfiles)
         .then(picked => { if (picked === openProfiles) void vscode.commands.executeCommand('gitcharm.manageProfiles'); });
       return undefined;
     }
-    if (result.source === 'local' || result.source === 'global') return undefined;
-    const { gitName, gitEmail } = result.profile;
-    if (!gitName && !gitEmail) return undefined;
-    return { gitName, gitEmail };
+    return credentials;
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {

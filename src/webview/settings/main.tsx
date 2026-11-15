@@ -5,8 +5,9 @@ import { createRoot } from 'react-dom/client';
 import { Codicon } from '../shared/Codicon';
 import { useMessageBridge } from '../shared/useMessageBridge';
 import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
-import type { HostToSettingsMsg, IntegrationsState, SettingsState, SettingsTarget, SettingsToHostMsg } from '../../host/types/messages';
+import type { HostToSettingsMsg, IntegrationsState, McpState, SettingsState, SettingsTarget, SettingsToHostMsg } from '../../host/types/messages';
 import { IntegrationsSection, type IntegrationsActions } from './IntegrationsSection';
+import { McpSection, type McpActions } from './McpSection';
 import { AiSection, PromptsSection } from './AiSection';
 import { getCategories, settingLabel, type CategoryDef } from './layout';
 import { Preview } from './previews';
@@ -30,6 +31,7 @@ function App() {
   const categories = useMemo(() => getCategories(), []);
   const [state, setState] = useState<SettingsState | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationsState | null>(null);
+  const [mcp, setMcp] = useState<McpState | null>(null);
   const [category, setCategory] = useState(() => window.__INITIAL_CONFIG__?.section ?? loadUiState().category ?? categories[0].id);
   const [target, setTarget] = useState<SettingsTarget>(() => loadUiState().target ?? 'user');
   const [collapsed, setCollapsed] = useState<string[]>(() => loadUiState().collapsed ?? []);
@@ -42,6 +44,7 @@ function App() {
       const msg = event.data;
       if (msg?.type === 'SETTINGS_STATE') setState(msg.state);
       else if (msg?.type === 'SETTINGS_INTEGRATIONS') setIntegrations(msg.state);
+      else if (msg?.type === 'SETTINGS_MCP') setMcp(msg.state);
       else if (msg?.type === 'SETTINGS_NAVIGATE') { setQuery(''); setCategory(msg.section); }
     };
     window.addEventListener('message', handler);
@@ -53,6 +56,7 @@ function App() {
   useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [category]);
   // Read lazily: the host has to look at every repository's remotes. It then keeps the page up to date.
   useEffect(() => { if (category === 'integrations') send({ type: 'SETTINGS_INTEGRATIONS_GET' }); }, [category, send]);
+  useEffect(() => { if (category === 'mcp') send({ type: 'SETTINGS_MCP_GET' }); }, [category, send]);
 
   // Without a folder open there's no workspace to write to.
   const effectiveTarget: SettingsTarget = state && !state.hasWorkspace ? 'user' : target;
@@ -131,6 +135,12 @@ function App() {
     assign: (repoId, value) => send({ type: 'SETTINGS_INTEGRATION_ASSIGN', repoId, value }),
     openUrl: url => send({ type: 'SETTINGS_OPEN_URL', url }),
   }), [send, request]);
+
+  const mcpActions: McpActions = useMemo(() => ({
+    install: agent => send({ type: 'SETTINGS_MCP_INSTALL', agent }),
+    uninstall: agent => send({ type: 'SETTINGS_MCP_UNINSTALL', agent }),
+    openConfig: agent => send({ type: 'SETTINGS_MCP_OPEN_CONFIG', agent }),
+  }), [send]);
 
   if (!state || !ctx) {
     return <div className="gc-loading"><Codicon name="loading" className="codicon-modifier-spin" /> {l10n.t('Loading settings…')}</div>;
@@ -243,7 +253,7 @@ function App() {
           {q ? (
             <SearchResults ctx={ctx} categories={categories} matches={matches} state={state} />
           ) : (
-            <CategoryPage category={current} ctx={ctx} state={state} listModels={listModels} testAi={testAi} setApiKey={setApiKey} integrations={integrations} integrationActions={integrationActions} />
+            <CategoryPage category={current} ctx={ctx} state={state} listModels={listModels} testAi={testAi} setApiKey={setApiKey} integrations={integrations} integrationActions={integrationActions} mcp={mcp} mcpActions={mcpActions} />
           )}
         </div>
       </div>
@@ -251,7 +261,7 @@ function App() {
   );
 }
 
-function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, integrations, integrationActions }: {
+function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, integrations, integrationActions, mcp, mcpActions }: {
   category: CategoryDef;
   ctx: RowContext;
   state: SettingsState;
@@ -260,6 +270,8 @@ function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, int
   setApiKey: React.ComponentProps<typeof AiSection>['setApiKey'];
   integrations: IntegrationsState | null;
   integrationActions: IntegrationsActions;
+  mcp: McpState | null;
+  mcpActions: McpActions;
 }) {
   return (
     <>
@@ -270,6 +282,7 @@ function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, int
           {category.custom === 'ai' && <AiSection ctx={ctx} state={state} listModels={listModels} testAi={testAi} setApiKey={setApiKey} />}
           {category.custom === 'aiPrompts' && <PromptsSection ctx={ctx} keys={category.keys} defaults={state.defaultPrompts} />}
           {category.custom === 'integrations' && <IntegrationsSection ctx={ctx} state={integrations} actions={integrationActions} />}
+          {category.custom === 'mcp' && <McpSection ctx={ctx} state={mcp} actions={mcpActions} />}
           {!category.custom && category.keys.map(key => <SettingRow key={key} ctx={ctx} settingKey={key} />)}
         </div>
         {category.preview && (
