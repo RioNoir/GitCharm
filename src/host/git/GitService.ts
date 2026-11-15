@@ -30,6 +30,13 @@ const STATUS_MAP: Record<string, GitFileStatus> = {
   '?': 'untracked',
 };
 
+/** `%(upstream:track)` of a branch with an upstream: "[ahead 2, behind 1]", "[ahead 2]", "[behind 1]", or empty when even. */
+function parseTrack(track: string | undefined): { ahead: number; behind: number } {
+  const ahead = /ahead (\d+)/.exec(track ?? '');
+  const behind = /behind (\d+)/.exec(track ?? '');
+  return { ahead: ahead ? parseInt(ahead[1], 10) : 0, behind: behind ? parseInt(behind[1], 10) : 0 };
+}
+
 // VS Code Status enum → GitFileStatus
 function vsStatusToGitFileStatus(s: Status): GitFileStatus {
   switch (s) {
@@ -324,7 +331,8 @@ export class GitService {
         isHead: true,
         isRemote: false,
         upstream: head?.upstream ? `${head.upstream.remote}/${head.upstream.name}` : undefined,
-        aheadBehind: (head?.ahead !== undefined && head?.behind !== undefined)
+        // Without an upstream there is nothing to be ahead of or behind: VS Code still reports 0/0.
+        aheadBehind: (head?.upstream && head.ahead !== undefined && head.behind !== undefined)
           ? { ahead: head.ahead, behind: head.behind }
           : undefined,
         detachedTag,
@@ -493,7 +501,8 @@ export class GitService {
         isHead: true,
         isRemote: false,
         upstream: head?.upstream ? `${head.upstream.remote}/${head.upstream.name}` : undefined,
-        aheadBehind: (head?.ahead !== undefined && head?.behind !== undefined)
+        // Without an upstream there is nothing to be ahead of or behind: VS Code still reports 0/0.
+        aheadBehind: (head?.upstream && head.ahead !== undefined && head.behind !== undefined)
           ? { ahead: head.ahead, behind: head.behind }
           : undefined,
         detachedTag,
@@ -560,16 +569,20 @@ export class GitService {
       }
     } catch { /* branch refs still come from the primary provider */ }
 
+    // Each local branch's upstream and how far it is from it. VS Code's API only reports that for HEAD.
     const goneBranches = new Set<string>();
+    const tracking = new Map<string, { upstream: string; aheadBehind?: { ahead: number; behind: number } }>();
     try {
       const raw = await this.git.raw([
         'for-each-ref',
-        '--format=%(refname:short)%00%(upstream:track)',
+        '--format=%(refname:short)%00%(upstream:short)%00%(upstream:track)',
         'refs/heads/',
       ]);
       for (const line of raw.trim().split('\n')) {
-        const [name, track] = line.split('\0');
-        if (name && track === '[gone]') goneBranches.add(name);
+        const [name, upstream, track] = line.split('\0');
+        if (!name || !upstream) continue;
+        if (track === '[gone]') { goneBranches.add(name); tracking.set(name, { upstream }); continue; }
+        tracking.set(name, { upstream, aheadBehind: parseTrack(track) });
       }
     } catch { /* upstream:track unsupported or no upstream configured — treat as not gone */ }
 
@@ -595,15 +608,17 @@ export class GitService {
           fullName: `refs/heads/${name}`,
           isHead,
           isRemote: false,
+          upstream: tracking.get(name)?.upstream,
           upstreamGone: goneBranches.has(name),
           lastCommitHash: ref.commit ?? tipMetadata.get(name)?.hash,
           lastCommitDate: tipMetadata.get(name)?.date,
           lastCommitDateRelative: tipMetadata.get(name)?.dateRelative,
           lastCommitMessage: tipMetadata.get(name)?.message,
           lastCommitAuthor: tipMetadata.get(name)?.author,
-          aheadBehind: (isHead && head!.ahead !== undefined && head!.behind !== undefined)
+          // HEAD's counts come from VS Code, which refreshes them as soon as a commit lands; the others from git.
+          aheadBehind: (isHead && head!.upstream && head!.ahead !== undefined && head!.behind !== undefined)
             ? { ahead: head!.ahead, behind: head!.behind }
-            : undefined,
+            : tracking.get(name)?.aheadBehind,
         });
       }
 
@@ -660,13 +675,14 @@ export class GitService {
         isHead: branch.current,
         isRemote,
         remoteName,
+        upstream: isRemote ? undefined : tracking.get(cleanName)?.upstream,
         upstreamGone: !isRemote && goneBranches.has(cleanName),
         lastCommitHash: tipMetadata.get(cleanName)?.hash ?? branch.commit,
         lastCommitDate: tipMetadata.get(cleanName)?.date,
         lastCommitDateRelative: tipMetadata.get(cleanName)?.dateRelative,
         lastCommitMessage: tipMetadata.get(cleanName)?.message,
         lastCommitAuthor: tipMetadata.get(cleanName)?.author,
-        aheadBehind,
+        aheadBehind: isRemote ? undefined : aheadBehind ?? tracking.get(cleanName)?.aheadBehind,
       });
     }
     return branches;
@@ -1064,9 +1080,10 @@ export class GitService {
     return list[0] ?? null;
   }
 
-  async getCommitDiff(hash: string, maxChars = 8000): Promise<string> {
+  /** `stat`: a per-file summary before the patch — leave it out when the files are listed elsewhere. */
+  async getCommitDiff(hash: string, maxChars = 8000, stat = true): Promise<string> {
     try {
-      const raw = await this.git.raw(['show', hash, '--stat', '--patch', '--format=']);
+      const raw = await this.git.raw(['show', hash, ...(stat ? ['--stat'] : []), '--patch', '--format=']);
       return raw.length > maxChars ? raw.slice(0, maxChars) + '\n...[diff truncated]' : raw;
     } catch { return ''; }
   }

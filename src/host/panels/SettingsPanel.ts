@@ -11,6 +11,7 @@ import { getAiApiKeyPresence, onDidChangeAiApiKeys, setAiApiKey } from '../ai/ai
 import { DEFAULT_PROMPTS } from '../ai/prompts';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { IntegrationsService } from '../integrations/IntegrationsService';
+import type { McpService } from '../mcp/McpService';
 import type { HostToSettingsMsg, SettingSchema, SettingsState, SettingsToHostMsg, SettingValue } from '../types/messages';
 
 const SECTION = 'gitcharm';
@@ -35,6 +36,12 @@ interface RawProperty {
 export class SettingsPanel {
   private static current: SettingsPanel | undefined;
   private static schemaCache: SettingSchema[] | undefined;
+  private static mcp: McpService | undefined;
+
+  /** The MCP section shows the server's state and installs it in agents. */
+  static setMcpService(mcp: McpService): void {
+    SettingsPanel.mcp = mcp;
+  }
 
   private readonly disposables: vscode.Disposable[] = [];
   private readonly post: (msg: HostToSettingsMsg) => void;
@@ -89,6 +96,19 @@ export class SettingsPanel {
       this.disposables.forEach(d => d.dispose());
     });
     void this.pushState();
+  }
+
+  /** The MCP section's state: the server, and which agents have it installed. Watched once the section is opened. */
+  private mcpWatch: vscode.Disposable | undefined;
+
+  private pushMcp(): void {
+    const mcp = SettingsPanel.mcp;
+    if (!mcp) return;
+    if (!this.mcpWatch) {
+      this.mcpWatch = mcp.onDidChange(() => this.pushMcp());
+      this.disposables.push(this.mcpWatch);
+    }
+    this.post({ type: 'SETTINGS_MCP', state: mcp.getState() });
   }
 
   private lastRepoKey = '';
@@ -188,6 +208,27 @@ export class SettingsPanel {
       case 'SETTINGS_INTEGRATIONS_GET':
         await this.pushIntegrations();
         break;
+      case 'SETTINGS_MCP_GET':
+        this.pushMcp();
+        break;
+      case 'SETTINGS_MCP_INSTALL':
+      case 'SETTINGS_MCP_UNINSTALL': {
+        const mcp = SettingsPanel.mcp;
+        if (!mcp) break;
+        try {
+          if (msg.type === 'SETTINGS_MCP_INSTALL') await mcp.install(msg.agent); else await mcp.uninstall(msg.agent);
+          this.post({ type: 'SETTINGS_MCP_RESULT', agent: msg.agent, ok: true });
+        } catch (e: unknown) {
+          this.post({ type: 'SETTINGS_MCP_RESULT', agent: msg.agent, ok: false, error: e instanceof Error ? e.message : String(e) });
+        }
+        this.pushMcp();
+        break;
+      }
+      case 'SETTINGS_MCP_OPEN_CONFIG': {
+        const agent = SettingsPanel.mcp?.getState().agents.find(a => a.id === msg.agent);
+        if (agent && fs.existsSync(agent.configPath)) await vscode.window.showTextDocument(vscode.Uri.file(agent.configPath));
+        break;
+      }
       case 'SETTINGS_INTEGRATION_ADD': {
         const result = await this.integrations.addAccount(msg.integrationId, {
           host: msg.host, label: msg.label, email: msg.email, organization: msg.organization, token: msg.token,

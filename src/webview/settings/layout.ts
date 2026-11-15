@@ -13,7 +13,7 @@ export interface CategoryDef {
   keys: string[];
   preview?: PreviewId;
   /** Categories whose body isn't the plain list of settings. */
-  custom?: 'ai' | 'aiPrompts' | 'integrations';
+  custom?: 'ai' | 'aiPrompts' | 'integrations' | 'mcp';
 }
 
 export const AI_PROMPT_KEYS = [
@@ -133,6 +133,12 @@ export function getCategories(): CategoryDef[] {
       keys: ['pullRequests.hostProviderOverrides'],
     },
     {
+      id: 'mcp', group: integrations, icon: 'server-process', custom: 'mcp',
+      label: l10n.t('MCP Server'),
+      description: l10n.t('Let coding agents such as Claude Code, Codex or Copilot use GitCharm\'s Git, pull request and issue tools on the repositories open in this window.'),
+      keys: ['mcp.enabled', 'mcp.confirmation'],
+    },
+    {
       id: 'discovery', group: advanced, icon: 'search', preview: 'discovery',
       label: l10n.t('Repository Discovery'),
       description: l10n.t('Which repositories and submodules GitCharm finds in the workspace.'),
@@ -250,6 +256,8 @@ export function settingLabel(key: string): string {
     case 'pullRequests.deleteBranchAfterMerge': return l10n.t('Delete branch after merge');
     case 'pullRequests.defaultCheckoutAction': return l10n.t('Default checkout action');
     case 'pullRequests.hostProviderOverrides': return l10n.t('Self-hosted forges');
+    case 'mcp.enabled': return l10n.t('Enable MCP server');
+    case 'mcp.confirmation': return l10n.t('Confirm in VS Code');
     case 'resetViewLocationsOnStartup': return l10n.t('Reset view locations on startup');
     default: return key;
   }
@@ -307,6 +315,9 @@ export function enumLabel(key: string, value: string): string {
     case 'pullRequests.deleteBranchAfterMerge=remote': return l10n.t('Remote only');
     case 'pullRequests.deleteBranchAfterMerge=local': return l10n.t('Local only');
     case 'pullRequests.deleteBranchAfterMerge=never': return l10n.t('Never');
+    case 'mcp.confirmation=risky': return l10n.t('Risky actions');
+    case 'mcp.confirmation=allWrites': return l10n.t('Every change');
+    case 'mcp.confirmation=never': return l10n.t('Never');
     case 'pullRequests.defaultCheckoutAction=pr': return 'Checkout Pull Request';
     case 'pullRequests.defaultCheckoutAction=branch': return 'Checkout Branch';
     case 'ai.provider=vscode-lm': return 'VS Code LM';

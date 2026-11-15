@@ -21,11 +21,22 @@ const options = {
   },
 };
 
+/** The stdio bridge agents run as GitCharm's MCP server (src/host/mcp/bridge.ts): plain Node, no vscode. */
+const { version } = JSON.parse(await import('fs').then(fs => fs.promises.readFile('package.json', 'utf8')));
+/** @type {import('esbuild').BuildOptions} */
+const bridgeOptions = {
+  ...options,
+  entryPoints: ['src/host/mcp/bridgeMain.ts'],
+  outfile: 'out/host/mcp-bridge.js',
+  external: [],
+  define: { ...options.define, BRIDGE_VERSION: JSON.stringify(version) },
+};
+
 if (isWatch) {
-  const ctx = await esbuild.context(options);
-  await ctx.watch();
+  const contexts = await Promise.all([esbuild.context(options), esbuild.context(bridgeOptions)]);
+  await Promise.all(contexts.map(ctx => ctx.watch()));
   console.log('Watching host for changes...');
 } else {
-  await esbuild.build(options);
+  await Promise.all([esbuild.build(options), esbuild.build(bridgeOptions)]);
   console.log('Host build complete.');
 }

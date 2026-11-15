@@ -13,6 +13,7 @@ import type { PullRequestSummary } from './types';
 
 type Choice = 'localAndRemote' | 'remote' | 'local';
 type Setting = 'ask' | Choice | 'never';
+export type BranchCleanupChoice = Choice | 'never';
 
 /**
  * After a pull request is merged through the forge: fetches, so the remote-tracking branches catch up, then deletes
@@ -25,15 +26,17 @@ export async function cleanUpAfterMerge(
   pullRequestManager: PullRequestManager,
   repoId: string,
   pr: PullRequestSummary,
-): Promise<void> {
-  const setting = vscode.workspace.getConfiguration('gitcharm.pullRequests').get<Setting>('deleteBranchAfterMerge', 'ask');
+  /** Made by the caller (an MCP tool) instead of the setting: nothing is asked. */
+  choiceOverride?: BranchCleanupChoice,
+): Promise<string[]> {
+  const setting: Setting = choiceOverride ?? vscode.workspace.getConfiguration('gitcharm.pullRequests').get<Setting>('deleteBranchAfterMerge', 'ask');
   const repo = manager.getRepo(repoId);
   const remote = repo && setting !== 'never' ? await pullRequestManager.getPullRequestRemote(repoId) : undefined;
   const fork = !!pr.sourceRepoFullName;
   // A fork's branch names say nothing about this repository's protected branches.
   if (!repo || !remote || setting === 'never' || (!fork && isProtectedBranch(pr.sourceBranch))) {
     await manager.fetchAll();
-    return;
+    return [];
   }
   const git: GitRunner = args => repo.run(args);
 
@@ -45,19 +48,19 @@ export async function cleanUpAfterMerge(
 
   // The repository's default branch stays, protected or not (e.g. a pull request from develop… into a release branch).
   const defaultBranch = (await git(['symbolic-ref', '--quiet', '--short', `refs/remotes/${remote}/HEAD`]).catch(() => '')).trim();
-  if (!fork && defaultBranch === `${remote}/${pr.sourceBranch}`) return;
+  if (!fork && defaultBranch === `${remote}/${pr.sourceBranch}`) return [];
   const remoteBranch = !fork && await hasRemoteBranch(git, remote, pr.sourceBranch).catch(() => false);
 
   const available: Choice[] = [];
   if (remoteBranch && localBranch) available.push('localAndRemote');
   if (remoteBranch) available.push('remote');
   if (localBranch) available.push('local');
-  if (available.length === 0) return;
+  if (available.length === 0) return [];
 
   const choice = setting === 'ask'
     ? await askChoice(pr, available, localBranch, `${remote}/${pr.sourceBranch}`)
     : narrowChoice(setting, available);
-  if (!choice) return;
+  if (!choice) return [];
   const deleteRemote = choice !== 'local';
   const deleteLocal = choice !== 'remote' && !!localBranch;
 
@@ -104,12 +107,13 @@ export async function cleanUpAfterMerge(
 
   void manager.getAllStatusesFresh();
   if (messages.length > 0) logInfo('pullrequest-delete-branch', messages.join(' '));
-  if (problems.length > 0) {
-    logWarn('pullrequest-delete-branch', problems.join(' '));
-    void vscode.window.showWarningMessage([...messages, ...problems].join(' '));
-  } else {
-    void vscode.window.showInformationMessage(messages.join(' '));
+  if (problems.length > 0) logWarn('pullrequest-delete-branch', problems.join(' '));
+  // An MCP tool reports the outcome to its agent itself.
+  if (!choiceOverride) {
+    if (problems.length > 0) void vscode.window.showWarningMessage([...messages, ...problems].join(' '));
+    else void vscode.window.showInformationMessage(messages.join(' '));
   }
+  return [...messages, ...problems];
 }
 
 async function askChoice(pr: PullRequestSummary, available: Choice[], localBranch: string | undefined, remoteBranch: string): Promise<Choice | undefined> {

@@ -17,6 +17,7 @@ import type {
   PullRequestComment, PullRequestCommit, PullRequestConnectionStatus, PullRequestDetail, PullRequestEvent, PullRequestLabel,
   PullRequestStateFilter, PullRequestSummary, PullRequestUser, ReviewEvent, SubmitReviewInput, TimelineCommitReference, TimelineReference,
 } from '../pullRequests/types';
+import type { AgentId, AgentStatus } from '../mcp/installers';
 
 /** The Commit Panel's commit actions — gitcharm.defaultCommitAction picks the main button's. */
 export type CommitAction = 'commit' | 'commitAndPush' | 'commitPushAndOpenPullRequest';
@@ -818,8 +819,21 @@ export interface IntegrationsState {
   repos: IntegrationRepoMsg[];
 }
 
+/** GitCharm's MCP server, for the settings page's MCP section. */
+export interface McpState {
+  enabled: boolean;
+  running: boolean;
+  /** Why the server isn't running although enabled. */
+  error?: string;
+  agents: AgentStatus[];
+  /** VS Code's own MCP support (Copilot's agent mode): GitCharm registers itself there when the API exists. */
+  vscodeAgent: boolean;
+}
+
 export type HostToSettingsMsg =
   | { type: 'SETTINGS_STATE'; state: SettingsState }
+  | { type: 'SETTINGS_MCP'; state: McpState }
+  | { type: 'SETTINGS_MCP_RESULT'; agent: AgentId; ok: boolean; error?: string }
   | { type: 'SETTINGS_NAVIGATE'; section: string }
   | { type: 'SETTINGS_MODELS'; requestId: string; models: AiModelOptionMsg[]; error?: string }
   | { type: 'SETTINGS_TEST_RESULT'; requestId: string; ok: boolean; message: string; elapsedMs: number }
@@ -841,7 +855,11 @@ export type SettingsToHostMsg =
   | { type: 'SETTINGS_INTEGRATION_REMOVE'; accountId: string }
   | { type: 'SETTINGS_INTEGRATION_GITHUB_ADD' }
   | { type: 'SETTINGS_INTEGRATION_MICROSOFT_ADD' }
-  | { type: 'SETTINGS_INTEGRATION_ASSIGN'; repoId: string; value: string };
+  | { type: 'SETTINGS_INTEGRATION_ASSIGN'; repoId: string; value: string }
+  | { type: 'SETTINGS_MCP_GET' }
+  | { type: 'SETTINGS_MCP_INSTALL'; agent: AgentId }
+  | { type: 'SETTINGS_MCP_UNINSTALL'; agent: AgentId }
+  | { type: 'SETTINGS_MCP_OPEN_CONFIG'; agent: AgentId };
 
 // ─── AI conflict resolution: live view ───────────────────────────────────────
 // A side panel following an AI conflict resolution as it happens: each conflict with its two sides, the

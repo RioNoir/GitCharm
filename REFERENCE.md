@@ -93,6 +93,12 @@ All commands are in the Command Palette under **GitCharm**. Some only appear whe
 | `GitCharm: Select AI Model` | Chooses the AI provider and model. |
 | `GitCharm: Customize AI Prompts` | Edits or resets the prompts used by the AI features. |
 
+### MCP Server
+
+| Command | Description |
+|:--|:--|
+| `GitCharm: Install MCP Server in Agents…` | Turns the MCP server on if needed, then installs it in (or removes it from) Claude Code, Codex, Gemini CLI, Cursor and Claude Desktop. |
+
 ## Keybindings
 
 | Keybinding | macOS | Command |
@@ -109,7 +115,7 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 | Setting | Default | Description |
 |:--|:--|:--|
 | `gitcharm.changesViewMode` | `simplified` | How changed files are shown: `simplified`, `changelists`, or `vscode`. Chosen on first install. |
-| `gitcharm.defaultCommitAction` | `commit` | Main action of the commit button: `commit` or `commitAndPush`. |
+| `gitcharm.defaultCommitAction` | `commit` | Main action of the commit button: `commit`, `commitAndPush` or `commitPushAndOpenPullRequest` (commit, push, then open the New Pull Request form on the pushed branch). |
 | `gitcharm.defaultSaveAction` | `stash` | Main action of the Save button: `stash` or `shelve`. |
 | `gitcharm.commitSignoff` | `false` | Add a Signed-off-by line to every commit (`git commit --signoff`). |
 | `gitcharm.commitPanel.subjectMaxLength` | `0` | Warn when the commit message's first line is longer than this many characters (`0`: off). |
@@ -205,6 +211,7 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 | `gitcharm.pullRequests.hostProviderOverrides` | `{}` | Forge type per Git host, for self-hosted instances that can't be auto-detected, e.g. `{ "git.mycompany.com": "gitea" }`. Valid values: `github`, `gitlab`, `bitbucket`, `gitea`, `azure`. |
 | `gitcharm.pullRequests.defaultTargetBranch` | `""` | Target branch for new pull requests when the repository's default branch can't be determined from the forge (empty: auto-detect `main`/`master`). |
 | `gitcharm.pullRequests.defaultMergeStrategy` | `merge` | Strategy pre-selected on the Merge button: `merge`, `squash`, `rebase`, or `fastForward`. Falls back to the first strategy the forge supports. |
+| `gitcharm.pullRequests.deleteBranchAfterMerge` | `ask` | What to do with a pull request's source branch after merging it from its detail panel: `ask` (local and remote preselected), `localAndRemote`, `remote`, `local` or `never`. The remote branch is deleted through the forge, never for a fork; the local one only when no commit would be lost. Protected and default branches are kept. |
 | `gitcharm.pullRequests.defaultCheckoutAction` | `pr` | Main action of the Checkout button: `pr` (Checkout Pull Request) or `branch` (Checkout Branch). The other stays in its dropdown. |
 
 ### Issues
@@ -258,6 +265,27 @@ Each AI feature's instructions can be replaced. Empty uses the built-in default;
 | `gitcharm.ai.prompts.issueBranchName` | **Create Branch with AI** and the branch of **Resolve with AI**. |
 | `gitcharm.ai.prompts.resolveIssue` | **Resolve with AI** on an issue. |
 | `gitcharm.ai.prompts.resolveConflicts` | **Resolve Conflicts with AI**. |
+
+### MCP Server
+
+| Setting | Default | Description |
+|:--|:--|:--|
+| `gitcharm.mcp.enabled` | `false` | Run GitCharm's MCP server, so coding agents use its Git, pull request and issue tools on the repositories open in the window. It listens on `127.0.0.1` only, with a random port and token. |
+| `gitcharm.mcp.confirmation` | `risky` | Which agent actions ask for confirmation in VS Code: `risky` (push, merge, deleting branches, rewriting history, amending, posting on the forge), `allWrites`, or `never`. |
+
+#### MCP tools
+
+| Tool | Kind | What it does |
+|:--|:--|:--|
+| `list_repositories`, `get_status` | read | The window's repositories; a repository's branch and staged/unstaged files. |
+| `get_log`, `get_commit`, `get_diff`, `compare` | read | History (of a branch or a file), a commit with its diff, uncommitted changes, what a branch adds to another. |
+| `list_branches`, `list_stashes` | read | Branches with upstream and ahead/behind; stashes with their files. |
+| `stage`, `unstage`, `commit` | write | Commits use the active Git profile; amending asks for confirmation. |
+| `create_branch`, `switch_branch`, `fetch`, `pull`, `stash`, `stash_pop` | write | |
+| `push`, `delete_branch` | risky | Protected branches stay guarded. |
+| `squash_commits`, `drop_commits` | risky | Rewrite the current branch; the later commits are replayed. |
+| `list_pull_requests`, `get_pull_request`, `list_issues`, `get_issue` | read | Through the forge account connected in GitCharm. |
+| `create_pull_request`, `comment_on_pull_request`, `merge_pull_request` | risky | Merging can delete the branch afterwards. |
 
 ### Experimental
 

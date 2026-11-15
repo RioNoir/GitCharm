@@ -256,5 +256,12 @@
   "config.issues.defaultFilter.mentioningMe": "Issues abiertas que me mencionan (GitHub y Gitea).",
   "config.issues.autoRefreshInterval.description": "Actualizar la lista de issues cada tantos minutos, mientras su pestaña está abierta y VS Code tiene el foco. 0 lo desactiva.",
   "config.issues.branchNameTemplate.markdownDescription": "El nombre propuesto para una rama creada desde una issue. `{number}` es el número de la issue, `{title}` su título en minúsculas con guiones, `{user}` tu nombre de usuario en la forja — p. ej. `feature/{number}-{title}`. El nombre se puede editar antes de crear la rama.",
-  "config.issues.commitReferenceTemplate.markdownDescription": "El texto que se inserta en el mensaje de commit al referenciar una issue. `{number}` es el número de la issue, `{title}` su título — p. ej. `Fixes #{number}` para cerrar la issue cuando el commit llegue a la rama por defecto."
+  "config.issues.commitReferenceTemplate.markdownDescription": "El texto que se inserta en el mensaje de commit al referenciar una issue. `{number}` es el número de la issue, `{title}` su título — p. ej. `Fixes #{number}` para cerrar la issue cuando el commit llegue a la rama por defecto.",
+  "config.section.mcp.title": "Servidor MCP",
+  "config.mcp.enabled.markdownDescription": "Inicia el servidor MCP de GitCharm, para que los agentes de programación (Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop, Copilot) usen las herramientas de Git, pull requests e issues de GitCharm en los repositorios abiertos en esta ventana. Solo escucha en esta máquina, con un token. Instálalo en los agentes desde Ajustes de GitCharm → Servidor MCP, o con el comando **GitCharm: Install MCP Server in Agents**.",
+  "config.mcp.confirmation.description": "Qué acciones pedidas por un agente a través del servidor MCP piden antes confirmación en VS Code.",
+  "config.mcp.confirmation.enum.risky": "Las arriesgadas: push, fusión, eliminar ramas, reescribir el historial, amend y publicar en la forja",
+  "config.mcp.confirmation.enum.allWrites": "Toda acción que cambia el repositorio o la forja",
+  "config.mcp.confirmation.enum.never": "Ninguna: los agentes actúan libremente (las ramas protegidas siguen protegidas)",
+  "command.mcp.installInAgents.title": "Instalar el servidor MCP en agentes…"
 }

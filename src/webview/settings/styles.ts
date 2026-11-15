@@ -267,6 +267,8 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 .gc-integration-name { font-weight: 600; }
 .gc-integration-desc { font-size: 12px; color: var(--vscode-descriptionForeground); }
 .gc-status-ok { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #89d185)); }
+.gc-status-error { display: inline-flex; align-items: center; gap: 4px; color: var(--vscode-errorForeground); }
+.gc-path { font-family: var(--vscode-editor-font-family); font-size: 12px; word-break: break-all; text-align: left; }
 .gc-integration-body { padding: 4px 12px 12px 38px; border-top: 1px solid var(--vscode-input-border, rgba(128,128,128,0.25)); }
 .gc-integration-body > .gc-row-desc { margin: 6px 0; }
 .gc-accounts { max-width: 100%; margin-top: 6px; }
