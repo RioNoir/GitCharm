@@ -2,7 +2,7 @@
 
 All notable changes to GitCharm are documented in this file.
 
-## Unreleased
+## v0.10.0
 
 ### ✨ New Features
 - **MCP server for coding agents** (off by default): Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop and GitHub Copilot's agent mode can use GitCharm's Git, pull request and issue tools on the repositories open in VS Code — status, history, diffs, branches, commits with the active Git profile, push and pull, squashing and dropping commits, and listing, reading, creating, commenting and merging pull requests through the connected forge accounts. Turn it on and install it in the agents from the new **MCP Server** page of GitCharm's settings, or with **GitCharm: Install MCP Server in Agents…**: the agent runs it with VS Code's own Node runtime, nothing else to install. It listens on this machine only, with a token, and risky actions ask for confirmation in VS Code (`gitcharm.mcp.confirmation`)
@@ -18,6 +18,7 @@ All notable changes to GitCharm are documented in this file.
 
 ### 🔧 Other
 - Dependencies updated to fix security advisories: DOMPurify, which sanitizes the Markdown shown in the panels, to 3.4.17 (critical advisories), and in the development tooling glob, minimatch, markdown-it, ip-address and the Azure identity libraries used by vsce; glob and minimatch are pinned to their fixed releases with npm overrides
+- Acceptance tests against real git (squash and drop, branch cleanup after a merge, the MCP server and its installers), run with `npm test` — see CONTRIBUTING
 
 ## v0.8.3
 
