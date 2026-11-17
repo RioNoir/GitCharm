@@ -2247,7 +2247,7 @@
   "dependencies": {
     "@simple-git/argv-parser": "^2.0.1",
     "@tiptap/extension-link": "^3.31.3",
-    "@tiptap/extension-mention": "^3.31.3",
+    "@tiptap/extension-mention": "^3.34.0",
     "@tiptap/extension-placeholder": "^3.31.3",
     "@tiptap/extension-table": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
