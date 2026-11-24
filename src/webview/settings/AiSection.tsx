@@ -26,6 +26,7 @@ interface ProviderDef {
 
 const PROVIDERS: ProviderDef[] = [
   { id: 'vscode-lm', label: 'VS Code LM', modelKey: 'ai.modelId', canList: true },
+  { id: 'cursor', label: 'Cursor', modelKey: 'ai.cursorModel', pathKey: 'ai.cursorPath', canList: true, modelPlaceholder: 'composer-2.5, gpt-5.2…' },
   { id: 'claude-api', label: 'Claude API', secret: 'claude', secretLabel: 'Anthropic', modelKey: 'ai.claudeModel', defaultModel: 'claude-sonnet-4-6', canList: true },
   { id: 'openai-api', label: 'OpenAI API', secret: 'openai', secretLabel: 'OpenAI', modelKey: 'ai.openaiModel', defaultModel: 'gpt-4o', canList: true },
   { id: 'gemini-api', label: 'Gemini API', secret: 'gemini', secretLabel: 'Gemini', modelKey: 'ai.geminiModel', defaultModel: 'gemini-2.0-flash', canList: true },

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { listCursorModels } from './aiGenerate';
 import { getAiApiKey } from './aiSecrets';
 
 export interface AiModelOption {
@@ -17,6 +18,9 @@ const LIST_TIMEOUT_MS = 10_000;
  */
 export async function listAiModels(provider: string, cfg: vscode.WorkspaceConfiguration): Promise<AiModelOption[]> {
   switch (provider) {
+    case 'cursor':
+      return listCursorModels(cfg.get<string>('ai.cursorPath', 'agent'));
+
     case 'vscode-lm': {
       const models = await vscode.lm.selectChatModels();
       // Several models can share a family (e.g. per-region endpoints); the setting stores vendor:family.

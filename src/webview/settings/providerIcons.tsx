@@ -33,6 +33,7 @@ function Mark({ name, cli }: { name: keyof typeof MARKS; cli?: boolean }) {
 export function aiProviderIcon(provider: string): React.ReactNode {
   switch (provider) {
     case 'vscode-lm': return <span className="gc-ai-icon"><Codicon name="copilot" style={{ fontSize: 18 }} /></span>;
+    case 'cursor': return <span className="gc-ai-icon"><Codicon name="sparkle" style={{ fontSize: 18 }} /></span>;
     case 'claude-api': return <Mark name="claude" />;
     case 'claude-cli': return <Mark name="claude" cli />;
     case 'openai-api': return <Mark name="openai" />;

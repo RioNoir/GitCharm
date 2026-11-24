@@ -39,6 +39,10 @@ export function getAiModelLabel(config: vscode.WorkspaceConfiguration, operation
       const model: string = cfg.get('ai.lmStudioModel', '');
       return model ? `lmstudio · ${model}` : 'lmstudio';
     }
+    case 'cursor': {
+      const model: string = cfg.get('ai.cursorModel', '');
+      return model ? `cursor · ${model}` : 'cursor';
+    }
     default: {
       const modelId: string = cfg.get('ai.modelId', '');
       return modelId ? modelId.replace('copilot:', '') : 'copilot';

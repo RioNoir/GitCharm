@@ -116,7 +116,7 @@ export function getCategories(): CategoryDef[] {
       description: l10n.t('Pick the model that writes commit messages and pull requests, explains changes, and works on issues.'),
       keys: [
         'ai.enabled', 'ai.provider', 'ai.modelId', 'ai.claudeModel', 'ai.claudePath', 'ai.openaiModel', 'ai.geminiModel',
-        'ai.geminiPath', 'ai.codexModel', 'ai.codexPath', 'ai.ollamaModel', 'ai.ollamaUrl', 'ai.lmStudioModel', 'ai.lmStudioUrl',
+        'ai.geminiPath', 'ai.codexModel', 'ai.codexPath', 'ai.cursorModel', 'ai.cursorPath', 'ai.ollamaModel', 'ai.ollamaUrl', 'ai.lmStudioModel', 'ai.lmStudioUrl',
         'ai.language', 'ai.maxDiffChars', 'ai.operationModels', 'ai.offerConflictResolution',
       ],
     },
@@ -232,11 +232,13 @@ export function settingLabel(key: string): string {
     case 'ai.openaiModel':
     case 'ai.geminiModel':
     case 'ai.codexModel':
+    case 'ai.cursorModel':
     case 'ai.ollamaModel':
     case 'ai.lmStudioModel': return l10n.t('Model');
     case 'ai.claudePath':
     case 'ai.geminiPath':
-    case 'ai.codexPath': return l10n.t('Executable path');
+    case 'ai.codexPath':
+    case 'ai.cursorPath': return l10n.t('Executable path');
     case 'ai.ollamaUrl':
     case 'ai.lmStudioUrl': return l10n.t('Server URL');
     case 'ai.maxDiffChars': return l10n.t('Maximum diff size');
@@ -321,6 +323,7 @@ export function enumLabel(key: string, value: string): string {
     case 'pullRequests.defaultCheckoutAction=pr': return 'Checkout Pull Request';
     case 'pullRequests.defaultCheckoutAction=branch': return 'Checkout Branch';
     case 'ai.provider=vscode-lm': return 'VS Code LM';
+    case 'ai.provider=cursor': return 'Cursor';
     case 'ai.provider=claude-api': return 'Claude API';
     case 'ai.provider=openai-api': return 'OpenAI API';
     case 'ai.provider=gemini-api': return 'Gemini API';

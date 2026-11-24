@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
+import * as os from 'os';
 import { getAiApiKey } from './aiSecrets';
 import { aiConfigFor } from './aiOperations';
 import type { AiOperation } from '../types/aiOperations';
@@ -78,6 +79,7 @@ function providerLabel(provider: string): string {
     case 'ollama': return 'Ollama';
     case 'lmstudio': return 'LM Studio';
     case 'vscode-lm': return 'VS Code LM';
+    case 'cursor': return 'Cursor';
     default: return 'CLI';
   }
 }
@@ -235,6 +237,9 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
         { model: model || undefined, messages: [{ role: 'user', content: prompt }] }, progress, options.signal);
     }
 
+    case 'cursor':
+      return generateWithCursor(cfg, prompt, progress, options);
+
     case 'vscode-lm':
     default: {
       let model: vscode.LanguageModelChat | undefined;
@@ -249,7 +254,10 @@ async function generateRaw(provider: string, prompt: string, cfg: vscode.Workspa
         const all = await vscode.lm.selectChatModels();
         model = all[0];
       }
-      if (!model) throw new Error(vscode.l10n.t('No VS Code LM model available. Install GitHub Copilot or use the "GitCharm: Select AI Model" command to switch provider.'));
+      // The Language Model API is the same in every VS Code host. Stock VS Code only has models when
+      // Copilot (or another extension) registers them; Cursor, VSCodium and other forks usually register none.
+      // Which editor this is does not matter: an installed local agent answers instead.
+      if (!model) return generateWithLocalAgent(cfg, prompt, progress, options);
       const cancellation = new vscode.CancellationTokenSource();
       options.signal?.addEventListener('abort', () => cancellation.cancel());
       const response = await model.sendRequest(
@@ -410,6 +418,88 @@ function spawnCli(bin: string, args: string[], input: string, env: NodeJS.Proces
     child.stdin.on('error', () => { /* the CLI may exit before reading stdin — its exit code tells the story */ });
     child.stdin.end(input);
   });
+}
+
+const CURSOR_TIMEOUT_MS = 120_000;
+
+/**
+ * Tried, in order, when this editor has no registered language model. Each one only prints an answer.
+ * Codex is absent on purpose: `codex exec` can edit the repository. The first CLI that exists is used,
+ * in VS Code, Cursor, VSCodium or any other host.
+ */
+const LOCAL_AGENT_FALLBACKS = ['cursor', 'claude-cli', 'gemini-cli'] as const;
+
+async function generateWithLocalAgent(cfg: vscode.WorkspaceConfiguration, prompt: string, progress: Progress, options: GenerateOptions): Promise<string> {
+  for (const provider of LOCAL_AGENT_FALLBACKS) {
+    try {
+      return await generateRaw(provider, prompt, cfg, progress, options);
+    } catch (err) {
+      if (!cliMissing(err)) throw err;
+    }
+  }
+  throw new Error(vscode.l10n.t('No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the "GitCharm: Select AI Model" command to switch provider.'));
+}
+
+function cliMissing(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+function missingCursorAgent(err: unknown): boolean {
+  return cliMissing(err);
+}
+
+/** Keeps `ENOENT`, so a missing binary can fall through to the next local agent. */
+function missingCliError(message: string): Error {
+  const wrapped = new Error(message) as NodeJS.ErrnoException;
+  wrapped.code = 'ENOENT';
+  return wrapped;
+}
+
+/**
+ * One answer from the Cursor Agent CLI, in ask mode so it cannot edit the workspace. The prompt is the whole
+ * request (instructions plus the diff); an empty model lets Cursor pick its auto model.
+ */
+async function generateWithCursor(cfg: vscode.WorkspaceConfiguration, prompt: string, progress: Progress, options: GenerateOptions): Promise<string> {
+  const model: string = cfg.get('ai.cursorModel', '');
+  const args = [
+    '--print', '--mode', 'ask', '--trust', '--output-format', 'text',
+    ...(model && model !== 'auto' ? ['--model', model] : []),
+    prompt,
+  ];
+  let output: string;
+  try {
+    output = await runCli(cfg.get('ai.cursorPath', 'agent'), args, '', {
+      cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.tmpdir(),
+      timeoutMs: Math.max(options.timeoutMs ?? 0, CURSOR_TIMEOUT_MS),
+      signal: options.signal,
+    });
+  } catch (err) {
+    if (missingCursorAgent(err)) throw missingCliError(vscode.l10n.t('Cursor Agent CLI was not found. Install it from Cursor, or set gitcharm.ai.cursorPath.'));
+    throw err;
+  }
+  // eslint-disable-next-line no-control-regex
+  const text = output.replace(/\u001b\[[0-9;]*m/g, '').trim();
+  progress(text);
+  return text;
+}
+
+/** Models `agent --list-models` prints, as `id - label`. `auto` is stored as an empty id (the CLI default). */
+export async function listCursorModels(bin: string): Promise<Array<{ id: string; label: string; detail?: string }>> {
+  let output: string;
+  try {
+    output = await runCli(bin || 'agent', ['--list-models'], '', { timeoutMs: 20_000 });
+  } catch (err) {
+    if (missingCursorAgent(err)) throw missingCliError(vscode.l10n.t('Cursor Agent CLI was not found. Install it from Cursor, or set gitcharm.ai.cursorPath.'));
+    throw err;
+  }
+  const models: Array<{ id: string; label: string; detail?: string }> = [];
+  for (const line of output.split('\n')) {
+    const match = /^(\S+)\s+-\s+(.+?)\s*$/.exec(line.trim());
+    if (!match) continue;
+    const [, id, label] = match;
+    models.push(id === 'auto' ? { id: '', label, detail: 'auto' } : { id, label, detail: id });
+  }
+  return models;
 }
 
 // ─── Agent mode ──────────────────────────────────────────────────────────────

@@ -1763,7 +1763,8 @@
               "codex-cli",
               "gemini-cli",
               "ollama",
-              "lmstudio"
+              "lmstudio",
+              "cursor"
             ],
             "enumDescriptions": [
               "%config.ai.provider.enum.vscode-lm%",
@@ -1774,7 +1775,8 @@
               "%config.ai.provider.enum.codex-cli%",
               "%config.ai.provider.enum.gemini-cli%",
               "%config.ai.provider.enum.ollama%",
-              "%config.ai.provider.enum.lmstudio%"
+              "%config.ai.provider.enum.lmstudio%",
+              "%config.ai.provider.enum.cursor%"
             ],
             "default": "vscode-lm",
             "description": "%config.ai.provider.description%"
@@ -1798,7 +1800,8 @@
                       "codex-cli",
                       "gemini-cli",
                       "ollama",
-                      "lmstudio"
+                      "lmstudio",
+                      "cursor"
                     ]
                   },
                   "model": {
@@ -1823,7 +1826,8 @@
                       "codex-cli",
                       "gemini-cli",
                       "ollama",
-                      "lmstudio"
+                      "lmstudio",
+                      "cursor"
                     ]
                   },
                   "model": {
@@ -1848,7 +1852,8 @@
                       "codex-cli",
                       "gemini-cli",
                       "ollama",
-                      "lmstudio"
+                      "lmstudio",
+                      "cursor"
                     ]
                   },
                   "model": {
@@ -1873,7 +1878,8 @@
                       "codex-cli",
                       "gemini-cli",
                       "ollama",
-                      "lmstudio"
+                      "lmstudio",
+                      "cursor"
                     ]
                   },
                   "model": {
@@ -1898,7 +1904,8 @@
                       "codex-cli",
                       "gemini-cli",
                       "ollama",
-                      "lmstudio"
+                      "lmstudio",
+                      "cursor"
                     ]
                   },
                   "model": {
@@ -1981,6 +1988,18 @@
             "type": "string",
             "default": "codex",
             "description": "%config.ai.codexPath.description%"
+          },
+          "gitcharm.ai.cursorModel": {
+            "order": 11,
+            "type": "string",
+            "default": "",
+            "description": "%config.ai.cursorModel.description%"
+          },
+          "gitcharm.ai.cursorPath": {
+            "order": 12,
+            "type": "string",
+            "default": "agent",
+            "description": "%config.ai.cursorPath.description%"
           },
           "gitcharm.ai.lmStudioModel": {
             "order": 7,
