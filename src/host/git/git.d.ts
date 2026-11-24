@@ -318,7 +318,8 @@ export interface Repository {
 	commit(message: string, opts?: CommitOptions): Promise<void>;
 	merge(ref: string): Promise<void>;
 	mergeAbort(): Promise<void>;
-	rebase(branch: string): Promise<void>;
+	// Optional: Cursor's git extension API does not expose rebase (issue #141).
+	rebase?(branch: string): Promise<void>;
 
 	createStash(options?: { message?: string; includeUntracked?: boolean; staged?: boolean }): Promise<void>;
 	applyStash(index?: number): Promise<void>;

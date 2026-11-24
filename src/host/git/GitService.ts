@@ -1874,8 +1874,12 @@ export class GitService {
     if (vsRepo) {
       if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       const upstream = vsRepo.state.HEAD.upstream;
+      const onto = `${upstream.remote}/${upstream.name}`;
+      // Fetch through the git extension so credentials stay with VS Code. Rebase is local;
+      // Cursor's API repository has no rebase (issue #141), so that step falls back to git.
       await vsRepo.fetch();
-      await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
+      if (typeof vsRepo.rebase === 'function') await vsRepo.rebase(onto);
+      else await this.git.rebase([onto]);
       return vscode.l10n.t('pulled (rebase)');
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
@@ -1994,7 +1998,8 @@ export class GitService {
 
   async rebase(onto: string): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.rebase(onto); return; }
+    // Same gap as pullRebase: the API object can exist without a rebase method.
+    if (vsRepo && typeof vsRepo.rebase === 'function') { await vsRepo.rebase(onto); return; }
     await this.git.rebase([onto]);
   }
 

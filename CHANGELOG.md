@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## Unreleased
+
+### 🐛 Bug Fixes
+- Rebase works in editors whose Git API does not expose `rebase`, such as Cursor: **Update Project** with rebase, **Rebase onto…** and the Log Panel's rebase no longer fail with "rebase is not a function". The fetch still uses the editor's credentials; the rebase itself runs through git, closes [#141](https://github.com/RioNoir/GitCharm/issues/141)
+
 ## v0.10.0
 
 ### ✨ New Features
