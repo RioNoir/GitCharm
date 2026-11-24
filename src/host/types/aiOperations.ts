@@ -13,12 +13,13 @@ export interface AiOperationTarget {
 }
 
 export const AI_PROVIDERS: readonly string[] = [
-  'vscode-lm', 'claude-api', 'openai-api', 'gemini-api', 'claude-cli', 'codex-cli', 'gemini-cli', 'ollama', 'lmstudio',
+  'vscode-lm', 'cursor', 'claude-api', 'openai-api', 'gemini-api', 'claude-cli', 'codex-cli', 'gemini-cli', 'ollama', 'lmstudio',
 ];
 
 /** The setting holding each provider's model. Claude and Gemini share theirs between API and CLI. */
 export const AI_MODEL_SETTING: Record<string, string> = {
   'vscode-lm': 'ai.modelId',
+  cursor: 'ai.cursorModel',
   'claude-api': 'ai.claudeModel',
   'claude-cli': 'ai.claudeModel',
   'openai-api': 'ai.openaiModel',

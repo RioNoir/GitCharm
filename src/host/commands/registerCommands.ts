@@ -14,6 +14,7 @@ import { hasConflictMarkers } from '../git/ConflictParser';
 import { logInfo, logWarn, notifyWithLogAction, showLogChannel } from '../utils/Logger';
 import { plural } from '../utils/plural';
 import type { IntegrationsService } from '../integrations/IntegrationsService';
+import { listAiModels } from '../ai/aiModels';
 import { presentOrphanBranches } from '../utils/orphanBranches';
 import type { BranchInfo } from '../types/git';
 
@@ -431,6 +432,7 @@ export function registerCommands(
       const OPEN_SETTINGS_ID = '__open_settings__';
       const providerItems: ProviderItem[] = [
         { label: '$(copilot) VS Code LM', description: vscode.l10n.t('GitHub Copilot or any registered LM extension'), providerId: 'vscode-lm' },
+        { label: '$(sparkle) Cursor', description: vscode.l10n.t('Cursor account, via the {0} CLI', 'agent'), providerId: 'cursor' },
         { label: '$(cloud) Claude API', description: vscode.l10n.t('{0}  (requires API key)', 'Anthropic API'), providerId: 'claude-api' },
         { label: '$(cloud) OpenAI API', description: vscode.l10n.t('{0}  (requires API key)', 'OpenAI API'), providerId: 'openai-api' },
         { label: '$(cloud) Gemini API', description: vscode.l10n.t('{0}  (requires API key)', 'Google Gemini API'), providerId: 'gemini-api' },
@@ -486,6 +488,39 @@ export function registerCommands(
         if (!pickedModel) return;
         await config.update('ai.modelId', pickedModel.modelId, vscode.ConfigurationTarget.Global);
         vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'VS Code LM', pickedModel.modelId || vscode.l10n.t('Auto')));
+
+      } else if (pickedProvider.providerId === 'cursor') {
+        const currentModel: string = config.get('ai.cursorModel', '');
+        let chosen = currentModel;
+        try {
+          const models = await listAiModels('cursor', config);
+          type CursorItem = vscode.QuickPickItem & { modelId: string };
+          const items: CursorItem[] = models.map(m => ({
+            label: m.label,
+            description: `${m.detail ?? ''}${m.id === currentModel ? `  $(check) ${vscode.l10n.t({ message: 'current', comment: ['Marks the currently selected AI model in a quick pick'] })}` : ''}`.trim(),
+            modelId: m.id,
+          }));
+          const picked = await vscode.window.showQuickPick(items, {
+            title: vscode.l10n.t('Select Cursor Model'),
+            placeHolder: vscode.l10n.t('Pick a model…'),
+          });
+          if (!picked) return;
+          chosen = picked.modelId;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          vscode.window.showWarningMessage(message);
+          logWarn('selectAiModel:cursor', message);
+          const input = await vscode.window.showInputBox({
+            title: vscode.l10n.t('Cursor Model'),
+            prompt: vscode.l10n.t('Enter the Cursor model id'),
+            value: currentModel,
+            placeHolder: vscode.l10n.t('e.g. {0}', 'composer-2.5, gpt-5.2'),
+          });
+          if (input === undefined) return;
+          chosen = input.trim();
+        }
+        await config.update('ai.cursorModel', chosen, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(vscode.l10n.t('AI: {0} — {1}', 'Cursor', chosen || vscode.l10n.t('Auto')));
 
       } else if (pickedProvider.providerId === 'ollama') {
         const ollamaUrl: string = config.get('ai.ollamaUrl', 'http://localhost:11434');

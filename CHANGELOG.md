@@ -2,6 +2,11 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## Unreleased
+
+### 🐛 Bug Fixes
+- AI features work in every VS Code host, not only where a language model is registered. VS Code with Copilot is unchanged. Cursor, VSCodium and other forks that register no model no longer stop with "No VS Code LM model available": the first installed text-only local agent answers (Cursor Agent in read-only ask mode, then Claude Code, then the Gemini CLI). Choose the provider with **GitCharm: Select AI Model** to pin one
+
 ## v0.10.0
 
 ### ✨ New Features

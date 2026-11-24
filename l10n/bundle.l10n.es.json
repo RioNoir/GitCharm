@@ -1457,7 +1457,6 @@
   "{0} returned an empty response": "{0} devolvió una respuesta vacía",
   "New Issue — {0}": "Nueva issue — {0}",
   "Issue #{0} was created, but: {1}": "La issue #{0} se creó, pero: {1}",
-  "No VS Code LM model available. Install GitHub Copilot or use the \"GitCharm: Select AI Model\" command to switch provider.": "No hay ningún modelo de VS Code LM disponible. Instala GitHub Copilot o usa el comando \"GitCharm: Seleccionar modelo de IA\" para cambiar de proveedor.",
   "Cancelled": "Cancelado",
   "Edit description": "Editar descripción",
   "Saving…": "Guardando…",
@@ -1959,5 +1958,11 @@
   "Token validation failed: the token was not accepted.": "Error al validar el token: el token no fue aceptado.",
   "Default Microsoft account": "Cuenta de Microsoft predeterminada",
   "{0} (token)": "{0} (token)",
-  "Enter the organization.": "Introduce la organización."
+  "Enter the organization.": "Introduce la organización.",
+  "Cursor account, via the {0} CLI": "Cuenta de Cursor, mediante la CLI {0}",
+  "Select Cursor Model": "Seleccionar modelo de Cursor",
+  "Cursor Model": "Modelo de Cursor",
+  "Enter the Cursor model id": "Introduce el id del modelo de Cursor",
+  "Cursor Agent CLI was not found. Install it from Cursor, or set gitcharm.ai.cursorPath.": "No se encontró la CLI de Cursor Agent. Instálala desde Cursor o configura gitcharm.ai.cursorPath.",
+  "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "No hay ningún modelo de lenguaje disponible en este editor. Instala GitHub Copilot u otra extensión de modelos de lenguaje, instala un agente local (Cursor, Claude Code o Gemini CLI), o usa el comando \"GitCharm: Seleccionar modelo de IA\" para cambiar de proveedor."
 }
