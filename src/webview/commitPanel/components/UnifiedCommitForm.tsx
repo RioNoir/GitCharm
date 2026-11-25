@@ -9,6 +9,29 @@ import { shortcut } from '../../shared/shortcut';
 import { plural } from '../../shared/l10n';
 import { isImeComposing } from '../../shared/ime';
 
+const MESSAGE_HEIGHT_KEY = 'gitcharm:commitMessageHeight';
+const MIN_MESSAGE_HEIGHT = 52;
+
+function maxMessageHeight(): number {
+  return Math.max(MIN_MESSAGE_HEIGHT, Math.floor(window.innerHeight * 0.7));
+}
+
+function clampMessageHeight(height: number): number {
+  return Math.min(maxMessageHeight(), Math.max(MIN_MESSAGE_HEIGHT, Math.round(height)));
+}
+
+/** A height the user dragged to, or null while the box still grows with the text. */
+function loadMessageHeight(): number | null {
+  try {
+    const raw = localStorage.getItem(MESSAGE_HEIGHT_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? clampMessageHeight(n) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface Props {
   message: string;
   repoStatuses: RepoStatus[];
@@ -292,6 +315,7 @@ export function UnifiedCommitForm({
   const amend = amendFlags[amendRepoId ?? ''] ?? false;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [messageHeight, setMessageHeight] = useState<number | null>(loadMessageHeight);
   /** Where the cursor was when the message box last had focus — a button click takes the focus away before inserting. */
   const lastCaretRef = useRef<{ start: number; end: number } | null>(null);
   const rememberCaret = () => {
@@ -337,7 +361,8 @@ export function UnifiedCommitForm({
       const s = document.createElement('style');
       s.id = id;
       s.textContent = `.gs-ctx-item:hover { background: var(--vscode-menu-selectionBackground) !important; color: var(--vscode-menu-selectionForeground) !important; }
-[data-autopilot-btn]:not([disabled]):hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; border-radius: 3px; }`;
+[data-autopilot-btn]:not([disabled]):hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; border-radius: 3px; }
+.gs-message-resize:hover .gs-message-resize-grip, .gs-message-resize:active .gs-message-resize-grip { background: var(--vscode-focusBorder); }`;
       document.head.appendChild(s);
     }
   }, []);
@@ -390,9 +415,9 @@ export function UnifiedCommitForm({
 
   const resizeTextarea = () => {
     const el = textareaRef.current;
-    if (!el) return;
+    if (!el || messageHeight != null) return;
     el.style.height = 'auto';
-    const maxHeight = Math.floor(window.innerHeight / 2);
+    const maxHeight = maxMessageHeight();
     if (el.scrollHeight > maxHeight) {
       el.style.height = `${maxHeight}px`;
       el.style.overflow = 'auto';
@@ -402,12 +427,48 @@ export function UnifiedCommitForm({
     }
   };
 
-  useEffect(() => { resizeTextarea(); }, [message]);
+  useEffect(() => { resizeTextarea(); }, [message, messageHeight]);
 
   useEffect(() => {
-    window.addEventListener('resize', resizeTextarea);
-    return () => window.removeEventListener('resize', resizeTextarea);
-  }, []);
+    const onResize = () => {
+      if (messageHeight == null) { resizeTextarea(); return; }
+      const clamped = clampMessageHeight(messageHeight);
+      if (clamped !== messageHeight) setMessageHeight(clamped);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [messageHeight]);
+
+  const onResizeMessage = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = textareaRef.current;
+    if (!el) return;
+    const startY = e.clientY;
+    const startHeight = el.offsetHeight;
+    const onMove = (ev: MouseEvent) => {
+      const next = clampMessageHeight(startHeight + (startY - ev.clientY));
+      setMessageHeight(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const height = textareaRef.current?.offsetHeight;
+      if (height) {
+        try { localStorage.setItem(MESSAGE_HEIGHT_KEY, String(clampMessageHeight(height))); } catch { /* private mode */ }
+      }
+    };
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const resetMessageHeight = () => {
+    setMessageHeight(null);
+    try { localStorage.removeItem(MESSAGE_HEIGHT_KEY); } catch { /* private mode */ }
+  };
 
   useEffect(() => {
     const id = 'gs-textarea-pulse-kf';
@@ -517,12 +578,25 @@ export function UnifiedCommitForm({
         </div>
       )}
 
-      {/* Message textarea — auto-height */}
+      {/* Message textarea. It grows with the text until the grip above it is dragged. */}
+      <div>
+        <div
+          className="gs-message-resize"
+          style={styles.resizeHandle}
+          onMouseDown={onResizeMessage}
+          onDoubleClick={resetMessageHeight}
+          title={l10n.t('Drag to resize the commit message. Double-click to fit the text.')}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={l10n.t('Resize commit message')}
+        >
+          <span className="gs-message-resize-grip" style={styles.resizeGrip} />
+        </div>
       <div style={styles.textareaWrap}>
         <textarea
           ref={textareaRef}
           className="gs-commit-textarea"
-          style={styles.textarea(generatingMessage, textareaFocused)}
+          style={styles.textarea(generatingMessage, textareaFocused, messageHeight)}
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => setTextareaFocused(true)}
@@ -552,6 +626,7 @@ export function UnifiedCommitForm({
             <Codicon name={generatingMessage ? 'loading~spin' : 'sparkle'} style={{ fontSize: '16px' }} />
           </button>
         )}
+      </div>
       </div>
       {(() => {
         const subjectLength = [...message.split('\n')[0]].length;
@@ -754,14 +829,30 @@ const styles = {
     width: '12px',
     height: '12px',
   }),
+  resizeHandle: {
+    height: '8px',
+    margin: '-4px 0 0',
+    cursor: 'ns-resize',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  resizeGrip: {
+    width: '28px',
+    height: '2px',
+    borderRadius: '1px',
+    background: 'var(--vscode-scrollbarSlider-background, rgba(128,128,128,0.45))',
+  } as React.CSSProperties,
   textareaWrap: {
     position: 'relative' as const,
   },
-  textarea: (generating: boolean, focused: boolean): React.CSSProperties => ({
+  textarea: (generating: boolean, focused: boolean, height: number | null): React.CSSProperties => ({
     width: '100%',
     resize: 'none' as const,
-    overflow: 'hidden',   // overridden dynamically by resizeTextarea
-    minHeight: '52px',
+    overflow: height != null ? 'auto' : 'hidden',
+    minHeight: `${MIN_MESSAGE_HEIGHT}px`,
+    ...(height != null ? { height: `${height}px` } : {}),
     background: 'var(--vscode-input-background)',
     color: 'var(--vscode-input-foreground)',
     border: generating

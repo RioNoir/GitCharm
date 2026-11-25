@@ -1280,32 +1280,38 @@
             "default": true,
             "description": "%config.showUncommittedChangesInLog.description%"
           },
-          "gitcharm.gitLog.showAuthor": {
+          "gitcharm.gitLog.showGraph": {
             "order": 82,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.gitLog.showGraph.description%"
+          },
+          "gitcharm.gitLog.showAuthor": {
+            "order": 83,
             "type": "boolean",
             "default": true,
             "description": "%config.gitLog.showAuthor.description%"
           },
           "gitcharm.gitLog.showAuthorAvatar": {
-            "order": 83,
+            "order": 84,
             "type": "boolean",
             "default": true,
             "description": "%config.gitLog.showAuthorAvatar.description%"
           },
           "gitcharm.gitLog.showDate": {
-            "order": 84,
+            "order": 85,
             "type": "boolean",
             "default": true,
             "description": "%config.gitLog.showDate.description%"
           },
           "gitcharm.gitLog.showHash": {
-            "order": 85,
+            "order": 86,
             "type": "boolean",
             "default": true,
             "description": "%config.gitLog.showHash.description%"
           },
           "gitcharm.gitLog.showInlineBranches": {
-            "order": 86,
+            "order": 87,
             "type": "boolean",
             "default": true,
             "description": "%config.gitLog.showInlineBranches.description%"

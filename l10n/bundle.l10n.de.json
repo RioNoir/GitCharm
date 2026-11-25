@@ -1964,5 +1964,8 @@
   "Cursor Model": "Cursor-Modell",
   "Enter the Cursor model id": "Cursor-Modell-ID eingeben",
   "Cursor Agent CLI was not found. Install it from Cursor, or set gitcharm.ai.cursorPath.": "Die Cursor-Agent-CLI wurde nicht gefunden. Installiere sie über Cursor oder setze gitcharm.ai.cursorPath.",
-  "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "In diesem Editor ist kein Sprachmodell verfügbar. Installiere GitHub Copilot oder eine andere Sprachmodell-Erweiterung, installiere einen lokalen Agenten (Cursor, Claude Code oder Gemini CLI), oder wechsle den Anbieter mit dem Befehl „GitCharm: KI-Modell auswählen“."
+  "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "In diesem Editor ist kein Sprachmodell verfügbar. Installiere GitHub Copilot oder eine andere Sprachmodell-Erweiterung, installiere einen lokalen Agenten (Cursor, Claude Code oder Gemini CLI), oder wechsle den Anbieter mit dem Befehl „GitCharm: KI-Modell auswählen“.",
+  "Show commit graph": "Commit-Graph anzeigen",
+  "Drag to resize the commit message. Double-click to fit the text.": "Ziehen, um die Commit-Nachricht in der Höhe zu ändern. Doppelklick passt sie wieder an den Text an.",
+  "Resize commit message": "Höhe der Commit-Nachricht ändern"
 }

@@ -296,7 +296,8 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
 
 interface SectionHeaderProps {
   title: string;
-  icon: string;
+  /** Omitted for the Changes section: the title already says what it is. */
+  icon?: string;
   /** Omitted for a section with nothing to count (e.g. "Unchanged"). */
   count?: number;
   collapsed: boolean;
@@ -326,7 +327,7 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
     >
       <div style={sectionHeaderMainStyle} onClick={onToggle}>
         <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />
-        <Codicon name={icon} style={{ fontSize: '13px', opacity: 0.8, flexShrink: 0 }} />
+        {icon && <Codicon name={icon} style={{ fontSize: '12px', opacity: 0.85, flexShrink: 0 }} />}
         <span style={sectionTitleStyle}>{title}</span>
       </div>
       {/* Right side always rendered to avoid layout shift */}
@@ -482,7 +483,6 @@ export function VscodeView({
       {/* ── Changes ── */}
       <SectionHeader
         title={l10n.t('Changes')}
-        icon="circle-large-outline"
         count={totalUnstaged}
         collapsed={unstagedCollapsed}
         onToggle={() => toggleCollapsed(UNSTAGED_COLLAPSE_KEY)}

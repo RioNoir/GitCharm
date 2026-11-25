@@ -85,6 +85,7 @@
   "config.section.basicSettings.title": "基本設定",
   "config.graphMaxCommits.description": "記錄面板圖形中載入的提交數上限。載入達到此數量後，捲動將不再載入更多。",
   "config.showUncommittedChangesInLog.description": "在 記錄面板圖形頂端顯示一列未提交的變更（已暫存、未暫存和未追蹤的檔案）",
+  "config.gitLog.showGraph.description": "在記錄面板的提交清單中顯示提交圖，即連接各提交的彩色線條和圓點。",
   "config.gitLog.showAuthor.description": "在 記錄面板 提交清單的每一列顯示作者名稱（清單夠寬時）。",
   "config.gitLog.showAuthorAvatar.description": "在 記錄面板 提交清單的每一列顯示作者頭像。",
   "config.gitLog.showDate.description": "在 記錄面板 提交清單的每一列顯示提交日期。",

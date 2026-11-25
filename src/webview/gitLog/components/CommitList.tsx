@@ -64,7 +64,7 @@ interface RepoBlock {
   rowCount: number;
 }
 
-const ALL_COLUMNS: LogColumns = { author: true, avatar: true, date: true, hash: true, refs: true };
+const ALL_COLUMNS: LogColumns = { graph: true, author: true, avatar: true, date: true, hash: true, refs: true };
 
 const REPO_LABEL_WIDTH = 6;
 const REPO_LABEL_WIDTH_EXPANDED = 110;
@@ -197,10 +197,12 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
-  // doesn't cause the existing rows to shift right.
+  // doesn't cause the existing rows to shift right. Hidden, the list is a flat column of messages.
+  const showGraph = columns.graph !== false;
   const graphWidthRef = useRef(0);
-  const graphWidth = Math.max(graphWidthRef.current, layout.totalCols * LANE_WIDTH + 4);
-  graphWidthRef.current = graphWidth;
+  const nextGraphWidth = Math.max(graphWidthRef.current, layout.totalCols * LANE_WIDTH + 4);
+  if (showGraph) graphWidthRef.current = nextGraphWidth;
+  const graphWidth = showGraph ? nextGraphWidth : 0;
 
   const parentRef = useRef<HTMLDivElement>(null);
   // Start as true — skeleton is always shown until commits arrive (handles first load correctly)
@@ -665,13 +667,15 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
         })}
 
         {/* Graph overlay SVG — single SVG covering the entire virtual height */}
-        <GraphOverlay
-          segments={segments}
-          visibleRows={items}
-          totalHeight={virtualizer.getTotalSize()}
-          graphWidth={graphWidth}
-          offsetX={labelColWidth}
-        />
+        {showGraph && (
+          <GraphOverlay
+            segments={segments}
+            visibleRows={items}
+            totalHeight={virtualizer.getTotalSize()}
+            graphWidth={graphWidth}
+            offsetX={labelColWidth}
+          />
+        )}
 
         {/* Commit rows (virtual) */}
         {items.map((vrow) => {
@@ -684,7 +688,9 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
           const rawTextStart = rowMaxX + LANE_WIDTH / 2 + 10;
           // Snap to the nearest LANE_WIDTH boundary so adjacent rows with near-identical
           // graph widths align rather than showing a few-pixel stagger.
-          const textStart = Math.ceil(rawTextStart / LANE_WIDTH) * LANE_WIDTH + labelColWidth;
+          const textStart = showGraph
+            ? Math.ceil(rawTextStart / LANE_WIDTH) * LANE_WIDTH + labelColWidth
+            : labelColWidth + 8;
 
           return (
             <div
@@ -800,12 +806,14 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
                 setContextMenu({ commit, x: e.clientX, y: e.clientY, multiSelected });
               }}
             >
-              <CommitDot
-                commit={commit}
-                isSelected={isSelected}
-                graphWidth={graphWidth}
-                offsetX={labelColWidth}
-              />
+              {showGraph && (
+                <CommitDot
+                  commit={commit}
+                  isSelected={isSelected}
+                  graphWidth={graphWidth}
+                  offsetX={labelColWidth}
+                />
+              )}
 
               {columns.refs && commit.refs.length > 0 && (() => {
                 const allGroups = mergeLocalRemote(groupRefs(commit.refs));

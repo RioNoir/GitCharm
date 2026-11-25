@@ -55,7 +55,7 @@ function App() {
   const { panelRef: detailRef, onMouseDown: onDetailResize } = useResize('left', 380, 200);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
   const [layoutByLocation, setLayoutByLocation] = useState(initialLayout);
-  const [columns, setColumns] = useState<LogColumns>({ author: true, avatar: true, date: true, hash: true, refs: true });
+  const [columns, setColumns] = useState<LogColumns>({ graph: true, author: true, avatar: true, date: true, hash: true, refs: true });
   const [viewLocation, setViewLocation] = useState(detectViewLocation);
   const { filtersHidden, sidebarHidden } = layoutByLocation[viewLocation];
   const [themeVersion, setThemeVersion] = useState(0);

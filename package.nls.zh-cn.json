@@ -85,6 +85,7 @@
   "config.section.basicSettings.title": "基本设置",
   "config.graphMaxCommits.description": "日志面板图中加载的最大提交数。加载达到此数量后，滚动将不再加载更多。",
   "config.showUncommittedChangesInLog.description": "在 日志面板图顶部显示一行未提交的更改（已暂存、未暂存和未跟踪的文件）",
+  "config.gitLog.showGraph.description": "在日志面板的提交列表中显示提交图，即连接各提交的彩色线条和圆点。",
   "config.gitLog.showAuthor.description": "在 日志面板 提交列表的每一行显示作者姓名（列表足够宽时）。",
   "config.gitLog.showAuthorAvatar.description": "在 日志面板 提交列表的每一行显示作者头像。",
   "config.gitLog.showDate.description": "在 日志面板 提交列表的每一行显示提交日期。",

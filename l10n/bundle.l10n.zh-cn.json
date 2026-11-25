@@ -1964,5 +1964,8 @@
   "Cursor Model": "Cursor 模型",
   "Enter the Cursor model id": "输入 Cursor 模型 ID",
   "Cursor Agent CLI was not found. Install it from Cursor, or set gitcharm.ai.cursorPath.": "找不到 Cursor Agent 命令行。请从 Cursor 安装它，或设置 gitcharm.ai.cursorPath。",
-  "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "这个编辑器里没有可用的语言模型。请安装 GitHub Copilot 或其他语言模型扩展，或安装本地代理（Cursor、Claude Code 或 Gemini CLI），或使用“GitCharm: 选择 AI 模型”命令切换提供商。"
+  "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "这个编辑器里没有可用的语言模型。请安装 GitHub Copilot 或其他语言模型扩展，或安装本地代理（Cursor、Claude Code 或 Gemini CLI），或使用“GitCharm: 选择 AI 模型”命令切换提供商。",
+  "Show commit graph": "显示提交图",
+  "Drag to resize the commit message. Double-click to fit the text.": "拖动调整提交说明的高度。双击则按文字高度收放。",
+  "Resize commit message": "调整提交说明高度"
 }

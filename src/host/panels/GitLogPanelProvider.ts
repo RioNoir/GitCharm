@@ -139,6 +139,7 @@ const COMPARE_ACTIVE_CONTEXT: Record<ReplyTarget, string> = {
 function getLogColumns(): LogColumns {
   const cfg = vscode.workspace.getConfiguration('gitcharm.gitLog');
   return {
+    graph: cfg.get<boolean>('showGraph', true),
     author: cfg.get<boolean>('showAuthor', true),
     avatar: cfg.get<boolean>('showAuthorAvatar', true),
     date: cfg.get<boolean>('showDate', true),

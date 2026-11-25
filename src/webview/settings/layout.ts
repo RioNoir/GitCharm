@@ -95,7 +95,7 @@ export function getCategories(): CategoryDef[] {
       description: l10n.t('Where the Log Panel opens, its layout, and how much history it loads.'),
       keys: [
         'gitLogDefaultLocation', 'gitLogDefaultLayout', 'graphMaxCommits', 'showUncommittedChangesInLog',
-        'gitLog.showAuthor', 'gitLog.showAuthorAvatar', 'gitLog.showDate', 'gitLog.showHash', 'gitLog.showInlineBranches',
+        'gitLog.showGraph', 'gitLog.showAuthor', 'gitLog.showAuthorAvatar', 'gitLog.showDate', 'gitLog.showHash', 'gitLog.showInlineBranches',
       ],
     },
     {
@@ -210,6 +210,7 @@ export function settingLabel(key: string): string {
     case 'issues.branchNameTemplate': return l10n.t('Branch name for an issue');
     case 'issues.commitReferenceTemplate': return l10n.t('Issue reference in commit messages');
     case 'commitPanel.showActivityBarBadge': return l10n.t('Activity bar badge');
+    case 'gitLog.showGraph': return l10n.t('Show commit graph');
     case 'gitLog.showAuthor': return l10n.t('Show author');
     case 'gitLog.showAuthorAvatar': return l10n.t('Show author avatar');
     case 'gitLog.showDate': return l10n.t('Show date');

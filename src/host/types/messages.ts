@@ -372,8 +372,10 @@ export type LogViewLocation = 'panel' | 'sideBar';
 /** Global layout preferences, kept apart for each location. */
 export type LogLayoutByLocation = Record<LogViewLocation, LogLayoutPrefs>;
 
-/** What each row of the Log Panel's commit list shows besides the graph and the message (the `gitcharm.gitLog.show*` settings). */
+/** What each row of the Log Panel's commit list shows besides the message (the `gitcharm.gitLog.show*` settings). */
 export interface LogColumns {
+  /** The colored lines and dots that connect commits. */
+  graph: boolean;
   author: boolean;
   avatar: boolean;
   date: boolean;

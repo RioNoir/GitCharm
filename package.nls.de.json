@@ -85,6 +85,7 @@
   "config.section.basicSettings.title": "Grundeinstellungen",
   "config.graphMaxCommits.description": "Maximale Anzahl an Commits, die im Git-Log-Graph geladen werden. Ist diese Anzahl erreicht, werden beim Scrollen keine weiteren nachgeladen.",
   "config.showUncommittedChangesInLog.description": "Oben im Git-Log-Graph eine Zeile mit den nicht committeten Änderungen (gestagte, nicht gestagte und nicht verfolgte Dateien) anzeigen",
+  "config.gitLog.showGraph.description": "Den Commit-Graphen in der Commit-Liste des Log Panel anzeigen: die farbigen Linien und Punkte, die Commits verbinden.",
   "config.gitLog.showAuthor.description": "Den Namen des Autors in jeder Zeile der Commit-Liste des Log Panel anzeigen (wenn die Liste breit genug ist).",
   "config.gitLog.showAuthorAvatar.description": "Den Avatar des Autors in jeder Zeile der Commit-Liste des Log Panel anzeigen.",
   "config.gitLog.showDate.description": "Das Commit-Datum in jeder Zeile der Commit-Liste des Log Panel anzeigen.",

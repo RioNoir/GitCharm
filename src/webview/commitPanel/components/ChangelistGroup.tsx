@@ -88,7 +88,7 @@ export function ChangelistGroup({
 
   const isUnversioned = changelist.id === CHANGELIST_UNVERSIONED_ID;
   const isDefault = changelist.id === CHANGELIST_DEFAULT_ID;
-  const headerIcon = isUnversioned ? 'question' : isDefault ? 'circle-large-outline' : 'list-unordered';
+  const headerIcon = isUnversioned ? 'question' : isDefault ? undefined : 'list-unordered';
 
   return (
     <div style={styles.container}>
@@ -108,7 +108,7 @@ export function ChangelistGroup({
         />
         <div style={styles.headerMain} onClick={() => toggleCollapsed(collapseKey)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
-          <Codicon name={headerIcon} style={{ ...styles.clIcon, opacity: isUnversioned ? 0.6 : 0.8 }} />
+          {headerIcon && <Codicon name={headerIcon} style={{ ...styles.clIcon, opacity: isUnversioned ? 0.6 : 0.8 }} />}
           <span style={styles.clName}>{changelist.name}</span>
           <div style={styles.rightGroup}>
             {totalFiles > 0 && (
@@ -473,8 +473,9 @@ const styles = {
     flexShrink: 0,
   },
   clIcon: {
-    fontSize: '13px',
+    fontSize: '12px',
     flexShrink: 0,
+    opacity: 0.85,
   },
   clName: {
     overflow: 'hidden',

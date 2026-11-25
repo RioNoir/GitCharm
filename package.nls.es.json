@@ -85,6 +85,7 @@
   "config.section.basicSettings.title": "Configuración básica",
   "config.graphMaxCommits.description": "Número máximo de commits que se cargan en el grafo de Log Panel. Una vez alcanzado este límite, el desplazamiento deja de cargar más.",
   "config.showUncommittedChangesInLog.description": "Mostrar en la parte superior del grafo de Log Panel una fila con los cambios sin confirmar (archivos preparados, sin preparar y sin seguimiento)",
+  "config.gitLog.showGraph.description": "Mostrar el grafo de commits en la lista de commits del Log Panel: las líneas y puntos de color que conectan los commits.",
   "config.gitLog.showAuthor.description": "Mostrar el nombre del autor en cada fila de la lista de commits del Log Panel (cuando la lista es lo bastante ancha).",
   "config.gitLog.showAuthorAvatar.description": "Mostrar el avatar del autor en cada fila de la lista de commits del Log Panel.",
   "config.gitLog.showDate.description": "Mostrar la fecha del commit en cada fila de la lista de commits del Log Panel.",

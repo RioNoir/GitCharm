@@ -85,6 +85,7 @@
   "config.section.basicSettings.title": "Basic Settings",
   "config.graphMaxCommits.description": "Maximum commits to load in the Log Panel graph. Scrolling stops paging in more once this many are loaded.",
   "config.showUncommittedChangesInLog.description": "Show a row for uncommitted changes (staged, unstaged and untracked files) at the top of the Log Panel graph",
+  "config.gitLog.showGraph.description": "Show the commit graph — the colored lines and dots that connect commits — in the Log Panel commit list.",
   "config.gitLog.showAuthor.description": "Show the author's name in each row of the Log Panel commit list (when the list is wide enough).",
   "config.gitLog.showAuthorAvatar.description": "Show the author's avatar in each row of the Log Panel commit list.",
   "config.gitLog.showDate.description": "Show the commit date in each row of the Log Panel commit list.",
