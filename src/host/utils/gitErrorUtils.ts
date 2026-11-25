@@ -59,6 +59,71 @@ function meaningfulLines(text: string, maxLines: number): string {
 // mapping — the raw output is the actual reason the operation failed.
 const HOOK_FAILURE_PATTERN = /\bhook\b|pre-(?:push|commit)|husky|lint-staged|✖\s*\d+\s*problems?/i;
 
+// git's own words for "the remote has commits you don't". Anything else that still exits
+// with "failed to push some refs" — a server hook, a TAPD status gate, a protected branch —
+// is a different failure. The editor labels every one of those PushRejected.
+const FAST_FORWARD_REASON = /^(?:non-fast-forward|fetch first|stale info|remote ref updated since checkout)$/i;
+const REMOTE_AHEAD_HINT = /updates were rejected because (?:the tip of your current branch is behind|the remote contains work that you do|a pushed branch tip is behind)/i;
+
+interface RefRejection {
+  remote: boolean;
+  reason: string;
+}
+
+function refRejectionReasons(text: string): RefRejection[] {
+  const pattern = /\[(?<remote>remote )?rejected\][^\n]*\((?<reason>[^)\n]+)\)/gi;
+  return [...text.matchAll(pattern)].map(match => ({
+    remote: Boolean(match.groups?.remote),
+    reason: (match.groups?.reason ?? '').trim(),
+  }));
+}
+
+function isFastForwardReason(reason: string): boolean {
+  return FAST_FORWARD_REASON.test(reason);
+}
+
+/** True only when git itself says the remote branch moved ahead. */
+function isNonFastForwardRejection(text: string): boolean {
+  const reasons = refRejectionReasons(text);
+  if (reasons.some(reason => reason.remote || !isFastForwardReason(reason.reason))) return false;
+  if (reasons.some(reason => isFastForwardReason(reason.reason))) return true;
+  return REMOTE_AHEAD_HINT.test(text);
+}
+
+/** A hook or a remote policy check, as opposed to the branch being behind. */
+function isHookOrPolicyRejection(text: string): boolean {
+  if (HOOK_FAILURE_PATTERN.test(text)) return true;
+  return refRejectionReasons(text).some(reason => reason.remote || !isFastForwardReason(reason.reason));
+}
+
+function clipLine(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1).trimEnd() + '…';
+}
+
+// Server hooks print the reason twice: a short one in "(Rejected by …)" and a longer
+// `remote:` line. The box-drawing and "Processing pre-receive" lines around them are noise.
+function remoteDetail(text: string): string | undefined {
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!/^remote:/i.test(line)) continue;
+    const body = line.replace(/^remote:\s*/i, '').replace(/^\|\s*/, '').trim();
+    if (!body || /^processing\b/i.test(body) || /^[+\-=|_]+$/.test(body)) continue;
+    return clipLine(body, 180);
+  }
+  return undefined;
+}
+
+function formatPolicyRejection(text: string, maxLines: number): string {
+  const reason = refRejectionReasons(text).find(item => item.remote || !isFastForwardReason(item.reason))?.reason;
+  const detail = remoteDetail(text);
+  if (reason && detail && !detail.includes(reason)) {
+    return vscode.l10n.t('Push rejected by the remote ({0}): {1}', reason, detail);
+  }
+  if (reason) return vscode.l10n.t('Push rejected by the remote ({0}).', reason);
+  return capitalizeFirst(meaningfulLines(text, maxLines));
+}
+
 // git's wording when a remote needs credentials and GIT_TERMINAL_PROMPT=0 (or no tty) stops the prompt.
 const NO_CREDENTIALS_PATTERN = /terminal prompts disabled|could not read (?:Username|Password)/i;
 
@@ -72,10 +137,24 @@ export function formatGitError(e: unknown, maxLines = 3): string {
   const err = e as { gitErrorCode?: string; stderr?: string; stdout?: string; message?: string };
 
   const stderr = err.stderr?.trim();
+  const text = stripAnsi([stderr, err.stdout, err.message].filter(Boolean).join('\n'));
+  const code = err.gitErrorCode as GitErrorCodes | undefined;
+
+  // PushRejected means "failed to push some refs", not "you are behind". A remote hook
+  // or policy check has to keep its own reason, or the UI tells the user to pull.
+  if (text && isHookOrPolicyRejection(text) && !isNonFastForwardRejection(text)) {
+    return formatPolicyRejection(text, maxLines);
+  }
+  if (text && isNonFastForwardRejection(text)
+    && code !== GitErrorCodes.ForcePushWithLeaseRejected
+    && code !== GitErrorCodes.ForcePushWithLeaseIfIncludesRejected) {
+    return friendlyMessages()[GitErrorCodes.PushRejected] ?? '';
+  }
+
   if (stderr && HOOK_FAILURE_PATTERN.test(stderr)) return capitalizeFirst(meaningfulLines(stderr, maxLines));
 
-  const friendly = err.gitErrorCode ? friendlyMessages()[err.gitErrorCode as GitErrorCodes] : undefined;
-  if (friendly) return friendly;
+  const friendly = code ? friendlyMessages()[code] : undefined;
+  if (friendly && !(code === GitErrorCodes.PushRejected && !isNonFastForwardRejection(text))) return friendly;
 
   // Plain git (not VS Code's API) asked for a username/password it can't prompt for.
   // simple-git puts git's stderr in the message, VS Code's API in `stderr`.
@@ -96,17 +175,18 @@ export function formatGitError(e: unknown, maxLines = 3): string {
 /**
  * True when a push failed because the remote has commits we don't have — the case where
  * the user has to choose between pulling first and overwriting the remote branch.
+ * A server hook or policy check also makes git print "failed to push some refs", and the
+ * editor then sets PushRejected; that must not offer a pull or a force push.
  */
 export function isPushRejected(e: unknown): boolean {
   if (!(e instanceof Error) && typeof e !== 'object') return false;
   const err = e as { gitErrorCode?: string; stderr?: string; stdout?: string; message?: string };
-  const code = err.gitErrorCode as GitErrorCodes | undefined;
-  if (code === GitErrorCodes.PushRejected
-    || code === GitErrorCodes.ForcePushWithLeaseRejected
-    || code === GitErrorCodes.ForcePushWithLeaseIfIncludesRejected) return true;
-  // simple-git doesn't set gitErrorCode — fall back to git's own wording.
   const text = stripAnsi([err.stderr, err.stdout, err.message].filter(Boolean).join('\n'));
-  return /\(non-fast-forward\)|\(fetch first\)|\(stale info\)|failed to push some refs/i.test(text);
+  if (text && isHookOrPolicyRejection(text) && !isNonFastForwardRejection(text)) return false;
+  if (isNonFastForwardRejection(text)) return true;
+  const code = err.gitErrorCode as GitErrorCodes | undefined;
+  return code === GitErrorCodes.ForcePushWithLeaseRejected
+    || code === GitErrorCodes.ForcePushWithLeaseIfIncludesRejected;
 }
 
 /** True when branch creation failed because a branch with that name already exists. */

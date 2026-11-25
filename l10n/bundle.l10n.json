@@ -1233,6 +1233,8 @@
   "Local changes would be overwritten — commit or stash them first.": "Local changes would be overwritten — commit or stash them first.",
   "Branch is not fully merged.": "Branch is not fully merged.",
   "Permission denied.": "Permission denied.",
+  "Push rejected by the remote ({0}): {1}": "Push rejected by the remote ({0}): {1}",
+  "Push rejected by the remote ({0}).": "Push rejected by the remote ({0}).",
   "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.": "Authentication failed — git found no credentials for this remote. Set up a credential helper or use SSH.",
   "Stash and checkout": "Stash and checkout",
   "Save changes to stash, then switch to the branch": "Save changes to stash, then switch to the branch",

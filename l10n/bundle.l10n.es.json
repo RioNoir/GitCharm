@@ -1967,5 +1967,7 @@
   "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "No hay ningún modelo de lenguaje disponible en este editor. Instala GitHub Copilot u otra extensión de modelos de lenguaje, instala un agente local (Cursor, Claude Code o Gemini CLI), o usa el comando \"GitCharm: Seleccionar modelo de IA\" para cambiar de proveedor.",
   "Show commit graph": "Mostrar el grafo de commits",
   "Drag to resize the commit message. Double-click to fit the text.": "Arrastra para cambiar la altura del mensaje de commit. Doble clic para ajustarlo al texto.",
-  "Resize commit message": "Cambiar la altura del mensaje de commit"
+  "Resize commit message": "Cambiar la altura del mensaje de commit",
+  "Push rejected by the remote ({0}): {1}": "El remoto rechazó el push ({0}): {1}",
+  "Push rejected by the remote ({0}).": "El remoto rechazó el push ({0})."
 }

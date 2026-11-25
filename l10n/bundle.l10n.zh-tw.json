@@ -1967,5 +1967,7 @@
   "No language model is available in this editor. Install GitHub Copilot or another language-model extension, install a local agent (Cursor, Claude Code or Gemini CLI), or use the \"GitCharm: Select AI Model\" command to switch provider.": "這個編輯器裡沒有可用的語言模型。請安裝 GitHub Copilot 或其他語言模型擴充功能，或安裝本機代理（Cursor、Claude Code 或 Gemini CLI），或使用「GitCharm: 選取 AI 模型」命令切換提供者。",
   "Show commit graph": "顯示提交圖",
   "Drag to resize the commit message. Double-click to fit the text.": "拖曳調整提交說明的高度。按兩下則依文字高度收放。",
-  "Resize commit message": "調整提交說明高度"
+  "Resize commit message": "調整提交說明高度",
+  "Push rejected by the remote ({0}): {1}": "推送遭遠端拒絕（{0}）：{1}",
+  "Push rejected by the remote ({0}).": "推送遭遠端拒絕（{0}）。"
 }

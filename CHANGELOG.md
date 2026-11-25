@@ -12,6 +12,7 @@ All notable changes to GitCharm are documented in this file.
 - Rebase works in editors whose Git API does not expose `rebase`, such as Cursor: **Update Project** with rebase, **Rebase onto…** and the Log Panel's rebase no longer fail with "rebase is not a function". The fetch still uses the editor's credentials; the rebase itself runs through git, closes [#141](https://github.com/RioNoir/GitCharm/issues/141)
 - AI features work in every VS Code host, not only where a language model is registered. VS Code with Copilot is unchanged. Cursor, VSCodium and other forks that register no model no longer stop with "No VS Code LM model available": the first installed text-only local agent answers (Cursor Agent in read-only ask mode, then Claude Code, then the Gemini CLI). Choose the provider with **GitCharm: Select AI Model** to pin one
 - The Commit Panel's **Changes** header no longer shows an icon beside the title. Custom changelists and Unversioned Files keep theirs
+- A push blocked by the remote — a server hook or a policy check such as a TAPD status gate — is no longer reported as "the remote has commits you don't have locally". The notification shows the remote's own reason, and GitCharm no longer offers to pull or force-push for that rejection
 
 ## v0.10.0
 
