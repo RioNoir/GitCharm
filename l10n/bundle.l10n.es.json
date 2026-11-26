@@ -1969,5 +1969,13 @@
   "Drag to resize the commit message. Double-click to fit the text.": "Arrastra para cambiar la altura del mensaje de commit. Doble clic para ajustarlo al texto.",
   "Resize commit message": "Cambiar la altura del mensaje de commit",
   "Push rejected by the remote ({0}): {1}": "El remoto rechazó el push ({0}): {1}",
-  "Push rejected by the remote ({0}).": "El remoto rechazó el push ({0})."
+  "Push rejected by the remote ({0}).": "El remoto rechazó el push ({0}).",
+  "Show Diff with Working Tree": "Mostrar diff con el árbol de trabajo",
+  "No differences between the working tree and \"{0}\".": "No hay diferencias entre el árbol de trabajo y \"{0}\".",
+  "Working tree vs \"{0}\"": "Árbol de trabajo vs \"{0}\"",
+  "Get from Branch": "Obtener de la rama",
+  "Update \"{0}\" to match \"{1}\"? Changes to this file in the working tree will be lost.": "¿Actualizar \"{0}\" para que coincida con \"{1}\"? Se perderán los cambios de este archivo en el árbol de trabajo.",
+  "Could not update {0} from {1}.": "No se pudo actualizar {0} desde {1}.",
+  "Update {0} files under \"{1}\" to match \"{2}\"? Changes to these files in the working tree will be lost.": "¿Actualizar {0} archivos bajo \"{1}\" para que coincidan con \"{2}\"? Se perderán los cambios de estos archivos en el árbol de trabajo.",
+  "Diff/Tab title: files that differ between a branch and the working tree": "Diff"
 }

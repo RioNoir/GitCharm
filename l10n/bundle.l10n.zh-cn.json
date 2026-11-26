@@ -1969,5 +1969,13 @@
   "Drag to resize the commit message. Double-click to fit the text.": "拖动调整提交说明的高度。双击则按文字高度收放。",
   "Resize commit message": "调整提交说明高度",
   "Push rejected by the remote ({0}): {1}": "推送被远程拒绝（{0}）：{1}",
-  "Push rejected by the remote ({0}).": "推送被远程拒绝（{0}）。"
+  "Push rejected by the remote ({0}).": "推送被远程拒绝（{0}）。",
+  "Show Diff with Working Tree": "显示与工作树的差异",
+  "No differences between the working tree and \"{0}\".": "工作树与“{0}”没有差异。",
+  "Working tree vs \"{0}\"": "工作树与“{0}”",
+  "Get from Branch": "从分支获取",
+  "Update \"{0}\" to match \"{1}\"? Changes to this file in the working tree will be lost.": "将“{0}”更新为与“{1}”一致？工作树中此文件的更改将会丢失。",
+  "Could not update {0} from {1}.": "无法从 {1} 更新 {0}。",
+  "Update {0} files under \"{1}\" to match \"{2}\"? Changes to these files in the working tree will be lost.": "将“{1}”下的 {0} 个文件更新为与“{2}”一致？工作树中这些文件的更改将会丢失。",
+  "Diff/Tab title: files that differ between a branch and the working tree": "差异"
 }

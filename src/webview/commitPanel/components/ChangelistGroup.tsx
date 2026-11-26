@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ChangelistData, FileStatus, RepoStatus } from '../../shared/types';
-import { CHANGELIST_DEFAULT_ID, CHANGELIST_UNVERSIONED_ID } from '../../shared/types';
 import type { ViewMode } from '../store/commitStore';
 import type { IconThemeData } from '../../../host/types/messages';
 import { FileTree } from './FileTree';
@@ -86,10 +85,6 @@ export function ChangelistGroup({
     }
   };
 
-  const isUnversioned = changelist.id === CHANGELIST_UNVERSIONED_ID;
-  const isDefault = changelist.id === CHANGELIST_DEFAULT_ID;
-  const headerIcon = isUnversioned ? 'question' : isDefault ? undefined : 'list-unordered';
-
   return (
     <div style={styles.container}>
       <div
@@ -108,7 +103,6 @@ export function ChangelistGroup({
         />
         <div style={styles.headerMain} onClick={() => toggleCollapsed(collapseKey)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
-          {headerIcon && <Codicon name={headerIcon} style={{ ...styles.clIcon, opacity: isUnversioned ? 0.6 : 0.8 }} />}
           <span style={styles.clName}>{changelist.name}</span>
           <div style={styles.rightGroup}>
             {totalFiles > 0 && (
@@ -201,7 +195,6 @@ export function UnchangedReposGroup({ repoGroups, isCollapsed, toggleCollapsed, 
         />
         <div style={styles.headerMain} onClick={() => toggleCollapsed(key)}>
           <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={styles.chevron} />
-          <Codicon name="circle-slash" style={{ ...styles.clIcon, opacity: 0.6 }} />
           <span style={styles.clName}>{l10n.t({ message: 'Unchanged', comment: ['Commit panel section: repositories with no changes'] })}</span>
         </div>
       </div>
@@ -471,11 +464,6 @@ const styles = {
     fontSize: '12px',
     opacity: 0.7,
     flexShrink: 0,
-  },
-  clIcon: {
-    fontSize: '12px',
-    flexShrink: 0,
-    opacity: 0.85,
   },
   clName: {
     overflow: 'hidden',

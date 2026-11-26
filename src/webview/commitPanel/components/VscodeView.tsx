@@ -296,8 +296,6 @@ function VscodeRepoGroup({ repoStatus, repoName, repoColor, staged, files, viewM
 
 interface SectionHeaderProps {
   title: string;
-  /** Omitted for the Changes section: the title already says what it is. */
-  icon?: string;
   /** Omitted for a section with nothing to count (e.g. "Unchanged"). */
   count?: number;
   collapsed: boolean;
@@ -316,7 +314,7 @@ interface SectionHeaderProps {
   topBorder?: boolean;
 }
 
-function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, secondActionIcon, secondActionTitle, onSecondAction, openChangesIcon, openChangesTitle, onOpenChanges, topBorder }: SectionHeaderProps) {
+function SectionHeader({ title, count, collapsed, onToggle, onContextMenu, actionIcon, actionTitle, onAction, secondActionIcon, secondActionTitle, onSecondAction, openChangesIcon, openChangesTitle, onOpenChanges, topBorder }: SectionHeaderProps) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -327,7 +325,6 @@ function SectionHeader({ title, icon, count, collapsed, onToggle, onContextMenu,
     >
       <div style={sectionHeaderMainStyle} onClick={onToggle}>
         <Codicon name={collapsed ? 'chevron-right' : 'chevron-down'} style={{ fontSize: '12px', opacity: 0.7, flexShrink: 0 }} />
-        {icon && <Codicon name={icon} style={{ fontSize: '12px', opacity: 0.85, flexShrink: 0 }} />}
         <span style={sectionTitleStyle}>{title}</span>
       </div>
       {/* Right side always rendered to avoid layout shift */}
@@ -421,7 +418,6 @@ export function VscodeView({
       {/* ── Staged Changes ── */}
       <SectionHeader
         title={l10n.t('Staged Changes')}
-        icon="git-commit"
         count={totalStaged}
         collapsed={stagedCollapsed}
         onToggle={() => toggleCollapsed(STAGED_COLLAPSE_KEY)}
@@ -547,7 +543,6 @@ export function VscodeView({
       {unchangedRepos.length > 0 && (
         <SectionHeader
           title={l10n.t({ message: 'Unchanged', comment: ['Commit panel section: repositories with no changes'] })}
-          icon="circle-slash"
           collapsed={unchanged.collapsed}
           onToggle={() => toggleCollapsed(unchanged.key)}
           onContextMenu={_e => {/* no-op */}}

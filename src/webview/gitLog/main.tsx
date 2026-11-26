@@ -677,6 +677,9 @@ function App() {
           onPushTag={(repoId, tagName) => {
             getVsCodeApi().postMessage({ type: 'LOG_PUSH_TAG_PICK', repoId, tagName } satisfies LogToHostMsg);
           }}
+          onDiffWithWorkingTree={(refs, label) => {
+            getVsCodeApi().postMessage({ type: 'LOG_DIFF_WITH_WORKING_TREE', label, refs } satisfies LogToHostMsg);
+          }}
           onDeleteTag={(repoIds, tagName) => {
             getVsCodeApi().postMessage({ type: 'LOG_DELETE_TAG_MULTI', requestId: generateId(), repoIds, tagName } satisfies LogToHostMsg);
           }}
@@ -726,7 +729,7 @@ function App() {
 
         {hasSelectedCommit && !detailCollapsed && <ResizeHandle onMouseDown={onDetailResize} />}
 
-        {/* Commit detail (right) — hidden when no commit selected or closed */}
+        {/* Commit detail (right) */}
         {hasSelectedCommit && !detailCollapsed && (
           <div ref={detailRef} style={detailPane}>
             <CommitDetail

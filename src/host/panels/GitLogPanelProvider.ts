@@ -2406,6 +2406,11 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         break;
       }
 
+      case 'LOG_DIFF_WITH_WORKING_TREE': {
+        await this.commitPanel?.showBranchDiff(msg.label, msg.refs);
+        break;
+      }
+
       case 'LOG_OPEN_WORKING_TREE_CHANGES': {
         const repo = this.manager.getRepo(msg.repoId);
         if (!repo) break;

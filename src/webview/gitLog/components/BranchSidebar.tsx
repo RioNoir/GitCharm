@@ -29,6 +29,7 @@ interface Props {
   onFetchRepo: (repoId: string) => void;
   onPull: (repoIds: string[], branchName: string) => void;
   onPush: (repoIds: string[], branchName: string) => void;
+  onDiffWithWorkingTree: (refs: { repoId: string; ref: string }[], label: string) => void;
   onCheckoutTag: (repoIds: string[], tagName: string) => void;
   onMergeTag: (repoIds: string[], tagName: string) => void;
   onPushTag: (repoId: string, tagName: string) => void;
@@ -218,7 +219,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
-  onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
+  onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush, onDiffWithWorkingTree,
   onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
 }, ref) {
   // A submodule's own default branch (develop, px4, rolling…) only earns a star when the
@@ -527,6 +528,16 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             onDelete={() => { onDelete(contextMenu.merged.repoIds, inst.name); setContextMenu(null); }}
             onPull={localRepoIds.length > 0 ? () => { onPull(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
             onPush={localRepoIds.length > 0 ? () => { onPush(localRepoIds, contextMenu.merged.baseName); setContextMenu(null); } : undefined}
+            onDiffWithWorkingTree={() => {
+              const seen = new Set<string>();
+              const refs = contextMenu.merged.instances.flatMap(instance => {
+                if (seen.has(instance.repoId)) return [];
+                seen.add(instance.repoId);
+                return [{ repoId: instance.repoId, ref: instance.name }];
+              });
+              onDiffWithWorkingTree(refs, contextMenu.merged.baseName);
+              setContextMenu(null);
+            }}
           />
         );
       })()}
@@ -1024,7 +1035,7 @@ function TagContextMenu({ mergedTag, x, y, canDelete, onClose, onCheckout, onMer
   );
 }
 
-export function BranchContextMenu({ branchName, x, y, canDelete, onClose, onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onPull, onPush }: {
+export function BranchContextMenu({ branchName, x, y, canDelete, onClose, onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onPull, onPush, onDiffWithWorkingTree }: {
   branchName: string;
   x: number; y: number;
   canDelete: boolean;
@@ -1038,6 +1049,7 @@ export function BranchContextMenu({ branchName, x, y, canDelete, onClose, onChec
   onDelete: () => void;
   onPull?: () => void;
   onPush?: () => void;
+  onDiffWithWorkingTree?: () => void;
 }) {
   const copyName = () => {
     navigator.clipboard.writeText(branchName).catch(() => {});
@@ -1046,6 +1058,7 @@ export function BranchContextMenu({ branchName, x, y, canDelete, onClose, onChec
   const items: MenuItem[] = [
     { icon: 'arrow-right', label: l10n.t('Checkout "{0}"', branchName), action: onCheckout },
     { icon: 'git-branch', label: l10n.t('New Branch from "{0}"...', branchName), action: onNewBranch },
+    ...(onDiffWithWorkingTree ? [{ icon: 'diff', label: l10n.t('Show Diff with Working Tree'), action: onDiffWithWorkingTree }] : []),
     { sep: true },
     { icon: 'git-merge', label: l10n.t('Merge into current'), action: onMerge },
     { icon: 'repo-forked', label: l10n.t('Rebase onto "{0}"', branchName), action: onRebase },

@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { getCommitPanelConfig, isCommitPanelTabShown } from '../ui/commitPanelConfig';
+import { loadBranchDiffGroups, showBranchFileDiff, showBranchDirDiff, takeBranchFiles, type BranchDiffGroup } from './WorkingTreeDiffPanel';
 import { cleanPartialModelOutput, generateForOperation } from '../ai/aiGenerate';
 import { buildPrompt } from '../ai/prompts';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
@@ -459,6 +460,39 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
   switchToTab(tab: CommitPanelTabId): void {
     if (!isCommitPanelTabShown(tab)) return;
     this.post({ type: 'COMMIT_SWITCH_TAB', tab });
+  }
+
+  private branchDiff: { label: string; refs: { repoId: string; ref: string }[]; groups: BranchDiffGroup[] } | null = null;
+  /** The next status request should select the Diff tab — the panel was not open when the comparison started. */
+  private branchDiffNeedsFocus = false;
+
+  /** Opens the branch-versus-working-tree tree on the Commit Panel's Diff tab. */
+  async showBranchDiff(label: string, refs: { repoId: string; ref: string }[]): Promise<void> {
+    const groups = await loadBranchDiffGroups(this.manager, refs);
+    if (!groups) return;
+    if (groups.length === 0) {
+      vscode.window.showInformationMessage(vscode.l10n.t('No differences between the working tree and "{0}".', label));
+      return;
+    }
+    this.branchDiff = { label, refs, groups };
+    this.branchDiffNeedsFocus = !this.view;
+    this.broadcastCommit({ type: 'COMMIT_BRANCH_DIFF', label, groups, focus: true });
+    await vscode.commands.executeCommand('gitcharm.commitPanel.focus');
+  }
+
+  private postBranchDiff(): void {
+    if (!this.branchDiff) return;
+    const focus = this.branchDiffNeedsFocus;
+    this.branchDiffNeedsFocus = false;
+    this.broadcastCommit({ type: 'COMMIT_BRANCH_DIFF', label: this.branchDiff.label, groups: this.branchDiff.groups, focus });
+  }
+
+  private async refreshBranchDiff(): Promise<void> {
+    if (!this.branchDiff) return;
+    const groups = await loadBranchDiffGroups(this.manager, this.branchDiff.refs);
+    if (!groups) return;
+    this.branchDiff = { ...this.branchDiff, groups };
+    this.broadcastCommit({ type: 'COMMIT_BRANCH_DIFF_FILES', groups });
   }
 
   /** Prompts for a token (and, for Bitbucket, an account email) and connects the repo with it as a new saved account. */
@@ -1014,6 +1048,43 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
+      case 'COMMIT_BRANCH_DIFF_SHOW':
+        await showBranchFileDiff(this.manager, msg);
+        break;
+
+      case 'COMMIT_BRANCH_DIFF_SHOW_DIR':
+        await showBranchDirDiff(this.manager, msg, this.branchDiff?.label ?? msg.ref);
+        break;
+
+      case 'COMMIT_BRANCH_DIFF_GET': {
+        const taken = await takeBranchFiles(this.manager, {
+          repoId: msg.repoId,
+          ref: msg.ref,
+          label: this.branchDiff?.label ?? msg.ref,
+          targetPath: msg.filePath,
+          files: [{ path: msg.filePath, status: msg.status, oldPath: msg.oldPath }],
+        });
+        if (taken) await this.refreshBranchDiff();
+        break;
+      }
+
+      case 'COMMIT_BRANCH_DIFF_GET_DIR': {
+        const taken = await takeBranchFiles(this.manager, {
+          repoId: msg.repoId,
+          ref: msg.ref,
+          label: this.branchDiff?.label ?? msg.ref,
+          targetPath: msg.dirPath,
+          files: msg.files,
+        });
+        if (taken) await this.refreshBranchDiff();
+        break;
+      }
+
+      case 'COMMIT_BRANCH_DIFF_CLOSE':
+        this.branchDiff = null;
+        this.broadcastCommit({ type: 'COMMIT_BRANCH_DIFF_CLEAR' });
+        break;
+
       case 'COMMIT_PERSIST_MESSAGE': {
         await this.workspaceState?.update(COMMIT_MESSAGE_WORKSPACE_KEY, msg.message || undefined);
         break;
@@ -1026,6 +1097,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
           this.view ? loadIconTheme(this.view.webview) : Promise.resolve(undefined),
         ]);
         this.post({ type: 'COMMIT_STATUS_UPDATE', repos, status, iconTheme });
+        this.postBranchDiff();
         this.postViewAndSortSettings();
         this.postChangelistsUpdate(status);
         break;

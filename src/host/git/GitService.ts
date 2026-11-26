@@ -1193,24 +1193,48 @@ export class GitService {
     return { files: foldCommitChanges(commits), orderedHashes: commits.map(c => c.hash) };
   }
 
-  async getRefVsWorkingTreeFiles(ref: string, folderPath: string): Promise<Array<{ path: string; status: string }>> {
+  async getRefVsWorkingTreeFiles(ref: string, folderPath: string): Promise<Array<{ path: string; status: string; oldPath?: string }>> {
     const pathArgs = folderPath ? ['--', folderPath] : [];
     const [nameStatus, untracked] = await Promise.all([
-      this.git.raw(['diff', '--name-status', ref, ...pathArgs]).catch(() => ''),
+      this.git.raw(['diff', '--name-status', '-M', ref, ...pathArgs]).catch(() => ''),
       this.git.raw(['ls-files', '--others', '--exclude-standard', ...pathArgs]).catch(() => ''),
     ]);
-    const files: Array<{ path: string; status: string }> = [];
+    const files: Array<{ path: string; status: string; oldPath?: string }> = [];
     for (const line of nameStatus.trim().split('\n')) {
       if (!line.trim()) continue;
       const parts = line.split('\t');
       if (parts.length < 2) continue;
-      files.push({ status: parts[0][0], path: parts[parts.length - 1] });
+      const status = parts[0][0];
+      const path = parts[parts.length - 1];
+      const oldPath = (status === 'R' || status === 'C') && parts.length >= 3 ? parts[parts.length - 2] : undefined;
+      files.push({ status, path, oldPath });
     }
     for (const line of untracked.trim().split('\n')) {
       const p = line.trim();
       if (p) files.push({ status: 'A', path: p });
     }
     return files;
+  }
+
+  /**
+   * Makes the index and working tree match `ref` for these paths.
+   * A path the ref does not contain is removed.
+   */
+  async takePathsFromRef(ref: string, paths: string[]): Promise<void> {
+    const unique = [...new Set(paths.filter(p => p.length > 0))];
+    for (const filePath of unique) {
+      const onRef = await this.git.raw(['cat-file', '-e', `${ref}:${filePath}`]).then(() => true, () => false);
+      if (onRef) {
+        await this.git.raw(['checkout', ref, '--', filePath]);
+        continue;
+      }
+      const removed = await this.git.raw(['rm', '-f', '--', filePath]).then(() => true, () => false);
+      if (removed) continue;
+      await this.git.raw(['clean', '-f', '--', filePath]);
+      if (fs.existsSync(path.join(this.rootPath, filePath))) {
+        throw new Error(vscode.l10n.t('Could not update {0} from {1}.', filePath, ref));
+      }
+    }
   }
 
   private async _sortHashesOldestFirst(hashes: string[]): Promise<string[]> {

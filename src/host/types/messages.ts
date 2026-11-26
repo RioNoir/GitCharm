@@ -206,7 +206,11 @@ export type HostToCommitMsg =
   | { type: 'COMMIT_INSERT_TEXT'; text: string }
   | ({ type: 'COMMIT_VIEW_SORT_SETTINGS_UPDATE' } & ViewAndSortSettings)
   | { type: 'COMMIT_SWITCH_TAB'; tab: CommitPanelTabId }
-  | { type: 'COMMIT_DESELECT_FILE'; filePath: string };
+  | { type: 'COMMIT_DESELECT_FILE'; filePath: string }
+  /** Directory tree of a branch compared with the working tree, shown on the Commit Panel's Diff tab. */
+  | { type: 'COMMIT_BRANCH_DIFF'; label: string; groups: Array<{ repoId: string; ref: string; files: Array<{ path: string; status: string; oldPath?: string }> }>; focus?: boolean }
+  | { type: 'COMMIT_BRANCH_DIFF_FILES'; groups: Array<{ repoId: string; ref: string; files: Array<{ path: string; status: string; oldPath?: string }> }> }
+  | { type: 'COMMIT_BRANCH_DIFF_CLEAR' };
 
 // ─── Commit Panel: WebView → Host ────────────────────────────────────────────
 
@@ -215,6 +219,11 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_PERSIST_MESSAGE'; message: string }
   /** The tab the user switched to, remembered for the "last used" default tab. */
   | { type: 'COMMIT_ACTIVE_TAB'; tab: CommitPanelTabId }
+  | { type: 'COMMIT_BRANCH_DIFF_SHOW'; repoId: string; ref: string; filePath: string; status: string; oldPath?: string }
+  | { type: 'COMMIT_BRANCH_DIFF_SHOW_DIR'; repoId: string; ref: string; dirPath: string; files: Array<{ path: string; status: string; oldPath?: string }> }
+  | { type: 'COMMIT_BRANCH_DIFF_GET'; repoId: string; ref: string; filePath: string; status: string; oldPath?: string }
+  | { type: 'COMMIT_BRANCH_DIFF_GET_DIR'; repoId: string; ref: string; dirPath: string; files: Array<{ path: string; status: string; oldPath?: string }> }
+  | { type: 'COMMIT_BRANCH_DIFF_CLOSE' }
   | { type: 'COMMIT_REQUEST_DIFF'; requestId: string; repoId: string; filePath: string; staged: boolean }
   | { type: 'COMMIT_STAGE_FILES'; requestId: string; repoId: string; paths: string[] }
   | { type: 'COMMIT_UNSTAGE_FILES'; requestId: string; repoId: string; paths: string[] }
@@ -412,7 +421,7 @@ export type HostToLogMsg =
   /** Uncommitted changes of every repo in the log, replacing the previous report. Empty when the setting is off. */
   | { type: 'LOG_WORKING_TREE_STATUS'; repos: LogWorkingTreeStatus[] }
   | { type: 'LOG_UNDOCKED_CONFIG'; showCommit: boolean }
-  | { type: 'LOG_DESELECT_FILE'; filePath: string };
+  | { type: 'LOG_DESELECT_FILE'; filePath: string }
 
 // ─── Log Panel: WebView → Host ─────────────────────────────────────────────────
 
@@ -486,6 +495,8 @@ export type LogToHostMsg =
   | { type: 'LOG_OPEN_WORKING_TREE_FILE_DIFF'; repoId: string; filePath: string; fileStatus: string; oldPath?: string }
   /** Multi-file diff of every uncommitted change, HEAD ↔ working tree. */
   | { type: 'LOG_OPEN_WORKING_TREE_CHANGES'; repoId: string }
+  /** Opens the working-tree comparison for the selected branch in an editor tab. */
+  | { type: 'LOG_DIFF_WITH_WORKING_TREE'; label: string; refs: { repoId: string; ref: string }[] }
   | { type: 'LOG_SHOW_IN_COMMIT_PANEL' }
   | { type: 'LOG_OPEN_MAX_COMMITS_SETTING' }
   | { type: 'LOG_EXPLAIN_COMMIT'; repoId: string; hash: string }

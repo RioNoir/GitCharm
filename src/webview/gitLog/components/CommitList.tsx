@@ -1043,6 +1043,7 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
             onPull={!isRemote ? () => post({ type: 'LOG_PULL_BRANCH_PICK', repoIds: [repoId], branchName: group.label }) : undefined}
             onPush={!isRemote ? () => post({ type: 'LOG_PUSH_BRANCH_PICK', repoIds: [repoId], branchName: group.label }) : undefined}
             onDelete={() => post({ type: 'LOG_DELETE_BRANCH_MULTI', requestId: generateId(), repoIds: [repoId], branchName: refName })}
+            onDiffWithWorkingTree={() => post({ type: 'LOG_DIFF_WITH_WORKING_TREE', label: group.label, refs: [{ repoId, ref: refName }] })}
           />
         );
       })()}

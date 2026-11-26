@@ -17,6 +17,7 @@ import { EmptyTabState } from './components/EmptyTabState';
 import { StashTab } from './components/StashTab';
 import { PushTab } from './components/PushTab';
 import { WorktreePanel } from './components/WorktreePanel';
+import { WorkingTreeBranchDiff, type WorkingTreeDiffGroup } from '../gitLog/components/WorkingTreeBranchDiff';
 import { PullRequestPanel, NoRemoteState, noRepoHasRemote } from './components/PullRequestPanel';
 import { IssuePanel, IssuesNoRemoteState, noIssueRepoHasRemote } from './components/IssuePanel';
 import { getVsCodeApi } from '../shared/vscodeApi';
@@ -256,7 +257,7 @@ const CHANGELIST_HEADER_ITEMS_CUSTOM = (): ContextMenuEntry[] => [
   { id: 'refresh',     label: l10n.t('Refresh'),           icon: 'refresh' },
 ];
 
-type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests' | 'issues';
+type TabId = 'changes' | 'shelf' | 'stash' | 'push' | 'worktree' | 'pullrequests' | 'issues' | 'branchdiff';
 
 function App() {
   const store = useCommitStore();
@@ -264,16 +265,19 @@ function App() {
 
   // ── Tab ───────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('changes');
+  const [branchDiff, setBranchDiff] = useState<{ label: string; groups: WorkingTreeDiffGroup[] } | null>(null);
   // The gitcharm.commitPanel.* settings: which tabs, in which order, labels and badges. Null until the host sends them.
   const [panelConfig, setPanelConfig] = useState<CommitPanelConfig | null>(null);
   // Read from the message handler, registered once.
   const keepCommitMessageRef = useRef(false);
   keepCommitMessageRef.current = !!panelConfig?.keepCommitMessage;
-  const shownTabs: TabId[] = panelConfig?.tabs ?? ['changes', 'shelf', 'stash', 'worktree', 'issues', 'pullrequests', 'push'];
-  // A tab turned off while open hands over to Changes.
+  const baseTabs: TabId[] = panelConfig?.tabs ?? ['changes', 'shelf', 'stash', 'worktree', 'issues', 'pullrequests', 'push'];
+  const shownTabs: TabId[] = branchDiff ? [...baseTabs, 'branchdiff'] : baseTabs;
+  const shownKey = shownTabs.join(',');
+  // A tab turned off while open, or the Diff tab once its comparison is closed, hands over to Changes.
   useEffect(() => {
-    if (!shownTabs.includes(activeTab)) setActiveTab('changes');
-  }, [activeTab, panelConfig]);
+    if (!shownKey.split(',').includes(activeTab)) setActiveTab('changes');
+  }, [activeTab, shownKey]);
   const [tabBarWidths, setTabBarWidths] = useState<TabBarWidths<TabId> | null>(null);
   // `dropdown`: the collapsed bar's menu, as wide as its button; `overflow`: the tabs left out of a partial strip.
   const [tabMenu, setTabMenu] = useState<{ kind: 'dropdown' | 'overflow'; x: number; y: number; width?: number } | null>(null);
@@ -794,6 +798,19 @@ function App() {
           if (msg.tab === 'issues') requestIssueList();
           break;
 
+        case 'COMMIT_BRANCH_DIFF':
+          setBranchDiff({ label: msg.label, groups: msg.groups });
+          if (msg.focus !== false) setActiveTab('branchdiff');
+          break;
+
+        case 'COMMIT_BRANCH_DIFF_FILES':
+          setBranchDiff(prev => prev ? { ...prev, groups: msg.groups } : prev);
+          break;
+
+        case 'COMMIT_BRANCH_DIFF_CLEAR':
+          setBranchDiff(null);
+          break;
+
         case 'COMMIT_DESELECT_FILE':
           setSelectedFile(prev => {
             if (!prev) return null;
@@ -1064,7 +1081,7 @@ function App() {
     if (panelConfig?.badges.issues && panelConfig.tabs.includes('issues') && !issueListRequestedRef.current) requestIssueList();
   }, [panelConfig]);
   useEffect(() => {
-    if (initialTabAppliedRef.current) send({ type: 'COMMIT_ACTIVE_TAB', tab: activeTab });
+    if (initialTabAppliedRef.current && activeTab !== 'branchdiff') send({ type: 'COMMIT_ACTIVE_TAB', tab: activeTab });
   }, [activeTab]);
 
   // The Shelf and Stash badges (off by default) need every repo's list even with the tab closed. Shelves and stashes
@@ -1599,13 +1616,22 @@ function App() {
         const changesLabel = (store.changesViewMode === 'changelists' || store.changesViewMode === 'vscode')
           ? l10n.t({ message: 'Commit', comment: ['Tab title: the tab with the commit form and changed files'] })
           : l10n.t({ message: 'Changes', comment: ['Tab title: list of changed files'] });
-        const tabMeta = (tab: TabId) => ({
-          label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : tab === 'issues' ? l10n.t('Issues') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
-          iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : tab === 'issues' ? 'issues' : 'cloud',
-          badge: !(panelConfig ? panelConfig.badges[tab] : tab === 'changes' || tab === 'push' || tab === 'pullrequests' || tab === 'issues') ? 0
-            : tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests : tab === 'issues' ? totalIssues
-            : tab === 'shelf' ? totalShelves : tab === 'stash' ? totalStashes : tab === 'worktree' ? totalWorktrees : 0,
-        });
+        const tabMeta = (tab: TabId) => {
+          if (tab === 'branchdiff') {
+            return {
+              label: l10n.t({ message: 'Diff', comment: ['Tab title: files that differ between a branch and the working tree'] }),
+              iconName: 'git-compare',
+              badge: branchDiff?.groups.reduce((sum, group) => sum + group.files.length, 0) ?? 0,
+            };
+          }
+          return {
+            label: tab === 'changes' ? changesLabel : tab === 'shelf' ? l10n.t('Shelf') : tab === 'stash' ? l10n.t({ message: 'Stash', comment: ['Tab title: list of git stashes'] }) : tab === 'worktree' ? l10n.t('Worktrees') : tab === 'pullrequests' ? l10n.t('Pull Requests') : tab === 'issues' ? l10n.t('Issues') : l10n.t({ message: 'Sync', comment: ['Tab title: remote operations — commits to push and to pull'] }),
+            iconName: tab === 'changes' ? 'git-branch-changes' : tab === 'shelf' ? 'archive' : tab === 'stash' ? 'git-stash' : tab === 'worktree' ? 'worktree' : tab === 'pullrequests' ? 'git-pull-request' : tab === 'issues' ? 'issues' : 'cloud',
+            badge: !(panelConfig ? panelConfig.badges[tab] : tab === 'changes' || tab === 'push' || tab === 'pullrequests' || tab === 'issues') ? 0
+              : tab === 'changes' ? totalChanges : tab === 'push' ? totalOutOfSync : tab === 'pullrequests' ? totalPullRequests : tab === 'issues' ? totalIssues
+              : tab === 'shelf' ? totalShelves : tab === 'stash' ? totalStashes : tab === 'worktree' ? totalWorktrees : 0,
+          };
+        };
         const selectTab = (tab: TabId) => {
           setActiveTab(tab);
           // Skip refetching data that's already loaded — avoids a jarring loading flash every time the
@@ -2200,6 +2226,58 @@ function App() {
               aiEnabled={store.aiEnabled}
             />
           </div>
+        )}
+
+        {activeTab === 'branchdiff' && branchDiff && (
+          <WorkingTreeBranchDiff
+            label={branchDiff.label}
+            groups={branchDiff.groups}
+            repos={store.repoMetas.map(repo => ({ id: repo.id, name: repo.name }))}
+            iconTheme={store.iconTheme}
+            onShowDiff={file => send({
+              type: 'COMMIT_BRANCH_DIFF_SHOW',
+              repoId: file.repoId,
+              ref: file.ref,
+              filePath: file.path,
+              status: file.status,
+              oldPath: file.oldPath,
+            })}
+            onShowDirDiff={(dirPath, files) => {
+              const first = files[0];
+              if (!first) return;
+              send({
+                type: 'COMMIT_BRANCH_DIFF_SHOW_DIR',
+                repoId: first.repoId,
+                ref: first.ref,
+                dirPath,
+                files: files.map(file => ({ path: file.path, status: file.status, oldPath: file.oldPath })),
+              });
+            }}
+            onGetFromBranch={file => send({
+              type: 'COMMIT_BRANCH_DIFF_GET',
+              repoId: file.repoId,
+              ref: file.ref,
+              filePath: file.path,
+              status: file.status,
+              oldPath: file.oldPath,
+            })}
+            onGetDirFromBranch={(dirPath, files) => {
+              const first = files[0];
+              if (!first) return;
+              send({
+                type: 'COMMIT_BRANCH_DIFF_GET_DIR',
+                repoId: first.repoId,
+                ref: first.ref,
+                dirPath,
+                files: files.map(file => ({ path: file.path, status: file.status, oldPath: file.oldPath })),
+              });
+            }}
+            onClose={() => {
+              setBranchDiff(null);
+              setActiveTab('changes');
+              send({ type: 'COMMIT_BRANCH_DIFF_CLOSE' });
+            }}
+          />
         )}
 
         {activeTab === 'worktree' && (

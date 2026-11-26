@@ -12,24 +12,66 @@ function gitUri(rootPath: string, ref: string, filePath: string): vscode.Uri {
   return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
 }
 
-export async function compareFileWithRef(repo: GitService, filePath: string, ref: string): Promise<void> {
-  const original = gitUri(repo.rootPath, ref, filePath);
-  const modified = vscode.Uri.file(path.join(repo.rootPath, filePath));
-  await vscode.commands.executeCommand('vscode.diff', original, modified, vscode.l10n.t('{0} (Working Tree) vs {1}', filePath, ref));
+export async function compareFileWithRef(
+  repo: GitService,
+  filePath: string,
+  ref: string,
+  file?: { status?: string; oldPath?: string },
+  show?: { preview?: boolean; viewColumn?: vscode.ViewColumn },
+): Promise<void> {
+  const status = file?.status ?? 'M';
+  const added = status === 'A' || status === 'C' || status === 'U';
+  const originalPath = status === 'R' ? (file?.oldPath ?? filePath) : filePath;
+  const original = gitUri(repo.rootPath, added ? EMPTY_TREE : ref, originalPath);
+  const modified = status === 'D'
+    ? gitUri(repo.rootPath, EMPTY_TREE, filePath)
+    : vscode.Uri.file(path.join(repo.rootPath, filePath));
+  const options = show ? { preview: show.preview !== false, viewColumn: show.viewColumn } : undefined;
+  await vscode.commands.executeCommand('vscode.diff', original, modified, vscode.l10n.t('{0} (Working Tree) vs {1}', filePath, ref), options);
 }
 
-export async function compareFolderWithRef(repo: GitService, folderPath: string, ref: string): Promise<void> {
+/** One editor listing every given file's diff against the working tree. */
+export async function openWorkingTreeFileChanges(
+  repo: GitService,
+  ref: string,
+  files: Array<{ path: string; status: string; oldPath?: string }>,
+  title: string,
+): Promise<void> {
+  const resources = files
+    .filter(file => file.status !== 'U')
+    .map(file => {
+      const label = vscode.Uri.file(path.join(repo.rootPath, file.path));
+      const added = file.status === 'A' || file.status === 'C' || file.status === 'U';
+      const originalPath = file.status === 'R' ? (file.oldPath ?? file.path) : file.path;
+      const original = gitUri(repo.rootPath, added ? EMPTY_TREE : ref, originalPath);
+      const modified = file.status === 'D'
+        ? gitUri(repo.rootPath, EMPTY_TREE, file.path)
+        : vscode.Uri.file(path.join(repo.rootPath, file.path));
+      return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
+    });
+  if (resources.length === 0) return;
+  await vscode.commands.executeCommand('vscode.changes', title, resources);
+}
+
+/** Opens the multi-file diff. Returns how many files it showed; 0 when the tree already matches. */
+export async function compareFolderWithRef(repo: GitService, folderPath: string, ref: string, title?: string): Promise<number> {
   const files = await repo.getRefVsWorkingTreeFiles(ref, folderPath);
   const resources = files
     .filter(f => f.status !== 'U')
     .map(f => {
       const label = vscode.Uri.file(path.join(repo.rootPath, f.path));
-      const original = gitUri(repo.rootPath, f.status === 'A' ? EMPTY_TREE : ref, f.path);
-      const modified = vscode.Uri.file(path.join(repo.rootPath, f.path));
+      const added = f.status === 'A' || f.status === 'C' || f.status === 'U';
+      const originalPath = f.status === 'R' ? (f.oldPath ?? f.path) : f.path;
+      const original = gitUri(repo.rootPath, added ? EMPTY_TREE : ref, originalPath);
+      const modified = f.status === 'D'
+        ? gitUri(repo.rootPath, EMPTY_TREE, f.path)
+        : vscode.Uri.file(path.join(repo.rootPath, f.path));
       return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
     });
-  const title = vscode.l10n.t('{0} vs {1}', folderPath || path.basename(repo.rootPath), ref);
-  await vscode.commands.executeCommand('vscode.changes', title, resources);
+  if (resources.length === 0) return 0;
+  const resolvedTitle = title ?? vscode.l10n.t('{0} vs {1}', folderPath || path.basename(repo.rootPath), ref);
+  await vscode.commands.executeCommand('vscode.changes', resolvedTitle, resources);
+  return resources.length;
 }
 
 export async function compareWithCommand(manager: WorkspaceGitManager, fileUri: vscode.Uri): Promise<void> {
