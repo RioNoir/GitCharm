@@ -12,13 +12,13 @@ function gitUri(rootPath: string, ref: string, filePath: string): vscode.Uri {
   return vscode.Uri.from({ scheme: 'git', path: fileUri.path, query: JSON.stringify({ path: fileUri.fsPath, ref }) });
 }
 
-export async function compareFileWithRef(
+/** The two sides of a working-tree diff, and the editor title that shows them. */
+export function workingTreeFileDiff(
   repo: GitService,
   filePath: string,
   ref: string,
   file?: { status?: string; oldPath?: string },
-  show?: { preview?: boolean; viewColumn?: vscode.ViewColumn },
-): Promise<void> {
+): { original: vscode.Uri; modified: vscode.Uri; title: string } {
   const status = file?.status ?? 'M';
   const added = status === 'A' || status === 'C' || status === 'U';
   const originalPath = status === 'R' ? (file?.oldPath ?? filePath) : filePath;
@@ -26,8 +26,23 @@ export async function compareFileWithRef(
   const modified = status === 'D'
     ? gitUri(repo.rootPath, EMPTY_TREE, filePath)
     : vscode.Uri.file(path.join(repo.rootPath, filePath));
+  return { original, modified, title: vscode.l10n.t('{0} ({1} ↔ Working Tree)', filePath, ref) };
+}
+
+export function workingTreeChangesTitle(dirPath: string, label: string): string {
+  return vscode.l10n.t('{0} ({1} ↔ Working Tree)', dirPath, label);
+}
+
+export async function compareFileWithRef(
+  repo: GitService,
+  filePath: string,
+  ref: string,
+  file?: { status?: string; oldPath?: string },
+  show?: { preview?: boolean; viewColumn?: vscode.ViewColumn },
+): Promise<void> {
+  const { original, modified, title } = workingTreeFileDiff(repo, filePath, ref, file);
   const options = show ? { preview: show.preview !== false, viewColumn: show.viewColumn } : undefined;
-  await vscode.commands.executeCommand('vscode.diff', original, modified, vscode.l10n.t('{0} (Working Tree) vs {1}', filePath, ref), options);
+  await vscode.commands.executeCommand('vscode.diff', original, modified, title, options);
 }
 
 /** One editor listing every given file's diff against the working tree. */

@@ -224,6 +224,7 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_BRANCH_DIFF_GET'; repoId: string; ref: string; filePath: string; status: string; oldPath?: string }
   | { type: 'COMMIT_BRANCH_DIFF_GET_DIR'; repoId: string; ref: string; dirPath: string; files: Array<{ path: string; status: string; oldPath?: string }> }
   | { type: 'COMMIT_BRANCH_DIFF_CLOSE' }
+  | { type: 'COMMIT_BRANCH_DIFF_REFRESH' }
   | { type: 'COMMIT_REQUEST_DIFF'; requestId: string; repoId: string; filePath: string; staged: boolean }
   | { type: 'COMMIT_STAGE_FILES'; requestId: string; repoId: string; paths: string[] }
   | { type: 'COMMIT_UNSTAGE_FILES'; requestId: string; repoId: string; paths: string[] }

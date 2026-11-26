@@ -127,6 +127,23 @@ test('rebase falls back to git when the VS Code API repository has no rebase', a
   assert.equal(await subjects(dir), 'a|c|b');
 });
 
+test('rebase keeps staged changes instead of refusing to start', async (t) => {
+  const dir = await fork(t);
+  useApiRepo(dir, {
+    state: { HEAD: { name: 'feature' }, remotes: [] },
+    fetch: async () => undefined,
+  });
+  const git = runner(dir);
+  fs.writeFileSync(path.join(dir, 'wip.txt'), 'wip\n');
+  await git(['add', 'wip.txt']);
+  fs.appendFileSync(path.join(dir, 'b.txt'), 'local\n');
+  await api.rebase(dir, 'main');
+  assert.equal(await subjects(dir), 'a|c|b');
+  const status = (await git(['status', '--porcelain'])).replace(/\n$/, '').split('\n').filter(line => line !== '').sort();
+  assert.deepEqual(status, [' M b.txt', 'A  wip.txt']);
+  assert.equal((await git(['stash', 'list'])).trim(), '');
+});
+
 test('pull rebase fetches through the API and rebases with git when rebase is missing', async (t) => {
   const root = scratch(t);
   const bare = path.join(root, 'origin.git');

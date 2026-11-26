@@ -2272,6 +2272,7 @@ function App() {
                 files: files.map(file => ({ path: file.path, status: file.status, oldPath: file.oldPath })),
               });
             }}
+            onRefresh={() => send({ type: 'COMMIT_BRANCH_DIFF_REFRESH' })}
             onClose={() => {
               setBranchDiff(null);
               setActiveTab('changes');

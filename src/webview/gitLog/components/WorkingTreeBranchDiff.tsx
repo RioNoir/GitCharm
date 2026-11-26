@@ -27,6 +27,7 @@ interface Props {
   onGetFromBranch: (file: WorkingTreeDiffFile) => void;
   onShowDirDiff: (dirPath: string, files: WorkingTreeDiffFile[]) => void;
   onGetDirFromBranch: (dirPath: string, files: WorkingTreeDiffFile[]) => void;
+  onRefresh: () => void;
   onClose: () => void;
 }
 
@@ -47,7 +48,7 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? 'var(--vscode-foreground)';
 }
 
-export function WorkingTreeBranchDiff({ label, groups, repos, iconTheme, onShowDiff, onGetFromBranch, onShowDirDiff, onGetDirFromBranch, onClose }: Props) {
+export function WorkingTreeBranchDiff({ label, groups, repos, iconTheme, onShowDiff, onGetFromBranch, onShowDirDiff, onGetDirFromBranch, onRefresh, onClose }: Props) {
   const [dirOverrides, setDirOverrides] = useState<Set<string>>(new Set());
   const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -111,13 +112,16 @@ export function WorkingTreeBranchDiff({ label, groups, repos, iconTheme, onShowD
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <div style={styles.title}>{l10n.t('Working tree vs "{0}"', label)}</div>
+        <div style={styles.title}>{l10n.t('"{0}" vs Working Tree', label)}</div>
         <button type="button" style={styles.close} title={l10n.t('Close')} onClick={onClose}>
           <Codicon name="close" style={{ fontSize: '16px' }} />
         </button>
       </div>
       <div style={styles.toolbar}>
         <span style={styles.count}>{plural(files.length, l10n.t('1 file'), l10n.t('{0} files', files.length))}</span>
+        <button type="button" style={styles.iconBtn} title={l10n.t('Refresh')} onClick={onRefresh}>
+          <Codicon name="refresh" style={{ fontSize: '14px' }} />
+        </button>
         <button type="button" style={styles.iconBtn} title={l10n.t('Expand all')} onClick={() => applyAllExpanded(true)}>
           <Codicon name="expand-all" style={{ fontSize: '14px' }} />
         </button>

@@ -1590,8 +1590,15 @@ export class GitService {
     // `rebase --continue` opens an editor for the commit being replayed. core.editor=true
     // is the no-op shell builtin, so the stored message is accepted unchanged and the
     // command never blocks — simple-git needs allowUnsafeEditor to let the override past.
-    await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
-      .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
+    let error: unknown;
+    try {
+      await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+        .raw(['-c', 'core.editor=true', 'rebase', '--continue']);
+    } catch (e: unknown) {
+      error = e;
+    }
+    await this.finishRebaseStash(!error);
+    if (error) throw error;
   }
 
   // Raw git rather than vsRepo() — getMergeRebaseState() (which the panel uses to decide
@@ -1604,11 +1611,19 @@ export class GitService {
 
   async abortRebase(): Promise<void> {
     await this.git.raw(['rebase', '--abort']);
+    await this.restoreRebaseStash();
   }
 
   async rebaseSkip(): Promise<void> {
-    await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
-      .raw(['-c', 'core.editor=true', 'rebase', '--skip']);
+    let error: unknown;
+    try {
+      await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } })
+        .raw(['-c', 'core.editor=true', 'rebase', '--skip']);
+    } catch (e: unknown) {
+      error = e;
+    }
+    await this.finishRebaseStash(!error);
+    if (error) throw error;
   }
 
   /**
@@ -1634,6 +1649,65 @@ export class GitService {
   /** Whether tracked files have uncommitted changes, which keep a rebase from starting. */
   async hasTrackedChanges(): Promise<boolean> {
     return (await this.git.raw(['status', '--porcelain', '--untracked-files=no'])).trim() !== '';
+  }
+
+  /**
+   * Git refuses `rebase` while the index differs from HEAD ("Your index contains uncommitted changes"),
+   * and `rebase --autostash` puts staged changes back unstaged. Stash first and pop with `--index` so a
+   * staged file is still staged afterwards. A rebase that stops keeps the stash until it is continued,
+   * skipped to the end, or aborted.
+   */
+  private async withRebaseStash<T>(run: () => Promise<T>): Promise<T> {
+    if (await this.getMergeRebaseState() === 'rebase') return run();
+    await this.stashTrackedChangesForRebase();
+    let error: unknown;
+    let result: T | undefined;
+    try {
+      result = await run();
+    } catch (e: unknown) {
+      error = e;
+    }
+    await this.finishRebaseStash(!error);
+    if (error) throw error;
+    return result as T;
+  }
+
+  private async stashTrackedChangesForRebase(): Promise<void> {
+    if (!(await this.hasTrackedChanges())) return;
+    const marker = await this.rebaseStashMarker();
+    if (fs.existsSync(marker)) return;
+    const before = await this.stashTip();
+    await this.git.raw(['stash', 'push', '-m', 'GitCharm: changes before rebase']);
+    const after = await this.stashTip();
+    if (!after || after === before) return;
+    fs.writeFileSync(marker, `${after}\n`);
+  }
+
+  /** Pops the stash once the rebase is no longer in progress. `report` surfaces a restore conflict. */
+  private async finishRebaseStash(report: boolean): Promise<void> {
+    if (await this.getMergeRebaseState() === 'rebase') return;
+    if (report) await this.restoreRebaseStash();
+    else await this.restoreRebaseStash().catch(() => undefined);
+  }
+
+  private async restoreRebaseStash(): Promise<void> {
+    const marker = await this.rebaseStashMarker();
+    if (!fs.existsSync(marker)) return;
+    const hash = fs.readFileSync(marker, 'utf8').trim();
+    fs.rmSync(marker, { force: true });
+    if (!hash) return;
+    const list = await this.git.raw(['stash', 'list', '--format=%H %gd']).catch(() => '');
+    const ref = list.split('\n').map(line => line.trim().split(' ')).find(([id]) => id === hash)?.[1];
+    if (!ref) return;
+    await this.git.raw(['stash', 'pop', '--index', ref]);
+  }
+
+  private async stashTip(): Promise<string> {
+    return (await this.git.raw(['rev-parse', '-q', '--verify', 'refs/stash']).catch(() => '')).trim();
+  }
+
+  private async rebaseStashMarker(): Promise<string> {
+    return path.join(await this.gitDir(), 'gitcharm-rebase-stash');
   }
 
   async isAncestorOfHead(hash: string): Promise<boolean> {
@@ -1682,10 +1756,13 @@ export class GitService {
     fs.writeFileSync(todoFile, todo);
     // git hands sequence.editor the todo it generated; copying ours over it is the whole edit. core.editor=true
     // accepts any message git would still ask for (a squash left to git) unchanged.
-    await createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } }).raw([
+    // Stash ourselves instead of --autostash: that flag restores staged changes as unstaged.
+    const rebase = () => createGit(this.rootPath, { unsafe: { allowUnsafeEditor: true } }).raw([
       '-c', `sequence.editor=cp ${shQuote(todoFile)}`, '-c', 'core.editor=true',
-      'rebase', '--interactive', ...(autostash ? ['--autostash'] : []), ...(upstream ? [upstream] : ['--root']),
+      'rebase', '--interactive', ...(upstream ? [upstream] : ['--root']),
     ]);
+    if (autostash) await this.withRebaseStash(rebase);
+    else await rebase();
     // Done without stopping: no exec line is left to read the messages. (A stopped rebase leaves them for the next run to clear.)
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -1902,13 +1979,12 @@ export class GitService {
       // Fetch through the git extension so credentials stay with VS Code. Rebase is local;
       // Cursor's API repository has no rebase (issue #141), so that step falls back to git.
       await vsRepo.fetch();
-      if (typeof vsRepo.rebase === 'function') await vsRepo.rebase(onto);
-      else await this.git.rebase([onto]);
+      await this.withRebaseStash(() => this.rebaseOnto(onto));
       return vscode.l10n.t('pulled (rebase)');
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
     if (!tracking) return vscode.l10n.t('No remote tracking branch — skipped');
-    await this.git.raw(['pull', '--rebase']);
+    await this.withRebaseStash(() => this.git.raw(['pull', '--rebase']));
     return vscode.l10n.t('pulled (rebase)');
   }
 
@@ -2021,6 +2097,10 @@ export class GitService {
   }
 
   async rebase(onto: string): Promise<void> {
+    await this.withRebaseStash(() => this.rebaseOnto(onto));
+  }
+
+  private async rebaseOnto(onto: string): Promise<void> {
     const vsRepo = this.vsRepo();
     // Same gap as pullRebase: the API object can exist without a rebase method.
     if (vsRepo && typeof vsRepo.rebase === 'function') { await vsRepo.rebase(onto); return; }
@@ -2224,7 +2304,7 @@ export class GitService {
   }
 
   async dropCommit(hash: string): Promise<void> {
-    await this.git.raw(['rebase', '--onto', `${hash}^`, hash]);
+    await this.withRebaseStash(() => this.git.raw(['rebase', '--onto', `${hash}^`, hash]));
   }
 
   /** The runs of adjacent commits that squashing `hashes` makes into one commit each, oldest first. */

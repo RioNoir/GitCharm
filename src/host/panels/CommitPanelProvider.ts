@@ -21,7 +21,7 @@ import type { GitLogPanelProvider } from './GitLogPanelProvider';
 import type { UndockedPanelProvider } from './UndockedPanelProvider';
 import { promptSquashGroups } from './SquashEditorPanel';
 import { openEditMessageEditor } from './EditMessageEditorPanel';
-import { compareFileWithRef, compareFolderWithRef } from './CompareWithCommand';
+import { compareFileWithRef, compareFolderWithRef, workingTreeChangesTitle } from './CompareWithCommand';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { sanitizeBranchName, validateBranchNameInput } from '../utils/branchNamePrompt';
 import type { GitProfileService } from '../git/GitProfileService';
@@ -1069,16 +1069,22 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       }
 
       case 'COMMIT_BRANCH_DIFF_GET_DIR': {
+        const label = this.branchDiff?.label ?? msg.ref;
         const taken = await takeBranchFiles(this.manager, {
           repoId: msg.repoId,
           ref: msg.ref,
-          label: this.branchDiff?.label ?? msg.ref,
+          label,
           targetPath: msg.dirPath,
           files: msg.files,
+          changesTitle: workingTreeChangesTitle(msg.dirPath, label),
         });
         if (taken) await this.refreshBranchDiff();
         break;
       }
+
+      case 'COMMIT_BRANCH_DIFF_REFRESH':
+        await this.refreshBranchDiff();
+        break;
 
       case 'COMMIT_BRANCH_DIFF_CLOSE':
         this.branchDiff = null;
