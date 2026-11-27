@@ -54,6 +54,9 @@ function normalizeRef(raw: string): { kind: 'head-pointer'; branch: string }
     const n = raw.slice('tag: '.length);
     return { kind: 'tag', name: n.startsWith('refs/tags/') ? n.slice('refs/tags/'.length) : n };
   }
+  // Any other full ref (refs/stash, refs/notes/…, a tool's own like refs/t3/…) is no branch
+  // or tag: without this it fell through to the short-form guess below, as a remote "refs".
+  if (raw.startsWith('refs/')) return null;
   // Fallback: short-form (old git / no --decorate=full).
   // A ref with a slash is ambiguous (could be remote/branch or local feature/foo).
   // Without a full prefix we can't tell, so treat it as a remote ref — this was
