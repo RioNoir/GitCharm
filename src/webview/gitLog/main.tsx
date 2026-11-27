@@ -666,6 +666,12 @@ function App() {
           onPush={(repoIds, branchName) => {
             getVsCodeApi().postMessage({ type: 'LOG_PUSH_BRANCH_PICK', repoIds, branchName } satisfies LogToHostMsg);
           }}
+          onUpdateBranches={(items) => {
+            getVsCodeApi().postMessage({ type: 'LOG_UPDATE_BRANCHES', items } satisfies LogToHostMsg);
+          }}
+          onDeleteBranches={(items) => {
+            getVsCodeApi().postMessage({ type: 'LOG_DELETE_BRANCHES', items } satisfies LogToHostMsg);
+          }}
           onCheckoutTag={(repoIds, tagName) => {
             repoIds.forEach(repoId => {
               getVsCodeApi().postMessage({ type: 'LOG_CHECKOUT_TAG', requestId: generateId(), repoId, tagName } satisfies LogToHostMsg);
