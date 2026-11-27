@@ -211,12 +211,5 @@
   "config.issues.defaultFilter.mentioningMe": "Issue aperte che mi menzionano (GitHub e Gitea).",
   "config.issues.autoRefreshInterval.description": "Aggiorna la lista delle issue ogni tot minuti, mentre la sua tab è aperta e VS Code è in primo piano. 0 lo disattiva.",
   "config.issues.branchNameTemplate.markdownDescription": "Il nome proposto per un branch creato da una issue. `{number}` è il numero della issue, `{title}` il titolo in minuscolo con i trattini, `{user}` il tuo nome utente sulla forge — ad es. `feature/{number}-{title}`. Il nome si può comunque modificare prima di creare il branch.",
-  "config.issues.commitReferenceTemplate.markdownDescription": "Il testo inserito nel messaggio di commit quando si cita una issue. `{number}` è il numero della issue, `{title}` il suo titolo — ad es. `Fixes #{number}` per chiudere la issue quando il commit arriva sul branch di default.",
-  "config.section.mcp.title": "Server MCP",
-  "config.mcp.enabled.markdownDescription": "Avvia il server MCP di GitCharm, così gli agenti di coding (Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop, Copilot) possono usare gli strumenti Git, pull request e issue di GitCharm sui repository aperti in questa finestra. Ascolta solo su questa macchina, con un token. Installalo negli agenti da Impostazioni di GitCharm → Server MCP, o con il comando **GitCharm: Install MCP Server in Agents**.",
-  "config.mcp.confirmation.description": "Quali azioni richieste da un agente tramite il server MCP chiedono prima conferma in VS Code.",
-  "config.mcp.confirmation.enum.risky": "Quelle rischiose: push, merge, eliminazione di branch, riscrittura della storia, amend e pubblicazioni sulla forge",
-  "config.mcp.confirmation.enum.allWrites": "Ogni azione che modifica il repository o la forge",
-  "config.mcp.confirmation.enum.never": "Nessuna: gli agenti agiscono liberamente (i branch protetti restano protetti)",
-  "command.mcp.installInAgents.title": "Installa il server MCP negli agenti…"
+  "config.issues.commitReferenceTemplate.markdownDescription": "Il testo inserito nel messaggio di commit quando si cita una issue. `{number}` è il numero della issue, `{title}` il suo titolo — ad es. `Fixes #{number}` per chiudere la issue quando il commit arriva sul branch di default."
 }

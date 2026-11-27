@@ -211,12 +211,5 @@
   "config.issues.defaultFilter.mentioningMe": "Issues ouvertes qui me mentionnent (GitHub et Gitea).",
   "config.issues.autoRefreshInterval.description": "Actualiser la liste des issues toutes les N minutes, tant que son onglet est ouvert et que VS Code a le focus. 0 le désactive.",
   "config.issues.branchNameTemplate.markdownDescription": "Le nom proposé pour une branche créée depuis une issue. `{number}` est le numéro de l'issue, `{title}` son titre en minuscules avec des tirets, `{user}` ton nom d'utilisateur sur la forge — p. ex. `feature/{number}-{title}`. Le nom reste modifiable avant la création de la branche.",
-  "config.issues.commitReferenceTemplate.markdownDescription": "Le texte inséré dans le message de commit lorsqu'on référence une issue. `{number}` est le numéro de l'issue, `{title}` son titre — p. ex. `Fixes #{number}` pour fermer l'issue quand le commit arrive sur la branche par défaut.",
-  "config.section.mcp.title": "Serveur MCP",
-  "config.mcp.enabled.markdownDescription": "Lance le serveur MCP de GitCharm, pour que les agents de code (Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop, Copilot) utilisent les outils Git, pull request et issues de GitCharm sur les dépôts ouverts dans cette fenêtre. Il n'écoute que sur cette machine, avec un jeton. Installez-le dans les agents depuis Paramètres GitCharm → Serveur MCP, ou avec la commande **GitCharm: Install MCP Server in Agents**.",
-  "config.mcp.confirmation.description": "Quelles actions demandées par un agent via le serveur MCP demandent d'abord une confirmation dans VS Code.",
-  "config.mcp.confirmation.enum.risky": "Les risquées : push, fusion, suppression de branches, réécriture de l'historique, amend et publication sur la forge",
-  "config.mcp.confirmation.enum.allWrites": "Toute action qui modifie le dépôt ou la forge",
-  "config.mcp.confirmation.enum.never": "Aucune : les agents agissent librement (les branches protégées restent protégées)",
-  "command.mcp.installInAgents.title": "Installer le serveur MCP dans les agents…"
+  "config.issues.commitReferenceTemplate.markdownDescription": "Le texte inséré dans le message de commit lorsqu'on référence une issue. `{number}` est le numéro de l'issue, `{title}` son titre — p. ex. `Fixes #{number}` pour fermer l'issue quand le commit arrive sur la branche par défaut."
 }

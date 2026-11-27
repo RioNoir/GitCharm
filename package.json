@@ -150,12 +150,6 @@
         }
       ]
     },
-    "mcpServerDefinitionProviders": [
-      {
-        "id": "gitcharm.mcp",
-        "label": "GitCharm"
-      }
-    ],
     "customEditors": [
       {
         "viewType": "gitcharm.rebaseTodo",
@@ -398,12 +392,6 @@
         "title": "%command.manageHiddenRepos.title%",
         "category": "GitCharm",
         "icon": "$(eye-closed)"
-      },
-      {
-        "command": "gitcharm.mcp.installInAgents",
-        "title": "%command.mcp.installInAgents.title%",
-        "category": "GitCharm",
-        "icon": "$(plug)"
       },
       {
         "command": "gitcharm.manageProfiles",
@@ -1881,33 +1869,6 @@
             "type": "string",
             "default": "#{number}",
             "markdownDescription": "%config.issues.commitReferenceTemplate.markdownDescription%"
-          }
-        }
-      },
-      {
-        "title": "%config.section.mcp.title%",
-        "properties": {
-          "gitcharm.mcp.enabled": {
-            "order": 1,
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%config.mcp.enabled.markdownDescription%"
-          },
-          "gitcharm.mcp.confirmation": {
-            "order": 2,
-            "type": "string",
-            "enum": [
-              "risky",
-              "allWrites",
-              "never"
-            ],
-            "enumDescriptions": [
-              "%config.mcp.confirmation.enum.risky%",
-              "%config.mcp.confirmation.enum.allWrites%",
-              "%config.mcp.confirmation.enum.never%"
-            ],
-            "default": "risky",
-            "description": "%config.mcp.confirmation.description%"
           }
         }
       },

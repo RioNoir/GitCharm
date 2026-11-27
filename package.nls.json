@@ -211,12 +211,5 @@
   "config.issues.defaultFilter.mentioningMe": "Open issues mentioning me (GitHub and Gitea).",
   "config.issues.autoRefreshInterval.description": "Refresh the issue list every this many minutes, while its tab is open and VS Code is focused. 0 turns it off.",
   "config.issues.branchNameTemplate.markdownDescription": "The name suggested for a branch created from an issue. `{number}` is the issue number, `{title}` its title in lowercase with hyphens, `{user}` your username on the forge — e.g. `feature/{number}-{title}`. The name can still be edited before the branch is created.",
-  "config.issues.commitReferenceTemplate.markdownDescription": "The text inserted into the commit message when referencing an issue. `{number}` is the issue number, `{title}` its title — e.g. `Fixes #{number}` to close the issue when the commit reaches the default branch.",
-  "config.section.mcp.title": "MCP Server",
-  "config.mcp.enabled.markdownDescription": "Run GitCharm's MCP server, so coding agents (Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop, Copilot) can use GitCharm's Git, pull request and issue tools on the repositories open in this window. It listens on this machine only, with a token. Install it in the agents from GitCharm Settings → MCP Server, or with the **GitCharm: Install MCP Server in Agents** command.",
-  "config.mcp.confirmation.description": "Which actions requested by an agent through the MCP server ask for confirmation in VS Code first.",
-  "config.mcp.confirmation.enum.risky": "Risky ones: pushing, merging, deleting branches, rewriting history, amending, and posting on the forge",
-  "config.mcp.confirmation.enum.allWrites": "Every action that changes the repository or the forge",
-  "config.mcp.confirmation.enum.never": "None: agents act freely (protected branches stay guarded)",
-  "command.mcp.installInAgents.title": "Install MCP Server in Agents…"
+  "config.issues.commitReferenceTemplate.markdownDescription": "The text inserted into the commit message when referencing an issue. `{number}` is the issue number, `{title}` its title — e.g. `Fixes #{number}` to close the issue when the commit reaches the default branch."
 }

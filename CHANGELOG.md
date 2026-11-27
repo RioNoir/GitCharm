@@ -18,6 +18,7 @@ All notable changes to GitCharm are documented in this file.
 
 ### 🔧 Other
 - AI features are removed: generated commit messages, explanations, conflict resolution, pull request titles and descriptions, and resolving an issue or naming its branch with a model. Conflicts still open in the merge editor, and a branch created from an issue still uses `gitcharm.issues.branchNameTemplate`
+- The MCP server for coding agents is removed, including **GitCharm: Install MCP Server in Agents…** and the MCP Server settings page. Agents that were pointed at it keep that configuration entry until it is deleted from the agent itself
 
 ## v0.10.0
 

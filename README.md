@@ -80,18 +80,6 @@ Works with **GitHub, GitLab, Bitbucket Cloud, Gitea/Forgejo, Azure DevOps and Az
 
 <img src="media/screenshots/issues.png" alt="GitCharm issues">
 
-### 🔌 MCP Server for Coding Agents
-
-GitCharm can run an [MCP](https://modelcontextprotocol.io) server, so coding agents — **Claude Code**, **Codex**, **Gemini CLI**, **Cursor**, **Claude Desktop** and **GitHub Copilot**'s agent mode — use GitCharm on the repositories open in VS Code:
-
-- **Git**: status, history, commits and diffs, branches, stashes; stage, commit (with the active Git profile), create and switch branches, fetch, pull, push.
-- **History**: squash and drop commits, the commits after them replayed as they were.
-- **Pull requests & issues**: list, read (with CI checks and comments), create, comment and merge pull requests (cleaning up the branch); list and read issues — through the accounts connected in GitCharm.
-
-It is **off by default**. Turn it on in **GitCharm: Settings → MCP Server**, and install it in your agents from the same page (or with **GitCharm: Install MCP Server in Agents…**): GitCharm writes the server into each agent's own configuration, for every project, and the agent runs it with VS Code's Node runtime — nothing else to install. Copilot needs no installation on VS Code 1.101+.
-
-The server listens on this machine only (`127.0.0.1`, a random port and token), and an agent reaches the VS Code window holding its working folder. Risky actions — pushing, merging, deleting branches, rewriting history, posting on the forge — ask you to confirm in VS Code first (`gitcharm.mcp.confirmation`), and protected branches stay guarded.
-
 ### 🗂️ Multi-Repository Workspaces
 
 - Nested repositories and submodules discovered automatically, with configurable depth and ignored folders.
@@ -166,7 +154,6 @@ Some of the most useful commands:
 | `GitCharm: Toggle Git Annotations` | Shows or hides inline blame in the active editor. |
 | `GitCharm: Undock` | Moves the Log Panel to an editor tab or a new window. |
 | `GitCharm: Switch Git Profile` | Switches the Git identity for the workspace. |
-| `GitCharm: Install MCP Server in Agents…` | Installs GitCharm's MCP server in Claude Code, Codex, Gemini CLI, Cursor or Claude Desktop. |
 | `GitCharm: Settings` | Opens the GitCharm settings page. |
 | `GitCharm: Show Output Log` | Opens the GitCharm log, useful when reporting a bug. |
 
@@ -198,7 +185,6 @@ All settings are easiest to change from **GitCharm: Settings**. A selection of t
 | `gitcharm.issues.commitReferenceTemplate` | `#{number}` | Text inserted when referencing an issue, e.g. `Fixes #{number}`. |
 | `gitcharm.pullRequests.defaultMergeStrategy` | `merge` | Pre-selected merge strategy: `merge`, `squash`, `rebase` or `fastForward`. |
 | `gitcharm.pullRequests.deleteBranchAfterMerge` | `ask` | After merging a pull request: `ask`, `localAndRemote`, `remote`, `local` or `never`. |
-| `gitcharm.mcp.enabled` | `false` | Run GitCharm's MCP server for coding agents. |
 | `gitcharm.avatars.gravatar.enabled` | `false` | Fall back to Gravatar for avatars. Sends a hash of the author's email to gravatar.com. |
 
 Example:

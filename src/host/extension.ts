@@ -28,8 +28,6 @@ import { IssueDetailPanel } from './panels/IssueDetailPanel';
 import { CreateIssuePanel } from './panels/CreateIssuePanel';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 import { avatarResolver } from './utils/avatarResolver';
-import { McpService } from './mcp/McpService';
-
 /**
  * Before avatars and Gravatar were two settings, `avatars.enabled` (off by default) meant Gravatar, and users were
  * asked once whether to turn it on. Their answer carries over, once: those who turned it on keep Gravatar; those
@@ -356,13 +354,6 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   issueDetailPanel.setPullRequestDetailPanel(pullRequestDetailPanel);
 
-  // GitCharm's MCP server for coding agents: off until gitcharm.mcp.enabled is turned on.
-  const mcpService = new McpService(context, { manager, profileService, pullRequestManager, issueManager });
-  SettingsPanel.setMcpService(mcpService);
-  context.subscriptions.push(
-    mcpService,
-    vscode.commands.registerCommand('gitcharm.mcp.installInAgents', () => mcpService.pickAgents()),
-  );
   pullRequestDetailPanel.setIssueSupport(issueManager, issueDetailPanel);
   commitPanel.setIssueSupport(issueManager, issueDetailPanel, createIssuePanel);
   logPanel.setCommitPanel(commitPanel);

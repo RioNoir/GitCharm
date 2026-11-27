@@ -211,12 +211,5 @@
   "config.issues.defaultFilter.mentioningMe": "Offene Issues, die mich erwähnen (GitHub und Gitea).",
   "config.issues.autoRefreshInterval.description": "Die Issue-Liste alle so vielen Minuten aktualisieren, solange ihr Tab geöffnet und VS Code im Fokus ist. 0 schaltet es aus.",
   "config.issues.branchNameTemplate.markdownDescription": "Der vorgeschlagene Name für einen aus einem Issue erstellten Branch. `{number}` ist die Issue-Nummer, `{title}` ihr Titel in Kleinbuchstaben mit Bindestrichen, `{user}` dein Benutzername auf der Forge — z. B. `feature/{number}-{title}`. Der Name kann vor dem Erstellen des Branches noch geändert werden.",
-  "config.issues.commitReferenceTemplate.markdownDescription": "Der Text, der beim Referenzieren eines Issues in die Commit-Nachricht eingefügt wird. `{number}` ist die Issue-Nummer, `{title}` ihr Titel — z. B. `Fixes #{number}`, um das Issue zu schließen, sobald der Commit den Standard-Branch erreicht.",
-  "config.section.mcp.title": "MCP-Server",
-  "config.mcp.enabled.markdownDescription": "Startet den MCP-Server von GitCharm, damit Coding-Agenten (Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop, Copilot) die Git-, Pull-Request- und Issue-Werkzeuge von GitCharm für die in diesem Fenster geöffneten Repositorys nutzen können. Er lauscht nur auf diesem Rechner, mit einem Token. Installation in den Agenten über GitCharm-Einstellungen → MCP-Server oder mit dem Befehl **GitCharm: Install MCP Server in Agents**.",
-  "config.mcp.confirmation.description": "Welche über den MCP-Server angeforderten Aktionen eines Agenten zuerst in VS Code bestätigt werden müssen.",
-  "config.mcp.confirmation.enum.risky": "Riskante: Pushen, Mergen, Branches löschen, Verlauf umschreiben, Amend und Veröffentlichen in der Forge",
-  "config.mcp.confirmation.enum.allWrites": "Jede Aktion, die das Repository oder die Forge ändert",
-  "config.mcp.confirmation.enum.never": "Keine: Agenten handeln frei (geschützte Branches bleiben geschützt)",
-  "command.mcp.installInAgents.title": "MCP-Server in Agenten installieren…"
+  "config.issues.commitReferenceTemplate.markdownDescription": "Der Text, der beim Referenzieren eines Issues in die Commit-Nachricht eingefügt wird. `{number}` ist die Issue-Nummer, `{title}` ihr Titel — z. B. `Fixes #{number}`, um das Issue zu schließen, sobald der Commit den Standard-Branch erreicht."
 }

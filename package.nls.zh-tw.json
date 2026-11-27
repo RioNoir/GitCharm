@@ -211,12 +211,5 @@
   "config.issues.defaultFilter.mentioningMe": "提及我的開啟的議題（GitHub 和 Gitea）。",
   "config.issues.autoRefreshInterval.description": "在其索引標籤開啟且 VS Code 處於焦點時，每隔這麼多分鐘重新整理議題清單。0 表示關閉。",
   "config.issues.branchNameTemplate.markdownDescription": "從議題建立分支時建議的名稱。`{number}` 是議題編號，`{title}` 是其小寫並以連字號連接的標題，`{user}` 是你在程式碼代管平台上的使用者名稱——例如 `feature/{number}-{title}`。建立分支前仍可編輯名稱。",
-  "config.issues.commitReferenceTemplate.markdownDescription": "參照議題時插入提交訊息的文字。`{number}` 是議題編號，`{title}` 是其標題——例如 `Fixes #{number}`，在提交進入預設分支時關閉該議題。",
-  "config.section.mcp.title": "MCP 伺服器",
-  "config.mcp.enabled.markdownDescription": "執行 GitCharm 的 MCP 伺服器，讓程式設計代理程式（Claude Code、Codex、Gemini CLI、Cursor、Claude Desktop、Copilot）可以對此視窗中開啟的存放庫使用 GitCharm 的 Git、提取要求和問題工具。它僅在本機接聽，並使用權杖。可在 GitCharm 設定 → MCP 伺服器中，或使用 **GitCharm: Install MCP Server in Agents** 命令將其安裝到代理程式中。",
-  "config.mcp.confirmation.description": "代理程式透過 MCP 伺服器要求的哪些動作需要先在 VS Code 中確認。",
-  "config.mcp.confirmation.enum.risky": "有風險的動作：推送、合併、刪除分支、重寫歷程記錄、修訂提交以及在程式碼託管平台上發佈",
-  "config.mcp.confirmation.enum.allWrites": "所有會變更存放庫或程式碼託管平台的動作",
-  "config.mcp.confirmation.enum.never": "無：代理程式可自由行動（受保護的分支仍受保護）",
-  "command.mcp.installInAgents.title": "將 MCP 伺服器安裝到代理程式…"
+  "config.issues.commitReferenceTemplate.markdownDescription": "參照議題時插入提交訊息的文字。`{number}` 是議題編號，`{title}` 是其標題——例如 `Fixes #{number}`，在提交進入預設分支時關閉該議題。"
 }

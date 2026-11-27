@@ -84,12 +84,6 @@ All commands are in the Command Palette under **GitCharm**. Some only appear whe
 | `GitCharm: Refresh Issues` | Refreshes the Issues tab, bypassing the cache. |
 | `GitCharm: Reference an Issue in the Commit Message` | Searches the open issues of the connected repositories and inserts a reference to the chosen one into the commit message. |
 
-### MCP Server
-
-| Command | Description |
-|:--|:--|
-| `GitCharm: Install MCP Server in Agents…` | Turns the MCP server on if needed, then installs it in (or removes it from) Claude Code, Codex, Gemini CLI, Cursor and Claude Desktop. |
-
 ## Keybindings
 
 | Keybinding | macOS | Command |
@@ -213,27 +207,6 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 | `gitcharm.issues.autoRefreshInterval` | `0` | Refresh the issue list every this many minutes while its tab is open and VS Code is focused (`0`: off). |
 | `gitcharm.issues.branchNameTemplate` | `{number}-{title}` | The name suggested for a branch created from an issue: `{number}`, `{title}` (lowercase, hyphenated) and `{user}` (your forge username), e.g. `feature/{number}-{title}`. |
 | `gitcharm.issues.commitReferenceTemplate` | `#{number}` | The text inserted into the commit message when referencing an issue, e.g. `Fixes #{number}`. `{title}` is also available. |
-
-### MCP Server
-
-| Setting | Default | Description |
-|:--|:--|:--|
-| `gitcharm.mcp.enabled` | `false` | Run GitCharm's MCP server, so coding agents use its Git, pull request and issue tools on the repositories open in the window. It listens on `127.0.0.1` only, with a random port and token. |
-| `gitcharm.mcp.confirmation` | `risky` | Which agent actions ask for confirmation in VS Code: `risky` (push, merge, deleting branches, rewriting history, amending, posting on the forge), `allWrites`, or `never`. |
-
-#### MCP tools
-
-| Tool | Kind | What it does |
-|:--|:--|:--|
-| `list_repositories`, `get_status` | read | The window's repositories; a repository's branch and staged/unstaged files. |
-| `get_log`, `get_commit`, `get_diff`, `compare` | read | History (of a branch or a file), a commit with its diff, uncommitted changes, what a branch adds to another. |
-| `list_branches`, `list_stashes` | read | Branches with upstream and ahead/behind; stashes with their files. |
-| `stage`, `unstage`, `commit` | write | Commits use the active Git profile; amending asks for confirmation. |
-| `create_branch`, `switch_branch`, `fetch`, `pull`, `stash`, `stash_pop` | write | |
-| `push`, `delete_branch` | risky | Protected branches stay guarded. |
-| `squash_commits`, `drop_commits` | risky | Rewrite the current branch; the later commits are replayed. |
-| `list_pull_requests`, `get_pull_request`, `list_issues`, `get_issue` | read | Through the forge account connected in GitCharm. |
-| `create_pull_request`, `comment_on_pull_request`, `merge_pull_request` | risky | Merging can delete the branch afterwards. |
 
 ### Experimental
 

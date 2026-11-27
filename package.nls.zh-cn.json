@@ -211,12 +211,5 @@
   "config.issues.defaultFilter.mentioningMe": "提及我的打开的议题（GitHub 和 Gitea）。",
   "config.issues.autoRefreshInterval.description": "在其选项卡打开且 VS Code 处于焦点时，每隔这么多分钟刷新议题列表。0 表示关闭。",
   "config.issues.branchNameTemplate.markdownDescription": "从议题创建分支时建议的名称。`{number}` 是议题编号，`{title}` 是其小写并以连字符连接的标题，`{user}` 是你在代码托管平台上的用户名——例如 `feature/{number}-{title}`。创建分支前仍可编辑名称。",
-  "config.issues.commitReferenceTemplate.markdownDescription": "引用议题时插入提交消息的文本。`{number}` 是议题编号，`{title}` 是其标题——例如 `Fixes #{number}`，在提交进入默认分支时关闭该议题。",
-  "config.section.mcp.title": "MCP 服务器",
-  "config.mcp.enabled.markdownDescription": "运行 GitCharm 的 MCP 服务器，让编码智能体（Claude Code、Codex、Gemini CLI、Cursor、Claude Desktop、Copilot）可以对此窗口中打开的存储库使用 GitCharm 的 Git、拉取请求和问题工具。它仅在本机监听，并使用令牌。可在 GitCharm 设置 → MCP 服务器中，或使用 **GitCharm: Install MCP Server in Agents** 命令将其安装到智能体中。",
-  "config.mcp.confirmation.description": "智能体通过 MCP 服务器请求的哪些操作需要先在 VS Code 中确认。",
-  "config.mcp.confirmation.enum.risky": "有风险的操作：推送、合并、删除分支、重写历史、修订提交以及在代码托管平台上发布",
-  "config.mcp.confirmation.enum.allWrites": "所有会更改存储库或代码托管平台的操作",
-  "config.mcp.confirmation.enum.never": "无：智能体可自由操作（受保护的分支仍受保护）",
-  "command.mcp.installInAgents.title": "将 MCP 服务器安装到智能体…"
+  "config.issues.commitReferenceTemplate.markdownDescription": "引用议题时插入提交消息的文本。`{number}` 是议题编号，`{title}` 是其标题——例如 `Fixes #{number}`，在提交进入默认分支时关闭该议题。"
 }
