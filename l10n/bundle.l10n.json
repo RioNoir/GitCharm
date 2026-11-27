@@ -246,6 +246,8 @@
   "Repository colors": "Repository colors",
   "Git annotations": "Git annotations",
   "Inline blame (ghost text)": "Inline blame (ghost text)",
+  "Blame in the status bar": "Blame in the status bar",
+  "Commit message in the status bar": "Commit message in the status bar",
   "Author avatars": "Author avatars",
   "Gravatar as fallback": "Gravatar as fallback",
   "AI features": "AI features",
@@ -1312,6 +1314,7 @@
   "No profiles configured.": "No profiles configured.",
   "Create Profile": "Create Profile",
   "GitCharm — Switch Git Profile": "GitCharm — Switch Git Profile",
+  "GitCharm Blame": "GitCharm Blame",
   "Not committed": "Not committed",
   "Open in Log Panel": "Open in Log Panel",
   "current/Badge marking the currently checked-out branch or tag in a list": {

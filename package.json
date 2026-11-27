@@ -1410,6 +1410,18 @@
             "default": true,
             "description": "%config.gitGhostText.enabled.description%"
           },
+          "gitcharm.statusBarBlame.enabled": {
+            "order": 101,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.statusBarBlame.enabled.description%"
+          },
+          "gitcharm.statusBarBlame.showMessage": {
+            "order": 102,
+            "type": "boolean",
+            "default": true,
+            "description": "%config.statusBarBlame.showMessage.description%"
+          },
           "gitcharm.avatars.enabled": {
             "order": 105,
             "type": "boolean",

@@ -1981,5 +1981,8 @@
   "Deleting 1 branch": "Suppression de 1 branche",
   "Deleting {0} branches": "Suppression de {0} branches",
   "Deleted 1 branch.": "1 branche supprimée.",
-  "Deleted {0} branches.": "{0} branches supprimées."
+  "Deleted {0} branches.": "{0} branches supprimées.",
+  "Blame in the status bar": "Blame dans la barre d'état",
+  "GitCharm Blame": "Blame GitCharm",
+  "Commit message in the status bar": "Message du commit dans la barre d'état"
 }

@@ -1981,5 +1981,8 @@
   "Deleting 1 branch": "Eliminando 1 rama",
   "Deleting {0} branches": "Eliminando {0} ramas",
   "Deleted 1 branch.": "1 rama eliminada.",
-  "Deleted {0} branches.": "{0} ramas eliminadas."
+  "Deleted {0} branches.": "{0} ramas eliminadas.",
+  "Blame in the status bar": "Blame en la barra de estado",
+  "GitCharm Blame": "Blame de GitCharm",
+  "Commit message in the status bar": "Mensaje del commit en la barra de estado"
 }

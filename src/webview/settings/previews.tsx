@@ -623,20 +623,30 @@ const CODE = [
 function EditorPreview({ get }: PreviewProps) {
   const annotations = get<boolean>('gitAnnotations.enabled');
   const ghost = get<boolean>('gitGhostText.enabled');
+  const statusBar = get<boolean>('statusBarBlame.enabled');
+  const statusBarMessage = get<boolean>('statusBarBlame.showMessage');
   const avatars = get<boolean>('avatars.enabled');
   const current = useLoop(CODE.length, 1100, 2);
   const line = CODE[current];
   return (
     <div className="pv-stack">
-      <div className="pv-editor">
-        {CODE.map((l, i) => (
-          <div key={i} className={`pv-code-row${i === current ? ' current' : ''}`}>
-            {annotations && <span className="pv-blame">{l.blame}</span>}
-            <span className="pv-ln">{i + 1}</span>
-            <span className="pv-code">{l.code}{i === current && <span className="pv-caret" />}</span>
-            {ghost && i === current && <span key={current} className="pv-ghost pv-fade">{l.author}, {l.when} · {l.summary}</span>}
+      <div>
+        <div className="pv-editor">
+          {CODE.map((l, i) => (
+            <div key={i} className={`pv-code-row${i === current ? ' current' : ''}`}>
+              {annotations && <span className="pv-blame">{l.blame}</span>}
+              <span className="pv-ln">{i + 1}</span>
+              <span className="pv-code">{l.code}{i === current && <span className="pv-caret" />}</span>
+              {ghost && i === current && <span key={current} className="pv-ghost pv-fade">{l.author}, {l.when} · {l.summary}</span>}
+            </div>
+          ))}
+        </div>
+        {statusBar && (
+          <div className="pv-statusbar">
+            <Codicon name="git-commit" />
+            <span key={current} className="pv-fade">{line.author} ({line.when}){statusBarMessage && ` · ${line.summary}`}</span>
           </div>
-        ))}
+        )}
       </div>
       <div key={line.author} className="pv-hover pv-in">
         {avatars

@@ -1981,5 +1981,8 @@
   "Deleting 1 branch": "正在刪除 1 個分支",
   "Deleting {0} branches": "正在刪除 {0} 個分支",
   "Deleted 1 branch.": "已刪除 1 個分支。",
-  "Deleted {0} branches.": "已刪除 {0} 個分支。"
+  "Deleted {0} branches.": "已刪除 {0} 個分支。",
+  "Blame in the status bar": "狀態列中的追溯",
+  "GitCharm Blame": "GitCharm 追溯",
+  "Commit message in the status bar": "狀態列中的提交訊息"
 }
