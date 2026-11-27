@@ -19,6 +19,7 @@ import type { CompareCounts, CompareRange, RangeFileEntry, RebaseCommit, RebaseP
 import { buildRebaseTodo, shQuote } from './rebaseTodo';
 import { planDrop, planSquash, readSquashGroups, type Rewrite, type SquashGroup } from './historyRewrite';
 import { compareRangeArgs, isSafeCompareRef } from './compareRange';
+import { effectiveRemoteUrl } from './remoteUrl';
 import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
 import { getOrOpenVscodeRepository, getVscodeRepository } from './VscodeGitApi';
@@ -95,6 +96,8 @@ export class GitService {
   // value after an operation whose watcher event hasn't arrived yet.
 
   private refCache = new Map<string, { fingerprint: string; value: Promise<unknown>; createdAt: number }>();
+  /** `getEffectiveRemoteUrl` results, keyed by remote name and configured URL. */
+  private effectiveUrlCache = new Map<string, Promise<string>>();
   private fingerprintInFlight: Promise<string | null> | null = null;
   private fingerprintPaths: Promise<{ head: string; config: string; stashLog: string } | null> | null = null;
   /** Bounds the entries kept for log queries, whose keys vary with every filter. */
@@ -1705,6 +1708,27 @@ export class GitService {
       fetchUrl: r.refs.fetch ?? '',
       pushUrl: r.refs.push ?? r.refs.fetch ?? '',
     }));
+  }
+
+  /**
+   * The URL git actually fetches `remote` from: `configuredUrl` (as getRemotesWithUrls reports
+   * it) with `url.<base>.insteadOf` rewrites applied — what tells which forge a repo lives on.
+   * getRemotesWithUrls keeps the configured URL, which is what editing a remote must show and
+   * write back. Cached per configured URL, so changing the remote re-resolves it; a changed
+   * insteadOf rule is picked up after clearEffectiveRemoteUrls() or a reload.
+   */
+  getEffectiveRemoteUrl(remote: string, configuredUrl: string): Promise<string> {
+    const key = `${remote}\0${configuredUrl}`;
+    let url = this.effectiveUrlCache.get(key);
+    if (!url) {
+      url = effectiveRemoteUrl(args => this.git.raw(args), remote, configuredUrl);
+      this.effectiveUrlCache.set(key, url);
+    }
+    return url;
+  }
+
+  clearEffectiveRemoteUrls(): void {
+    this.effectiveUrlCache.clear();
   }
 
   async addRemote(name: string, url: string): Promise<void> {
