@@ -318,7 +318,8 @@ export interface Repository {
 	commit(message: string, opts?: CommitOptions): Promise<void>;
 	merge(ref: string): Promise<void>;
 	mergeAbort(): Promise<void>;
-	rebase(branch: string): Promise<void>;
+	/** Missing from some VS Code forks' git API (Cursor): check it's a function before calling (#141). */
+	rebase?(branch: string): Promise<void>;
 
 	createStash(options?: { message?: string; includeUntracked?: boolean; staged?: boolean }): Promise<void>;
 	applyStash(index?: number): Promise<void>;

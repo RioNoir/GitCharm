@@ -1874,8 +1874,12 @@ export class GitService {
     if (vsRepo) {
       if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       const upstream = vsRepo.state.HEAD.upstream;
+      // The fetch goes through VS Code, for its credentials; the rebase is local, so plain git
+      // does it when the API lacks rebase (Cursor's does, #141).
       await vsRepo.fetch();
-      await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
+      const onto = `${upstream.remote}/${upstream.name}`;
+      if (typeof vsRepo.rebase === 'function') await vsRepo.rebase(onto);
+      else await this.git.rebase([onto]);
       return vscode.l10n.t('pulled (rebase)');
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
@@ -1994,7 +1998,8 @@ export class GitService {
 
   async rebase(onto: string): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.rebase(onto); return; }
+    // Some forks' git API has no rebase (Cursor's, #141): plain git then.
+    if (typeof vsRepo?.rebase === 'function') { await vsRepo.rebase(onto); return; }
     await this.git.rebase([onto]);
   }
 
