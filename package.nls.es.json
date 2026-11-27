@@ -104,6 +104,8 @@
   "config.autoRefreshInterval.description": "Intervalo de actualización automática en segundos (0 = desactivado, usar solo la supervisión de archivos)",
   "config.gitAnnotations.enabled.description": "Habilitar las anotaciones de Git en el editor.",
   "config.gitGhostText.enabled.description": "Habilitar el texto fantasma de Git en línea en el editor.",
+  "config.statusBarBlame.enabled.description": "Muestra en la barra de estado el autor, la fecha y el mensaje del último commit que modificó la línea actual. Haz clic para mostrar el commit en el Log Panel.",
+  "config.statusBarBlame.showMessage.description": "Incluir el mensaje del commit en el blame de la barra de estado. Si está desactivado, solo se muestran el autor y la fecha; el mensaje sigue en la información sobre herramientas.",
   "config.avatars.enabled.markdownDescription": "Mostrar los avatares de los autores, obtenidos de las forjas: del GitHub, GitLab, Bitbucket o Gitea del repositorio cuando está conectado (la forja ya contiene los commits y sus autores), y de las direcciones noreply de GitHub, GitLab y Codeberg. No se envía ninguna dirección de correo a terceros. Los autores sin avatar muestran sus iniciales.",
   "config.avatars.gravatar.enabled.markdownDescription": "Cuando ninguna forja tiene el avatar de un autor, buscarlo en Gravatar. **Privacidad:** se envía a gravatar.com un hash del correo del autor, que puede revelar la dirección. Déjalo deshabilitado para repositorios privados o de empresa. Requiere `#gitcharm.avatars.enabled#`.",
   "config.gitLogDefaultLocation.description": "Dónde se abre Log Panel de forma predeterminada: panel inferior, pestaña del editor o ventana nueva.",

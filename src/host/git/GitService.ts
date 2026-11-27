@@ -19,6 +19,8 @@ import type { CompareCounts, CompareRange, RangeFileEntry, RebaseCommit, RebaseP
 import { buildRebaseTodo, shQuote } from './rebaseTodo';
 import { planDrop, planSquash, readSquashGroups, type Rewrite, type SquashGroup } from './historyRewrite';
 import { compareRangeArgs, isSafeCompareRef } from './compareRange';
+import { effectiveRemoteUrl } from './remoteUrl';
+import { LOG_REF_NAMESPACES, logRevisionArgs } from './logRefs';
 import { foldCommitChanges, parseRawLogChanges } from './combinedChanges';
 import { parseDiff, detectLanguage } from './DiffParser';
 import { getOrOpenVscodeRepository, getVscodeRepository } from './VscodeGitApi';
@@ -95,6 +97,8 @@ export class GitService {
   // value after an operation whose watcher event hasn't arrived yet.
 
   private refCache = new Map<string, { fingerprint: string; value: Promise<unknown>; createdAt: number }>();
+  /** `getEffectiveRemoteUrl` results, keyed by remote name and configured URL. */
+  private effectiveUrlCache = new Map<string, Promise<string>>();
   private fingerprintInFlight: Promise<string | null> | null = null;
   private fingerprintPaths: Promise<{ head: string; config: string; stashLog: string } | null> | null = null;
   /** Bounds the entries kept for log queries, whose keys vary with every filter. */
@@ -126,7 +130,9 @@ export class GitService {
       if (!paths) return null;
       const mtime = (file: string) => fs.promises.stat(file).then(st => String(st.mtimeMs), () => '');
       const [refs, head, config, stashLog] = await Promise.all([
-        this.git.raw(['for-each-ref', '--format=%(objectname) %(refname)']),
+        // Only the namespaces the Log reads: a tool updating its own refs (T3 Code's
+        // checkpoints, prefetch refs…) must not throw the caches away.
+        this.git.raw(['for-each-ref', '--format=%(objectname) %(refname)', ...LOG_REF_NAMESPACES, 'refs/stash']),
         fs.promises.readFile(paths.head, 'utf8'),
         mtime(paths.config),
         mtime(paths.stashLog),
@@ -765,9 +771,10 @@ export class GitService {
         return side === (mode === 'ahead' ? 'target' : 'base') ? [c] : [];
       });
     }
+    // Reachable the way the Log is: from a branch, remote branch or tag, or HEAD.
     const isReachable = async (hash: string): Promise<boolean> => {
-      const refs = await this.git.raw(['for-each-ref', '--format=%(refname)', '--contains', hash]).catch(() => '');
-      if (refs.split('\n').some(r => r.trim() && r.trim() !== 'refs/stash')) return true;
+      const refs = await this.git.raw(['for-each-ref', '--format=%(refname)', '--count=1', '--contains', hash, ...LOG_REF_NAMESPACES]).catch(() => '');
+      if (refs.trim()) return true;
       return isAncestor(hash, 'HEAD');
     };
     const reachable = await Promise.all(matches.map(c => isReachable(c.hash)));
@@ -838,7 +845,9 @@ export class GitService {
       } else if (opts?.filterBranch) {
         args.push(opts.filterBranch);
       } else {
-        args.push('--exclude=refs/stash', '--all');
+        // Branches, remote branches, tags and detached HEADs — not `--all`, which also walks
+        // the refs other tools keep under refs/ (T3 Code checkpoints, prefetch refs…, #140).
+        args.push(...await this.cachedByRefs('logRevisions', () => logRevisionArgs(a => this.git.raw(a)), fingerprint));
       }
       // The same query on unchanged refs gives the same commits: a refresh caused by
       // another repo, or a page re-requested, doesn't need to run git log again here.
@@ -1707,6 +1716,27 @@ export class GitService {
     }));
   }
 
+  /**
+   * The URL git actually fetches `remote` from: `configuredUrl` (as getRemotesWithUrls reports
+   * it) with `url.<base>.insteadOf` rewrites applied — what tells which forge a repo lives on.
+   * getRemotesWithUrls keeps the configured URL, which is what editing a remote must show and
+   * write back. Cached per configured URL, so changing the remote re-resolves it; a changed
+   * insteadOf rule is picked up after clearEffectiveRemoteUrls() or a reload.
+   */
+  getEffectiveRemoteUrl(remote: string, configuredUrl: string): Promise<string> {
+    const key = `${remote}\0${configuredUrl}`;
+    let url = this.effectiveUrlCache.get(key);
+    if (!url) {
+      url = effectiveRemoteUrl(args => this.git.raw(args), remote, configuredUrl);
+      this.effectiveUrlCache.set(key, url);
+    }
+    return url;
+  }
+
+  clearEffectiveRemoteUrls(): void {
+    this.effectiveUrlCache.clear();
+  }
+
   async addRemote(name: string, url: string): Promise<void> {
     await this.git.addRemote(name, url);
     this.vsRepo()?.fetch?.();
@@ -1874,8 +1904,12 @@ export class GitService {
     if (vsRepo) {
       if (!vsRepo.state.HEAD?.upstream) return vscode.l10n.t('No remote tracking branch — skipped');
       const upstream = vsRepo.state.HEAD.upstream;
+      // The fetch goes through VS Code, for its credentials; the rebase is local, so plain git
+      // does it when the API lacks rebase (Cursor's does, #141).
       await vsRepo.fetch();
-      await vsRepo.rebase(`${upstream.remote}/${upstream.name}`);
+      const onto = `${upstream.remote}/${upstream.name}`;
+      if (typeof vsRepo.rebase === 'function') await vsRepo.rebase(onto);
+      else await this.git.rebase([onto]);
       return vscode.l10n.t('pulled (rebase)');
     }
     const tracking = (await this.git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')).trim();
@@ -1994,7 +2028,8 @@ export class GitService {
 
   async rebase(onto: string): Promise<void> {
     const vsRepo = this.vsRepo();
-    if (vsRepo) { await vsRepo.rebase(onto); return; }
+    // Some forks' git API has no rebase (Cursor's, #141): plain git then.
+    if (typeof vsRepo?.rebase === 'function') { await vsRepo.rebase(onto); return; }
     await this.git.rebase([onto]);
   }
 

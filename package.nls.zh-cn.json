@@ -104,6 +104,8 @@
   "config.autoRefreshInterval.description": "自动刷新间隔（秒）（0 = 禁用，仅使用文件监视器）",
   "config.gitAnnotations.enabled.description": "在编辑器中启用 Git 注解。",
   "config.gitGhostText.enabled.description": "在编辑器中启用内联 Git 虚影文本。",
+  "config.statusBarBlame.enabled.description": "在状态栏中显示最后修改当前行的提交的作者、日期和消息。单击可在日志面板中显示该提交。",
+  "config.statusBarBlame.showMessage.description": "在状态栏追溯中包含提交消息。关闭时仅显示作者和日期；消息仍显示在工具提示中。",
   "config.avatars.enabled.markdownDescription": "显示作者头像，来源于代码托管平台：仓库已连接时来自其 GitHub、GitLab、Bitbucket 或 Gitea（平台本就持有这些提交及其作者），以及 GitHub、GitLab 和 Codeberg 的 noreply 地址。不会向第三方发送任何邮箱地址。没有头像的作者显示其姓名首字母。",
   "config.avatars.gravatar.enabled.markdownDescription": "当没有任何平台提供某位作者的头像时，在 Gravatar 上查找。**隐私：**这会将作者邮箱的哈希值发送到 gravatar.com，可能泄露该地址。对于私有或公司仓库，请保持禁用。需要启用 `#gitcharm.avatars.enabled#`。",
   "config.gitLogDefaultLocation.description": "日志面板默认打开的位置：底部面板、编辑器标签页或新窗口。",

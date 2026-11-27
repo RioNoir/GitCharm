@@ -2,6 +2,20 @@
 
 All notable changes to GitCharm are documented in this file.
 
+## v0.10.1
+
+### ✨ New Features
+- Several branches can be selected in the Log Panel's branch list with Ctrl/Cmd-click and Shift-click, within Local or within one remote. Right-clicking the selection offers **Update Selected**, which pulls each local branch from its upstream (fast-forward only for the branches not checked out), **Delete Selected**, with a single confirmation listing the branches, and **Copy Branch Names**. Checked-out branches, also in other worktrees, and a remote's default branch are skipped, closes [#132](https://github.com/RioNoir/GitCharm/issues/132) by [@ripopov](https://github.com/ripopov)
+- The status bar shows who last changed the line under the cursor: author, relative date and commit message, with the commit's details on hover. Clicking it reveals the commit in the Log Panel. On by default, and independent of the inline blame at the end of the line, so either can be turned off: **Blame in the status bar** in GitCharm's Editor settings (`gitcharm.statusBarBlame.enabled`). **Commit message in the status bar** (`gitcharm.statusBarBlame.showMessage`) leaves out the message to keep it short, closes [#139](https://github.com/RioNoir/GitCharm/issues/139) by [@ChadMao](https://github.com/ChadMao)
+
+### 🐛 Bug Fixes
+- Rebasing works in Cursor, whose Git extension doesn't expose rebase to other extensions: Update Project with rebase, Rebase onto… and the Log Panel's rebase failed with "rebase is not a function". GitCharm now runs the rebase with git itself when the editor's Git API lacks it, still fetching through the editor first, closes [#141](https://github.com/RioNoir/GitCharm/issues/141) by [@nifan950624](https://github.com/nifan950624), who also tracked down the cause and proposed this fix in [#142](https://github.com/RioNoir/GitCharm/pull/142)
+- The Log Panel shows the history of branches, remote branches, tags and detached HEADs only, no longer of every ref under `refs/`: the commits other tools keep in refs of their own, like T3 Code's checkpoints (`refs/t3/…`), `git maintenance` prefetch refs or filter-branch backups, stay out of the log, and updating those refs no longer reloads it, closes [#140](https://github.com/RioNoir/GitCharm/issues/140) by [@KaKi87](https://github.com/KaKi87)
+- Pull requests and issues connect to the forge git actually fetches from: a `url.<base>.insteadOf` rule that redirects the remote's configured URL (e.g. a public mirror) to another host is now applied when detecting the provider. A self-hosted host still needs mapping to its provider with `gitcharm.pullRequests.hostProviderOverrides`, closes [#138](https://github.com/RioNoir/GitCharm/issues/138) by [@AZMCode](https://github.com/AZMCode)
+
+### 🔧 Other
+- Dependencies updated within their current major versions: the Tiptap editor of pull requests and issues to 3.35, marked to 18.2, DOMPurify to 3.4.18, turndown, React, zustand, TanStack Virtual and the Material icon theme, plus the development tooling (ESLint, typescript-eslint, the Vite React plugin, vsce). Only releases published at least a week earlier were taken
+
 ## v0.10.0
 
 ### ✨ New Features

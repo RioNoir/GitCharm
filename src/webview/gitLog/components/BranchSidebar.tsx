@@ -8,6 +8,11 @@ import { focusOnHover, handleTreeNavKeyDown } from '../../shared/keyboardNav';
 import * as l10n from '@vscode/l10n';
 import { isImeComposing } from '../../shared/ime';
 import { RepoDots, type RepoDotInfo } from '../../shared/RepoDots';
+import type { BulkBranchItem } from '../../../host/types/messages';
+import {
+  applyBranchClick, pruneBranchSelection, EMPTY_BRANCH_SELECTION,
+  type BranchClickMode, type BranchSelection,
+} from '../utils/branchSelection';
 
 interface Props {
   repos: RepoMeta[];
@@ -29,6 +34,9 @@ interface Props {
   onFetchRepo: (repoId: string) => void;
   onPull: (repoIds: string[], branchName: string) => void;
   onPush: (repoIds: string[], branchName: string) => void;
+  /** Bulk actions on the branches selected with Ctrl/Cmd-click or Shift-click. */
+  onUpdateBranches: (items: BulkBranchItem[]) => void;
+  onDeleteBranches: (items: BulkBranchItem[]) => void;
   onCheckoutTag: (repoIds: string[], tagName: string) => void;
   onMergeTag: (repoIds: string[], tagName: string) => void;
   onPushTag: (repoId: string, tagName: string) => void;
@@ -203,6 +211,8 @@ interface MergedTag {
   repoIds: string[];
 }
 
+const EMPTY_NAMES: ReadonlySet<string> = new Set();
+
 function buildMergedTags(tags: TagInfo[]): MergedTag[] {
   const map = new Map<string, MergedTag>();
   for (const t of tags) {
@@ -219,7 +229,7 @@ function buildMergedTags(tags: TagInfo[]): MergedTag[] {
 export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSidebar({
   repos, branches, tags, filter, selectedBranchFilter, activeRepoId, onFilterChange, onBranchFilterSelect, onBranchFocus,
   onCheckout, onNewBranch, onMerge, onRebase, onInteractiveRebase, onRename, onDelete, onFetchRepo: _onFetchRepo, onPull, onPush,
-  onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
+  onUpdateBranches, onDeleteBranches, onCheckoutTag, onMergeTag, onPushTag, onDeleteTag, hidden,
 }, ref) {
   // A submodule's own default branch (develop, px4, rolling…) only earns a star when the
   // sidebar shows that submodule alone: across a workspace with dozens of submodules it would
@@ -235,15 +245,34 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ merged: MergedBranch; x: number; y: number } | null>(null);
   const [tagContextMenu, setTagContextMenu] = useState<{ mergedTag: MergedTag; x: number; y: number } | null>(null);
+  const [selection, setSelection] = useState<BranchSelection>(EMPTY_BRANCH_SELECTION);
+  const [bulkMenu, setBulkMenu] = useState<{ x: number; y: number } | null>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
 
   // Arrow/Home/End/PageUp/PageDown move focus between rows (branches, tags, folders) in
   // document order — the same order they're rendered in, so it stays correct through any
   // filter or collapsed state without duplicating the tree-walk logic here. Enter/Space on
   // a focused row is handled by the row itself (BranchRow/FolderRow), same as a click.
+  // Escape clears a multi-selection.
   const handleNavKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape' && !isImeComposing(e.nativeEvent)) {
+      setSelection(prev => prev.names.length > 0 ? EMPTY_BRANCH_SELECTION : prev);
+    }
     handleTreeNavKeyDown(e, navScrollRef.current);
   }, []);
+
+  // A Shift-click range follows the rows as they're on screen — pinned branches first, then
+  // the tree, leaving out what collapsed folders or the filter hide — so it's read off the DOM.
+  const visibleBranchOrder = useCallback((section: string): string[] => {
+    const rows = navScrollRef.current?.querySelectorAll<HTMLElement>('[data-branch-section]') ?? [];
+    return Array.from(rows)
+      .filter(row => row.dataset.branchSection === section)
+      .map(row => row.dataset.branchName ?? '');
+  }, []);
+
+  const handleBranchSelect = useCallback((section: string, merged: MergedBranch, mode: BranchClickMode) => {
+    setSelection(prev => applyBranchClick(prev, section, merged.baseName, mode, mode === 'range' ? visibleBranchOrder(section) : []));
+  }, [visibleBranchOrder]);
 
   useEffect(() => {
     const id = 'gitcharm-branch-ctx-hover';
@@ -336,6 +365,31 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       return { name, merged, folderPaths };
     });
 
+  // The selection as it applies now: branches deleted, renamed or hidden by the filter since
+  // they were selected drop out, so a bulk action only ever targets rows the user can see.
+  const sectionMerged = selection.section === 'local'
+    ? localMerged
+    : remoteGroups.find(g => `remote:${g.name}` === selection.section)?.merged ?? [];
+  const sectionByName = new Map(sectionMerged.map(m => [m.baseName, m]));
+  const activeSelection = pruneBranchSelection(selection, new Set(sectionByName.keys()));
+  const selectedMerged = activeSelection.names.map(n => sectionByName.get(n)!);
+  const selectedIn = (section: string): ReadonlySet<string> =>
+    activeSelection.section === section ? new Set(activeSelection.names) : EMPTY_NAMES;
+
+  // Right-click on a branch that's part of a multi-selection opens the bulk menu; on any other
+  // branch it selects just that one (as a tree does) and opens its own menu.
+  const openBranchMenu = (section: string, merged: MergedBranch, e: React.MouseEvent) => {
+    setTagContextMenu(null);
+    if (activeSelection.section === section && activeSelection.names.length > 1 && activeSelection.names.includes(merged.baseName)) {
+      setContextMenu(null);
+      setBulkMenu({ x: e.clientX, y: e.clientY });
+      return;
+    }
+    setBulkMenu(null);
+    setSelection({ section, names: [merged.baseName], anchor: merged.baseName });
+    setContextMenu({ merged, x: e.clientX, y: e.clientY });
+  };
+
   // Active detached tag name(s) — shown as "current" in the Tags section
   const activeDetachedTags = new Set(branches.filter(b => b.detachedTag).map(b => b.detachedTag!));
 
@@ -368,7 +422,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   }
 
   return (
-    <div ref={ref} style={hidden ? { ...styles.container, display: 'none' } : styles.container} onClick={() => { setContextMenu(null); setTagContextMenu(null); }}>
+    <div ref={ref} style={hidden ? { ...styles.container, display: 'none' } : styles.container} onClick={() => { setContextMenu(null); setTagContextMenu(null); setBulkMenu(null); }}>
       {/* Sticky header: search + repo list */}
       <div style={styles.stickyHeader}>
         <div style={styles.searchBox}>
@@ -399,6 +453,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
       {!collapsed.has('local') && (
         <BranchList
           merged={localMerged}
+          section="local"
           keyPrefix="folder:local"
           collapsed={collapsed}
           onToggleFolder={toggle}
@@ -406,7 +461,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
           multiRepo={multiRepo}
           selectedBranchFilter={selectedBranchFilter}
           contextMenu={contextMenu}
-          setContextMenu={setContextMenu}
+          selectedNames={selectedIn('local')}
+          onBranchSelect={handleBranchSelect}
+          onBranchContextMenu={openBranchMenu}
           primaryInstance={primaryInstance}
           focusInstance={focusInstance}
           onBranchFocus={onBranchFocus}
@@ -440,6 +497,7 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
             {!collapsed.has(sectionKey) && (
               <BranchList
                 merged={merged}
+                section={sectionKey}
                 keyPrefix={`folder:${sectionKey}`}
                 collapsed={collapsed}
                 onToggleFolder={toggle}
@@ -447,7 +505,9 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
                 multiRepo={multiRepo}
                 selectedBranchFilter={selectedBranchFilter}
                 contextMenu={contextMenu}
-                setContextMenu={setContextMenu}
+                selectedNames={selectedIn(sectionKey)}
+                onBranchSelect={handleBranchSelect}
+                onBranchContextMenu={openBranchMenu}
                 primaryInstance={primaryInstance}
                 focusInstance={focusInstance}
                 onBranchFocus={onBranchFocus}
@@ -531,6 +591,37 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
         );
       })()}
 
+      {/* Bulk menu for a multi-selection */}
+      {bulkMenu && selectedMerged.length > 1 && (() => {
+        const isLocal = activeSelection.section === 'local';
+        const count = selectedMerged.length;
+        // A local item covers the repos that have the local branch; a remote one carries the
+        // remote-tracking name ("origin/x") the host deletes on that remote.
+        const items: BulkBranchItem[] = selectedMerged.map(m => isLocal
+          ? { branchName: m.baseName, repoIds: m.instances.filter(i => !i.isRemote).map(i => i.repoId) }
+          : { branchName: m.instances[0].name, repoIds: m.repoIds });
+        const close = () => setBulkMenu(null);
+        const menuItems: MenuItem[] = [
+          ...(isLocal ? [
+            { icon: 'cloud-download', label: l10n.t('Update Selected ({0})', count), action: () => { onUpdateBranches(items); close(); } },
+            { sep: true as const },
+          ] : []),
+          {
+            icon: 'copy',
+            label: l10n.t('Copy Branch Names'),
+            action: () => { navigator.clipboard.writeText(selectedMerged.map(m => m.baseName).join('\n')).catch(() => {}); close(); },
+          },
+          { sep: true },
+          {
+            icon: 'trash',
+            label: l10n.t('Delete Selected ({0})', count),
+            danger: true,
+            action: () => { onDeleteBranches(items); setSelection(EMPTY_BRANCH_SELECTION); close(); },
+          },
+        ];
+        return <BranchMenuPopup x={bulkMenu.x} y={bulkMenu.y} onClose={close} items={menuItems} />;
+      })()}
+
       {/* Tag context menu */}
       {tagContextMenu && (
         <TagContextMenu
@@ -549,13 +640,16 @@ export const BranchSidebar = forwardRef<HTMLDivElement, Props>(function BranchSi
   );
 });
 
-function BranchRow({ merged, repoMap, multiRepo, isFilterSelected, isCtxActive, onContextMenu, onClick, onDoubleClick, depth = 0, displayName }: {
+function BranchRow({ merged, section, repoMap, multiRepo, isFilterSelected, isSelected, isCtxActive, onContextMenu, onSelect, onClick, onDoubleClick, depth = 0, displayName }: {
   merged: MergedBranch;
+  section: string;
   repoMap: Record<string, RepoDotInfo>;
   multiRepo: boolean;
   isFilterSelected: boolean;
+  isSelected: boolean;
   isCtxActive: boolean;
   onContextMenu: (e: React.MouseEvent) => void;
+  onSelect: (mode: BranchClickMode) => void;
   onClick: () => void;
   onDoubleClick: () => void;
   depth?: number;
@@ -575,14 +669,26 @@ function BranchRow({ merged, repoMap, multiRepo, isFilterSelected, isCtxActive, 
   return (
     <div
       data-nav-row=""
+      data-branch-section={section}
+      data-branch-name={baseName}
       tabIndex={-1}
-      style={styles.branchRow(isHead, isFilterSelected, hovered, isCtxActive, depth, focused)}
+      aria-selected={isSelected}
+      style={styles.branchRow(isHead, isFilterSelected, hovered, isCtxActive, depth, focused, isSelected)}
       onMouseEnter={(e) => { setHovered(true); focusOnHover(e.currentTarget); }}
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       onContextMenu={onContextMenu}
-      onClick={() => {
+      onClick={(e) => {
+        // Ctrl/Cmd-click and Shift-click only change the selection — no waiting for a
+        // possible double-click, and the graph doesn't jump to the branch.
+        if (e.metaKey || e.ctrlKey || e.shiftKey) {
+          e.preventDefault();
+          if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+          onSelect(e.shiftKey ? 'range' : 'toggle');
+          return;
+        }
+        onSelect('single');
         if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
         clickTimerRef.current = setTimeout(() => {
           clickTimerRef.current = null;
@@ -596,8 +702,8 @@ function BranchRow({ merged, repoMap, multiRepo, isFilterSelected, isCtxActive, 
         }
         onDoubleClick();
       }}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
-      title={`${baseName}\n${l10n.t('Click to focus branch head · Double-click to filter · Right-click for git actions')}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect('single'); onClick(); } }}
+      title={`${baseName}\n${l10n.t('Click to focus branch head · Double-click to filter · Right-click for git actions')}\n${l10n.t('Ctrl/Cmd+click or Shift+click to select several branches')}`}
     >
       <span style={styles.chevronSpacer} />
       <Codicon
@@ -679,11 +785,12 @@ function SectionHeader({ icon, label, count, sectionKey, collapsed, onToggleSect
 // at the top — current first — followed by the tree view of everything else, folders and
 // branches merged into one alphabetical-by-name list.
 function BranchList({
-  merged, keyPrefix, collapsed, onToggleFolder,
-  repoMap, multiRepo, selectedBranchFilter, contextMenu, setContextMenu,
+  merged, section, keyPrefix, collapsed, onToggleFolder,
+  repoMap, multiRepo, selectedBranchFilter, contextMenu, selectedNames, onBranchSelect, onBranchContextMenu,
   primaryInstance, focusInstance, onBranchFocus, onBranchFilterSelect, forceExpanded,
 }: {
   merged: MergedBranch[];
+  section: string;
   keyPrefix: string;
   collapsed: Set<SectionKey>;
   onToggleFolder: (key: SectionKey) => void;
@@ -691,7 +798,9 @@ function BranchList({
   multiRepo: boolean;
   selectedBranchFilter: string;
   contextMenu: { merged: MergedBranch; x: number; y: number } | null;
-  setContextMenu: (v: { merged: MergedBranch; x: number; y: number } | null) => void;
+  selectedNames: ReadonlySet<string>;
+  onBranchSelect: (section: string, merged: MergedBranch, mode: BranchClickMode) => void;
+  onBranchContextMenu: (section: string, merged: MergedBranch, e: React.MouseEvent) => void;
   primaryInstance: (m: MergedBranch) => BranchInfo;
   focusInstance: (m: MergedBranch) => BranchInfo | undefined;
   onBranchFocus: (branch: BranchInfo) => void;
@@ -704,17 +813,20 @@ function BranchList({
     <BranchRow
       key={m.baseName}
       merged={m}
+      section={section}
       depth={depth}
       displayName={m.baseName.split('/').pop()}
       repoMap={repoMap}
       multiRepo={multiRepo}
       isFilterSelected={selectedBranchFilter === primaryInstance(m).name}
+      isSelected={selectedNames.has(m.baseName)}
       isCtxActive={contextMenu?.merged.baseName === m.baseName}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setContextMenu({ merged: m, x: e.clientX, y: e.clientY });
+        onBranchContextMenu(section, m, e);
       }}
+      onSelect={mode => onBranchSelect(section, m, mode)}
       onClick={() => {
         const instance = focusInstance(m);
         if (instance) onBranchFocus(instance);
@@ -1229,23 +1341,25 @@ const styles = {
     fontSize: '10px',
     flexShrink: 0,
   },
-  branchRow: (isHead: boolean, isFilterSelected: boolean, hovered = false, ctxActive = false, depth = 0, keyboardFocused = false): React.CSSProperties => ({
+  branchRow: (isHead: boolean, isFilterSelected: boolean, hovered = false, ctxActive = false, depth = 0, keyboardFocused = false, selected = false): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
     padding: `2px 8px 2px ${8 + depth * 14}px`,
     cursor: 'pointer',
     minWidth: 0,
-    background: keyboardFocused
-      ? 'var(--vscode-list-inactiveSelectionBackground)'
-      : isFilterSelected
-        ? 'var(--vscode-list-hoverBackground)'
-        : ctxActive
-          ? 'var(--vscode-list-inactiveSelectionBackground)'
-          : hovered
-            ? 'var(--vscode-list-hoverBackground)'
-            : 'transparent',
-    color: 'var(--vscode-foreground)',
+    background: selected
+      ? 'var(--vscode-list-activeSelectionBackground)'
+      : keyboardFocused
+        ? 'var(--vscode-list-inactiveSelectionBackground)'
+        : isFilterSelected
+          ? 'var(--vscode-list-hoverBackground)'
+          : ctxActive
+            ? 'var(--vscode-list-inactiveSelectionBackground)'
+            : hovered
+              ? 'var(--vscode-list-hoverBackground)'
+              : 'transparent',
+    color: selected ? 'var(--vscode-list-activeSelectionForeground, var(--vscode-foreground))' : 'var(--vscode-foreground)',
     fontSize: '12px',
     minHeight: '22px',
     outline: isFilterSelected ? '1px solid var(--vscode-focusBorder)' : 'none',

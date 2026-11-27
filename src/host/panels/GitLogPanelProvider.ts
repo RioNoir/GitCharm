@@ -4,7 +4,7 @@ import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { attachAvatarResolver } from '../utils/avatarResolver';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
-import type { LogToHostMsg, HostToLogMsg, CompareCounts, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus, LogColumns } from '../types/messages';
+import type { LogToHostMsg, HostToLogMsg, BulkBranchItem, CompareCounts, CompareRange, LogLayoutPrefs, LogLayoutByLocation, LogViewLocation, LogWorkingTreeStatus, LogColumns } from '../types/messages';
 import type { BranchInfo, FileStatus, GitFileStatus, RepoMeta, WorkspaceStatus } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { CommitPanelProvider } from './CommitPanelProvider';
@@ -730,6 +730,212 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
         placeHolder: vscode.l10n.t('Select the repository in which to push this branch'),
       });
     return picked?.repoId ?? null;
+  }
+
+  /**
+   * The branches checked out in a repository: in its own working tree and in any linked
+   * worktree. Git refuses to delete those or fast-forward them with a fetch, so the bulk
+   * actions skip them up front instead of reporting the failure afterwards.
+   */
+  private async checkedOutBranches(repo: NonNullable<ReturnType<WorkspaceGitManager['getRepo']>>): Promise<Set<string>> {
+    const names = new Set<string>();
+    const worktrees = await repo.getWorktrees().catch(() => []);
+    for (const wt of worktrees) if (wt.branchShort) names.add(wt.branchShort);
+    const current = await repo.getCurrentBranch().catch(() => null);
+    if (current && !current.detachedTag && !current.detachedHash) names.add(current.name);
+    return names;
+  }
+
+  /** "branch", or "repo: branch" when the items span several repositories. */
+  private bulkBranchLabeler(items: BulkBranchItem[]): (repoId: string, branchName: string) => string {
+    const multiRepo = new Set(items.flatMap(item => item.repoIds)).size > 1;
+    const names = new Map(this.manager.getRepoMetas().map(meta => [meta.id, meta.name]));
+    return (repoId, branchName) => multiRepo ? `${names.get(repoId) ?? repoId}: ${branchName}` : branchName;
+  }
+
+  /**
+   * "Update Selected" in the branch sidebar: brings each selected local branch up to date with
+   * its upstream — a pull for the branch checked out in this working tree, a fast-forward-only
+   * `fetch <remote> <upstream>:<branch>` for the others (same as Pull on a single branch).
+   * Branches without an upstream, or checked out in another worktree, are skipped; a failure
+   * (e.g. a branch that diverged from its upstream) doesn't stop the remaining ones.
+   */
+  private async updateBranches(items: BulkBranchItem[]): Promise<void> {
+    const label = this.bulkBranchLabeler(items);
+    const byRepo = new Map<string, string[]>();
+    for (const item of items) {
+      for (const repoId of item.repoIds) {
+        const list = byRepo.get(repoId) ?? [];
+        if (!list.includes(item.branchName)) list.push(item.branchName);
+        byRepo.set(repoId, list);
+      }
+    }
+    const total = Array.from(byRepo.values()).reduce((n, list) => n + list.length, 0);
+    if (total === 0) return;
+
+    let updated = 0;
+    const noUpstream: string[] = [];
+    const elsewhere: string[] = [];
+    const errors: string[] = [];
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: plural(total, vscode.l10n.t('Updating 1 branch'), vscode.l10n.t('Updating {0} branches', total)),
+        cancellable: false,
+      },
+      async progress => {
+        for (const [repoId, branchNames] of byRepo) {
+          const repo = this.manager.getRepo(repoId);
+          if (!repo) continue;
+          const current = await repo.getCurrentBranch().catch(() => null);
+          const currentName = current && !current.detachedTag && !current.detachedHash ? current.name : null;
+          const checkedOut = await this.checkedOutBranches(repo);
+          for (const branchName of branchNames) {
+            const name = label(repoId, branchName);
+            progress.report({ message: name, increment: 100 / total });
+            try {
+              const upstream = await repo.getBranchUpstream(branchName);
+              if (!upstream) { noUpstream.push(name); continue; }
+              if (branchName === currentName) {
+                await repo.pullWithDefault();
+              } else if (checkedOut.has(branchName)) {
+                elsewhere.push(name);
+                continue;
+              } else {
+                await repo.pullBranchFastForward(upstream.remote, upstream.branchName, branchName);
+              }
+              updated++;
+            } catch (e: unknown) {
+              logError('updateBranches', formatGitError(e), getRawErrorDetail(e));
+              errors.push(`${name}: ${formatGitError(e)}`);
+            }
+          }
+        }
+      }
+    );
+
+    const parts = [
+      plural(updated, vscode.l10n.t('Updated 1 branch.'), vscode.l10n.t('Updated {0} branches.', updated)),
+      noUpstream.length > 0 ? vscode.l10n.t('Skipped, no upstream: {0}.', noUpstream.join(', ')) : undefined,
+      elsewhere.length > 0 ? vscode.l10n.t('Skipped, checked out in another worktree: {0}.', elsewhere.join(', ')) : undefined,
+      errors.length > 0 ? errorsSummary(errors) : undefined,
+    ].filter((part): part is string => !!part);
+    logInfo('updateBranches', parts.join(' '));
+    if (errors.length > 0) notifyWithLogAction('warning', parts.join(' '));
+    else if (noUpstream.length > 0 || elsewhere.length > 0) vscode.window.showWarningMessage(parts.join(' '));
+    else vscode.window.showInformationMessage(parts.join(' '));
+  }
+
+  /**
+   * "Delete Selected" in the branch sidebar: one confirmation listing every branch, then deletes
+   * them — local branches with `git branch -d` (or -D on Force Delete), remote-tracking ones by
+   * pushing the deletion to their remote. Branches checked out (here or in a linked worktree)
+   * and a remote's default branch are left out and listed as skipped. Returns whether anything
+   * was deleted.
+   */
+  private async deleteBranches(items: BulkBranchItem[]): Promise<boolean> {
+    const label = this.bulkBranchLabeler(items);
+    const repoIds = Array.from(new Set(items.flatMap(item => item.repoIds)));
+    const state = new Map<string, { branches: BranchInfo[]; checkedOut: Set<string> }>();
+    await Promise.all(repoIds.map(async repoId => {
+      const repo = this.manager.getRepo(repoId);
+      if (!repo) return;
+      const [branches, checkedOut] = await Promise.all([
+        repo.getBranches().catch(() => [] as BranchInfo[]),
+        this.checkedOutBranches(repo),
+      ]);
+      state.set(repoId, { branches, checkedOut });
+    }));
+
+    type Target = { repoId: string; branchName: string; remote?: string; bareName?: string };
+    const targets: Target[] = [];
+    const skipped: string[] = [];
+    const remoteDefaults = new Map<string, string | undefined>();
+    for (const item of items) {
+      for (const repoId of item.repoIds) {
+        const repoState = state.get(repoId);
+        const info = repoState?.branches.find(b => b.name === item.branchName);
+        if (!repoState || !info) continue;
+        const name = label(repoId, item.branchName);
+        if (!info.isRemote) {
+          if (repoState.checkedOut.has(info.name)) {
+            skipped.push(vscode.l10n.t('{0} (checked out)', name));
+            continue;
+          }
+          targets.push({ repoId, branchName: info.name });
+          continue;
+        }
+        const remote = info.remoteName ?? item.branchName.split('/')[0];
+        const bareName = item.branchName.slice(remote.length + 1);
+        const key = `${repoId}\0${remote}`;
+        if (!remoteDefaults.has(key)) {
+          const repo = this.manager.getRepo(repoId);
+          remoteDefaults.set(key, await repo?.getRemoteDefaultBranch(remote, { allowNetwork: true }).catch(() => undefined));
+        }
+        if (remoteDefaults.get(key) === bareName) {
+          skipped.push(vscode.l10n.t('{0} (default branch on the remote)', name));
+          continue;
+        }
+        targets.push({ repoId, branchName: item.branchName, remote, bareName });
+      }
+    }
+
+    if (targets.length === 0) {
+      const warn = vscode.l10n.t('None of the selected branches can be deleted: {0}.', skipped.join(', '));
+      logWarn('deleteBranches', warn);
+      vscode.window.showWarningMessage(warn);
+      return false;
+    }
+
+    const MAX_LISTED = 15;
+    const listed = targets.slice(0, MAX_LISTED).map(t => `• ${label(t.repoId, t.branchName)}`);
+    if (targets.length > MAX_LISTED) listed.push(vscode.l10n.t('…and {0} more', targets.length - MAX_LISTED));
+    const detail = [
+      listed.join('\n'),
+      targets.some(t => t.remote) ? vscode.l10n.t('Remote branches are deleted on their remote.') : undefined,
+      skipped.length > 0 ? vscode.l10n.t('Skipped: {0}', skipped.join(', ')) : undefined,
+    ].filter(Boolean).join('\n\n');
+    const deleteLabel = vscode.l10n.t('Delete');
+    const forceDeleteLabel = vscode.l10n.t('Force Delete');
+    const hasLocal = targets.some(t => !t.remote);
+    const confirm = await vscode.window.showWarningMessage(
+      plural(targets.length, vscode.l10n.t('Delete 1 branch?'), vscode.l10n.t('Delete {0} branches?', targets.length)),
+      { modal: true, detail },
+      deleteLabel, ...(hasLocal ? [forceDeleteLabel] : []),
+    );
+    if (!confirm) return false;
+    const force = confirm === forceDeleteLabel;
+
+    let deleted = 0;
+    const errors: string[] = [];
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: plural(targets.length, vscode.l10n.t('Deleting 1 branch'), vscode.l10n.t('Deleting {0} branches', targets.length)),
+        cancellable: false,
+      },
+      async progress => {
+        for (const target of targets) {
+          const name = label(target.repoId, target.branchName);
+          progress.report({ message: name, increment: 100 / targets.length });
+          const repo = this.manager.getRepo(target.repoId);
+          if (!repo) continue;
+          try {
+            if (target.remote) await repo.deleteRemoteBranch(target.remote, target.bareName!);
+            else await repo.deleteBranch(target.branchName, force);
+            deleted++;
+          } catch (e: unknown) {
+            logError('deleteBranches', formatGitError(e), getRawErrorDetail(e));
+            errors.push(`${name}: ${formatGitError(e)}`);
+          }
+        }
+      }
+    );
+
+    const summary = plural(deleted, vscode.l10n.t('Deleted 1 branch.'), vscode.l10n.t('Deleted {0} branches.', deleted));
+    logInfo('deleteBranches', summary);
+    if (errors.length > 0) notifyWithLogAction('warning', `${summary} ${errorsSummary(errors)}`);
+    return deleted > 0;
   }
 
   private async handleMessage(msg: LogToHostMsg, origin: ReplyTarget = 'sidebar'): Promise<void> {
@@ -1469,6 +1675,17 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
           post({ type: 'LOG_BRANCH_OP_RESULT', requestId: msg.requestId, ok: true });
           post({ type: 'LOG_REFRESH' });
         }
+        break;
+      }
+
+      case 'LOG_UPDATE_BRANCHES': {
+        await this.updateBranches(msg.items);
+        post({ type: 'LOG_REFRESH' });
+        break;
+      }
+
+      case 'LOG_DELETE_BRANCHES': {
+        if (await this.deleteBranches(msg.items)) post({ type: 'LOG_REFRESH' });
         break;
       }
 
