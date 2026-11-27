@@ -197,9 +197,11 @@ export class PullRequestManager {
     if (repoId) {
       this.cache.delete(repoId);
       this.providerCache.delete(repoId);
+      this.manager.getRepo(repoId)?.clearEffectiveRemoteUrls();
     } else {
       this.cache.clear();
       this.providerCache.clear();
+      for (const meta of this.manager.getRepoMetas()) this.manager.getRepo(meta.id)?.clearEffectiveRemoteUrls();
     }
   }
 
@@ -290,7 +292,9 @@ export class PullRequestManager {
     const remotes = await repo.getRemotesWithUrls();
     const origin = remotes.find(r => r.name === 'origin') ?? remotes[0];
     if (!origin?.fetchUrl) return null;
-    const parsed = parseRemoteUrl(origin.fetchUrl);
+    // The forge is the one git actually talks to: a `url.<base>.insteadOf` rule can send a remote
+    // configured with a mirror's URL to another host (#138).
+    const parsed = parseRemoteUrl(await repo.getEffectiveRemoteUrl(origin.name, origin.fetchUrl));
     if (!parsed) return null;
     const resolved = resolveProvider(parsed, getHostProviderOverrides());
     return { owner: resolved.owner, repo: resolved.repo, host: resolved.host, provider: resolved };
