@@ -57,7 +57,7 @@ representing the project in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainers at 85.grocers-esteem@icloud.com. All complaints will
+reported to the maintainers through [this repository's issues](https://github.com/nifan950624/GitCharm/issues). All complaints will
 be reviewed and investigated promptly and fairly.
 
 All maintainers are obligated to respect the privacy and security of the

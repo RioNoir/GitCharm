@@ -88,7 +88,7 @@ export function useForgeAvatarUrl(url: string | undefined): string | undefined {
 
 /**
  * Stable background color for an initials avatar. Keyed by name rather than email because forges report
- * PR authors, reviewers and commenters by name only; case-insensitive so "RioNoir" and "rionoir" match.
+ * PR authors, reviewers and commenters by name only; case-insensitive so "Ada" and "ada" match.
  */
 export function avatarColor(name: string): string {
   const seed = name.trim().toLowerCase();

@@ -918,7 +918,7 @@ export class PullRequestManager {
 
     // Spaces become hyphens (e.g. "Riccardo Morandi" -> "riccardo-morandi"); any other non-branch-safe
     // character is also hyphenated. Lowercased throughout — git branch names are case-sensitive and this
-    // avoids "pr/RioNoir/1" vs "pr/rionoir/1" ambiguity across checkouts of the same author's PRs.
+    // avoids "pr/Ada/1" vs "pr/ada/1" ambiguity across checkouts of the same author's PRs.
     const safeAuthor = pr.authorName.trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
     const branchName = mode === 'branch' ? pr.sourceBranch : `pr/${safeAuthor}/${pr.number}`;
     const { remote, refspec } = await target.provider.getCheckoutSource(pr);

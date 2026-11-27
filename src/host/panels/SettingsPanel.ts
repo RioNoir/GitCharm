@@ -148,7 +148,7 @@ export class SettingsPanel {
         break;
       }
       case 'SETTINGS_OPEN_NATIVE':
-        await vscode.commands.executeCommand('workbench.action.openSettings', msg.key ? `${SECTION}.${msg.key}` : '@ext:rionoir.gitcharm');
+        await vscode.commands.executeCommand('workbench.action.openSettings', msg.key ? `${SECTION}.${msg.key}` : '@ext:nifan950624.gitcharm');
         break;
       case 'SETTINGS_OPEN_JSON':
         await vscode.commands.executeCommand('workbench.action.openSettingsJson');

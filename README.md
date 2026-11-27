@@ -13,16 +13,11 @@
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-1.93%2B-007ACC">
   <img alt="Node" src="https://img.shields.io/badge/Node-18%2B-339933">
   <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-red">
-  <img alt="GitHub forks" src="https://img.shields.io/github/forks/RioNoir/GitCharm?style=flat&logo=github&label=Forks&color=orange">
-  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/RioNoir/GitCharm?style=flat&logo=GitHub&label=Stars&color=yellow">
-  <a href="https://github.com/RioNoir/GitCharm/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/RioNoir/GitCharm/ci.yml?branch=main&style=flat&logo=github&label=CI"></a>
 </p>
 
 GitCharm brings a JetBrains-style Git experience to VS Code: a focused Commit Panel, a Log Panel with graph, interactive rebase, shelves and stashes, and pull requests and issues for every major forge — across every repository and submodule in your workspace.
 
-<a href="https://ko-fi.com/rionoir" target="_blank">
-  <img alt="Support GitCharm" src="media/banners/support-banner.png" width="100%">
-</a>
+This repository was migrated from [RioNoir/GitCharm](https://github.com/RioNoir/GitCharm) and is maintained here as a separate fork. The upstream project stays at that address.
 
 <img src="media/screenshots/full.png" alt="GitCharm">
 
@@ -110,7 +105,7 @@ Everything is configured from **GitCharm: Settings**, a dedicated page styled af
 
 ## 📦 Installation
 
-Install **GitCharm** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=RioNoir.gitcharm), or search for it in the Extensions view. It activates automatically when the workspace contains a Git repository.
+Install this fork from a VSIX built in this repository (`Extensions: Install from VSIX…`). It activates automatically when the workspace contains a Git repository. The Marketplace item `RioNoir.gitcharm` is the upstream extension, not this fork.
 
 **Requirements:** VS Code `1.93` or newer and Git.
 
@@ -212,7 +207,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the
 
 ## 🙏 Acknowledgements
 
-GitCharm is built on [simple-git](https://github.com/steveukx/git-js), [React](https://react.dev/), [Zustand](https://github.com/pmndrs/zustand), [TanStack Virtual](https://github.com/TanStack/virtual), [Prism.js](https://prismjs.com/), [Codicons](https://github.com/microsoft/vscode-codicons) and [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme). Thanks also to everyone who opens issues, submits pull requests, and provides feedback.
+GitCharm is built on [simple-git](https://github.com/steveukx/git-js), [React](https://react.dev/), [Zustand](https://github.com/pmndrs/zustand), [TanStack Virtual](https://github.com/TanStack/virtual), [Prism.js](https://prismjs.com/), [Codicons](https://github.com/microsoft/vscode-codicons) and [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme). This fork started from [RioNoir/GitCharm](https://github.com/RioNoir/GitCharm).
 
 ## 📄 License
 

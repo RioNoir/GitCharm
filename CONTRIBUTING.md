@@ -19,7 +19,7 @@ participating, you agree to uphold it.
 ### Setup
 
 ```bash
-git clone https://github.com/RioNoir/GitCharm.git
+git clone https://github.com/nifan950624/GitCharm.git
 cd GitCharm
 npm install
 ```
@@ -118,7 +118,7 @@ GitCharm uses VS Code's built-in localization:
 
 ## Reporting bugs
 
-Open a [GitHub issue](https://github.com/RioNoir/GitCharm/issues) and
+Open a [GitHub issue](https://github.com/nifan950624/GitCharm/issues) and
 include:
 
 * GitCharm version, VS Code version, and OS

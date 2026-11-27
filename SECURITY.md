@@ -15,7 +15,7 @@ the VS Code Marketplace is supported with security fixes.
 If you discover a security vulnerability in GitCharm, please **do not**
 report it through a public GitHub issue, discussion, or pull request.
 
-Instead, report it privately by emailing **85.grocers-esteem@icloud.com** with:
+Instead, report it privately through [this repository's security advisories](https://github.com/nifan950624/GitCharm/security/advisories/new), with:
 
 * A description of the vulnerability and its potential impact
 * Steps to reproduce, or a proof of concept if available

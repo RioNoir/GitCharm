@@ -3,14 +3,11 @@
   "displayName": "GitCharm",
   "description": "%extension.description%",
   "version": "0.10.0",
-  "publisher": "RioNoir",
+  "publisher": "nifan950624",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/RioNoir/GitCharm.git"
-  },
-  "sponsor": {
-    "url": "https://ko-fi.com/rionoir"
+    "url": "https://github.com/nifan950624/GitCharm.git"
   },
   "engines": {
     "vscode": "^1.93.0"

@@ -274,7 +274,7 @@ export function registerCommands(
 
     vscode.commands.registerCommand('gitcharm.openSettings', (section?: string) => {
       if (!extensionUri || !manager || !integrations) {
-        void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rionoir.gitcharm');
+        void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:nifan950624.gitcharm');
         return;
       }
       // Menu contributions pass their context (a view item, a URI…) as first argument: only a string is a section.

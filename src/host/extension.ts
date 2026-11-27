@@ -96,37 +96,6 @@ async function showViewModeQuickpick(globalState: vscode.Memento): Promise<void>
   }
 }
 
-async function maybeShowSupportNotification(globalState: vscode.Memento): Promise<void> {
-  const DO_NOT_SHOW_KEY = 'doNotShowSupportNotification';
-  const LAST_SHOWN_KEY = 'supportNotificationLastShown';
-
-  if (globalState.get<boolean>(DO_NOT_SHOW_KEY)) return;
-
-  const lastShown = globalState.get<number>(LAST_SHOWN_KEY, 0);
-  const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
-  if (Date.now() - lastShown < oneMonthMs) return;
-
-  await globalState.update(LAST_SHOWN_KEY, Date.now());
-
-  const star = vscode.l10n.t('Leave a Star');
-  const support = vscode.l10n.t('Support');
-  const doNotShow = vscode.l10n.t('Do Not Show Again');
-  const picked = await vscode.window.showInformationMessage(
-    vscode.l10n.t('Do you like GitCharm?'),
-    star,
-    support,
-    doNotShow,
-  );
-
-  if (picked === doNotShow) {
-    await globalState.update(DO_NOT_SHOW_KEY, true);
-  } else if (picked === star) {
-    await vscode.env.openExternal(vscode.Uri.parse('https://github.com/RioNoir/GitCharm'));
-  } else if (picked === support) {
-    await vscode.env.openExternal(vscode.Uri.parse('https://ko-fi.com/rionoir'));
-  }
-}
-
 async function maybeNotifyUnpushedCommits(manager: WorkspaceGitManager, commitPanel: CommitPanelProvider): Promise<void> {
   if (!vscode.workspace.getConfiguration('gitcharm').get<boolean>('notifyOnUnpushedCommits', true)) return;
 
@@ -274,9 +243,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // DEV ONLY: uncomment to reset the quickpick flag
   //context.globalState.update('hasShownViewModeQuickpick', false);
-  // DEV ONLY: uncomment to reset the support notification
-  //context.globalState.update('doNotShowSupportNotification', false);
-  //context.globalState.update('supportNotificationLastShown', 0);
   // DEV ONLY: uncomment to reset the missing Git identity notification
   //context.globalState.update('doNotShowMissingGitIdentityNotification', false);
   // DEV ONLY: uncomment to reset the incoming commits notification flag
@@ -284,7 +250,6 @@ export function activate(context: vscode.ExtensionContext): void {
   showViewModeQuickpick(context.globalState);
   context.subscriptions.push(watchAvatarSetting());
   void migrateAvatarSettings(context.globalState);
-  setTimeout(() => maybeShowSupportNotification(context.globalState), 5 * 60 * 1000); // DEV: use 5 * 60 * 1000 for production
 
   const shelveDocProvider = new ShelveDocumentProvider();
   context.subscriptions.push(
