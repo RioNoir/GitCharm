@@ -36,10 +36,9 @@ export interface CommitState {
   defaultCommitAction: CommitAction;
   defaultSaveAction: 'stash' | 'shelve';
   hasWorkspaceFolder: boolean;
-  aiEnabled: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
 
-  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, defaultCommitAction?: CommitAction, defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
+  setStatus: (repos: RepoMeta[], status: WorkspaceStatus, iconTheme?: IconThemeData | null, defaultCommitAction?: CommitAction, defaultSaveAction?: 'stash' | 'shelve', hasWorkspaceFolder?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
   setRepoSelection: (repoId: string, selected: boolean) => void;
   isPushSelected: (repoId: string) => boolean;
   setPushSelection: (repoId: string, selected: boolean) => void;
@@ -120,10 +119,9 @@ export const useCommitStore = create<CommitState>((set, get) => ({
   defaultCommitAction: 'commit',
   defaultSaveAction: 'stash',
   hasWorkspaceFolder: true,
-  aiEnabled: true,
   activeProfile: undefined,
 
-  setStatus: (repoMetas, status, iconTheme, defaultCommitAction, defaultSaveAction, hasWorkspaceFolder, aiEnabled, activeProfile) => {
+  setStatus: (repoMetas, status, iconTheme, defaultCommitAction, defaultSaveAction, hasWorkspaceFolder, activeProfile) => {
     const prev = get().repoSelections;
     const prevFiles = get().fileSelections;
     const prevSeen = get().seenFiles;
@@ -181,7 +179,7 @@ export const useCommitStore = create<CommitState>((set, get) => ({
         }
       }
     }
-    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(defaultSaveAction !== undefined ? { defaultSaveAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}), ...(activeProfile !== undefined ? { activeProfile } : {}) });
+    set({ repoMetas, status, repoSelections, fileSelections, seenFiles, collapsedKeys, ...(iconTheme !== undefined ? { iconTheme } : {}), ...(defaultCommitAction !== undefined ? { defaultCommitAction } : {}), ...(defaultSaveAction !== undefined ? { defaultSaveAction } : {}), ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(activeProfile !== undefined ? { activeProfile } : {}) });
   },
 
   setRepoSelection: (repoId, selected) =>

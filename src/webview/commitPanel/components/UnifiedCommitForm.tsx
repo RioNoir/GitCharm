@@ -63,10 +63,6 @@ interface Props {
   onPullRepos: (repoIds: string[]) => void;
   onPushRepos: (repoIds: string[]) => void;
   onForcePushRepos: (repoIds: string[]) => void;
-  aiEnabled: boolean;
-  onAutopilot: () => void;
-  onAutopilotContextMenu: (e: React.MouseEvent) => void;
-  generatingMessage: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   onOpenProfiles: () => void;
   onRebaseAction: (repoId: string, action: 'continue' | 'skip' | 'abort') => void;
@@ -246,7 +242,6 @@ export function UnifiedCommitForm({
   message, repoStatuses, syncRepoStatuses, repoMetas, amendFlags,
   loading, changesViewMode, defaultCommitAction = 'commit', defaultSaveAction = 'stash', vscodeSelectedRepos, getSelectedFilesForRepo, onDeselectRepo, onMessageChange, onAmendToggle, onCommit, onCommitAndPush, onCommitPushAndOpenPullRequest, onShelve, onStash,
   onSyncAction, onPullRepos, onPushRepos, onForcePushRepos,
-  aiEnabled, onAutopilot, onAutopilotContextMenu, generatingMessage,
   activeProfile, onOpenProfiles, onRebaseAction, subjectMaxLength = 0, insertRequest, onInsertHandled,
 }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
@@ -361,7 +356,6 @@ export function UnifiedCommitForm({
       const s = document.createElement('style');
       s.id = id;
       s.textContent = `.gs-ctx-item:hover { background: var(--vscode-menu-selectionBackground) !important; color: var(--vscode-menu-selectionForeground) !important; }
-[data-autopilot-btn]:not([disabled]):hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; border-radius: 3px; }
 .gs-message-resize:hover .gs-message-resize-grip, .gs-message-resize:active .gs-message-resize-grip { background: var(--vscode-focusBorder); }`;
       document.head.appendChild(s);
     }
@@ -596,14 +590,13 @@ export function UnifiedCommitForm({
         <textarea
           ref={textareaRef}
           className="gs-commit-textarea"
-          style={styles.textarea(generatingMessage, textareaFocused, messageHeight)}
+          style={styles.textarea(textareaFocused, messageHeight)}
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           onFocus={() => setTextareaFocused(true)}
           onBlur={() => { rememberCaret(); setTextareaFocused(false); }}
           onSelect={rememberCaret}
-          placeholder={generatingMessage ? l10n.t('Generating commit message…') : l10n.t('Commit message ({0} to commit)', shortcut(['mod'], 'Enter'))}
-          readOnly={generatingMessage}
+          placeholder={l10n.t('Commit message ({0} to commit)', shortcut(['mod'], 'Enter'))}
           rows={2}
           onContextMenu={handleCtxMenu}
           onKeyDown={(e) => {
@@ -614,18 +607,6 @@ export function UnifiedCommitForm({
             }
           }}
         />
-        {aiEnabled && (
-          <button
-            data-autopilot-btn=""
-            style={styles.autopilotBtn(generatingMessage)}
-            onClick={onAutopilot}
-            onContextMenu={onAutopilotContextMenu}
-            disabled={generatingMessage}
-            title={l10n.t('Generate commit message with AI (right-click for options)')}
-          >
-            <Codicon name={generatingMessage ? 'loading~spin' : 'sparkle'} style={{ fontSize: '16px' }} />
-          </button>
-        )}
       </div>
       </div>
       {(() => {
@@ -847,7 +828,7 @@ const styles = {
   textareaWrap: {
     position: 'relative' as const,
   },
-  textarea: (generating: boolean, focused: boolean, height: number | null): React.CSSProperties => ({
+  textarea: (focused: boolean, height: number | null): React.CSSProperties => ({
     width: '100%',
     resize: 'none' as const,
     overflow: height != null ? 'auto' : 'hidden',
@@ -855,37 +836,18 @@ const styles = {
     ...(height != null ? { height: `${height}px` } : {}),
     background: 'var(--vscode-input-background)',
     color: 'var(--vscode-input-foreground)',
-    border: generating
+    border: focused
       ? '1px solid var(--vscode-focusBorder)'
-      : focused
-        ? '1px solid var(--vscode-focusBorder)'
       : '1px solid var(--vscode-input-border, rgba(128,128,128,0.35))',
     borderRadius: '3px',
-    padding: '5px 28px 5px 7px',
+    padding: '5px 7px',
     fontSize: '12px',
     fontFamily: 'var(--vscode-font-family)',
     lineHeight: '1.5',
     outline: 'none',
     boxSizing: 'border-box' as const,
-    opacity: generating ? 0.6 : 1,
-    cursor: generating ? 'default' : 'text',
-    animation: generating ? 'gs-textarea-pulse 1.2s ease-in-out infinite' : 'none',
-    boxShadow: focused && !generating ? '0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent)' : 'none',
+    boxShadow: focused ? '0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent)' : 'none',
     transition: 'border-color 0.12s ease, box-shadow 0.12s ease',
-  }),
-  autopilotBtn: (spinning: boolean): React.CSSProperties => ({
-    position: 'absolute' as const,
-    top: '4px',
-    right: '4px',
-    background: 'transparent',
-    border: 'none',
-    cursor: spinning ? 'default' : 'pointer',
-    color: 'var(--vscode-foreground)',
-    opacity: spinning ? 0.5 : 0.7,
-    padding: '2px',
-    display: 'flex',
-    alignItems: 'center',
-    lineHeight: 1,
   }),
   ctxMenu: {
     position: 'fixed' as const,

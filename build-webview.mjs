@@ -15,11 +15,8 @@ const apps = [
   { name: 'pullRequestDetail', entry: 'src/webview/pullRequestDetail/main.tsx' },
   { name: 'issueDetail',       entry: 'src/webview/issueDetail/main.tsx' },
   { name: 'issueCreate',       entry: 'src/webview/issueCreate/main.tsx' },
-  { name: 'issueResolve',      entry: 'src/webview/issueResolve/main.tsx' },
   { name: 'commitFullDetail',  entry: 'src/webview/commitFullDetail/main.tsx' },
-  { name: 'aiExplainDetail',   entry: 'src/webview/aiExplainDetail/main.tsx' },
   { name: 'settings',          entry: 'src/webview/settings/main.tsx' },
-  { name: 'conflictAi',        entry: 'src/webview/conflictAi/main.tsx' },
   { name: 'interactiveRebase', entry: 'src/webview/interactiveRebase/main.tsx' },
 ];
 

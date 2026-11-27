@@ -5,8 +5,6 @@ import { attachAvatarResolver } from '../utils/avatarResolver';
 import { EMPTY_TREE, openSmartDiff } from './GitLogPanelProvider';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { loadIconTheme } from '../utils/IconThemeService';
-import { getAiModelLabel } from '../utils/aiModelLabel';
-import { buildPrompt } from '../ai/prompts';
 import { pickRefQuickPick } from '../utils/refPicker';
 import { formatGitError, showGitError, getRawErrorDetail } from '../utils/gitErrorUtils';
 import { logInfo, logWarn, logError } from '../utils/Logger';
@@ -37,7 +35,6 @@ export async function openCommitFullDetailPanel(
   manager: WorkspaceGitManager,
   repoId: string,
   hash: string,
-  opts: { autoExplain?: boolean } = {},
   profileService?: import('../git/GitProfileService').GitProfileService,
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
@@ -57,7 +54,7 @@ export async function openCommitFullDetailPanel(
       localResourceRoots: getLocalResourceRoots(extensionUri),
     }
   );
-  await setupPanel(panel, extensionUri, manager, repoId, hash, opts, profileService);
+  await setupPanel(panel, extensionUri, manager, repoId, hash, profileService);
 }
 
 /** Re-hydrates a Commit Full Detail panel restored by VS Code after a window reload/restart — see registerWebviewPanelSerializer('gitcharm.commitFullDetail', ...) in extension.ts. */
@@ -79,7 +76,7 @@ export async function deserializeCommitFullDetailPanel(
     panel.dispose();
     return;
   }
-  await setupPanel(panel, extensionUri, manager, s.repoId, s.hash, {}, profileService);
+  await setupPanel(panel, extensionUri, manager, s.repoId, s.hash, profileService);
 }
 
 async function setupPanel(
@@ -88,7 +85,6 @@ async function setupPanel(
   manager: WorkspaceGitManager,
   repoId: string,
   hash: string,
-  opts: { autoExplain?: boolean },
   profileService?: import('../git/GitProfileService').GitProfileService,
 ): Promise<void> {
   const repo = manager.getRepo(repoId);
@@ -170,7 +166,7 @@ async function setupPanel(
   const gate = webviewReadyGate<HostToCommitFullDetailMsg>(panel);
 
   attachAvatarResolver(panel.webview);
-  panel.webview.onDidReceiveMessage((msg: CommitFullDetailToHostMsg | LogToHostMsg) => handleMessage(msg, repoId, hash, repo, panel, extensionUri));
+  panel.webview.onDidReceiveMessage((msg: CommitFullDetailToHostMsg | LogToHostMsg) => handleMessage(msg, repoId, hash, repo, panel));
 
   const iconThemeWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
     if (!e.affectsConfiguration('workbench.iconTheme')) return;
@@ -180,7 +176,6 @@ async function setupPanel(
   panel.onDidDispose(() => iconThemeWatcher.dispose());
 
   const iconTheme = await loadIconTheme(panel.webview).catch(() => ({ type: 'none' as const }));
-  const cfg = vscode.workspace.getConfiguration('gitcharm');
 
   // Only needed for a stash — its author section shows "you" (the active profile),
   // matching how it's committed, not a fixed author baked into the entry.
@@ -214,49 +209,7 @@ async function setupPanel(
     files,
     iconTheme,
     activeProfile,
-    aiEnabled: cfg.get('ai.enabled', true),
-    aiModelLabel: getAiModelLabel(cfg, 'explain'),
-    autoExplain: opts.autoExplain ?? false,
   } satisfies HostToCommitFullDetailMsg);
-}
-
-/** Builds the AI prompt from the commit's diff/message/files and generates the explanation.
- * Returns the result rather than posting it — the caller displays it in the separate AI Explain Detail panel. */
-async function explainCommit(
-  hash: string,
-  repo: import('../git/GitService').GitService,
-  onProgress: (explanationSoFar: string) => void,
-): Promise<{ explanation?: string; error?: string }> {
-  try {
-    const cfg = vscode.workspace.getConfiguration('gitcharm');
-    const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
-
-    const [diff, fullMessage, commitMeta] = await Promise.all([
-      repo.getCommitDiff(hash, maxDiffChars),
-      repo.getFullCommitMessage(hash),
-      repo.getCommitMeta(hash),
-    ]);
-    const commitFiles = await repo.getCommitFiles(hash, commitMeta.parents);
-
-    const fileList = commitFiles.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`).join('\n');
-    const prompt = buildPrompt('explainCommit', [
-      `## Commit: ${commitMeta.shortHash}`,
-      `## Message: ${fullMessage.trim() || commitMeta.message}`,
-      '',
-      '## Changed files',
-      fileList,
-      diff && `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\``,
-    ], cfg);
-
-    const { cleanPartialModelOutput, generateForOperation } = await import('../ai/aiGenerate');
-    const explanation = await generateForOperation('explain', prompt, cfg, {
-      onProgress: text => onProgress(cleanPartialModelOutput(text)),
-    });
-    return { explanation };
-  } catch (e: unknown) {
-    logError('commitFullDetail:explain', formatGitError(e), getRawErrorDetail(e));
-    return { error: formatGitError(e) };
-  }
 }
 
 async function handleMessage(
@@ -265,24 +218,10 @@ async function handleMessage(
   hash: string,
   repo: import('../git/GitService').GitService,
   panel: vscode.WebviewPanel,
-  extensionUri: vscode.Uri,
 ): Promise<void> {
   const post = (m: HostToLogMsg | HostToCommitFullDetailMsg) => panel.webview.postMessage(m);
 
   switch (msg.type) {
-    case 'COMMITFULLDETAIL_EXPLAIN': {
-      const { openAiExplainDetail } = await import('./AiExplainDetailPanel');
-      const cfg = vscode.workspace.getConfiguration('gitcharm');
-      const shortHash = msg.hash.startsWith('stash@{') ? msg.hash : msg.hash.slice(0, 7);
-      openAiExplainDetail(
-        extensionUri,
-        { key: `commit:${msg.repoId}:${msg.hash}`, kind: 'commit', title: vscode.l10n.t('Commit {0}', shortHash) },
-        getAiModelLabel(cfg, 'explain'),
-        onProgress => explainCommit(msg.hash, repo, onProgress),
-      );
-      return;
-    }
-
     case 'LOG_REQUEST_COMMIT_FILES': {
       try {
         const requestedFiles = await repo.getCommitFiles(msg.hash, msg.parents);

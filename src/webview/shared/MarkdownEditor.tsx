@@ -9,7 +9,7 @@ import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { Codicon } from './Codicon';
-import { focusableFieldStyle, generatingFieldStyle } from './inputStyles';
+import { focusableFieldStyle } from './inputStyles';
 import * as l10n from '@vscode/l10n';
 import { shortcut } from './shortcut';
 import { isImeComposing } from './ime';
@@ -25,12 +25,8 @@ interface Props {
    * own border (e.g. editing a comment in place) — the editor then fills that container edge-to-edge instead
    * of visually doubling up on borders. */
   bare?: boolean;
-  /** Rendered inside the text area's top-right corner (e.g. the AI generate button), like the commit message's. */
-  inlineAction?: React.ReactNode;
-  /** Blocks typing and toolbar actions, e.g. while the content is being generated. */
+  /** Blocks typing and toolbar actions. */
   readOnly?: boolean;
-  /** AI is writing the content: read-only, plus the commit message's generating look (focus border, pulsing text). */
-  generating?: boolean;
 }
 
 const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-', codeBlockStyle: 'fenced' });
@@ -131,9 +127,8 @@ function TableBarButton({ label, icon, onClick }: { label: string; icon: string;
   );
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180px', bare = false, inlineAction, readOnly: readOnlyProp = false, generating = false }: Props) {
-  const readOnly = readOnlyProp || generating;
-  // Read lazily by the Placeholder extension, so a changed placeholder (e.g. "Generating…") shows without recreating the editor.
+export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180px', bare = false, readOnly = false }: Props) {
+  // Read lazily by the Placeholder extension, so a changed placeholder shows without recreating the editor.
   const placeholderRef = useRef(placeholder ?? '');
   placeholderRef.current = placeholder ?? '';
   const mentionCandidates = useMentionCandidates();
@@ -171,7 +166,6 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
       // All six levels are accepted so an existing `####` survives an edit; the toolbar only offers the first three.
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
       Link.configure({ openOnClick: false, autolink: true }),
-      // Shown while read-only too, so "Generating…" appears while AI writes the content.
       Placeholder.configure({ placeholder: () => placeholderRef.current, showOnlyWhenEditable: false }),
       // Not resizable: column widths have no markdown representation, they'd be lost on save anyway.
       TableKit.configure({ table: { resizable: false } }),
@@ -287,7 +281,6 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
     <div style={{
       ...focusableFieldStyle(focused),
       ...(bare ? { border: 'none', borderRadius: 0, boxShadow: 'none', borderBottom: '1px solid var(--vscode-panel-border)' } : null),
-      ...(generating && !bare ? { border: '1px solid var(--vscode-focusBorder)', boxShadow: 'none', animation: 'gs-ai-generating-border-pulse 1.2s ease-in-out infinite' } : null),
       ...css.fieldGroup,
     }}>
       <div style={{ ...css.toolbar, ...(readOnly ? { pointerEvents: 'none', opacity: 0.5 } : null) }}>
@@ -364,10 +357,9 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = '180p
       )}
 
       <div style={{ position: 'relative' }}>
-        <div style={{ ...css.editorFrame, minHeight, ...(inlineAction ? { paddingRight: '30px' } : null), ...(generating ? { cursor: 'default', animation: generatingFieldStyle().animation } : readOnly ? { opacity: 0.6, cursor: 'default' } : null) }}>
+        <div style={{ ...css.editorFrame, minHeight, ...(readOnly ? { opacity: 0.6, cursor: 'default' } : null) }}>
           <EditorContent editor={editor} />
         </div>
-        {inlineAction && <div style={css.inlineAction}>{inlineAction}</div>}
       </div>
 
       {suggestion?.rect && (
@@ -438,7 +430,6 @@ const css = {
     background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)',
   } as React.CSSProperties,
   linkCancelBtn: { fontSize: '11px', padding: '4px 10px' } as React.CSSProperties,
-  inlineAction: { position: 'absolute' as const, top: '4px', right: '4px' } as React.CSSProperties,
   editorFrame: {
     maxHeight: '420px', overflow: 'auto', cursor: 'text',
     padding: '6px 8px', fontSize: '13px',

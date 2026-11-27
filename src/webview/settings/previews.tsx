@@ -292,7 +292,6 @@ function ChangesViewPreview({ get, repos }: PreviewProps) {
           ) : (
             <span className="pv-muted">{l10n.t('Commit message ({0} to commit)', shortcut(['mod'], 'Enter'))}</span>
           )}
-          <Codicon name="sparkle" style={{ fontSize: 11, marginLeft: 'auto', opacity: 0.7 }} />
         </div>
         <div className="pv-buttons">
           <span className="pv-btn"><Codicon name={shelve ? 'archive' : 'git-stash'} style={{ fontSize: 11 }} />{shelve ? 'Shelve' : 'Stash'}<span className="pv-btn-split"><Codicon name="chevron-down" style={{ fontSize: 10 }} /></span></span>

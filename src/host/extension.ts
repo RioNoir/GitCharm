@@ -19,7 +19,6 @@ import { PullRequestManager } from './pullRequests/PullRequestManager';
 import { IntegrationAccountStore } from './integrations/IntegrationAccountStore';
 import { IntegrationsService } from './integrations/IntegrationsService';
 import { SettingsPanel } from './panels/SettingsPanel';
-import { registerConflictAiCommands } from './commands/conflictAiCommands';
 import { registerInteractiveRebase } from './commands/interactiveRebaseCommands';
 import { CreatePullRequestPanel } from './panels/CreatePullRequestPanel';
 import { PullRequestDetailPanel } from './panels/PullRequestDetailPanel';
@@ -27,10 +26,8 @@ import { PullRequestDocumentProvider } from './pullRequests/PullRequestDocumentP
 import { IssueManager } from './issues/IssueManager';
 import { IssueDetailPanel } from './panels/IssueDetailPanel';
 import { CreateIssuePanel } from './panels/CreateIssuePanel';
-import { IssueResolvePanel } from './panels/IssueResolvePanel';
 import { deserializeCommitFullDetailPanel } from './panels/CommitFullDetailPanel';
 import { avatarResolver } from './utils/avatarResolver';
-import { initAiSecrets } from './ai/aiSecrets';
 import { McpService } from './mcp/McpService';
 
 /**
@@ -307,7 +304,6 @@ export function activate(context: vscode.ExtensionContext): void {
   const profileService = new GitProfileService(context, log);
   const profilesReady = profileService.autoInitIfEmpty();
 
-  initAiSecrets(context);
   const integrationAccounts = new IntegrationAccountStore(context.secrets, context.globalState);
   const pullRequestManager = new PullRequestManager(manager, integrationAccounts, context.workspaceState);
   avatarResolver.setForgeLookup(
@@ -367,10 +363,6 @@ export function activate(context: vscode.ExtensionContext): void {
     mcpService,
     vscode.commands.registerCommand('gitcharm.mcp.installInAgents', () => mcpService.pickAgents()),
   );
-  const issueResolvePanel = new IssueResolvePanel(context.extensionUri, manager, issueManager, prDocProvider, (_repoId, _issue, commitDraft) => {
-    void commitPanel.showCommitDraft(commitDraft);
-  });
-  issueDetailPanel.setIssueResolvePanel(issueResolvePanel);
   pullRequestDetailPanel.setIssueSupport(issueManager, issueDetailPanel);
   commitPanel.setIssueSupport(issueManager, issueDetailPanel, createIssuePanel);
   logPanel.setCommitPanel(commitPanel);
@@ -432,7 +424,6 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     issueDetailPanel,
     createIssuePanel,
-    issueResolvePanel,
     manager,
     badge,
     logPanel,
@@ -444,7 +435,6 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerCommands(context, commitPanel, logPanel, branchStatusBar, annotationController, profileStatusBar, manager, context.extensionUri, integrations);
-  registerConflictAiCommands(context, manager);
   registerInteractiveRebase(context, manager, () => { logPanel.refresh(); commitPanel.refresh(); });
 
   context.subscriptions.push(

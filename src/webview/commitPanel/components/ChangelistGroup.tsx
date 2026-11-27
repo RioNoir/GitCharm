@@ -44,8 +44,7 @@ interface Props {
   onFolderContextMenu: (e: React.MouseEvent, repoId: string, folderPath: string, files: FileStatus[]) => void;
   onOpenFile: (file: FileStatus) => void;
   onRollback: (files: FileStatus[]) => void;
-  /** `withAi`: resolve the conflicts with the AI instead of opening the merge editor. */
-  onResolveMerge: (file: FileStatus, withAi?: boolean) => void;
+  onResolveMerge: (file: FileStatus) => void;
   onHeaderContextMenu: (e: React.MouseEvent, changelistId: string) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
   onOpenChanges: (repoId: string) => void;
@@ -257,8 +256,7 @@ interface RepoSubGroupProps {
   onFolderContextMenu: (e: React.MouseEvent, repoId: string, folderPath: string, files: FileStatus[]) => void;
   onOpenFile: (file: FileStatus) => void;
   onRollback: (files: FileStatus[]) => void;
-  /** `withAi`: resolve the conflicts with the AI instead of opening the merge editor. */
-  onResolveMerge: (file: FileStatus, withAi?: boolean) => void;
+  onResolveMerge: (file: FileStatus) => void;
   onRepoContextMenu: (e: React.MouseEvent, repoId: string, changelistId?: string) => void;
   onOpenChanges: (repoId: string) => void;
   onBranchClick: (repoId: string) => void;

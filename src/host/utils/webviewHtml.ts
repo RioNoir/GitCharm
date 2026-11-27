@@ -11,7 +11,7 @@ export function generateNonce(): string {
 export function getWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
-  appName: 'commitPanel' | 'gitLog' |'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'issueDetail' | 'issueCreate' | 'issueResolve' | 'commitFullDetail' | 'aiExplainDetail' | 'settings' | 'conflictAi' | 'interactiveRebase',
+  appName: 'commitPanel' | 'gitLog' |'undockedPanel' | 'pullRequestCreate' | 'pullRequestDetail' | 'issueDetail' | 'issueCreate' | 'commitFullDetail' | 'settings' | 'interactiveRebase',
   title: string,
   initialConfig?: Record<string, unknown>,
 ): string {
@@ -259,33 +259,6 @@ export function getWebviewHtml(
     }
     @media (prefers-reduced-motion: reduce) {
       .skeleton-block { animation: none; background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent); }
-    }
-
-    /* ── AI Explain floating action button ───────────────────────────────────── */
-    .ai-explain-fab {
-      animation: ai-explain-glow 2.4s ease-in-out infinite;
-    }
-    .ai-explain-fab:hover, .ai-explain-fab:focus-visible {
-      animation: none;
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-button-background) 70%, transparent),
-        0 0 18px 4px color-mix(in srgb, var(--vscode-button-background) 55%, transparent);
-    }
-    /* Same pulse as the commit message textarea while AI generates it (see inputStyles.generatingFieldStyle). */
-    @keyframes gs-ai-generating-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.35; } }
-    /* For fields whose content pulses separately from their frame (the markdown editor, whose toolbar must not
-       pulse): the border follows the same rhythm on its own. */
-    @keyframes gs-ai-generating-border-pulse {
-      0%, 100% { border-color: color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent); }
-      50% { border-color: color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent); }
-    }
-    /* Same hover as the commit message's generate button ([data-autopilot-btn] in UnifiedCommitForm). */
-    [data-ai-generate-btn]:not([disabled]):hover { background: var(--vscode-toolbar-hoverBackground) !important; opacity: 1 !important; border-radius: 3px; }
-    @keyframes ai-explain-glow {
-      0%, 100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 0 color-mix(in srgb, var(--vscode-button-background) 45%, transparent); }
-      50% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 14px 3px color-mix(in srgb, var(--vscode-button-background) 45%, transparent); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .ai-explain-fab { animation: none; }
     }
   </style>
 </head>

@@ -79,9 +79,8 @@ const FILE_CONTEXT_ITEMS = (): ContextMenuEntry[] => [
   { id: 'refresh',         label: l10n.t('Refresh'),             icon: 'refresh' },
 ];
 
-const FILE_CONTEXT_ITEMS_CONFLICT = (aiEnabled: boolean): ContextMenuEntry[] => [
+const FILE_CONTEXT_ITEMS_CONFLICT = (): ContextMenuEntry[] => [
   { id: 'resolve',   label: l10n.t('Resolve Conflicts'),  icon: 'git-merge' },
-  ...(aiEnabled ? [{ id: 'resolveAi', label: l10n.t('Resolve Conflicts with AI'), icon: 'sparkle' }] : []),
   { separator: true },
   ...FILE_CONTEXT_ITEMS(),
 ];
@@ -483,11 +482,6 @@ function App() {
   const shownTabsKey = shownTabs.join(',');
   useLayoutEffect(() => { measureTabBarRef.current(); }, [shownTabsKey]);
 
-  // ── Autopilot ─────────────────────────────────────────────────────────────
-  const [generatingMessage, setGeneratingMessage]   = useState(false);
-  // What the message was before AI generation started streaming into it — put back if generation fails midway.
-  const messageBeforeGenerate = useRef<string | null>(null);
-
   // ── Selected file (highlighted when diff is open or on right-click) ──────
   const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
 
@@ -546,7 +540,7 @@ function App() {
           });
           break;
         case 'COMMIT_STATUS_UPDATE':
-          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
+          store.setStatus(msg.repos, msg.status, msg.iconTheme, msg.defaultCommitAction, msg.defaultSaveAction, msg.hasWorkspaceFolder, msg.activeProfile);
           if (msg.panelConfig) setPanelConfig(msg.panelConfig);
           if (Array.isArray(msg.status.repos) && useCommitStore.getState().changesViewMode === 'vscode') {
             const prevCounts = prevUnstagedCountsRef.current;
@@ -592,19 +586,6 @@ function App() {
           } else if (msg.error && msg.error !== 'Cancelled') {
             notifyError(msg.error);
           }
-          break;
-        case 'COMMIT_GENERATE_MESSAGE_PROGRESS':
-          if (msg.message) store.setCommitMessage(msg.message);
-          break;
-        case 'COMMIT_GENERATE_MESSAGE_RESULT':
-          setGeneratingMessage(false);
-          if (msg.message) {
-            store.setCommitMessage(msg.message);
-          } else {
-            if (messageBeforeGenerate.current !== null) store.setCommitMessage(messageBeforeGenerate.current);
-            if (msg.error && msg.error !== 'Cancelled') notifyError(msg.error);
-          }
-          messageBeforeGenerate.current = null;
           break;
         case 'COMMIT_LAST_COMMIT_MESSAGE_RESULT':
           if (msg.message && !useCommitStore.getState().commitMessage.trim()) {
@@ -1167,9 +1148,6 @@ function App() {
       case 'resolve':
         send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: file.repoId, filePath: file.path });
         break;
-      case 'resolveAi':
-        send({ type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: file.repoId, filePath: file.path });
-        break;
       case 'rollback':
         send({ type: 'COMMIT_DISCARD_FILE', requestId: generateId(), repoId: file.repoId, path: file.path });
         break;
@@ -1383,10 +1361,6 @@ function App() {
     send({ type: 'PUSH_OPEN_COMMIT_CHANGES', repoId, hash } satisfies CommitToHostMsg);
   };
 
-  const doPushExplainCommit = (repoId: string, hash: string) => {
-    send({ type: 'PUSH_EXPLAIN_COMMIT', repoId, hash } satisfies CommitToHostMsg);
-  };
-
   const doPushViewCombinedDiff = (repoId: string, hashes: string[]) => {
     send({ type: 'PUSH_VIEW_COMBINED_DIFF', repoId, hashes } satisfies CommitToHostMsg);
   };
@@ -1438,30 +1412,6 @@ function App() {
         break;
     }
   };
-
-  // ── Autopilot ─────────────────────────────────────────────────────────────
-
-  const doAutopilot = useCallback(() => {
-    if (generatingMessage) return;
-    // Same files doCommit would commit: staged ones in vscode mode, the selected ones otherwise
-    const freshState = useCommitStore.getState();
-    const currentRepos = freshState.status?.repos ?? [];
-    const repos = freshState.changesViewMode === 'vscode'
-      ? currentRepos
-          .filter(r => vscodeSelectedRepos.has(r.repoId))
-          .map(r => ({ repoId: r.repoId, paths: r.stagedFiles.map(f => f.path), stagedOnly: true }))
-      : currentRepos
-          .filter(r => freshState.repoSelections[r.repoId] !== false)
-          .map(r => ({ repoId: r.repoId, paths: freshState.getSelectedFilesForRepo(r.repoId), stagedOnly: false }));
-    setGeneratingMessage(true);
-    messageBeforeGenerate.current = freshState.commitMessage;
-    send({ type: 'COMMIT_GENERATE_MESSAGE', requestId: generateId(), repos: repos.filter(r => r.paths.length > 0) });
-  }, [generatingMessage, send, vscodeSelectedRepos]);
-
-  const doAutopilotContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    send({ type: 'COMMIT_SELECT_AI_MODEL' });
-  }, [send]);
 
   // ── Loading / empty states ────────────────────────────────────────────────
 
@@ -1839,7 +1789,7 @@ function App() {
                     send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
                   }
                 }}
-                onResolveMerge={(f, withAi) => send(withAi ? { type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: f.repoId, filePath: f.path } : { type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                 onStageFiles={(rid, paths) => send({ type: 'COMMIT_STAGE_FILES', requestId: generateId(), repoId: rid, paths })}
                 onUnstageFiles={(rid, paths) => send({ type: 'COMMIT_UNSTAGE_FILES', requestId: generateId(), repoId: rid, paths })}
                 onStageAll={rid => send({ type: 'COMMIT_STAGE_ALL', requestId: generateId(), repoId: rid })}
@@ -1898,7 +1848,7 @@ function App() {
                     send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
                   }
                 }}
-                onResolveMerge={(f, withAi) => send(withAi ? { type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: f.repoId, filePath: f.path } : { type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                 onHeaderContextMenu={(e, clId) => setClHeaderCtxMenu({ x: e.clientX, y: e.clientY, changelistId: clId })}
                 onRepoContextMenu={(e, rid, clId) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid, changelistId: clId })}
                 onOpenChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
@@ -1989,7 +1939,7 @@ function App() {
                           send({ type: 'COMMIT_DISCARD_FILES', requestId: generateId(), files: files.map(f => ({ repoId: f.repoId, path: f.path })) });
                         }
                       }}
-                      onResolveMerge={(f, withAi) => send(withAi ? { type: 'COMMIT_RESOLVE_CONFLICTS_AI', repoId: f.repoId, filePath: f.path } : { type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
+                      onResolveMerge={f => send({ type: 'COMMIT_OPEN_MERGE_EDITOR', repoId: f.repoId, filePath: f.path })}
                       onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
                       onRepoContextMenu={(e, rid) => setRepoCtxMenu({ x: e.clientX, y: e.clientY, repoId: rid })}
                       onOpenAllChanges={rid => send({ type: 'COMMIT_OPEN_ALL_CHANGES', repoId: rid } satisfies CommitToHostMsg)}
@@ -2078,10 +2028,6 @@ function App() {
             onPullRepos={ids => ids.forEach(id => doPull(id, false))}
             onPushRepos={ids => ids.forEach(doPush)}
             onForcePushRepos={ids => ids.forEach(doForcePush)}
-            aiEnabled={store.aiEnabled}
-            onAutopilot={doAutopilot}
-            onAutopilotContextMenu={doAutopilotContextMenu}
-            generatingMessage={generatingMessage}
             activeProfile={store.activeProfile}
             onOpenProfiles={() => send({ type: 'OPEN_PROFILES_MENU' } satisfies CommitToHostMsg)}
             onRebaseAction={(repoId, action) => {
@@ -2220,10 +2166,8 @@ function App() {
               onEditCommitMsg={doEditCommitMsg}
               onOpenDetail={doPushOpenDetail}
               onOpenChanges={doPushOpenChanges}
-              onExplainCommit={doPushExplainCommit}
               onViewCombinedDiff={doPushViewCombinedDiff}
               onBranchClick={rid => send({ type: 'COMMIT_SHOW_BRANCH_MENU', repoId: rid })}
-              aiEnabled={store.aiEnabled}
             />
           </div>
         )}
@@ -2376,7 +2320,7 @@ function App() {
         const isUntracked = file.status === 'untracked';
         const isSubmodule = file.status === 'submodule';
         const hasCustomCls = store.changelists.some(cl => cl.id !== CHANGELIST_DEFAULT_ID && cl.id !== CHANGELIST_UNVERSIONED_ID);
-        const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT(store.aiEnabled) : FILE_CONTEXT_ITEMS();
+        const baseItems = file.status === 'conflicted' ? FILE_CONTEXT_ITEMS_CONFLICT() : FILE_CONTEXT_ITEMS();
         let items: ContextMenuEntry[] = baseItems;
         if (isSubmodule) {
           items = ctxMenuStaged ? SUBMODULE_FILE_STAGED_ITEMS() : SUBMODULE_FILE_UNSTAGED_ITEMS();

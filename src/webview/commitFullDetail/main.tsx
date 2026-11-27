@@ -1,33 +1,24 @@
 import '../shared/l10n';
 import * as l10n from '@vscode/l10n';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CommitDetail } from '../gitLog/components/CommitDetail';
 import { Codicon } from '../shared/Codicon';
 import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
-import { AiExplainFab } from '../shared/AiExplainFab';
 import type { CommitNode, HostToCommitFullDetailMsg, HostToLogMsg, IconThemeData } from '../../host/types/messages';
 import type { RepoMeta } from '../shared/types';
 
 interface FileEntry { path: string; status: string; added?: number; removed?: number; oldPath?: string }
 
 function App() {
-  const [repoId, setRepoId] = useState<string | null>(null);
   const [commit, setCommit] = useState<CommitNode | null>(null);
   const [fullMessage, setFullMessage] = useState('');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<{ path: string; status: string } | null>(null);
   const [iconTheme, setIconTheme] = useState<IconThemeData | null>(null);
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiModelLabel, setAiModelLabel] = useState('');
   const [activeProfile, setActiveProfile] = useState<{ name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' } | undefined>();
   const [repoMeta, setRepoMeta] = useState<RepoMeta | null>(null);
 
-  const handleExplain = useCallback((currentRepoId: string, hash: string) => {
-    getVsCodeApi().postMessage({ type: 'COMMITFULLDETAIL_EXPLAIN', repoId: currentRepoId, hash });
-  }, []);
-
-  const autoExplainedRef = useRef(false);
   useEffect(() => {
     const handler = (event: MessageEvent<HostToCommitFullDetailMsg | HostToLogMsg>) => {
       const msg = event.data;
@@ -35,19 +26,12 @@ function App() {
       if (msg.type === 'COMMITFULLDETAIL_INIT') {
         // Persisted so VS Code can restore this panel (via registerWebviewPanelSerializer) after a window reload/restart.
         getVsCodeApi().setState({ repoId: msg.repoId, hash: msg.commit.hash });
-        setRepoId(msg.repoId);
         setRepoMeta({ id: msg.repoId, name: msg.repoName, rootPath: '', color: '#4ec9b0' });
         setCommit(msg.commit);
         setFullMessage(msg.fullMessage);
         setFiles(msg.files);
         setIconTheme(msg.iconTheme ?? null);
-        setAiEnabled(msg.aiEnabled);
-        setAiModelLabel(msg.aiModelLabel);
         setActiveProfile(msg.activeProfile);
-        if (msg.autoExplain && !autoExplainedRef.current) {
-          autoExplainedRef.current = true;
-          handleExplain(msg.repoId, msg.commit.hash);
-        }
       } else if (msg.type === 'COMMITFULLDETAIL_ICON_THEME') {
         setIconTheme(msg.iconTheme);
       }
@@ -55,7 +39,7 @@ function App() {
     window.addEventListener('message', handler);
     notifyHostReady();
     return () => window.removeEventListener('message', handler);
-  }, [handleExplain]);
+  }, []);
 
   if (!commit || !repoMeta) {
     return <div style={{ padding: '16px', fontSize: '12px', opacity: 0.5 }}>{l10n.t('Loading…')}</div>;
@@ -68,9 +52,6 @@ function App() {
         <span style={styles.toolbarHash}>{commit.shortHash}</span>
         <span style={styles.toolbarMessage}>{commit.message}</span>
       </div>
-      {aiEnabled && repoId && (
-        <AiExplainFab modelLabel={aiModelLabel} onClick={() => handleExplain(repoId, commit.hash)} />
-      )}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <CommitDetail
           commit={commit}

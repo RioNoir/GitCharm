@@ -161,7 +161,7 @@ export interface CommitPanelConfig {
 }
 
 export type HostToCommitMsg =
-  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: CommitAction; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; panelConfig?: CommitPanelConfig }
+  | { type: 'COMMIT_STATUS_UPDATE'; repos: RepoMeta[]; status: WorkspaceStatus; iconTheme?: IconThemeData; defaultCommitAction?: CommitAction; defaultSaveAction?: 'stash' | 'shelve'; hasWorkspaceFolder?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; panelConfig?: CommitPanelConfig }
   | { type: 'COMMIT_PANEL_CONFIG'; config: CommitPanelConfig }
   | { type: 'COMMIT_PERSISTED_MESSAGE_RESULT'; message: string }
   | { type: 'COMMIT_DIFF_RESULT'; requestId: string; diff: FileDiff | null; error?: string }
@@ -169,9 +169,6 @@ export type HostToCommitMsg =
   | { type: 'COMMIT_BRANCHES_UPDATE'; repoId: string; branches: BranchInfo[] }
   | { type: 'COMMIT_REMOTES_RESULT'; requestId: string; remotes: string[]; error?: string }
   | { type: 'COMMIT_LAST_COMMIT_MESSAGE_RESULT'; requestId: string; message: string; error?: string }
-  | { type: 'COMMIT_GENERATE_MESSAGE_RESULT'; requestId: string; message?: string; error?: string }
-  /** Text generated so far, while the AI is still writing — followed by exactly one COMMIT_GENERATE_MESSAGE_RESULT. */
-  | { type: 'COMMIT_GENERATE_MESSAGE_PROGRESS'; requestId: string; message: string }
   | { type: 'SHELVE_LIST_RESULT'; requestId: string; repoId: string; shelves: ShelveEntry[]; error?: string }
   | { type: 'SHELVE_DIFF_RESULT'; requestId: string; repoId: string; shelveId: string; filePath: string; diff: string; error?: string }
   | { type: 'SHELVE_OP_RESULT'; requestId: string; repoId: string; op: 'push' | 'apply' | 'drop'; ok: boolean; error?: string; hasConflicts?: boolean; conflictFiles?: string[] }
@@ -256,11 +253,6 @@ export type CommitToHostMsg =
   | { type: 'COMMIT_ADD_TO_GITIGNORE'; repoId: string; entryPath: string }
   | { type: 'COMMIT_SHOW_BRANCH_MENU'; repoId?: string }
   | { type: 'COMMIT_OPEN_MERGE_EDITOR'; repoId: string; filePath: string }
-  | { type: 'COMMIT_RESOLVE_CONFLICTS_AI'; repoId: string; filePath: string }
-  /** `repos`: the files that would be committed — the selected ones, or (stagedOnly) what's staged in VS Code mode. */
-  | { type: 'COMMIT_GENERATE_MESSAGE'; requestId: string; repos: { repoId: string; paths: string[]; stagedOnly: boolean }[] }
-  | { type: 'COMMIT_SELECT_AI_MODEL' }
-  | { type: 'COMMIT_OPEN_AI_SETTINGS' }
   | { type: 'SHELVE_LIST'; requestId: string; repoId: string }
   | { type: 'SHELVE_PUSH'; requestId: string; repoId: string; name: string; paths?: string[] }
   | { type: 'SHELVE_APPLY'; requestId: string; repoId: string; shelveId: string; paths?: string[] }
@@ -283,7 +275,6 @@ export type CommitToHostMsg =
   | { type: 'PUSH_EDIT_COMMIT_MSG'; requestId: string; repoId: string; hash: string; currentMessage: string }
   | { type: 'PUSH_OPEN_DETAIL'; repoId: string; hash: string }
   | { type: 'PUSH_OPEN_COMMIT_CHANGES'; repoId: string; hash: string }
-  | { type: 'PUSH_EXPLAIN_COMMIT'; repoId: string; hash: string }
   | { type: 'PUSH_VIEW_COMBINED_DIFF'; repoId: string; hashes: string[] }
   | { type: 'COMMIT_OPEN_ALL_CHANGES'; repoId: string; section?: 'staged' | 'unstaged' }
   | { type: 'COMMIT_OPEN_LOG'; hash: string; repoId: string }
@@ -394,7 +385,7 @@ export interface LogColumns {
 }
 
 export type HostToLogMsg =
-  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; aiEnabled?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation; columns?: LogColumns }
+  | { type: 'LOG_INIT_DATA'; repos: RepoMeta[]; branches: BranchInfo[]; iconTheme?: IconThemeData; hasWorkspaceFolder?: boolean; activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }; layout?: LogLayoutByLocation; columns?: LogColumns }
   | { type: 'LOG_COLUMNS'; columns: LogColumns }
   | { type: 'LOG_LAYOUT_PREFS'; layout: LogLayoutByLocation }
   | { type: 'LOG_CLEAR_FILTERS' }
@@ -500,7 +491,6 @@ export type LogToHostMsg =
   | { type: 'LOG_DIFF_WITH_WORKING_TREE'; label: string; refs: { repoId: string; ref: string }[] }
   | { type: 'LOG_SHOW_IN_COMMIT_PANEL' }
   | { type: 'LOG_OPEN_MAX_COMMITS_SETTING' }
-  | { type: 'LOG_EXPLAIN_COMMIT'; repoId: string; hash: string }
   | { type: 'LOG_STASH_POP'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_APPLY'; requestId: string; repoId: string; stashRef: string }
   | { type: 'LOG_STASH_DROP'; requestId: string; repoId: string; stashRef: string }
@@ -515,7 +505,7 @@ export type LogToHostMsg =
 
 export type HostToPrCreateMsg =
   /** `sourceBranch`: preselected source; otherwise the checked-out branch. */
-  | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider; aiEnabled: boolean; aiModelLabel: string; sourceBranch?: string }
+  | { type: 'PRCREATE_INIT'; repoId: string; repoName: string; provider: ForgeProvider; sourceBranch?: string }
   | { type: 'PRCREATE_SET_SOURCE'; branch: string }
   | { type: 'PRCREATE_BRANCHES_RESULT'; branches: BranchInfo[]; error?: string }
   | { type: 'PRCREATE_ICON_THEME'; iconTheme: IconThemeData }
@@ -523,8 +513,6 @@ export type HostToPrCreateMsg =
   | { type: 'PRCREATE_COMPARE_RESULT'; requestId: string; files: ChangedFile[]; commits: CommitNode[]; error?: string }
   | { type: 'PRCREATE_SUBMIT_RESULT'; ok: boolean; pr?: PullRequestSummary; error?: string }
   | { type: 'PRCREATE_MENTION_CANDIDATES'; users: PullRequestUser[] }
-  | { type: 'PRCREATE_GENERATE_RESULT'; requestId: string; field: 'title' | 'description'; text?: string; error?: string }
-  | { type: 'PRCREATE_GENERATE_PROGRESS'; requestId: string; field: 'title' | 'description'; text: string };
 
 // ─── Create Pull Request: WebView → Host ─────────────────────────────────────
 
@@ -538,12 +526,11 @@ export type PrCreateToHostMsg =
   | { type: 'PRCREATE_CANCEL' }
   | { type: 'PRCREATE_REQUEST_MENTION_CANDIDATES' }
   /** `field` is the one being generated; `title`/`description` carry what's currently typed, so the other one can steer it. */
-  | { type: 'PRCREATE_GENERATE'; requestId: string; field: 'title' | 'description'; sourceBranch: string; targetBranch: string; title: string; description: string };
 
 // ─── Pull Request Detail: Host → WebView ─────────────────────────────────────
 
 export type HostToPrDetailMsg =
-  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string; aiEnabled: boolean; aiModelLabel: string; defaultMergeStrategy: MergeStrategy; defaultCheckoutAction: 'pr' | 'branch' }
+  | { type: 'PRDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: PullRequestSummary; currentUsername?: string; defaultMergeStrategy: MergeStrategy; defaultCheckoutAction: 'pr' | 'branch' }
   | { type: 'PRDETAIL_ICON_THEME'; iconTheme: IconThemeData }
   | { type: 'PRDETAIL_LOADED'; detail: PullRequestDetail }
   | { type: 'PRDETAIL_LOAD_ERROR'; error: string }
@@ -603,7 +590,6 @@ export type PrDetailToHostMsg =
   | { type: 'PRDETAIL_PICK_ASSIGNEES' }
   | { type: 'PRDETAIL_PICK_LABELS' }
   | { type: 'PRDETAIL_REQUEST_CHECKS'; headSha: string }
-  | { type: 'PRDETAIL_EXPLAIN' }
   | { type: 'PRDETAIL_REQUEST_MENTION_CANDIDATES' }
   | { type: 'PRDETAIL_UPDATE_DESCRIPTION'; description: string }
   /** `description`: the PR's, for forges with no API for the issues a PR closes (read from its closing keywords). */
@@ -615,12 +601,6 @@ export type PrDetailToHostMsg =
 export type HostToIssueDetailMsg =
   | {
       type: 'ISSUEDETAIL_INIT'; repoId: string; repoName: string; number: number; summary: IssueSummary; provider: ForgeProvider; currentUsername?: string;
-      aiEnabled: boolean;
-      /** Model labels of the "explain" and "issues" AI operations. */
-      aiExplainModelLabel: string;
-      aiIssuesModelLabel: string;
-      /** How "Resolve with AI" works with the configured provider: an agent editing files, or a text proposal. */
-      aiResolveMode: 'agent' | 'text';
     }
   | { type: 'ISSUEDETAIL_LOADED'; detail: IssueDetail }
   | { type: 'ISSUEDETAIL_LOAD_ERROR'; error: string }
@@ -657,48 +637,12 @@ export type IssueDetailToHostMsg =
   | { type: 'ISSUEDETAIL_UPDATE_DESCRIPTION'; description: string }
   | { type: 'ISSUEDETAIL_OPEN_IN_BROWSER' }
   | { type: 'ISSUEDETAIL_CREATE_BRANCH' }
-  | { type: 'ISSUEDETAIL_CREATE_BRANCH_AI' }
-  | { type: 'ISSUEDETAIL_EXPLAIN' }
-  | { type: 'ISSUEDETAIL_RESOLVE_AI' }
   | { type: 'ISSUEDETAIL_INSERT_REFERENCE' }
   | { type: 'ISSUEDETAIL_OPEN_PULL_REQUEST'; pullRequest: LinkedPullRequest }
   /** A pull request or issue from the Activity timeline: opened in its panel when it's in this repository. */
   | { type: 'ISSUEDETAIL_OPEN_REFERENCE'; reference: TimelineReference }
   /** A commit from the Activity timeline: its local detail when the repository has it, else the forge page. */
   | { type: 'ISSUEDETAIL_OPEN_COMMIT'; commit: TimelineCommitReference };
-
-// ─── Resolve Issue with AI: Host → WebView ───────────────────────────────────
-
-export type IssueResolvePhase =
-  | 'preparing' | 'selectingFiles' | 'readingFiles' | 'generating' | 'agentWorking' | 'collecting'
-  | 'ready' | 'failed' | 'cancelled' | 'applying' | 'applied';
-
-export interface IssueResolveFile {
-  path: string;
-  status: 'added' | 'modified' | 'deleted';
-  additions: number;
-  deletions: number;
-}
-
-export type HostToIssueResolveMsg =
-  | { type: 'ISSUERESOLVE_INIT'; repoName: string; number: number; title: string; mode: 'agent' | 'text'; modelLabel: string }
-  | { type: 'ISSUERESOLVE_PHASE'; phase: IssueResolvePhase }
-  /** Text mode: the files the model asked to read. */
-  | { type: 'ISSUERESOLVE_FILES_READ'; paths: string[] }
-  /** The model's answer (text mode) or the agent's activity log so far. */
-  | { type: 'ISSUERESOLVE_PROGRESS'; text: string }
-  | { type: 'ISSUERESOLVE_RESULT'; summary: string; files: IssueResolveFile[]; warnings: string[] }
-  | { type: 'ISSUERESOLVE_ERROR'; error: string }
-  | { type: 'ISSUERESOLVE_APPLIED'; branchName: string };
-
-export type IssueResolveToHostMsg =
-  | { type: 'ISSUERESOLVE_OPEN_DIFF'; path: string }
-  | { type: 'ISSUERESOLVE_VIEW_ALL' }
-  | { type: 'ISSUERESOLVE_APPLY' }
-  | { type: 'ISSUERESOLVE_DISCARD' }
-  | { type: 'ISSUERESOLVE_CANCEL' }
-  | { type: 'ISSUERESOLVE_RETRY' }
-  | { type: 'ISSUERESOLVE_OPEN_COMMIT_PANEL' };
 
 // ─── Create Issue: Host → WebView ────────────────────────────────────────────
 
@@ -722,8 +666,7 @@ export type IssueCreateToHostMsg =
 // ─── Commit Full Detail: Host → WebView ──────────────────────────────────────
 // Reuses LogToHostMsg/HostToLogMsg for its file-tree/context-menu interactions
 // (see src/webview/gitLog/components/CommitDetail.tsx) — this panel is a
-// standalone single-commit view built around that same component, so only the
-// init payload and the AI explain result/request are panel-specific.
+// standalone single-commit view built around that same component.
 
 export type HostToCommitFullDetailMsg =
   | {
@@ -734,28 +677,13 @@ export type HostToCommitFullDetailMsg =
       fullMessage: string;
       files: Array<{ path: string; status: string; added?: number; removed?: number; oldPath?: string }>;
       iconTheme?: IconThemeData;
-      aiEnabled: boolean;
-      aiModelLabel: string;
-      autoExplain: boolean;
       activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
     }
   | { type: 'COMMITFULLDETAIL_ICON_THEME'; iconTheme: IconThemeData };
 
-// ─── AI Explain Detail: Host → WebView ───────────────────────────────────────
-// A small standalone panel (opened beside the commit/PR detail panel it was triggered from) that just
-// displays one AI-generated explanation — subject metadata + model label + markdown result/error. It never
-// re-generates itself; the host re-posts AIEXPLAIN_RESULT into the same already-open panel when the user
-// hits "Regenerate" on the originating panel's floating action button.
-
-export type HostToAiExplainMsg =
-  | { type: 'AIEXPLAIN_INIT'; subjectKind: 'commit' | 'pull-request' | 'issue'; subjectTitle: string; subjectSubtitle?: string; modelLabel: string }
-  | { type: 'AIEXPLAIN_RESULT'; explanation?: string; error?: string }
-  | { type: 'AIEXPLAIN_PROGRESS'; explanation: string };
-
 // ─── Commit Full Detail: WebView → Host ──────────────────────────────────────
 
-export type CommitFullDetailToHostMsg =
-  | { type: 'COMMITFULLDETAIL_EXPLAIN'; repoId: string; hash: string };
+export type CommitFullDetailToHostMsg = never;
 
 // ─── Settings page ───────────────────────────────────────────────────────────
 // GitCharm's own settings editor. The host reads the setting schema from package.json (descriptions already
@@ -789,14 +717,8 @@ export interface SettingsState {
   schema: SettingSchema[];
   values: Record<string, SettingValue>;
   hasWorkspace: boolean;
-  /** Which AI providers have an API key in secure storage — never the keys themselves. */
-  apiKeys: Record<'claude' | 'openai' | 'gemini', boolean>;
   repos: { name: string; color: string }[];
-  defaultPrompts: Record<string, string>;
-  aiModelLabel: string;
 }
-
-export interface AiModelOptionMsg { id: string; label: string; detail?: string }
 
 /** A saved account of a cloud integration (GitHub: an account signed into VS Code). */
 export interface IntegrationAccountMsg {
@@ -849,16 +771,11 @@ export type HostToSettingsMsg =
   | { type: 'SETTINGS_MCP'; state: McpState }
   | { type: 'SETTINGS_MCP_RESULT'; agent: AgentId; ok: boolean; error?: string }
   | { type: 'SETTINGS_NAVIGATE'; section: string }
-  | { type: 'SETTINGS_MODELS'; requestId: string; models: AiModelOptionMsg[]; error?: string }
-  | { type: 'SETTINGS_TEST_RESULT'; requestId: string; ok: boolean; message: string; elapsedMs: number }
   | { type: 'SETTINGS_INTEGRATIONS'; state: IntegrationsState }
   | { type: 'SETTINGS_INTEGRATION_ADDED'; requestId: string; ok: boolean; error?: string };
 
 export type SettingsToHostMsg =
   | { type: 'SETTINGS_UPDATE'; key: string; value: unknown; target: SettingsTarget }
-  | { type: 'SETTINGS_SET_API_KEY'; provider: 'claude' | 'openai' | 'gemini'; value: string }
-  | { type: 'SETTINGS_LIST_MODELS'; requestId: string; provider: string }
-  | { type: 'SETTINGS_TEST_AI'; requestId: string }
   | { type: 'SETTINGS_OPEN_NATIVE'; key?: string }
   | { type: 'SETTINGS_OPEN_JSON' }
   | { type: 'SETTINGS_COPY'; text: string }
@@ -874,26 +791,6 @@ export type SettingsToHostMsg =
   | { type: 'SETTINGS_MCP_INSTALL'; agent: AgentId }
   | { type: 'SETTINGS_MCP_UNINSTALL'; agent: AgentId }
   | { type: 'SETTINGS_MCP_OPEN_CONFIG'; agent: AgentId };
-
-// ─── AI conflict resolution: live view ───────────────────────────────────────
-// A side panel following an AI conflict resolution as it happens: each conflict with its two sides, the
-// model's explanation and the resolved lines, streamed. `fileKey` identifies a file within one run.
-
-export type HostToConflictAiMsg =
-  | { type: 'CONFLICTAI_RESET'; modelLabel: string }
-  | { type: 'CONFLICTAI_FILE'; fileKey: string; path: string }
-  | {
-      type: 'CONFLICTAI_HUNK_START'; fileKey: string; index: number; line: number;
-      currentLabel: string; incomingLabel: string; current: string; incoming: string; base?: string;
-    }
-  | { type: 'CONFLICTAI_HUNK_PROGRESS'; fileKey: string; index: number; explanation: string; resolution: string }
-  | { type: 'CONFLICTAI_HUNK_DONE'; fileKey: string; index: number; explanation: string; resolution: string }
-  | { type: 'CONFLICTAI_HUNK_FAILED'; fileKey: string; index: number; error: string }
-  | { type: 'CONFLICTAI_FILE_DONE'; fileKey: string; resolved: number; failed: number; staged: boolean; error?: string }
-  | { type: 'CONFLICTAI_RUN_DONE'; cancelled: boolean };
-
-export type ConflictAiToHostMsg =
-  | { type: 'CONFLICTAI_OPEN_FILE'; path: string; line: number };
 
 // ─── Interactive rebase ──────────────────────────────────────────────────────
 // The editor of an interactive rebase. 'managed': GitCharm started it from its own UI and runs git once the

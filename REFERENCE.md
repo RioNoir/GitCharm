@@ -8,7 +8,7 @@ The complete list of GitCharm's commands and settings. For an overview of the fe
 
 ## Commands
 
-All commands are in the Command Palette under **GitCharm**. Some only appear when they apply — for example, file commands need a file open in the editor, and AI commands need `gitcharm.ai.enabled`.
+All commands are in the Command Palette under **GitCharm**. Some only appear when they apply — for example, file commands need a file open in the editor.
 
 ### General
 
@@ -22,7 +22,7 @@ All commands are in the Command Palette under **GitCharm**. Some only appear whe
 | `GitCharm: Sync All (Pull + Push)` | Pulls then pushes all repositories; stops if any pull fails. |
 | `GitCharm: Check for Orphaned Branches` | Fetches, then lists local branches whose remote branch was deleted. |
 | `GitCharm: Refresh` | Re-discovers repositories and refreshes both the Commit Panel and the Log Panel. |
-| `GitCharm: Settings` | Opens the GitCharm settings page, with AI providers and Cloud Integrations. |
+| `GitCharm: Settings` | Opens the GitCharm settings page, including Cloud Integrations. |
 | `GitCharm: Show Output Log` | Opens the GitCharm output log, useful when reporting a bug. |
 | `GitCharm: Reset View Locations` | Runs VS Code's Reset View Locations, to clear stale GitCharm badge placement. |
 
@@ -48,8 +48,6 @@ All commands are in the Command Palette under **GitCharm**. Some only appear whe
 | `GitCharm: Compare with...` | Diffs a file or folder against a chosen branch, tag, or commit. |
 | `GitCharm: Open Git Annotations` / `Close Git Annotations` / `Toggle Git Annotations` | Shows or hides inline blame annotations in the active editor. |
 | `GitCharm: Open Merge Editor` | Opens VS Code's merge editor for the active conflicted file. |
-| `GitCharm: Resolve Conflicts with AI` | Resolves the conflicts of the active file with AI. |
-| `GitCharm: Resolve All Conflicts with AI` | Resolves the conflicts of every conflicted file with AI. |
 
 ### Branches & Rebase
 
@@ -85,13 +83,6 @@ All commands are in the Command Palette under **GitCharm**. Some only appear whe
 | `GitCharm: Refresh Pull Requests` | Refreshes the Pull Requests tab, bypassing the cache. |
 | `GitCharm: Refresh Issues` | Refreshes the Issues tab, bypassing the cache. |
 | `GitCharm: Reference an Issue in the Commit Message` | Searches the open issues of the connected repositories and inserts a reference to the chosen one into the commit message. |
-
-### AI
-
-| Command | Description |
-|:--|:--|
-| `GitCharm: Select AI Model` | Chooses the AI provider and model. |
-| `GitCharm: Customize AI Prompts` | Edits or resets the prompts used by the AI features. |
 
 ### MCP Server
 
@@ -222,49 +213,6 @@ Every setting can also be changed from **GitCharm: Settings**, which groups them
 | `gitcharm.issues.autoRefreshInterval` | `0` | Refresh the issue list every this many minutes while its tab is open and VS Code is focused (`0`: off). |
 | `gitcharm.issues.branchNameTemplate` | `{number}-{title}` | The name suggested for a branch created from an issue: `{number}`, `{title}` (lowercase, hyphenated) and `{user}` (your forge username), e.g. `feature/{number}-{title}`. |
 | `gitcharm.issues.commitReferenceTemplate` | `#{number}` | The text inserted into the commit message when referencing an issue, e.g. `Fixes #{number}`. `{title}` is also available. |
-
-### AI
-
-API keys are not settings: they are kept in VS Code's secret storage and set from the **AI** page of **GitCharm: Settings**.
-
-| Setting | Default | Description |
-|:--|:--|:--|
-| `gitcharm.ai.enabled` | `true` | Enable the AI features. When disabled, all AI actions are hidden. |
-| `gitcharm.ai.provider` | `vscode-lm` | AI provider: `vscode-lm`, `claude-api`, `openai-api`, `gemini-api`, `claude-cli`, `codex-cli`, `gemini-cli`, `ollama`, or `lmstudio`. |
-| `gitcharm.ai.operationModels` | `{}` | A provider and model for each AI operation (`commitMessage`, `pullRequest`, `issues`, `explain`, `resolveConflicts`), in place of the default ones, e.g. `{ "resolveConflicts": { "provider": "claude-api", "model": "claude-opus-4-7" } }`. |
-| `gitcharm.ai.language` | `""` | Language for AI-generated text (e.g. `en`, `it`). Empty uses VS Code's display language. |
-| `gitcharm.ai.maxDiffChars` | `8000` | Maximum characters of diff sent to the AI model. Larger values give more context but use more tokens. |
-| `gitcharm.ai.offerConflictResolution` | `true` | When a merge, rebase, pull or other operation leaves conflicts, offer to resolve them with AI. |
-| `gitcharm.ai.modelId` | `""` | VS Code language model ID (e.g. `copilot:gpt-4o`). Empty auto-selects. |
-| `gitcharm.ai.claudeModel` | `""` | Claude model, for `claude-api` and `claude-cli`. Empty uses the default. |
-| `gitcharm.ai.claudePath` | `claude` | Path to the Claude CLI. |
-| `gitcharm.ai.openaiModel` | `gpt-4o` | OpenAI model, for `openai-api`. |
-| `gitcharm.ai.geminiModel` | `gemini-2.0-flash` | Gemini model, for `gemini-api` and `gemini-cli`. |
-| `gitcharm.ai.geminiPath` | `gemini` | Path to the Gemini CLI. |
-| `gitcharm.ai.codexModel` | `""` | Codex model, for `codex-cli`. Empty uses the CLI default. |
-| `gitcharm.ai.codexPath` | `codex` | Path to the Codex CLI. |
-| `gitcharm.ai.ollamaModel` | `llama3` | Ollama model name. |
-| `gitcharm.ai.ollamaUrl` | `http://localhost:11434` | Base URL of the Ollama API. |
-| `gitcharm.ai.lmStudioModel` | `""` | LM Studio model. Empty uses the currently loaded model. |
-| `gitcharm.ai.lmStudioUrl` | `http://localhost:1234` | Base URL of the LM Studio server. |
-
-The model settings can also be picked interactively with **GitCharm: Select AI Model**.
-
-#### Prompts
-
-Each AI feature's instructions can be replaced. Empty uses the built-in default; `{language}` is replaced with the configured language, and the changes, conflict or issue are always appended after your instructions. **GitCharm: Customize AI Prompts** starts editing from the default text, or resets a prompt.
-
-| Setting | Used for |
-|:--|:--|
-| `gitcharm.ai.prompts.commitMessage` | Commit messages. |
-| `gitcharm.ai.prompts.pullRequestTitle` | Pull request titles. |
-| `gitcharm.ai.prompts.pullRequestDescription` | Pull request descriptions. |
-| `gitcharm.ai.prompts.explainCommit` | **Explain with AI** on a commit. |
-| `gitcharm.ai.prompts.explainPullRequest` | **Explain with AI** on a pull request. |
-| `gitcharm.ai.prompts.explainIssue` | AI explanation of an issue. |
-| `gitcharm.ai.prompts.issueBranchName` | **Create Branch with AI** and the branch of **Resolve with AI**. |
-| `gitcharm.ai.prompts.resolveIssue` | **Resolve with AI** on an issue. |
-| `gitcharm.ai.prompts.resolveConflicts` | **Resolve Conflicts with AI**. |
 
 ### MCP Server
 

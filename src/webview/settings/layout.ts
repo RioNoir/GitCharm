@@ -13,26 +13,13 @@ export interface CategoryDef {
   keys: string[];
   preview?: PreviewId;
   /** Categories whose body isn't the plain list of settings. */
-  custom?: 'ai' | 'aiPrompts' | 'integrations' | 'mcp';
+  custom?: 'integrations' | 'mcp';
 }
-
-export const AI_PROMPT_KEYS = [
-  'ai.prompts.commitMessage',
-  'ai.prompts.pullRequestTitle',
-  'ai.prompts.pullRequestDescription',
-  'ai.prompts.explainCommit',
-  'ai.prompts.explainPullRequest',
-  'ai.prompts.resolveConflicts',
-  'ai.prompts.issueBranchName',
-  'ai.prompts.explainIssue',
-  'ai.prompts.resolveIssue',
-];
 
 /** Every `gitcharm.*` setting must be listed in exactly one category (except the API keys, kept in SecretStorage). */
 export function getCategories(): CategoryDef[] {
   const workflow = l10n.t({ message: 'Workflow', comment: ['Settings page: sidebar heading'] });
   const views = l10n.t({ message: 'Views', comment: ['Settings page: sidebar heading'] });
-  const ai = l10n.t({ message: 'AI', comment: ['Settings page: sidebar heading'] });
   const integrations = l10n.t({ message: 'Integrations', comment: ['Settings page: sidebar heading'] });
   const advanced = l10n.t({ message: 'Advanced', comment: ['Settings page: sidebar heading'] });
   return [
@@ -109,22 +96,6 @@ export function getCategories(): CategoryDef[] {
       label: l10n.t('Appearance'),
       description: l10n.t('How GitCharm shows dates and commit authors, tells repositories apart, and what it puts in the status bar.'),
       keys: ['dateFormat', 'avatars.enabled', 'avatars.gravatar.enabled', 'projectColors', 'statusBar.showBranch', 'statusBar.showProfile'],
-    },
-    {
-      id: 'ai', group: ai, icon: 'sparkle', custom: 'ai',
-      label: l10n.t('AI'),
-      description: l10n.t('Pick the model that writes commit messages and pull requests, explains changes, and works on issues.'),
-      keys: [
-        'ai.enabled', 'ai.provider', 'ai.modelId', 'ai.claudeModel', 'ai.claudePath', 'ai.openaiModel', 'ai.geminiModel',
-        'ai.geminiPath', 'ai.codexModel', 'ai.codexPath', 'ai.cursorModel', 'ai.cursorPath', 'ai.ollamaModel', 'ai.ollamaUrl', 'ai.lmStudioModel', 'ai.lmStudioUrl',
-        'ai.language', 'ai.maxDiffChars', 'ai.operationModels', 'ai.offerConflictResolution',
-      ],
-    },
-    {
-      id: 'aiPrompts', group: ai, icon: 'note', custom: 'aiPrompts',
-      label: l10n.t('AI Prompts'),
-      description: l10n.t('The instructions sent to the model. The changes themselves are always added after them.'),
-      keys: AI_PROMPT_KEYS,
     },
     {
       id: 'integrations', group: integrations, icon: 'plug', custom: 'integrations',
@@ -225,35 +196,6 @@ export function settingLabel(key: string): string {
     case 'gitGhostText.enabled': return l10n.t('Inline blame (ghost text)');
     case 'avatars.enabled': return l10n.t('Author avatars');
     case 'avatars.gravatar.enabled': return l10n.t('Gravatar as fallback');
-    case 'ai.enabled': return l10n.t('AI features');
-    case 'ai.language': return l10n.t('Language');
-    case 'ai.provider': return l10n.t('Provider');
-    case 'ai.modelId':
-    case 'ai.claudeModel':
-    case 'ai.openaiModel':
-    case 'ai.geminiModel':
-    case 'ai.codexModel':
-    case 'ai.cursorModel':
-    case 'ai.ollamaModel':
-    case 'ai.lmStudioModel': return l10n.t('Model');
-    case 'ai.claudePath':
-    case 'ai.geminiPath':
-    case 'ai.codexPath':
-    case 'ai.cursorPath': return l10n.t('Executable path');
-    case 'ai.ollamaUrl':
-    case 'ai.lmStudioUrl': return l10n.t('Server URL');
-    case 'ai.maxDiffChars': return l10n.t('Maximum diff size');
-    case 'ai.operationModels': return l10n.t('Models per operation');
-    case 'ai.offerConflictResolution': return l10n.t('Offer to resolve conflicts');
-    case 'ai.prompts.resolveConflicts': return l10n.t('Resolve conflicts');
-    case 'ai.prompts.issueBranchName': return l10n.t('Issue branch name');
-    case 'ai.prompts.explainIssue': return l10n.t('Explain issue');
-    case 'ai.prompts.resolveIssue': return l10n.t('Resolve issue');
-    case 'ai.prompts.commitMessage': return l10n.t('Commit message');
-    case 'ai.prompts.pullRequestTitle': return l10n.t('Pull request title');
-    case 'ai.prompts.pullRequestDescription': return l10n.t('Pull request description');
-    case 'ai.prompts.explainCommit': return l10n.t('Explain commit');
-    case 'ai.prompts.explainPullRequest': return l10n.t('Explain pull request');
     case 'pullRequests.defaultTargetBranch': return l10n.t('Default target branch');
     case 'pullRequests.defaultMergeStrategy': return l10n.t('Default merge strategy');
     case 'pullRequests.deleteBranchAfterMerge': return l10n.t('Delete branch after merge');
@@ -323,16 +265,6 @@ export function enumLabel(key: string, value: string): string {
     case 'mcp.confirmation=never': return l10n.t('Never');
     case 'pullRequests.defaultCheckoutAction=pr': return 'Checkout Pull Request';
     case 'pullRequests.defaultCheckoutAction=branch': return 'Checkout Branch';
-    case 'ai.provider=vscode-lm': return 'VS Code LM';
-    case 'ai.provider=cursor': return 'Cursor';
-    case 'ai.provider=claude-api': return 'Claude API';
-    case 'ai.provider=openai-api': return 'OpenAI API';
-    case 'ai.provider=gemini-api': return 'Gemini API';
-    case 'ai.provider=claude-cli': return 'Claude CLI';
-    case 'ai.provider=codex-cli': return 'Codex CLI';
-    case 'ai.provider=gemini-cli': return 'Gemini CLI';
-    case 'ai.provider=ollama': return 'Ollama';
-    case 'ai.provider=lmstudio': return 'LM Studio';
     default: return value;
   }
 }

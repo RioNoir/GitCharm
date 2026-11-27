@@ -162,7 +162,7 @@ function App() {
 
       switch (msg.type) {
         case 'LOG_INIT_DATA':
-          store.setRepos(msg.repos, msg.hasWorkspaceFolder, msg.aiEnabled, msg.activeProfile);
+          store.setRepos(msg.repos, msg.hasWorkspaceFolder, msg.activeProfile);
           store.setBranches(msg.branches);
           if (msg.iconTheme) store.setIconTheme(msg.iconTheme);
           if (msg.layout) setLayoutByLocation(msg.layout);
@@ -716,7 +716,6 @@ function App() {
             backgroundLoading={store.backgroundLoading}
             scrollTarget={store.pendingScrollTarget}
             onScrollTargetHandled={() => store.setPendingScrollTarget(null)}
-            aiEnabled={store.aiEnabled}
             themeVersion={themeVersion}
             activeProfile={store.activeProfile}
             emptyState={compareEmptyState}

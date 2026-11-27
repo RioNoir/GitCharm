@@ -1,4 +1,3 @@
-import React, { useEffect, useRef, useState } from 'react';
 import type { IssueDetail, IssueSummary } from '../../../host/types/messages';
 import { Codicon } from '../../shared/Codicon';
 import { avatarColor, initials, initialsFontSize } from '../../shared/avatars';
@@ -16,8 +15,6 @@ interface Props {
   creatingBranch: boolean;
   onPickTitle: () => void;
   onCreateBranch: () => void;
-  /** Present when AI is enabled: offers "Create Branch with AI" under the Create Branch button, and "Resolve with AI". */
-  ai?: { modelLabel: string; resolveMode: 'agent' | 'text'; onCreateBranchWithAi: () => void; onResolve: () => void };
   onInsertReference: () => void;
   onRefresh: () => void;
   onOpenInBrowser: () => void;
@@ -31,59 +28,16 @@ function stateBadge(issue: Pick<IssueSummary, 'state' | 'stateReason'>): { icon:
   return { icon: 'pass', bg: '#8250df', label: l10n.t({ message: 'Closed', comment: ['Issue state'] }) };
 }
 
-/** "Create Branch" with a chevron for its AI variant — same split-button look as the PR panel's Checkout. */
-function CreateBranchButton({ creatingBranch, onCreateBranch, onCreateBranchWithAi, modelLabel }: {
-  creatingBranch: boolean; onCreateBranch: () => void; onCreateBranchWithAi?: () => void; modelLabel?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h, true);
-    return () => document.removeEventListener('mousedown', h, true);
-  }, [open]);
+function CreateBranchButton({ creatingBranch, onCreateBranch }: { creatingBranch: boolean; onCreateBranch: () => void }) {
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
-      <div style={css.split}>
-        <button style={css.splitMain} onClick={onCreateBranch} disabled={creatingBranch} title={l10n.t('Create a local branch for this issue and check it out')}>
-          <Codicon name="git-branch" style={{ fontSize: '13px' }} />
-          {creatingBranch ? l10n.t('Creating branch…') : l10n.t('Create Branch')}
-        </button>
-        {onCreateBranchWithAi && (
-          <>
-            <div style={css.splitDivider} />
-            <button style={css.splitChevron} onClick={() => setOpen(o => !o)} disabled={creatingBranch} title={l10n.t('More branch options')}>
-              <Codicon name="chevron-down" style={{ fontSize: '12px' }} />
-            </button>
-          </>
-        )}
-      </div>
-      {open && onCreateBranchWithAi && (
-        <div style={css.menu}>
-          <div className="menu-item" style={css.menuItem} onClick={() => { setOpen(false); onCreateBranch(); }}>
-            <Codicon name="git-branch" style={{ fontSize: '13px', marginTop: '2px', flexShrink: 0 }} />
-            <div>
-              <div style={css.menuItemLabel}>{l10n.t('Create Branch')}</div>
-              <div style={css.menuItemDesc}>{l10n.t('Named after the issue number and title')}</div>
-            </div>
-          </div>
-          <div className="menu-item" style={css.menuItem} onClick={() => { setOpen(false); onCreateBranchWithAi(); }}>
-            <Codicon name="sparkle" style={{ fontSize: '13px', marginTop: '2px', flexShrink: 0 }} />
-            <div>
-              <div style={css.menuItemLabel}>{l10n.t('Create Branch with AI')}</div>
-              <div style={css.menuItemDesc}>
-                {modelLabel ? l10n.t('A short name the AI writes from the issue ({0})', modelLabel) : l10n.t('A short name the AI writes from the issue')}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    <button style={css.splitMain} onClick={onCreateBranch} disabled={creatingBranch} title={l10n.t('Create a local branch for this issue and check it out')}>
+      <Codicon name="git-branch" style={{ fontSize: '13px' }} />
+      {creatingBranch ? l10n.t('Creating branch…') : l10n.t('Create Branch')}
+    </button>
   );
 }
 
-export function IssueHeader({ summary, detail, canEdit, updating, creatingBranch, onPickTitle, onCreateBranch, ai, onInsertReference, onRefresh, onOpenInBrowser }: Props) {
+export function IssueHeader({ summary, detail, canEdit, updating, creatingBranch, onPickTitle, onCreateBranch, onInsertReference, onRefresh, onOpenInBrowser }: Props) {
   const issue = detail ?? summary;
   const badge = stateBadge(issue);
   const authorName = issue.authorName;
@@ -100,25 +54,8 @@ export function IssueHeader({ summary, detail, canEdit, updating, creatingBranch
           )}
         </span>
         <div style={css.actionsRow}>
-          {issue.state === 'open' && ai && (
-            <button
-              style={css.aiBtn}
-              onClick={ai.onResolve}
-              title={ai.resolveMode === 'agent'
-                ? l10n.t('The AI agent ({0}) works out a fix in a scratch copy of the repository; you review it, then it goes to a new branch, uncommitted', ai.modelLabel)
-                : l10n.t('The AI ({0}) reads the relevant files and proposes a fix; you review it, then it goes to a new branch, uncommitted', ai.modelLabel)}
-            >
-              <Codicon name="sparkle" style={{ fontSize: '13px' }} />
-              {l10n.t('Resolve with AI (Beta)')}
-            </button>
-          )}
           {issue.state === 'open' && (
-            <CreateBranchButton
-              creatingBranch={creatingBranch}
-              onCreateBranch={onCreateBranch}
-              onCreateBranchWithAi={ai?.onCreateBranchWithAi}
-              modelLabel={ai?.modelLabel}
-            />
+            <CreateBranchButton creatingBranch={creatingBranch} onCreateBranch={onCreateBranch} />
           )}
           <div style={css.iconBtnGroup}>
             <button className="icon-btn" style={css.iconBtnGrouped} onClick={onInsertReference} title={l10n.t('Reference in the commit message')}>
@@ -180,10 +117,6 @@ const css = {
     display: 'flex', alignItems: 'center', flexShrink: 0, padding: '2px',
   } as React.CSSProperties,
   actionsRow: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 } as React.CSSProperties,
-  aiBtn: {
-    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px', borderRadius: '4px', whiteSpace: 'nowrap' as const,
-    background: 'linear-gradient(135deg, #8957e5, #bc4c9c)', color: '#fff', border: 'none', cursor: 'pointer',
-  } as React.CSSProperties,
   split: { display: 'flex', borderRadius: '4px', overflow: 'hidden', background: 'var(--vscode-button-background)' } as React.CSSProperties,
   splitMain: {
     display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px',

@@ -47,9 +47,8 @@ interface LogState {
   workingTree: Record<string, LogWorkingTreeStatus['files']>;
 
   hasWorkspaceFolder: boolean;
-  aiEnabled: boolean;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
-  setRepos: (repos: RepoMeta[], hasWorkspaceFolder?: boolean, aiEnabled?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
+  setRepos: (repos: RepoMeta[], hasWorkspaceFolder?: boolean, activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' }) => void;
   setBranches: (branches: BranchInfo[]) => void;
   updateTags: (repoId: string, tags: TagInfo[]) => void;
   setIconTheme: (theme: IconThemeData | null) => void;
@@ -133,7 +132,6 @@ export const useLogStore = create<LogState>((set, _get) => ({
   repos: [],
   initialized: false,
   hasWorkspaceFolder: true,
-  aiEnabled: true,
   branches: [],
   tags: [],
   iconTheme: null,
@@ -160,7 +158,7 @@ export const useLogStore = create<LogState>((set, _get) => ({
   pendingScrollTarget: null,
   fileLoadSeq: 0,
 
-  setRepos: (repos, hasWorkspaceFolder, aiEnabled, activeProfile) => set({ repos, initialized: true, ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(aiEnabled !== undefined ? { aiEnabled } : {}), ...(activeProfile !== undefined ? { activeProfile } : {}) }),
+  setRepos: (repos, hasWorkspaceFolder, activeProfile) => set({ repos, initialized: true, ...(hasWorkspaceFolder !== undefined ? { hasWorkspaceFolder } : {}), ...(activeProfile !== undefined ? { activeProfile } : {}) }),
   setBranches: (branches) => set({ branches }),
   updateTags: (repoId, tags) => set(s => ({
     tags: [...s.tags.filter(t => t.repoId !== repoId), ...tags],

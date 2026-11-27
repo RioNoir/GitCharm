@@ -140,12 +140,14 @@ export class WorkspaceGitManager implements vscode.Disposable {
       // File saved inside a repo → refresh status (immediate + follow-up for slow git index updates)
       vscode.workspace.onDidSaveTextDocument((doc) => {
         const repoIds = this.reposContaining([doc.uri]);
-        if (repoIds.length > 0) {
-          this.scheduleRefresh(repoIds);
-          // Schedule a follow-up refresh in case git hasn't updated its index yet
-          if (this.refreshFollowUp) clearTimeout(this.refreshFollowUp);
-          this.refreshFollowUp = setTimeout(() => this.scheduleRefresh(repoIds), 1200);
-        }
+        if (repoIds.length === 0) return;
+        this.scheduleRefresh(repoIds);
+        // A VS Code Git repository reports the same save again after its own status run.
+        // The follow-up is only for the file-watcher fallback, where the index can lag the save.
+        const fallback = repoIds.filter(id => !this.statusWatchers.get(id)?.vsRepo);
+        if (fallback.length === 0) return;
+        if (this.refreshFollowUp) clearTimeout(this.refreshFollowUp);
+        this.refreshFollowUp = setTimeout(() => this.scheduleRefresh(fallback), 1200);
       }),
 
       // File-explorer operations (create/delete/rename via VSCode UI or extensions)
@@ -1254,17 +1256,30 @@ export class WorkspaceGitManager implements vscode.Disposable {
       // not surfacing files from foreign repos in the parent's status panel.
       // We check the first path component so "deep/nested-repo/foo.ts" is also
       // caught even though git reports only "deep/nested-repo/" as untracked.
+      const repoRoot = r.repoId;
+      // One status lists many files under the same directories. Remember whether a
+      // path (or an ancestor, up to the repo root) is itself a git repo, so the walk
+      // stats each directory once instead of once per file.
+      const nestedGit = new Map<string, boolean>();
       const isInsideNestedRepo = (f: import('../types/git').FileStatus): boolean => {
-        // Walk from the file's absolute path (inclusive) up to the repo root.
-        // git status reports nested repo directories as the directory itself
-        // (e.g. "deep/nested-repo/"), so absolutePath IS the nested repo root —
-        // we must check it first, then its ancestors.
-        const repoRoot = r.repoId;
+        const cached = nestedGit.get(f.absolutePath);
+        if (cached !== undefined) return cached;
         let dir = f.absolutePath;
+        const chain: string[] = [];
         while (dir.startsWith(repoRoot + path.sep)) {
-          if (fs.existsSync(path.join(dir, '.git'))) return true;
+          const known = nestedGit.get(dir);
+          if (known !== undefined) {
+            for (const seen of chain) nestedGit.set(seen, known);
+            return known;
+          }
+          chain.push(dir);
+          if (fs.existsSync(path.join(dir, '.git'))) {
+            for (const seen of chain) nestedGit.set(seen, true);
+            return true;
+          }
           dir = path.dirname(dir);
         }
+        for (const seen of chain) nestedGit.set(seen, false);
         return false;
       };
 

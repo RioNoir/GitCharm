@@ -12,9 +12,12 @@ All notable changes to GitCharm are documented in this file.
 ### 🐛 Bug Fixes
 - Rebase works in editors whose Git API does not expose `rebase`, such as Cursor: **Update Project** with rebase, **Rebase onto…** and the Log Panel's rebase no longer fail with "rebase is not a function". The fetch still uses the editor's credentials; the rebase itself runs through git, closes [#141](https://github.com/RioNoir/GitCharm/issues/141)
 - Rebase no longer refuses to start when files are staged ("Your index contains uncommitted changes"). Staged and unstaged changes are set aside for the rebase and put back afterwards, still staged. The same applies to pull with rebase, interactive rebase, squash and drop
-- AI features work in every VS Code host, not only where a language model is registered. VS Code with Copilot is unchanged. Cursor, VSCodium and other forks that register no model no longer stop with "No VS Code LM model available": the first installed text-only local agent answers (Cursor Agent in read-only ask mode, then Claude Code, then the Gemini CLI). Choose the provider with **GitCharm: Select AI Model** to pin one
+- Saving a file no longer walks the whole history just to count how far the branch is ahead of or behind its upstream. That count is kept until HEAD or the upstream tip actually moves
 - Commit Panel section headers — Changes, Staged Changes, Unversioned Files, custom changelists and Unchanged — no longer show an icon beside the title
 - A push blocked by the remote — a server hook or a policy check such as a TAPD status gate — is no longer reported as "the remote has commits you don't have locally". The notification shows the remote's own reason, and GitCharm no longer offers to pull or force-push for that rejection
+
+### 🔧 Other
+- AI features are removed: generated commit messages, explanations, conflict resolution, pull request titles and descriptions, and resolving an issue or naming its branch with a model. Conflicts still open in the merge editor, and a branch created from an issue still uses `gitcharm.issues.branchNameTemplate`
 
 ## v0.10.0
 

@@ -572,9 +572,8 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
   private enrichLogMsg(msg: HostToLogMsg): void {
     if (msg.type === 'LOG_INIT_DATA') {
-      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean; aiEnabled?: boolean };
+      const m = msg as typeof msg & { hasWorkspaceFolder?: boolean };
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
-      if (m.aiEnabled === undefined) m.aiEnabled = vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
       if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
       if (m.layout === undefined) m.layout = this.getLayoutPrefs();
       if (m.columns === undefined) m.columns = getLogColumns();
@@ -2288,7 +2287,7 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
       case 'LOG_OPEN_EXTENDED_DETAIL': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, {}, this.profileService);
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, this.profileService);
         break;
       }
 
@@ -2436,12 +2435,6 @@ export class GitLogPanelProvider implements vscode.WebviewViewProvider, vscode.D
       case 'LOG_SHOW_IN_COMMIT_PANEL':
         await vscode.commands.executeCommand('gitcharm.commitPanel.focus');
         break;
-
-      case 'LOG_EXPLAIN_COMMIT': {
-        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true }, this.profileService);
-        break;
-      }
 
       case 'LOG_STASH_APPLY': {
         const repo = this.manager.getRepo(msg.repoId);

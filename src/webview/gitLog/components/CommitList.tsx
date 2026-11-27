@@ -41,7 +41,6 @@ interface Props {
   backgroundLoading?: boolean;
   scrollTarget?: { hash: string; repoId: string } | null;
   onScrollTargetHandled?: () => void;
-  aiEnabled?: boolean;
   themeVersion?: number;
   activeProfile?: { name: string; gitName: string; gitEmail: string; builtIn?: 'local' | 'global' };
   /** Replaces the default "No commits yet" message, e.g. for an empty compare range. */
@@ -193,7 +192,7 @@ const DRAG_SCROLL_STEP = 8;
 /** Identifies a row across repos — the same hash can show up in several. */
 const commitKey = (c: { hash: string; repoId: string }) => `${c.hash}:${c.repoId}`;
 
-export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, branches, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, aiEnabled, activeProfile, emptyState, compareSideLabels, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
+export function CommitList({ layout, selectedHash, repoColors: _repoColors, repos, branches, activeRepoId, currentBranchByRepo, headHashByRepo, onSelect, onMultiSelectionChange, onLoadMore, hasMore, storeHasMore, loading, backgroundLoading, scrollTarget, onScrollTargetHandled, activeProfile, emptyState, compareSideLabels, hideDate, columns = ALL_COLUMNS, commitLimitReached }: Props) {
   const { commits, segments, refColors } = layout;
 
   // graphWidth is stable: it only grows, never shrinks, so adding new commits
@@ -1057,7 +1056,6 @@ export function CommitList({ layout, selectedHash, repoColors: _repoColors, repo
           allCommits={commits}
           currentBranchByRepo={currentBranchByRepo}
           headHashByRepo={headHashByRepo}
-          aiEnabled={aiEnabled}
           onClose={() => setContextMenu(null)}
           onSquash={(selected) => {
             setContextMenu(null);
@@ -1332,7 +1330,7 @@ const popoverStyles = {
   } as React.CSSProperties,
 };
 
-function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, headHashByRepo, aiEnabled, onClose, onSquash }: {
+function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBranchByRepo, headHashByRepo, onClose, onSquash }: {
   commit: LaidOutCommit;
   x: number;
   y: number;
@@ -1340,7 +1338,6 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
   allCommits: LaidOutCommit[];
   currentBranchByRepo: Record<string, string>;
   headHashByRepo: Record<string, string>;
-  aiEnabled?: boolean;
   onClose: () => void;
   onSquash: (selected: LaidOutCommit[]) => void;
 }) {
@@ -1591,22 +1588,6 @@ function CommitContextMenu({ commit, x, y, multiSelected, allCommits, currentBra
           >
             <Codicon name="git-compare" style={ctxStyles.icon} />
             <span>{l10n.t('Compare with…')}</span>
-          </div>
-        )}
-        {aiEnabled && (
-          <div
-            data-ctx-item=""
-            style={ctxStyles.item}
-            onClick={() =>
-              send({
-                type: "LOG_EXPLAIN_COMMIT",
-                repoId: commit.repoId,
-                hash: commit.hash,
-              })
-            }
-          >
-            <Codicon name="sparkle" style={ctxStyles.icon} />
-            <span>{l10n.t('Explain with AI')}</span>
           </div>
         )}
         {commit.isStash ? (

@@ -11,10 +11,6 @@ import { attachAvatarResolver, checkAvatarUrl } from '../utils/avatarResolver';
 import { panelIcon } from '../utils/panelIcon';
 import { webviewReadyGate } from '../utils/webviewReadyGate';
 import type { PullRequestDetailPanel } from './PullRequestDetailPanel';
-import type { IssueResolvePanel } from './IssueResolvePanel';
-import { getAiModelLabel } from '../utils/aiModelLabel';
-import { agentProviderFor } from '../ai/aiGenerate';
-import { explainIssue, generateIssueBranchName, loadIssueContext } from '../issues/issueAiActions';
 import { createGit } from '../git/gitClient';
 import { openCommitFullDetailPanel } from './CommitFullDetailPanel';
 
@@ -46,29 +42,16 @@ export function labelSwatchIconPath(hexColor: string): vscode.Uri {
 }
 
 /**
- * Creates a local branch for an issue and checks it out. The name offered is gitcharm.issues.branchNameTemplate's,
- * or with `useAi` one the AI writes from the issue's content — editable either way before the branch is created.
+ * Creates a local branch for an issue and checks it out. The name offered comes from
+ * gitcharm.issues.branchNameTemplate and can be edited before the branch is created.
  */
 export async function createBranchForIssue(
-  manager: WorkspaceGitManager, issueManager: IssueManager, repoId: string, issue: Pick<IssueSummary, 'number' | 'title'>, useAi = false,
+  manager: WorkspaceGitManager, issueManager: IssueManager, repoId: string, issue: Pick<IssueSummary, 'number' | 'title'>,
 ): Promise<{ ok: boolean; branchName?: string; error?: string }> {
   const repo = manager.getRepo(repoId);
   if (!repo) return { ok: false, error: vscode.l10n.t('Repository not found') };
-  let suggested: string;
-  if (useAi) {
-    const name = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Asking the AI for a branch name…') },
-      async () => {
-        const context = await loadIssueContext(issueManager, repoId, issue.number);
-        return 'error' in context ? context : generateIssueBranchName(issueManager, repoId, context);
-      },
-    );
-    if (typeof name !== 'string') return { ok: false, error: name.error };
-    suggested = name;
-  } else {
-    const username = await issueManager.getCurrentUsername(repoId).catch(() => undefined);
-    suggested = issueBranchName(issue, username);
-  }
+  const username = await issueManager.getCurrentUsername(repoId).catch(() => undefined);
+  const suggested = issueBranchName(issue, username);
   const branchName = await promptBranchName({
     title: vscode.l10n.t('Create Branch for Issue #{0}', issue.number),
     prompt: vscode.l10n.t('The branch is created from the current HEAD and checked out'),
@@ -90,7 +73,6 @@ export class IssueDetailPanel {
   /** Holds each open panel's current issue summary once known — the restore path wires the message handler before fetching it. */
   private currentIssueByPanel = new WeakMap<vscode.WebviewPanel, { value: IssueSummary | null }>();
   private pullRequestDetailPanel?: PullRequestDetailPanel;
-  private issueResolvePanel?: IssueResolvePanel;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -105,10 +87,6 @@ export class IssueDetailPanel {
 
   setPullRequestDetailPanel(panel: PullRequestDetailPanel): void {
     this.pullRequestDetailPanel = panel;
-  }
-
-  setIssueResolvePanel(panel: IssueResolvePanel): void {
-    this.issueResolvePanel = panel;
   }
 
   async open(repoId: string, issue: IssueSummary): Promise<void> {
@@ -185,13 +163,8 @@ export class IssueDetailPanel {
       this.pullRequestManager.getConnectionStatus(repoId),
       this.issueManager.getCurrentUsername(repoId).catch(() => undefined),
     ]);
-    const cfg = vscode.workspace.getConfiguration('gitcharm');
     webviewReadyGate<HostToIssueDetailMsg>(panel).post({
       type: 'ISSUEDETAIL_INIT', repoId, repoName: meta.name, number: issue.number, summary: issue, provider: connection.provider, currentUsername,
-      aiEnabled: cfg.get('ai.enabled', true),
-      aiExplainModelLabel: getAiModelLabel(cfg, 'explain'),
-      aiIssuesModelLabel: getAiModelLabel(cfg, 'issues'),
-      aiResolveMode: agentProviderFor('issues', cfg) ? 'agent' : 'text',
     });
   }
 
@@ -336,32 +309,11 @@ export class IssueDetailPanel {
         break;
       }
 
-      case 'ISSUEDETAIL_CREATE_BRANCH':
-      case 'ISSUEDETAIL_CREATE_BRANCH_AI': {
-        const result = await createBranchForIssue(this.manager, this.issueManager, repoId, issue, msg.type === 'ISSUEDETAIL_CREATE_BRANCH_AI');
+      case 'ISSUEDETAIL_CREATE_BRANCH': {
+        const result = await createBranchForIssue(this.manager, this.issueManager, repoId, issue);
         post({ type: 'ISSUEDETAIL_CREATE_BRANCH_RESULT', ...result });
         if (result.branchName) vscode.window.showInformationMessage(vscode.l10n.t('Switched to new branch "{0}"', result.branchName));
         else if (!result.ok) vscode.window.showErrorMessage(result.error ?? vscode.l10n.t('Failed to create branch'));
-        break;
-      }
-
-      case 'ISSUEDETAIL_EXPLAIN': {
-        const { openAiExplainDetail } = await import('./AiExplainDetailPanel');
-        const cfg = vscode.workspace.getConfiguration('gitcharm');
-        openAiExplainDetail(
-          this.extensionUri,
-          { key: `issue:${repoId}:${issue.number}`, kind: 'issue', title: vscode.l10n.t('Issue #{0} — {1}', issue.number, issue.title) },
-          getAiModelLabel(cfg, 'explain'),
-          async onProgress => {
-            const context = await loadIssueContext(this.issueManager, repoId, issue.number);
-            return 'error' in context ? context : explainIssue(context, onProgress);
-          },
-        );
-        break;
-      }
-
-      case 'ISSUEDETAIL_RESOLVE_AI': {
-        this.issueResolvePanel?.open(repoId, issue);
         break;
       }
 

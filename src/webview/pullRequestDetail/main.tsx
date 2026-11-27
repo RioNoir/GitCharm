@@ -11,7 +11,6 @@ import { ChecksList } from './components/ChecksList';
 import { PeopleField, EditFieldButton } from './components/PeoplePanel';
 import { LabelsPanel } from './components/LabelsPanel';
 import { LinkedIssues } from './components/LinkedIssues';
-import { AiExplainFab } from '../shared/AiExplainFab';
 import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips } from '../shared/Skeleton';
@@ -56,8 +55,6 @@ function StaticSection({ title, icon, first, headerAction, children }: { title: 
 function App() {
   const [summary, setSummary] = useState<PullRequestSummary | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | undefined>();
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiModelLabel, setAiModelLabel] = useState('');
   const [defaultMergeStrategy, setDefaultMergeStrategy] = useState<MergeStrategy>('merge');
   const [defaultCheckoutAction, setDefaultCheckoutAction] = useState<'pr' | 'branch'>('pr');
   const [detail, setDetail] = useState<PullRequestDetail | null>(null);
@@ -122,8 +119,6 @@ function App() {
         case 'PRDETAIL_INIT':
           setSummary(msg.summary);
           setCurrentUsername(msg.currentUsername);
-          setAiEnabled(msg.aiEnabled);
-          setAiModelLabel(msg.aiModelLabel);
           setDefaultMergeStrategy(msg.defaultMergeStrategy);
           setDefaultCheckoutAction(msg.defaultCheckoutAction);
           // Persisted so VS Code can restore this panel (via registerWebviewPanelSerializer) after a window reload/restart.
@@ -409,10 +404,6 @@ function App() {
     send({ type: 'PRDETAIL_SUBMIT_REVIEW', input: { event: 'approve' } });
   }, [send]);
 
-  const handleExplain = useCallback(() => {
-    send({ type: 'PRDETAIL_EXPLAIN' });
-  }, [send]);
-
   if (!summary) {
     return (
       <div style={css.loading}>
@@ -457,8 +448,6 @@ function App() {
         defaultMergeStrategy={defaultMergeStrategy}
         defaultCheckoutAction={defaultCheckoutAction}
       />
-
-      {aiEnabled && <AiExplainFab modelLabel={aiModelLabel} onClick={handleExplain} />}
 
       <div style={css.tabBar}>
         {([

@@ -32,10 +32,8 @@ interface Props {
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
   onOpenChanges: (repoId: string, hash: string) => void;
-  onExplainCommit: (repoId: string, hash: string) => void;
   onViewCombinedDiff: (repoId: string, hashes: string[]) => void;
   onBranchClick: (repoId: string) => void;
-  aiEnabled: boolean;
   /** The workspace's only repo: neutral repo headers (repo icon, no color). Otherwise each keeps its color and dot, even as the only one listed. */
   plainHeaders?: boolean;
 }
@@ -174,7 +172,7 @@ function MenuItem({ icon, label, danger, onClick }: { icon: string; label: strin
   );
 }
 
-function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onOpenChanges, onViewCombinedDiff, onExplain, aiEnabled, onClose }: {
+function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, onEditMsg, onUndo, onRevertSingle, onDropSingle, onViewInLog, onOpenDetail, onOpenChanges, onViewCombinedDiff, onClose }: {
   state: CommitCtxMenuState;
   onSquash: () => void;
   onDropCommits: () => void;
@@ -187,8 +185,6 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
   onOpenDetail: () => void;
   onOpenChanges: () => void;
   onViewCombinedDiff: () => void;
-  onExplain: () => void;
-  aiEnabled: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -233,7 +229,6 @@ function CommitContextMenu({ state, onSquash, onDropCommits, onRevertCommits, on
           <MenuItem icon="go-to-file" label={l10n.t('View in Log Panel')} onClick={wrap(onViewInLog)} />
           <MenuItem icon="open-preview" label={l10n.t('Open Full Detail')} onClick={wrap(onOpenDetail)} />
           <MenuItem icon="diff-multiple" label={l10n.t('Open Changes')} onClick={wrap(onOpenChanges)} />
-          {aiEnabled && <MenuItem icon="sparkle" label={l10n.t('Explain with AI')} onClick={wrap(onExplain)} />}
           <div style={ctxStyles.separator} />
           {state.isHead && <MenuItem icon="edit" label={l10n.t('Edit Commit Message…')} onClick={wrap(onEditMsg)} />}
           <MenuItem icon="discard" label={l10n.t('Revert Commit')} onClick={wrap(onRevertSingle)} />
@@ -350,7 +345,7 @@ function CommitRow({ commit, repoId, isHead, isSelected, suppressBorder, onOpenI
 // ── Per-repo section ──────────────────────────────────────────────────────────
 
 
-function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, singleRepo, plain = false, collapsible = !singleRepo, isLast }: {
+function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush, onPull, onFetch, checked, canCheck, onToggle, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onViewCombinedDiff, onBranchClick, singleRepo, plain = false, collapsible = !singleRepo, isLast }: {
   repoStatus: RepoStatus;
   repoMeta: RepoMeta | undefined;
   unpushed: Props['unpushedMap'][string] | undefined;
@@ -370,10 +365,8 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   onEditCommitMsg: (repoId: string, hash: string, currentMessage: string) => void;
   onOpenDetail: (repoId: string, hash: string) => void;
   onOpenChanges: (repoId: string, hash: string) => void;
-  onExplainCommit: (repoId: string, hash: string) => void;
   onViewCombinedDiff: (repoId: string, hashes: string[]) => void;
   onBranchClick: (repoId: string) => void;
-  aiEnabled: boolean;
   singleRepo?: boolean;
   plain?: boolean;
   /** False for the only repo listed: always open, no chevron — there'd be nothing else to show. */
@@ -473,11 +466,6 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
   const handleOpenChanges = () => {
     if (!ctxMenu?.singleHash) return;
     onOpenChanges(repoStatus.repoId, ctxMenu.singleHash);
-  };
-
-  const handleExplain = () => {
-    if (!ctxMenu?.singleHash) return;
-    onExplainCommit(repoStatus.repoId, ctxMenu.singleHash);
   };
 
   const handleSquash = () => {
@@ -657,8 +645,6 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
           onOpenDetail={handleOpenDetail}
           onOpenChanges={handleOpenChanges}
           onViewCombinedDiff={handleViewCombinedDiff}
-          onExplain={handleExplain}
-          aiEnabled={aiEnabled}
           onClose={() => { setCtxMenu(null); setMultiSelectHashes(new Set()); }}
         />
       )}
@@ -668,7 +654,7 @@ function RepoSection({ repoStatus, repoMeta, unpushed, canPush, canPull, onPush,
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onPull, onFetch, onSync, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onExplainCommit, onViewCombinedDiff, onBranchClick, aiEnabled, plainHeaders = false }: Props) {
+export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, onPushAll: _onPushAll, onPull, onFetch, onSync, onOpenInLog, onUndoCommit, onSquash, onDropCommits, onRevertCommits, onEditCommitMsg, onOpenDetail, onOpenChanges, onViewCombinedDiff, onBranchClick, plainHeaders = false }: Props) {
   const metaMap = new Map(repoMetas.map(m => [m.id, m]));
   const isSingleRepo = repos.length === 1;
   const { isPushSelected, setPushSelection } = useCommitStore();
@@ -771,10 +757,8 @@ export function PushTab({ repos, repoMetas, unpushedMap, onPush, onForcePush, on
       onEditCommitMsg={onEditCommitMsg}
       onOpenDetail={onOpenDetail}
       onOpenChanges={onOpenChanges}
-      onExplainCommit={onExplainCommit}
       onViewCombinedDiff={onViewCombinedDiff}
       onBranchClick={onBranchClick}
-      aiEnabled={aiEnabled}
       singleRepo={opts.single}
       plain={plainHeaders}
       collapsible={opts.collapsible}

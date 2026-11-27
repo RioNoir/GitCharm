@@ -1,7 +1,7 @@
 import * as l10n from '@vscode/l10n';
 import React, { useEffect, useRef, useState } from 'react';
 import { Codicon } from '../shared/Codicon';
-import type { AiModelOptionMsg, SettingSchema } from '../../host/types/messages';
+import type { SettingSchema } from '../../host/types/messages';
 import { enumLabel } from './layout';
 
 // The controls of VS Code's Settings editor: checkbox, text/number box, dropdown, and the list and
@@ -340,109 +340,6 @@ export function HostOverridesEditor({ value, onChange, disabled }: { value: Reco
       ) : (
         <button type="button" className="gc-btn gc-btn-primary gc-list-add" disabled={disabled} onClick={() => setAdding(true)}>{l10n.t('Add Item')}</button>
       )}
-    </div>
-  );
-}
-
-/** An API key: write-only. The page only ever learns whether one is stored. */
-export function ApiKeyField({ stored, providerLabel, onSave }: { stored: boolean; providerLabel: string; onSave(v: string): void }) {
-  const [editing, setEditing] = useState(!stored);
-  const [draft, setDraft] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { setEditing(!stored); setDraft(''); }, [stored]);
-  useEffect(() => { if (editing && stored) inputRef.current?.focus(); }, [editing, stored]);
-
-  if (!editing) {
-    return (
-      <div>
-        <div className="gc-apikey-status"><Codicon name="lock" /> {l10n.t('Stored in secure storage')}</div>
-        <div className="gc-inline">
-          <button type="button" className="gc-btn gc-btn-secondary" onClick={() => setEditing(true)}>{l10n.t('Replace')}</button>
-          <button type="button" className="gc-btn gc-btn-secondary" onClick={() => onSave('')}>{l10n.t('Remove')}</button>
-        </div>
-      </div>
-    );
-  }
-  const save = () => { if (draft.trim()) onSave(draft); };
-  return (
-    <div className="gc-inline">
-      <input
-        ref={inputRef}
-        className="gc-input mono"
-        type="password"
-        autoComplete="off"
-        value={draft}
-        placeholder={l10n.t('Paste your {0} API key', providerLabel)}
-        aria-label={l10n.t('{0} API key', providerLabel)}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape' && stored) setEditing(false); }}
-      />
-      <button type="button" className="gc-btn gc-btn-primary" disabled={!draft.trim()} onClick={save}>{l10n.t('Save')}</button>
-      {stored && <button type="button" className="gc-btn gc-btn-secondary" onClick={() => setEditing(false)}>{l10n.t('Cancel')}</button>}
-    </div>
-  );
-}
-
-/**
- * The model of a provider: a dropdown of what the provider lists, with the current value kept even when it
- * isn't listed, and a free-text fallback (custom ids, provider unreachable, CLI providers with no listing).
- */
-export function ModelPicker({ value, onCommit, load, autoLabel, placeholder, canList, disabled }: {
-  value: string;
-  onCommit(v: string): void;
-  load(): Promise<{ models: AiModelOptionMsg[]; error?: string }>;
-  /** Label of the empty value: the provider's own default model. */
-  autoLabel: string;
-  placeholder?: string;
-  canList: boolean;
-  disabled?: boolean;
-}) {
-  const [models, setModels] = useState<AiModelOptionMsg[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [manual, setManual] = useState(!canList);
-
-  const refresh = () => {
-    if (!canList) return;
-    setLoading(true);
-    setError(undefined);
-    load().then(
-      r => { setModels(r.models); setError(r.error); setLoading(false); },
-      (e: unknown) => { setModels([]); setError(e instanceof Error ? e.message : String(e)); setLoading(false); },
-    );
-  };
-  // Reload whenever the picker is shown for another provider (its `load` changes with it).
-  useEffect(() => { setManual(!canList); setModels(null); refresh(); }, [load, canList]);
-
-  const listed = models ?? [];
-  const showSelect = canList && !manual && listed.length > 0;
-  return (
-    <div>
-      <div className="gc-inline">
-        {showSelect ? (
-          <select className="gc-select" style={{ flex: 1, width: 'auto' }} value={value} disabled={disabled} aria-label={l10n.t('Model')} onChange={e => onCommit(e.target.value)}>
-            <option value="">{autoLabel}</option>
-            {value && !listed.some(m => m.id === value) && <option value={value}>{value}</option>}
-            {listed.map(m => <option key={m.id} value={m.id}>{m.detail ? `${m.label} — ${m.detail}` : m.label}</option>)}
-          </select>
-        ) : (
-          <TextInput value={value} onCommit={onCommit} placeholder={placeholder ?? autoLabel} disabled={disabled} monospace label={l10n.t('Model')} />
-        )}
-        {canList && (
-          <button type="button" className="gc-icon-btn" title={l10n.t('Reload the model list')} aria-label={l10n.t('Reload the model list')} disabled={loading} onClick={refresh}>
-            <Codicon name={loading ? 'loading' : 'refresh'} className={loading ? 'codicon-modifier-spin' : undefined} />
-          </button>
-        )}
-        {canList && listed.length > 0 && (
-          <button type="button" className="gc-icon-btn" title={manual ? l10n.t('Pick from the list') : l10n.t('Type a model id')}
-            aria-label={manual ? l10n.t('Pick from the list') : l10n.t('Type a model id')} onClick={() => setManual(m => !m)}>
-            <Codicon name={manual ? 'list-selection' : 'edit'} />
-          </button>
-        )}
-      </div>
-      {loading && <div className="gc-model-status">{l10n.t('Loading models…')}</div>}
-      {!loading && error && <div className="gc-model-status warning"><Codicon name="warning" /> {error}</div>}
-      {!loading && !error && models && models.length === 0 && canList && <div className="gc-model-status">{l10n.t('No models found. Type the model id instead.')}</div>}
     </div>
   );
 }

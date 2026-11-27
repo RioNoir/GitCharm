@@ -4,7 +4,6 @@ import { renderMarkdown } from '../shared/renderMarkdown';
 import type { SettingSchema } from '../../host/types/messages';
 import { Checkbox, EnumCards, EnumSelect, GearMenu, HostOverridesEditor, NumberInput, OrderedList, ProjectColorsEditor, StringList, TextInput } from './controls';
 import { enumLabel, settingLabel } from './layout';
-import { aiProviderIcon } from './providerIcons';
 import { normalizeBranchModel } from '../../host/types/branchModels';
 
 /** What a row needs from the page: values as seen from the selected target (User or Workspace), and how to change them. */
@@ -31,7 +30,6 @@ export interface RowContext {
 const CARD_ENUM_MAX = 6;
 
 const PLACEHOLDER: Record<string, () => string> = {
-  'ai.language': () => l10n.t('Empty: VS Code display language (e.g. en, it, fr)'),
   'pullRequests.defaultTargetBranch': () => l10n.t('Empty: detect main / master'),
 };
 
@@ -51,7 +49,7 @@ function branchModel(v: string): string {
   return normalizeBranchModel(v) ?? '';
 }
 
-/** The title line and the gear menu, shared by every kind of row (also the AI prompts and the API key). */
+/** The title line and the gear menu, shared by every kind of row. */
 export function RowHeader({ ctx, settingKey, label }: { ctx: RowContext; settingKey: string; label?: string }) {
   const title = label ?? settingLabel(settingKey);
   const note = ctx.scopeNote(settingKey);
@@ -139,8 +137,8 @@ export function SettingRow({ ctx, settingKey, children }: { ctx: RowContext; set
       );
     } else if (schema.enum) {
       // Cards show every option with its explanation; a long list stays a dropdown.
-      control = schema.enum.length <= CARD_ENUM_MAX || settingKey === 'ai.provider'
-        ? <EnumCards settingKey={settingKey} schema={schema} value={String(value)} disabled={disabled} label={label} icon={settingKey === 'ai.provider' ? aiProviderIcon : undefined} onChange={v => ctx.update(settingKey, v)} />
+      control = schema.enum.length <= CARD_ENUM_MAX
+        ? <EnumCards settingKey={settingKey} schema={schema} value={String(value)} disabled={disabled} label={label} onChange={v => ctx.update(settingKey, v)} />
         : <EnumSelect settingKey={settingKey} schema={schema} value={String(value)} disabled={disabled} label={label} onChange={v => ctx.update(settingKey, v)} />;
     } else if (schema.type === 'number') {
       control = <NumberInput value={Number(value)} schema={schema} disabled={disabled} label={label} onCommit={v => ctx.update(settingKey, v)} />;

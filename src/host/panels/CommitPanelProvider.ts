@@ -7,14 +7,12 @@ import * as path from 'path';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { getCommitPanelConfig, isCommitPanelTabShown } from '../ui/commitPanelConfig';
 import { loadBranchDiffGroups, showBranchFileDiff, showBranchDirDiff, takeBranchFiles, type BranchDiffGroup } from './WorkingTreeDiffPanel';
-import { cleanPartialModelOutput, generateForOperation } from '../ai/aiGenerate';
-import { buildPrompt } from '../ai/prompts';
 import { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import { ShelveService } from '../git/ShelveService';
 import { ChangelistService, changelistDisplayName } from '../git/ChangelistService';
 import { ShelveDocumentProvider, applyPatchToContent } from '../utils/ShelveDocumentProvider';
 import type { CommitAction, CommitToHostMsg, HostToCommitMsg, PullRequestStateFilter, PullRequestAuthorFilter, CommitPanelTabId, IssueStateFilter, IssueSummary } from '../types/messages';
-import type { FileStatus, WorkspaceStatus } from '../types/git';
+import type { WorkspaceStatus } from '../types/git';
 import { CHANGELIST_UNVERSIONED_ID } from '../types/git';
 import { loadIconTheme } from '../utils/IconThemeService';
 import type { GitLogPanelProvider } from './GitLogPanelProvider';
@@ -355,11 +353,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         this.broadcastCommit({ type: 'COMMIT_PANEL_CONFIG', config: this.getPanelConfig() });
         this.badgeController?.refresh();
       }
-      if (e.affectsConfiguration('gitcharm.ai.enabled')) {
-        this.manager.getAllStatuses().then(status => {
-          this.post({ type: 'COMMIT_STATUS_UPDATE', repos: this.manager.getRepoMetas(), status });
-        });
-      }
       if (e.affectsConfiguration('gitcharm.changesViewMode') || e.affectsConfiguration('gitcharm.defaultCommitAction') || e.affectsConfiguration('gitcharm.defaultSaveAction')) {
         this.changelistService?.setChangelistMode(this.getChangesViewMode() === 'changelists');
         this.manager.getAllStatuses().then(status => {
@@ -403,7 +396,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
       if (m.defaultCommitAction === undefined) m.defaultCommitAction = this.getDefaultCommitAction();
       if (m.defaultSaveAction === undefined) m.defaultSaveAction = this.getDefaultSaveAction();
       if (m.hasWorkspaceFolder === undefined) m.hasWorkspaceFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
-      if (m.aiEnabled === undefined) m.aiEnabled = this.getAiEnabled();
       if (m.activeProfile === undefined) m.activeProfile = this.cachedActiveProfile;
       if (m.panelConfig === undefined) m.panelConfig = this.getPanelConfig();
     }
@@ -903,10 +895,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
   private getDefaultSaveAction(): 'stash' | 'shelve' {
     return vscode.workspace.getConfiguration('gitcharm').get<'stash' | 'shelve'>('defaultSaveAction', 'stash');
-  }
-
-  private getAiEnabled(): boolean {
-    return vscode.workspace.getConfiguration('gitcharm').get<boolean>('ai.enabled', true);
   }
 
   getHiddenRepoIds(): string[] {
@@ -1860,81 +1848,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
         break;
       }
 
-      case 'COMMIT_RESOLVE_CONFLICTS_AI': {
-        const repo = this.manager.getRepo(msg.repoId);
-        if (!repo) return;
-        // Saved right away: the file usually isn't open, and the Commit Panel then shows it as resolvable.
-        await vscode.commands.executeCommand('gitcharm.resolveConflictsWithAi', vscode.Uri.file(path.join(repo.rootPath, msg.filePath)), { save: true });
-        break;
-      }
-
-      case 'COMMIT_SELECT_AI_MODEL': {
-        await vscode.commands.executeCommand('gitcharm.selectAiModel');
-        break;
-      }
-
-      case 'COMMIT_OPEN_AI_SETTINGS': {
-        await vscode.commands.executeCommand('gitcharm.openSettings', 'ai');
-        break;
-      }
-
-      case 'COMMIT_GENERATE_MESSAGE': {
-        try {
-          const ws = await this.manager.getAllStatuses();
-          const cfg = vscode.workspace.getConfiguration('gitcharm');
-          const maxDiffChars: number = cfg.get('ai.maxDiffChars', 8000);
-
-          // Only the files that would be committed: the selected ones, or what's staged in VS Code mode
-          const targets = msg.repos.flatMap(t => {
-            const repo = ws.repos.find(r => r.repoId === t.repoId);
-            if (!repo) return [];
-            const wanted = new Set(t.paths);
-            const byPath = new Map<string, FileStatus>();
-            for (const f of t.stagedOnly ? repo.stagedFiles : [...repo.stagedFiles, ...repo.unstagedFiles]) {
-              if (wanted.has(f.path) && !byPath.has(f.path)) byPath.set(f.path, f);
-            }
-            return byPath.size > 0 ? [{ repoId: repo.repoId, stagedOnly: t.stagedOnly, files: [...byPath.values()] }] : [];
-          });
-          if (targets.length === 0) {
-            void vscode.window.showWarningMessage(vscode.l10n.t('No files to commit: select or stage some changes to generate a commit message.'));
-            this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId });
-            break;
-          }
-          const multiRepo = targets.length > 1;
-
-          // Collect file summary + diff per repo
-          const sections: string[] = [];
-          for (const repo of targets) {
-            const repoName = path.basename(repo.repoId);
-            const files = repo.files;
-
-            const fileLines = files.slice(0, 50).map(f => `${f.status[0].toUpperCase()} ${f.path}`);
-            const svc = this.manager.getRepo(repo.repoId);
-            const diff = svc ? await svc.getCommitDiffForPaths(files.map(f => f.path), repo.stagedOnly, maxDiffChars) : '';
-
-            const block = [
-              multiRepo ? `### Repository: ${repoName}` : '',
-              '## Changed files',
-              fileLines.join('\n'),
-              diff ? `\n## Diff\n\`\`\`diff\n${diff}\n\`\`\`` : '',
-            ].filter(Boolean).join('\n');
-            sections.push(block);
-          }
-
-          const context = sections.join('\n\n');
-          const prompt = buildPrompt('commitMessage', [context], cfg);
-
-          const message = await generateForOperation('commitMessage', prompt, cfg, {
-            onProgress: text => this.post({ type: 'COMMIT_GENERATE_MESSAGE_PROGRESS', requestId: msg.requestId, message: cleanPartialModelOutput(text) }),
-          });
-          this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, message });
-        } catch (e: unknown) {
-          logError('ai-generate', formatGitError(e), getRawErrorDetail(e));
-          this.post({ type: 'COMMIT_GENERATE_MESSAGE_RESULT', requestId: msg.requestId, error: formatGitError(e) });
-        }
-        break;
-      }
-
       case 'SHELVE_LIST': {
         const svc = this.getShelveService(msg.repoId);
         if (!svc) { logWarn('shelve-list', 'Repo not found'); this.post({ type: 'SHELVE_LIST_RESULT', requestId: msg.requestId, repoId: msg.repoId, shelves: [], error: vscode.l10n.t('Repo not found') }); return; }
@@ -2402,7 +2315,7 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
 
       case 'PUSH_OPEN_DETAIL': {
         const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, {}, this.profileService);
+        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, this.profileService);
         break;
       }
 
@@ -2426,12 +2339,6 @@ export class CommitPanelProvider implements vscode.WebviewViewProvider {
             return [label, original, modified] as [vscode.Uri, vscode.Uri, vscode.Uri];
           });
         await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('Changes in {0}', msg.hash.slice(0, 8)), resources);
-        break;
-      }
-
-      case 'PUSH_EXPLAIN_COMMIT': {
-        const { openCommitFullDetailPanel } = await import('./CommitFullDetailPanel');
-        await openCommitFullDetailPanel(this.extensionUri, this.manager, msg.repoId, msg.hash, { autoExplain: true }, this.profileService);
         break;
       }
 

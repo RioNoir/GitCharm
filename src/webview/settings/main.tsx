@@ -1,6 +1,6 @@
 import '../shared/l10n';
 import * as l10n from '@vscode/l10n';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Codicon } from '../shared/Codicon';
 import { useMessageBridge } from '../shared/useMessageBridge';
@@ -8,7 +8,6 @@ import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
 import type { HostToSettingsMsg, IntegrationsState, McpState, SettingsState, SettingsTarget, SettingsToHostMsg } from '../../host/types/messages';
 import { IntegrationsSection, type IntegrationsActions } from './IntegrationsSection';
 import { McpSection, type McpActions } from './McpSection';
-import { AiSection, PromptsSection } from './AiSection';
 import { getCategories, settingLabel, type CategoryDef } from './layout';
 import { Preview } from './previews';
 import { GitCharmIcon } from '../shared/GitCharmIcon';
@@ -106,20 +105,6 @@ function App() {
       repos: state.repos,
     };
   }, [state, effectiveTarget, send, categories]);
-
-  const listModels = useCallback(async (provider: string) => {
-    const r = await request<Extract<HostToSettingsMsg, { type: 'SETTINGS_MODELS' }>>({ type: 'SETTINGS_LIST_MODELS', provider } as SettingsToHostMsg, 20_000);
-    return { models: r.models, error: r.error };
-  }, [request]);
-
-  const testAi = useCallback(async () => {
-    const r = await request<Extract<HostToSettingsMsg, { type: 'SETTINGS_TEST_RESULT' }>>({ type: 'SETTINGS_TEST_AI' } as SettingsToHostMsg, 60_000);
-    return { ok: r.ok, message: r.message, elapsedMs: r.elapsedMs };
-  }, [request]);
-
-  const setApiKey = useCallback((provider: 'claude' | 'openai' | 'gemini', value: string) => {
-    send({ type: 'SETTINGS_SET_API_KEY', provider, value });
-  }, [send]);
 
   const integrationActions: IntegrationsActions = useMemo(() => ({
     add: async (integrationId, input) => {
@@ -251,9 +236,9 @@ function App() {
 
         <div className="gc-content" ref={contentRef}>
           {q ? (
-            <SearchResults ctx={ctx} categories={categories} matches={matches} state={state} />
+            <SearchResults ctx={ctx} categories={categories} matches={matches} />
           ) : (
-            <CategoryPage category={current} ctx={ctx} state={state} listModels={listModels} testAi={testAi} setApiKey={setApiKey} integrations={integrations} integrationActions={integrationActions} mcp={mcp} mcpActions={mcpActions} />
+            <CategoryPage category={current} ctx={ctx} state={state} integrations={integrations} integrationActions={integrationActions} mcp={mcp} mcpActions={mcpActions} />
           )}
         </div>
       </div>
@@ -261,13 +246,10 @@ function App() {
   );
 }
 
-function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, integrations, integrationActions, mcp, mcpActions }: {
+function CategoryPage({ category, ctx, state, integrations, integrationActions, mcp, mcpActions }: {
   category: CategoryDef;
   ctx: RowContext;
   state: SettingsState;
-  listModels: React.ComponentProps<typeof AiSection>['listModels'];
-  testAi: React.ComponentProps<typeof AiSection>['testAi'];
-  setApiKey: React.ComponentProps<typeof AiSection>['setApiKey'];
   integrations: IntegrationsState | null;
   integrationActions: IntegrationsActions;
   mcp: McpState | null;
@@ -279,8 +261,6 @@ function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, int
       <p className="gc-group-desc">{category.description}</p>
       <div className={`gc-body${category.preview ? ' with-preview' : ''}`}>
         <div className="gc-body-main">
-          {category.custom === 'ai' && <AiSection ctx={ctx} state={state} listModels={listModels} testAi={testAi} setApiKey={setApiKey} />}
-          {category.custom === 'aiPrompts' && <PromptsSection ctx={ctx} keys={category.keys} defaults={state.defaultPrompts} />}
           {category.custom === 'integrations' && <IntegrationsSection ctx={ctx} state={integrations} actions={integrationActions} />}
           {category.custom === 'mcp' && <McpSection ctx={ctx} state={mcp} actions={mcpActions} />}
           {!category.custom && category.keys.map(key => <SettingRow key={key} ctx={ctx} settingKey={key} />)}
@@ -295,7 +275,7 @@ function CategoryPage({ category, ctx, state, listModels, testAi, setApiKey, int
   );
 }
 
-function SearchResults({ ctx, categories, matches, state }: { ctx: RowContext; categories: CategoryDef[]; matches(key: string): boolean; state: SettingsState }) {
+function SearchResults({ ctx, categories, matches }: { ctx: RowContext; categories: CategoryDef[]; matches(key: string): boolean }) {
   const sections = categories.map(c => ({ c, keys: c.keys.filter(matches) })).filter(s => s.keys.length > 0);
   if (sections.length === 0) {
     return <div className="gc-empty">{l10n.t('No Settings Found')}</div>;
@@ -305,9 +285,7 @@ function SearchResults({ ctx, categories, matches, state }: { ctx: RowContext; c
       {sections.map(({ c, keys }) => (
         <section key={c.id}>
           <h3 className="gc-subgroup-title">{c.label}</h3>
-          {c.custom === 'aiPrompts'
-            ? <PromptsSection ctx={ctx} keys={keys} defaults={state.defaultPrompts} />
-            : keys.map(key => <SettingRow key={key} ctx={ctx} settingKey={key} />)}
+          {keys.map(key => <SettingRow key={key} ctx={ctx} settingKey={key} />)}
         </section>
       ))}
     </>

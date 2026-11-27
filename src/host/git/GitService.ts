@@ -95,6 +95,10 @@ export class GitService {
   // value after an operation whose watcher event hasn't arrived yet.
 
   private refCache = new Map<string, { fingerprint: string; value: Promise<unknown>; createdAt: number }>();
+  /** Ahead/behind for the current HEAD and upstream tip. A file edit moves neither, so status refreshes reuse it. */
+  private aheadBehindCache?: { head: string; upstream: string; ahead: number; behind: number };
+  /** `null` until the first status: older git rejects `--no-ahead-behind`, and that walk is what we are avoiding. */
+  private statusExtraArgs: string[] | null = null;
   private fingerprintInFlight: Promise<string | null> | null = null;
   private fingerprintPaths: Promise<{ head: string; config: string; stashLog: string } | null> | null = null;
   /** Bounds the entries kept for log queries, whose keys vary with every filter. */
@@ -200,28 +204,71 @@ export class GitService {
     try { await this.git.status(); return true; } catch { return false; }
   }
 
+  /**
+   * Working-tree status without the ahead/behind walk. `git status` counts that divergence
+   * by default, which on a long history costs more than listing the changed files.
+   */
+  private async readWorkTreeStatus() {
+    if (this.statusExtraArgs === null) {
+      try {
+        const status = await this.git.status(['--no-ahead-behind']);
+        this.statusExtraArgs = ['--no-ahead-behind'];
+        return status;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/unknown option|unrecognized option|no-ahead-behind/i.test(msg)) throw e;
+        this.statusExtraArgs = [];
+      }
+    }
+    return this.statusExtraArgs.length > 0 ? this.git.status(this.statusExtraArgs) : this.git.status();
+  }
+
+  /**
+   * How far HEAD is from its upstream. The two tips are cheap ref reads; the history walk
+   * runs only when one of them moved (a commit, fetch, or checkout), not on a file save.
+   */
+  private async aheadBehindCounts(): Promise<{ ahead: number; behind: number } | undefined> {
+    let head = '';
+    let upstream = '';
+    try {
+      // Both tips come from git, not the editor's cached HEAD. A commit can land before
+      // that cache moves, and keying the counts by a stale hash would reuse the wrong pair.
+      const [headRaw, upstreamRaw] = await Promise.all([
+        this.git.raw(['rev-parse', 'HEAD']),
+        this.git.raw(['rev-parse', '--verify', '--quiet', '@{u}']),
+      ]);
+      head = headRaw.trim();
+      upstream = upstreamRaw.trim();
+    } catch {
+      return undefined;
+    }
+    if (!head || !upstream) return undefined;
+    const cached = this.aheadBehindCache;
+    if (cached && cached.head === head && cached.upstream === upstream) {
+      return { ahead: cached.ahead, behind: cached.behind };
+    }
+    try {
+      // Left of HEAD...@{u} is commits we have; right is commits the upstream has.
+      const raw = (await this.git.raw(['rev-list', '--left-right', '--count', 'HEAD...@{u}'])).trim();
+      const [aheadRaw, behindRaw] = raw.split(/\s+/);
+      const ahead = parseInt(aheadRaw, 10);
+      const behind = parseInt(behindRaw, 10);
+      if (isNaN(ahead) || isNaN(behind)) return undefined;
+      this.aheadBehindCache = { head, upstream, ahead, behind };
+      return { ahead, behind };
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Read status directly from git (bypasses VSCode's cached state). */
   async getStatusFresh(): Promise<RepoStatus> {
-    const [status, branchInfo] = await Promise.all([
-      this.git.status(),
+    const [status, branchInfo, aheadBehind] = await Promise.all([
+      this.readWorkTreeStatus(),
       this.getCurrentBranch(),
+      this.aheadBehindCounts(),
     ]);
-
-    // Override aheadBehind with a direct git count — always attempt rev-list since
-    // the VS Code API's HEAD.upstream can lag and arrive undefined even when a tracking
-    // branch is configured, causing ahead/behind to be silently skipped.
-    let freshBranchInfo = branchInfo;
-    try {
-      const [aheadRaw, behindRaw] = await Promise.all([
-        this.git.raw(['rev-list', '--count', '@{u}..HEAD']),
-        this.git.raw(['rev-list', '--count', 'HEAD..@{u}']),
-      ]);
-      const ahead = parseInt(aheadRaw.trim(), 10);
-      const behind = parseInt(behindRaw.trim(), 10);
-      if (!isNaN(ahead) && !isNaN(behind)) {
-        freshBranchInfo = { ...branchInfo, aheadBehind: { ahead, behind } };
-      }
-    } catch { /* no upstream configured — leave aheadBehind as-is */ }
+    const freshBranchInfo = aheadBehind ? { ...branchInfo, aheadBehind } : branchInfo;
 
     const stagedFiles: FileStatus[] = [];
     const unstagedFiles: FileStatus[] = [];
@@ -366,7 +413,7 @@ export class GitService {
       const submoduleRelPaths = await this.getSubmoduleRelativePaths();
       const submodulePorcelainFiles: FileStatus[] = [];
       if (submoduleRelPaths.size > 0) {
-        const porcelain = await this.git.status();
+        const porcelain = await this.readWorkTreeStatus();
         for (const file of porcelain.files) {
           if (!submoduleRelPaths.has(file.path)) continue;
           const absPath = path.join(this.rootPath, file.path);
@@ -433,7 +480,7 @@ export class GitService {
 
     // Fallback: simple-git
     const [status, branchInfo] = await Promise.all([
-      this.git.status(),
+      this.readWorkTreeStatus(),
       this.getCurrentBranch(),
     ]);
 

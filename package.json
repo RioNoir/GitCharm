@@ -160,7 +160,11 @@
       {
         "viewType": "gitcharm.rebaseTodo",
         "displayName": "%customEditor.rebaseTodo.displayName%",
-        "selector": [{ "filenamePattern": "git-rebase-todo" }],
+        "selector": [
+          {
+            "filenamePattern": "git-rebase-todo"
+          }
+        ],
         "priority": "default"
       }
     ],
@@ -480,16 +484,6 @@
         "category": "GitCharm"
       },
       {
-        "command": "gitcharm.selectAiModel",
-        "title": "%command.selectAiModel.title%",
-        "category": "GitCharm"
-      },
-      {
-        "command": "gitcharm.customizeAiPrompts",
-        "title": "%command.customizeAiPrompts.title%",
-        "category": "GitCharm"
-      },
-      {
         "command": "gitcharm.showBranchOptions",
         "title": "%command.showBranchOptions.title%",
         "category": "GitCharm"
@@ -577,23 +571,6 @@
         "title": "%command.interactiveRebase.title%",
         "category": "GitCharm",
         "icon": "$(list-ordered)"
-      },
-      {
-        "command": "gitcharm.resolveConflictsWithAi",
-        "title": "%command.resolveConflictsWithAi.title%",
-        "category": "GitCharm",
-        "icon": "$(sparkle)"
-      },
-      {
-        "command": "gitcharm.resolveAllConflictsWithAi",
-        "title": "%command.resolveAllConflictsWithAi.title%",
-        "category": "GitCharm",
-        "icon": "$(sparkle)"
-      },
-      {
-        "command": "gitcharm.resolveConflictHunkWithAi",
-        "title": "%command.resolveConflictHunkWithAi.title%",
-        "category": "GitCharm"
       }
     ],
     "menus": {
@@ -897,11 +874,6 @@
           "command": "gitcharm.openSettings",
           "when": "activeWebviewPanelId == gitcharm.undocked",
           "group": "navigation@10"
-        },
-        {
-          "command": "gitcharm.resolveConflictsWithAi",
-          "when": "config.gitcharm.ai.enabled && (isMergeEditor || gitcharm.activeEditorHasConflicts)",
-          "group": "navigation"
         }
       ],
       "scm/sourceControl": [
@@ -1043,12 +1015,6 @@
           "command": "gitcharm.switchProfile"
         },
         {
-          "command": "gitcharm.selectAiModel"
-        },
-        {
-          "command": "gitcharm.customizeAiPrompts"
-        },
-        {
           "command": "gitcharm.undock"
         },
         {
@@ -1144,18 +1110,6 @@
         },
         {
           "command": "gitcharm.showBranchOptions",
-          "when": "false"
-        },
-        {
-          "command": "gitcharm.resolveConflictsWithAi",
-          "when": "config.gitcharm.ai.enabled"
-        },
-        {
-          "command": "gitcharm.resolveAllConflictsWithAi",
-          "when": "config.gitcharm.ai.enabled"
-        },
-        {
-          "command": "gitcharm.resolveConflictHunkWithAi",
           "when": "false"
         }
       ],
@@ -1487,7 +1441,9 @@
           "gitcharm.protectedBranches": {
             "order": 50,
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "default": [],
             "markdownDescription": "%config.protectedBranches.markdownDescription%"
           },
@@ -1531,8 +1487,18 @@
           "gitcharm.pullMode": {
             "order": 57,
             "type": "string",
-            "enum": ["ask", "merge", "rebase", "ffOnly"],
-            "enumDescriptions": ["%config.pullMode.ask%", "%config.pullMode.merge%", "%config.pullMode.rebase%", "%config.pullMode.ffOnly%"],
+            "enum": [
+              "ask",
+              "merge",
+              "rebase",
+              "ffOnly"
+            ],
+            "enumDescriptions": [
+              "%config.pullMode.ask%",
+              "%config.pullMode.merge%",
+              "%config.pullMode.rebase%",
+              "%config.pullMode.ffOnly%"
+            ],
             "default": "ask",
             "description": "%config.pullMode.description%"
           },
@@ -1558,8 +1524,16 @@
           "gitcharm.dateFormat": {
             "order": 60,
             "type": "string",
-            "enum": ["auto", "absolute", "relative"],
-            "enumDescriptions": ["%config.dateFormat.auto%", "%config.dateFormat.absolute%", "%config.dateFormat.relative%"],
+            "enum": [
+              "auto",
+              "absolute",
+              "relative"
+            ],
+            "enumDescriptions": [
+              "%config.dateFormat.auto%",
+              "%config.dateFormat.absolute%",
+              "%config.dateFormat.relative%"
+            ],
             "default": "auto",
             "description": "%config.dateFormat.description%"
           },
@@ -1578,8 +1552,20 @@
           "gitcharm.pullRequests.defaultFilter": {
             "order": 63,
             "type": "string",
-            "enum": ["open", "mine", "assignedToMe", "reviewRequested", "mentioningMe"],
-            "enumDescriptions": ["%config.pullRequests.defaultFilter.open%", "%config.pullRequests.defaultFilter.mine%", "%config.pullRequests.defaultFilter.assignedToMe%", "%config.pullRequests.defaultFilter.reviewRequested%", "%config.pullRequests.defaultFilter.mentioningMe%"],
+            "enum": [
+              "open",
+              "mine",
+              "assignedToMe",
+              "reviewRequested",
+              "mentioningMe"
+            ],
+            "enumDescriptions": [
+              "%config.pullRequests.defaultFilter.open%",
+              "%config.pullRequests.defaultFilter.mine%",
+              "%config.pullRequests.defaultFilter.assignedToMe%",
+              "%config.pullRequests.defaultFilter.reviewRequested%",
+              "%config.pullRequests.defaultFilter.mentioningMe%"
+            ],
             "default": "open",
             "description": "%config.pullRequests.defaultFilter.description%"
           },
@@ -1629,24 +1615,69 @@
           "gitcharm.commitPanel.tabOrder": {
             "order": 35,
             "type": "array",
-            "items": { "type": "string", "enum": ["changes", "shelf", "stash", "worktrees", "issues", "pullRequests", "sync"] },
+            "items": {
+              "type": "string",
+              "enum": [
+                "changes",
+                "shelf",
+                "stash",
+                "worktrees",
+                "issues",
+                "pullRequests",
+                "sync"
+              ]
+            },
             "uniqueItems": true,
-            "default": ["changes", "shelf", "stash", "worktrees", "issues", "pullRequests", "sync"],
+            "default": [
+              "changes",
+              "shelf",
+              "stash",
+              "worktrees",
+              "issues",
+              "pullRequests",
+              "sync"
+            ],
             "description": "%config.commitPanel.tabOrder.description%"
           },
           "gitcharm.commitPanel.defaultTab": {
             "order": 36,
             "type": "string",
-            "enum": ["changes", "shelf", "stash", "worktrees", "pullRequests", "issues", "sync", "lastUsed"],
-            "enumDescriptions": ["%config.commitPanel.defaultTab.changes%", "%config.commitPanel.defaultTab.shelf%", "%config.commitPanel.defaultTab.stash%", "%config.commitPanel.defaultTab.worktrees%", "%config.commitPanel.defaultTab.pullRequests%", "%config.commitPanel.defaultTab.issues%", "%config.commitPanel.defaultTab.sync%", "%config.commitPanel.defaultTab.lastUsed%"],
+            "enum": [
+              "changes",
+              "shelf",
+              "stash",
+              "worktrees",
+              "pullRequests",
+              "issues",
+              "sync",
+              "lastUsed"
+            ],
+            "enumDescriptions": [
+              "%config.commitPanel.defaultTab.changes%",
+              "%config.commitPanel.defaultTab.shelf%",
+              "%config.commitPanel.defaultTab.stash%",
+              "%config.commitPanel.defaultTab.worktrees%",
+              "%config.commitPanel.defaultTab.pullRequests%",
+              "%config.commitPanel.defaultTab.issues%",
+              "%config.commitPanel.defaultTab.sync%",
+              "%config.commitPanel.defaultTab.lastUsed%"
+            ],
             "default": "changes",
             "description": "%config.commitPanel.defaultTab.description%"
           },
           "gitcharm.commitPanel.tabLabels": {
             "order": 37,
             "type": "string",
-            "enum": ["active", "always", "never"],
-            "enumDescriptions": ["%config.commitPanel.tabLabels.active%", "%config.commitPanel.tabLabels.always%", "%config.commitPanel.tabLabels.never%"],
+            "enum": [
+              "active",
+              "always",
+              "never"
+            ],
+            "enumDescriptions": [
+              "%config.commitPanel.tabLabels.active%",
+              "%config.commitPanel.tabLabels.always%",
+              "%config.commitPanel.tabLabels.never%"
+            ],
             "default": "active",
             "description": "%config.commitPanel.tabLabels.description%"
           },
@@ -1743,374 +1774,6 @@
         }
       },
       {
-        "title": "%config.section.aiSettings.title%",
-        "properties": {
-          "gitcharm.ai.enabled": {
-            "order": 0,
-            "type": "boolean",
-            "default": true,
-            "description": "%config.ai.enabled.description%"
-          },
-          "gitcharm.ai.language": {
-            "order": 1,
-            "type": "string",
-            "default": "",
-            "markdownDescription": "%config.ai.language.markdownDescription%"
-          },
-          "gitcharm.ai.provider": {
-            "order": 2,
-            "type": "string",
-            "enum": [
-              "vscode-lm",
-              "claude-api",
-              "openai-api",
-              "gemini-api",
-              "claude-cli",
-              "codex-cli",
-              "gemini-cli",
-              "ollama",
-              "lmstudio",
-              "cursor"
-            ],
-            "enumDescriptions": [
-              "%config.ai.provider.enum.vscode-lm%",
-              "%config.ai.provider.enum.claude-api%",
-              "%config.ai.provider.enum.openai-api%",
-              "%config.ai.provider.enum.gemini-api%",
-              "%config.ai.provider.enum.claude-cli%",
-              "%config.ai.provider.enum.codex-cli%",
-              "%config.ai.provider.enum.gemini-cli%",
-              "%config.ai.provider.enum.ollama%",
-              "%config.ai.provider.enum.lmstudio%",
-              "%config.ai.provider.enum.cursor%"
-            ],
-            "default": "vscode-lm",
-            "description": "%config.ai.provider.description%"
-          },
-          "gitcharm.ai.operationModels": {
-            "order": 2,
-            "type": "object",
-            "default": {},
-            "properties": {
-              "commitMessage": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "vscode-lm",
-                      "claude-api",
-                      "openai-api",
-                      "gemini-api",
-                      "claude-cli",
-                      "codex-cli",
-                      "gemini-cli",
-                      "ollama",
-                      "lmstudio",
-                      "cursor"
-                    ]
-                  },
-                  "model": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "provider"
-                ]
-              },
-              "pullRequest": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "vscode-lm",
-                      "claude-api",
-                      "openai-api",
-                      "gemini-api",
-                      "claude-cli",
-                      "codex-cli",
-                      "gemini-cli",
-                      "ollama",
-                      "lmstudio",
-                      "cursor"
-                    ]
-                  },
-                  "model": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "provider"
-                ]
-              },
-              "explain": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "vscode-lm",
-                      "claude-api",
-                      "openai-api",
-                      "gemini-api",
-                      "claude-cli",
-                      "codex-cli",
-                      "gemini-cli",
-                      "ollama",
-                      "lmstudio",
-                      "cursor"
-                    ]
-                  },
-                  "model": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "provider"
-                ]
-              },
-              "resolveConflicts": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "vscode-lm",
-                      "claude-api",
-                      "openai-api",
-                      "gemini-api",
-                      "claude-cli",
-                      "codex-cli",
-                      "gemini-cli",
-                      "ollama",
-                      "lmstudio",
-                      "cursor"
-                    ]
-                  },
-                  "model": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "provider"
-                ]
-              },
-              "issues": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "vscode-lm",
-                      "claude-api",
-                      "openai-api",
-                      "gemini-api",
-                      "claude-cli",
-                      "codex-cli",
-                      "gemini-cli",
-                      "ollama",
-                      "lmstudio",
-                      "cursor"
-                    ]
-                  },
-                  "model": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "provider"
-                ]
-              }
-            },
-            "additionalProperties": false,
-            "markdownDescription": "%config.ai.operationModels.markdownDescription%"
-          },
-          "gitcharm.ai.modelId": {
-            "order": 2,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.modelId.description%"
-          },
-          "gitcharm.ai.claudeApiKey": {
-            "order": 3,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.claudeApiKey.description%",
-            "markdownDeprecationMessage": "%config.ai.apiKey.deprecationMessage%"
-          },
-          "gitcharm.ai.claudeModel": {
-            "order": 4,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.claudeModel.description%"
-          },
-          "gitcharm.ai.claudePath": {
-            "order": 5,
-            "type": "string",
-            "default": "claude",
-            "description": "%config.ai.claudePath.description%"
-          },
-          "gitcharm.ai.openaiApiKey": {
-            "order": 6,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.openaiApiKey.description%",
-            "markdownDeprecationMessage": "%config.ai.apiKey.deprecationMessage%"
-          },
-          "gitcharm.ai.openaiModel": {
-            "order": 7,
-            "type": "string",
-            "default": "gpt-4o",
-            "description": "%config.ai.openaiModel.description%"
-          },
-          "gitcharm.ai.geminiApiKey": {
-            "order": 8,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.geminiApiKey.description%",
-            "markdownDeprecationMessage": "%config.ai.apiKey.deprecationMessage%"
-          },
-          "gitcharm.ai.geminiModel": {
-            "order": 9,
-            "type": "string",
-            "default": "gemini-2.0-flash",
-            "description": "%config.ai.geminiModel.description%"
-          },
-          "gitcharm.ai.geminiPath": {
-            "order": 10,
-            "type": "string",
-            "default": "gemini",
-            "description": "%config.ai.geminiPath.description%"
-          },
-          "gitcharm.ai.codexModel": {
-            "order": 11,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.codexModel.description%"
-          },
-          "gitcharm.ai.codexPath": {
-            "order": 9,
-            "type": "string",
-            "default": "codex",
-            "description": "%config.ai.codexPath.description%"
-          },
-          "gitcharm.ai.cursorModel": {
-            "order": 11,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.cursorModel.description%"
-          },
-          "gitcharm.ai.cursorPath": {
-            "order": 12,
-            "type": "string",
-            "default": "agent",
-            "description": "%config.ai.cursorPath.description%"
-          },
-          "gitcharm.ai.lmStudioModel": {
-            "order": 7,
-            "type": "string",
-            "default": "",
-            "description": "%config.ai.lmStudioModel.description%"
-          },
-          "gitcharm.ai.lmStudioUrl": {
-            "order": 8,
-            "type": "string",
-            "default": "http://localhost:1234",
-            "description": "%config.ai.lmStudioUrl.description%"
-          },
-          "gitcharm.ai.ollamaModel": {
-            "order": 11,
-            "type": "string",
-            "default": "llama3",
-            "description": "%config.ai.ollamaModel.description%"
-          },
-          "gitcharm.ai.ollamaUrl": {
-            "order": 12,
-            "type": "string",
-            "default": "http://localhost:11434",
-            "description": "%config.ai.ollamaUrl.description%"
-          },
-          "gitcharm.ai.maxDiffChars": {
-            "order": 13,
-            "type": "number",
-            "default": 8000,
-            "minimum": 1000,
-            "maximum": 100000,
-            "description": "%config.ai.maxDiffChars.description%"
-          },
-          "gitcharm.ai.offerConflictResolution": {
-            "order": 13,
-            "type": "boolean",
-            "default": true,
-            "description": "%config.ai.offerConflictResolution.description%"
-          },
-          "gitcharm.ai.prompts.commitMessage": {
-            "order": 14,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.commitMessage.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.pullRequestTitle": {
-            "order": 15,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.pullRequestTitle.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.pullRequestDescription": {
-            "order": 16,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.pullRequestDescription.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.explainCommit": {
-            "order": 17,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.explainCommit.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.explainPullRequest": {
-            "order": 18,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.explainPullRequest.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.resolveConflicts": {
-            "order": 19,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.resolveConflicts.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.issueBranchName": {
-            "order": 20,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.issueBranchName.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.explainIssue": {
-            "order": 21,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.explainIssue.markdownDescription%"
-          },
-          "gitcharm.ai.prompts.resolveIssue": {
-            "order": 22,
-            "type": "string",
-            "default": "",
-            "editPresentation": "multilineText",
-            "markdownDescription": "%config.ai.prompts.resolveIssue.markdownDescription%"
-          }
-        }
-      },
-      {
         "title": "%config.section.pullRequests.title%",
         "properties": {
           "gitcharm.pullRequests.hostProviderOverrides": {
@@ -2185,8 +1848,18 @@
           "gitcharm.issues.defaultFilter": {
             "order": 1,
             "type": "string",
-            "enum": ["open", "mine", "assignedToMe", "mentioningMe"],
-            "enumDescriptions": ["%config.issues.defaultFilter.open%", "%config.issues.defaultFilter.mine%", "%config.issues.defaultFilter.assignedToMe%", "%config.issues.defaultFilter.mentioningMe%"],
+            "enum": [
+              "open",
+              "mine",
+              "assignedToMe",
+              "mentioningMe"
+            ],
+            "enumDescriptions": [
+              "%config.issues.defaultFilter.open%",
+              "%config.issues.defaultFilter.mine%",
+              "%config.issues.defaultFilter.assignedToMe%",
+              "%config.issues.defaultFilter.mentioningMe%"
+            ],
             "default": "open",
             "description": "%config.issues.defaultFilter.description%"
           },

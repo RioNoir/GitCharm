@@ -9,7 +9,6 @@ import { CommentsThread } from '../pullRequestDetail/components/CommentsThread';
 import { PeopleField, EditFieldButton } from '../pullRequestDetail/components/PeoplePanel';
 import { LabelsPanel } from '../pullRequestDetail/components/LabelsPanel';
 import { getVsCodeApi, notifyHostReady } from '../shared/vscodeApi';
-import { AiExplainFab } from '../shared/AiExplainFab';
 import { Codicon } from '../shared/Codicon';
 import { SkeletonBlock, SkeletonChips, SkeletonList } from '../shared/Skeleton';
 import { MentionCandidatesContext, toMentionCandidates, type MentionCandidate } from '../shared/mentions';
@@ -72,9 +71,6 @@ function App() {
   const [savingDescription, setSavingDescription] = useState(false);
   const [descriptionError, setDescriptionError] = useState<string | undefined>();
   const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
-  const [ai, setAi] = useState<{ enabled: boolean; explainModelLabel: string; issuesModelLabel: string; resolveMode: 'agent' | 'text' }>({
-    enabled: false, explainModelLabel: '', issuesModelLabel: '', resolveMode: 'text',
-  });
 
   const send = useCallback((msg: IssueDetailToHostMsg) => {
     getVsCodeApi().postMessage(msg);
@@ -94,7 +90,6 @@ function App() {
       switch (msg.type) {
         case 'ISSUEDETAIL_INIT':
           setSummary(msg.summary);
-          setAi({ enabled: msg.aiEnabled, explainModelLabel: msg.aiExplainModelLabel, issuesModelLabel: msg.aiIssuesModelLabel, resolveMode: msg.aiResolveMode });
           // Persisted so VS Code can restore this panel after a window reload.
           getVsCodeApi().setState({ repoId: msg.repoId, number: msg.number });
           requestAll();
@@ -219,18 +214,10 @@ function App() {
           creatingBranch={creatingBranch}
           onPickTitle={() => { setUpdating(true); send({ type: 'ISSUEDETAIL_PICK_TITLE' }); }}
           onCreateBranch={() => { setCreatingBranch(true); send({ type: 'ISSUEDETAIL_CREATE_BRANCH' }); }}
-          ai={ai.enabled ? {
-            modelLabel: ai.issuesModelLabel,
-            resolveMode: ai.resolveMode,
-            onCreateBranchWithAi: () => { setCreatingBranch(true); send({ type: 'ISSUEDETAIL_CREATE_BRANCH_AI' }); },
-            onResolve: () => send({ type: 'ISSUEDETAIL_RESOLVE_AI' }),
-          } : undefined}
           onInsertReference={() => send({ type: 'ISSUEDETAIL_INSERT_REFERENCE' })}
           onRefresh={handleRefresh}
           onOpenInBrowser={() => send({ type: 'ISSUEDETAIL_OPEN_IN_BROWSER' })}
         />
-
-        {ai.enabled && <AiExplainFab modelLabel={ai.explainModelLabel} onClick={() => send({ type: 'ISSUEDETAIL_EXPLAIN' })} />}
 
         <div style={css.body}>
           {detailError && <div style={css.errorBanner}>{detailError}</div>}

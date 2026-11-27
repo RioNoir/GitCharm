@@ -3,21 +3,13 @@ import * as fs from 'fs';
 import { getWebviewHtml } from '../utils/webviewHtml';
 import { panelIcon } from '../utils/panelIcon';
 import { webviewReadyGate } from '../utils/webviewReadyGate';
-import { getAiModelLabel } from '../utils/aiModelLabel';
 import { logWarn } from '../utils/Logger';
-import { generateWithAI } from '../ai/aiGenerate';
-import { listAiModels } from '../ai/aiModels';
-import { getAiApiKeyPresence, onDidChangeAiApiKeys, setAiApiKey } from '../ai/aiSecrets';
-import { DEFAULT_PROMPTS } from '../ai/prompts';
 import type { WorkspaceGitManager } from '../git/WorkspaceGitManager';
 import type { IntegrationsService } from '../integrations/IntegrationsService';
 import type { McpService } from '../mcp/McpService';
 import type { HostToSettingsMsg, SettingSchema, SettingsState, SettingsToHostMsg, SettingValue } from '../types/messages';
 
 const SECTION = 'gitcharm';
-const TEST_TIMEOUT_MS = 45_000;
-/** Shown and edited through SecretStorage instead (see aiSecrets.ts), never as plain settings. */
-const HIDDEN_KEYS = new Set(['ai.claudeApiKey', 'ai.openaiApiKey', 'ai.geminiApiKey']);
 
 interface RawProperty {
   type?: string | string[];
@@ -88,7 +80,6 @@ export class SettingsPanel {
       panel.webview.onDidReceiveMessage((msg: SettingsToHostMsg) => void this.handle(msg)),
       vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration(SECTION)) void this.pushState(); }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => { void this.pushState(); if (this.integrationsWatch) void this.pushIntegrations(); }),
-      onDidChangeAiApiKeys(() => void this.pushState()),
       manager.onStatusChange(() => this.pushStateIfReposChanged()),
     );
     panel.onDidDispose(() => {
@@ -159,10 +150,7 @@ export class SettingsPanel {
       schema,
       values,
       hasWorkspace: (vscode.workspace.workspaceFolders?.length ?? 0) > 0,
-      apiKeys: await getAiApiKeyPresence(),
       repos,
-      defaultPrompts: DEFAULT_PROMPTS,
-      aiModelLabel: getAiModelLabel(cfg),
     };
     this.post({ type: 'SETTINGS_STATE', state });
   }
@@ -179,20 +167,6 @@ export class SettingsPanel {
         }
         break;
       }
-      case 'SETTINGS_SET_API_KEY':
-        await setAiApiKey(msg.provider, msg.value);
-        break;
-      case 'SETTINGS_LIST_MODELS':
-        try {
-          const models = await listAiModels(msg.provider, vscode.workspace.getConfiguration(SECTION));
-          this.post({ type: 'SETTINGS_MODELS', requestId: msg.requestId, models });
-        } catch (err) {
-          this.post({ type: 'SETTINGS_MODELS', requestId: msg.requestId, models: [], error: err instanceof Error ? err.message : String(err) });
-        }
-        break;
-      case 'SETTINGS_TEST_AI':
-        await this.testAi(msg.requestId);
-        break;
       case 'SETTINGS_OPEN_NATIVE':
         await vscode.commands.executeCommand('workbench.action.openSettings', msg.key ? `${SECTION}.${msg.key}` : '@ext:rionoir.gitcharm');
         break;
@@ -267,26 +241,6 @@ export class SettingsPanel {
     }
   }
 
-  /** Sends one tiny prompt with the saved configuration, the same path real generations take. */
-  private async testAi(requestId: string): Promise<void> {
-    const cfg = vscode.workspace.getConfiguration(SECTION);
-    const started = Date.now();
-    let timer: NodeJS.Timeout | undefined;
-    try {
-      const answer = await Promise.race([
-        generateWithAI(cfg.get('ai.provider', 'vscode-lm'), 'Reply with the single word: OK', cfg),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(vscode.l10n.t('No answer within {0} seconds', TEST_TIMEOUT_MS / 1000))), TEST_TIMEOUT_MS);
-        }),
-      ]);
-      this.post({ type: 'SETTINGS_TEST_RESULT', requestId, ok: true, message: answer.slice(0, 200), elapsedMs: Date.now() - started });
-    } catch (err) {
-      this.post({ type: 'SETTINGS_TEST_RESULT', requestId, ok: false, message: err instanceof Error ? err.message : String(err), elapsedMs: Date.now() - started });
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
   /** The `gitcharm.*` settings from package.json, with %placeholders% resolved in VS Code's display language. */
   private schema(): SettingSchema[] {
     if (SettingsPanel.schemaCache) return SettingsPanel.schemaCache;
@@ -310,7 +264,6 @@ export class SettingsPanel {
     for (const section of list) {
       for (const [fullKey, p] of Object.entries(section?.properties ?? {})) {
         const key = fullKey.replace(/^gitcharm\./, '');
-        if (HIDDEN_KEYS.has(key)) continue;
         const type = (Array.isArray(p.type) ? p.type[0] : p.type) as SettingSchema['type'] | undefined;
         if (!type) { logWarn('SettingsPanel', `Setting ${fullKey} has no type; skipped`); continue; }
         schema.push({

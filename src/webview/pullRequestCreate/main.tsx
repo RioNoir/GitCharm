@@ -46,14 +46,7 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>();
 
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiModelLabel, setAiModelLabel] = useState('');
-  const [generating, setGenerating] = useState<'title' | 'description' | null>(null);
-  const [generateError, setGenerateError] = useState<string | undefined>();
   const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
-  const pendingGenerateRequestId = useRef<string | null>(null);
-  // The field's value before AI generation started streaming into it — put back if generation fails midway.
-  const valueBeforeGenerate = useRef('');
 
   const pendingPickRequestId = useRef<string | null>(null);
   const pendingCompareRequestId = useRef<string | null>(null);
@@ -100,33 +93,12 @@ function App() {
         case 'PRCREATE_INIT':
           setRepoName(msg.repoName);
           setProvider(msg.provider);
-          setAiEnabled(msg.aiEnabled);
-          setAiModelLabel(msg.aiModelLabel);
           if (msg.sourceBranch) setSourceBranch(msg.sourceBranch);
           send({ type: 'PRCREATE_REQUEST_BRANCHES' });
           send({ type: 'PRCREATE_REQUEST_MENTION_CANDIDATES' });
           break;
         case 'PRCREATE_MENTION_CANDIDATES':
           setMentionCandidates(toMentionCandidates(msg.users));
-          break;
-        case 'PRCREATE_GENERATE_PROGRESS':
-          if (pendingGenerateRequestId.current !== msg.requestId || !msg.text) break;
-          if (msg.field === 'title') setTitle(msg.text);
-          else setDescription(msg.text);
-          break;
-        case 'PRCREATE_GENERATE_RESULT':
-          if (pendingGenerateRequestId.current !== msg.requestId) break;
-          pendingGenerateRequestId.current = null;
-          setGenerating(null);
-          if (msg.error || !msg.text) {
-            if (msg.field === 'title') setTitle(valueBeforeGenerate.current);
-            else setDescription(valueBeforeGenerate.current);
-            if (msg.error) setGenerateError(msg.error);
-          } else {
-            setGenerateError(undefined);
-            if (msg.field === 'title') setTitle(msg.text);
-            else setDescription(msg.text);
-          }
           break;
         case 'PRCREATE_BRANCHES_RESULT':
           setBranchesLoading(false);
@@ -181,15 +153,6 @@ function App() {
     send({ type: 'PRCREATE_OPEN_NATIVE_COMPARE', sourceBranch, targetBranch });
   }, [send, sourceBranch, targetBranch]);
 
-  const handleGenerate = useCallback((field: 'title' | 'description') => {
-    const requestId = makeRequestId('gen');
-    pendingGenerateRequestId.current = requestId;
-    setGenerating(field);
-    setGenerateError(undefined);
-    valueBeforeGenerate.current = field === 'title' ? title : description;
-    send({ type: 'PRCREATE_GENERATE', requestId, field, sourceBranch, targetBranch, title, description });
-  }, [send, sourceBranch, targetBranch, title, description]);
-
   const handleSubmit = useCallback((input: CreatePullRequestInput) => {
     setSubmitting(true);
     setSubmitError(undefined);
@@ -228,11 +191,6 @@ function App() {
       submitError={submitError}
       onSubmit={handleSubmit}
       onCancel={handleCancel}
-      aiEnabled={aiEnabled}
-      aiModelLabel={aiModelLabel}
-      generating={generating}
-      generateError={generateError}
-      onGenerate={handleGenerate}
     />
     </MentionCandidatesContext.Provider>
   );
