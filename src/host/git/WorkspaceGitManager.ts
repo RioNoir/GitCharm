@@ -807,8 +807,10 @@ export class WorkspaceGitManager implements vscode.Disposable {
     // checkout or rebase always touches at least one of them.
     watch(gitDir, 'HEAD');
     watch(gitDir, 'logs/HEAD');
-    // Refs are shared with the main repo when this is a linked worktree.
-    watch(commonDir, 'refs/**');
+    // Refs are shared with the main repo when this is a linked worktree. Only the namespaces
+    // the Log shows: other tools keep refs of their own under refs/ (T3 Code writes one per
+    // checkpoint), which would reload the Log for nothing (#140).
+    watch(commonDir, 'refs/{heads/**,remotes/**,tags/**,stash}');
     watch(commonDir, 'packed-refs');
     if (commonDir !== gitDir) {
       watch(gitDir, 'refs/**');
@@ -871,7 +873,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     // .git internals
     const w1 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/index'));
     const w2 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/HEAD'));
-    const w3 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/refs/**'));
+    const w3 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '.git/refs/{heads/**,remotes/**,tags/**,stash}'));
     // Working-tree: all three events (create, change, delete) — excludes .git itself
     const w4 = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repoPath, '**/*'));
     // .gitmodules watcher is already created in reinitialize() for all workspace folders
@@ -1364,7 +1366,7 @@ export class WorkspaceGitManager implements vscode.Disposable {
     const targets = compareByRepo ? requested.filter(r => compareByRepo[r.repoId]) : requested;
 
     // Build a map from main repo path → worktree GitServices, so getLog can collect
-    // unpushed hashes from worktree branches (which appear in the log via --all)
+    // unpushed hashes from worktree branches (which appear in the log via --branches)
     const worktreesByMainRepo = new Map<string, GitService[]>();
     for (const [repoId, meta] of this.repoMetas) {
       if (meta.isWorktree && meta.mainWorktreePath) {
