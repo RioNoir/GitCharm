@@ -414,6 +414,12 @@ export type HostToLogMsg =
 
 // ─── Log Panel: WebView → Host ─────────────────────────────────────────────────
 
+/** One branch of a bulk sidebar action, with the repositories it exists in. */
+export interface BulkBranchItem {
+  branchName: string;
+  repoIds: string[];
+}
+
 export type LogToHostMsg =
   | { type: 'LOG_REQUEST_COMMITS'; repoIds: string[]; limit: number; skip: number; requestId?: string; filterText?: string; filterAuthor?: string; filterBranch?: string; filterDateFrom?: string; filterDateTo?: string; compare?: CompareRange }
   | { type: 'LOG_REQUEST_COMMIT_FILES'; requestId: string; repoId: string; hash: string; parents?: string[] }
@@ -437,6 +443,11 @@ export type LogToHostMsg =
   | { type: 'LOG_COMPARE'; requestId: string; repoId: string; refA: string; refB: string }
   | { type: 'LOG_DELETE_BRANCH'; requestId: string; repoId: string; branchName: string; force: boolean }
   | { type: 'LOG_DELETE_BRANCH_MULTI'; requestId: string; repoIds: string[]; branchName: string }
+  /** Bulk actions on the branches selected in the sidebar (Ctrl/Cmd-click, Shift-click). Each
+   * item is one branch — its full ref name (e.g. "feature/x" or "origin/feature/x") — and the
+   * repositories that have it. */
+  | { type: 'LOG_UPDATE_BRANCHES'; items: BulkBranchItem[] }
+  | { type: 'LOG_DELETE_BRANCHES'; items: BulkBranchItem[] }
   | { type: 'LOG_RENAME_BRANCH_MULTI'; requestId: string; repoIds: string[]; oldName: string }
   | { type: 'LOG_NEW_BRANCH_FROM'; repoIds: string[]; fromBranch: string }
   | { type: 'LOG_FETCH_REPO'; requestId: string; repoId: string }
