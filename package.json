@@ -2267,7 +2267,7 @@
     "@tiptap/starter-kit": "^3.35.0",
     "@tiptap/suggestion": "^3.35.0",
     "@vscode/l10n": "^0.0.18",
-    "dompurify": "^3.4.18",
+    "dompurify": "^3.5.0",
     "marked": "^18.2.1",
     "prismjs": "^1.30.0",
     "simple-git": "^4.0.2",
