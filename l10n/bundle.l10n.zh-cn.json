@@ -1959,5 +1959,8 @@
   "Token validation failed: the token was not accepted.": "令牌验证失败：令牌未被接受。",
   "Default Microsoft account": "默认 Microsoft 账户",
   "{0} (token)": "{0}（令牌）",
-  "Enter the organization.": "请输入组织。"
+  "Enter the organization.": "请输入组织。",
+  "Blame in the status bar": "状态栏中的追溯",
+  "GitCharm Blame": "GitCharm 追溯",
+  "Commit message in the status bar": "状态栏中的提交消息"
 }

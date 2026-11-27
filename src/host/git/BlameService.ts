@@ -12,27 +12,41 @@ export interface BlameLine {
 
 export class BlameService {
   private cache = new Map<string, BlameLine[]>();
+  /** Blames still running, shared by the callers that ask for the same file meanwhile (ghost text and status bar). */
+  private inflight = new Map<string, Promise<BlameLine[]>>();
 
-  async getBlame(filePath: string, rootPath: string): Promise<BlameLine[]> {
-    if (this.cache.has(filePath)) return this.cache.get(filePath)!;
+  getBlame(filePath: string, rootPath: string): Promise<BlameLine[]> {
+    const cached = this.cache.get(filePath);
+    if (cached) return Promise.resolve(cached);
+    const inflight = this.inflight.get(filePath);
+    if (inflight) return inflight;
+    // Only the latest request caches its result: one that a save invalidated while it ran
+    // would cache the blame of the file as it was before the save.
+    const pending: Promise<BlameLine[]> = this.runBlame(filePath, rootPath).then(result => {
+      const current = this.inflight.get(filePath) === pending;
+      if (current) this.inflight.delete(filePath);
+      if (!result) return [];
+      if (current) this.cache.set(filePath, result);
+      return result;
+    });
+    this.inflight.set(filePath, pending);
+    return pending;
+  }
 
+  /** The file's blame, or null when git fails (not cached, so the next request retries). */
+  private async runBlame(filePath: string, rootPath: string): Promise<BlameLine[] | null> {
     const git = createGit(rootPath);
     const relPath = path.relative(rootPath, filePath);
-
-    let raw: string;
     try {
-      raw = await git.raw(['blame', '--porcelain', relPath]);
+      return this.parsePorcelain(await git.raw(['blame', '--porcelain', relPath]));
     } catch {
-      return [];
+      return null;
     }
-
-    const result = this.parsePorcelain(raw);
-    this.cache.set(filePath, result);
-    return result;
   }
 
   invalidate(filePath: string): void {
     this.cache.delete(filePath);
+    this.inflight.delete(filePath);
   }
 
   private parsePorcelain(raw: string): BlameLine[] {

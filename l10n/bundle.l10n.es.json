@@ -1959,5 +1959,8 @@
   "Token validation failed: the token was not accepted.": "Error al validar el token: el token no fue aceptado.",
   "Default Microsoft account": "Cuenta de Microsoft predeterminada",
   "{0} (token)": "{0} (token)",
-  "Enter the organization.": "Introduce la organización."
+  "Enter the organization.": "Introduce la organización.",
+  "Blame in the status bar": "Blame en la barra de estado",
+  "GitCharm Blame": "Blame de GitCharm",
+  "Commit message in the status bar": "Mensaje del commit en la barra de estado"
 }

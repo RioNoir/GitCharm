@@ -104,6 +104,8 @@
   "config.autoRefreshInterval.description": "自動重新整理間隔（秒）（0 = 停用，僅使用檔案監看員）",
   "config.gitAnnotations.enabled.description": "在編輯器中啟用 Git 註解。",
   "config.gitGhostText.enabled.description": "在編輯器中啟用內嵌 Git 浮水印文字。",
+  "config.statusBarBlame.enabled.description": "在狀態列中顯示最後修改目前行的提交的作者、日期和訊息。按一下可在記錄面板中顯示該提交。",
+  "config.statusBarBlame.showMessage.description": "在狀態列追溯中包含提交訊息。關閉時僅顯示作者和日期；訊息仍顯示在工具提示中。",
   "config.avatars.enabled.markdownDescription": "顯示作者頭像，來源為程式碼託管平台：存放庫已連線時來自其 GitHub、GitLab、Bitbucket 或 Gitea（平台本就持有這些提交及其作者），以及 GitHub、GitLab 和 Codeberg 的 noreply 位址。不會將任何電子郵件位址傳送給第三方。沒有頭像的作者會顯示其姓名縮寫。",
   "config.avatars.gravatar.enabled.markdownDescription": "當沒有任何平台提供某位作者的頭像時，在 Gravatar 上查詢。**隱私：**這會將作者電子郵件的雜湊值傳送至 gravatar.com，可能洩露該位址。對於私人或公司存放庫，請保持停用。需要啟用 `#gitcharm.avatars.enabled#`。",
   "config.gitLogDefaultLocation.description": "記錄面板預設開啟的位置：底部面板、編輯器索引標籤或新視窗。",

@@ -1959,5 +1959,8 @@
   "Token validation failed: the token was not accepted.": "權杖驗證失敗：權杖未被接受。",
   "Default Microsoft account": "預設 Microsoft 帳戶",
   "{0} (token)": "{0}（權杖）",
-  "Enter the organization.": "請輸入組織。"
+  "Enter the organization.": "請輸入組織。",
+  "Blame in the status bar": "狀態列中的追溯",
+  "GitCharm Blame": "GitCharm 追溯",
+  "Commit message in the status bar": "狀態列中的提交訊息"
 }

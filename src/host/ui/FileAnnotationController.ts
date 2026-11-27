@@ -10,6 +10,11 @@ const CONTEXT_KEY = 'gitcharm.annotationsVisible';
 const CONFIG_SECTION = 'gitcharm';
 const GIT_ANNOTATIONS_ENABLED = 'gitAnnotations.enabled';
 const GIT_GHOST_TEXT_ENABLED = 'gitGhostText.enabled';
+const STATUS_BAR_BLAME_ENABLED = 'statusBarBlame.enabled';
+const STATUS_BAR_BLAME_SHOW_MESSAGE = 'statusBarBlame.showMessage';
+const STATUS_BAR_MAX_SUMMARY_LEN = 50;
+// Cursor moves come in bursts (arrow keys held down, typing): wait for them to settle.
+const STATUS_BAR_DEBOUNCE_MS = 100;
 
 // 16-slot palette. Each slot is a separate decoration type whose `before`
 // pseudo-element carries both the backgroundColor AND the per-line text
@@ -80,6 +85,11 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|]/g, '\\$&');
 }
 
+/** Status bar text renders `$(name)` as an icon: keep an author or a commit message from doing that. */
+function escapeCodicons(text: string): string {
+  return text.replace(/\$\(/g, '\\$(');
+}
+
 const BEFORE_TEXT_DECORATION =
   'none; display: inline-block; box-sizing: border-box; overflow: hidden; white-space: pre; line-height: inherit; vertical-align: top; box-shadow: inset -1px 0 0 rgba(127,127,127,0.55);';
 const PLACEHOLDER_TEXT_DECORATION =
@@ -117,6 +127,10 @@ export class FileAnnotationController implements vscode.Disposable {
   // Tracks the last rendered blame per URI, with line numbers adjusted for unsaved edits.
   private readonly adjustedBlame = new Map<string, { lines: BlameLine[]; repoId: string }>();
   private readonly disposables: vscode.Disposable[] = [];
+
+  // Status bar: the blame of the cursor's line, without touching the editor (#139).
+  private readonly statusBarItem: vscode.StatusBarItem;
+  private statusBarTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly manager: WorkspaceGitManager,
@@ -212,12 +226,17 @@ export class FileAnnotationController implements vscode.Disposable {
       })
     );
 
+    this.statusBarItem = vscode.window.createStatusBarItem('gitcharm.statusBarBlame', vscode.StatusBarAlignment.Right, 100);
+    this.statusBarItem.name = vscode.l10n.t('GitCharm Blame');
+
     this.disposables.push(
       vscode.window.onDidChangeTextEditorSelection(e => {
         this.updateGhostText(e.textEditor);
+        if (e.textEditor === vscode.window.activeTextEditor) this.scheduleStatusBarBlame();
       }),
 
       vscode.window.onDidChangeActiveTextEditor(editor => {
+        this.scheduleStatusBarBlame(0);
         if (!editor) return;
         this.updateGhostText(editor);
         this.updateContextKey(editor);
@@ -229,6 +248,7 @@ export class FileAnnotationController implements vscode.Disposable {
       vscode.workspace.onDidSaveTextDocument(doc => {
         this.blameService.invalidate(doc.uri.fsPath);
         const uriStr = doc.uri.toString();
+        if (vscode.window.activeTextEditor?.document.uri.toString() === uriStr) this.scheduleStatusBarBlame(0);
         for (const editor of vscode.window.visibleTextEditors) {
           if (editor.document.uri.toString() !== uriStr) continue;
           this.updateGhostText(editor);
@@ -288,8 +308,70 @@ export class FileAnnotationController implements vscode.Disposable {
             else editor.setDecorations(this.ghostType, []);
           }
         }
+
+        if (e.affectsConfiguration(`${CONFIG_SECTION}.statusBarBlame`)) this.scheduleStatusBarBlame(0);
       }),
     );
+
+    this.updateStatusBarBlame();
+  }
+
+  private scheduleStatusBarBlame(delayMs = STATUS_BAR_DEBOUNCE_MS): void {
+    if (this.statusBarTimer) clearTimeout(this.statusBarTimer);
+    this.statusBarTimer = setTimeout(() => {
+      this.statusBarTimer = undefined;
+      this.updateStatusBarBlame();
+    }, delayMs);
+  }
+
+  /**
+   * Shows the blame of the active editor's cursor line in the status bar — author, relative
+   * date and summary, with the commit's hover as tooltip — and clicking it reveals the commit
+   * in the Log Panel. Hidden for files outside a repository or not on disk, and when off.
+   */
+  private updateStatusBarBlame(): void {
+    const editor = vscode.window.activeTextEditor;
+    if (!this.isStatusBarBlameEnabled() || !editor || editor.document.uri.scheme !== 'file') {
+      this.statusBarItem.hide();
+      return;
+    }
+    const filePath = editor.document.uri.fsPath;
+    const repo = this.manager.getServiceForFile(filePath);
+    if (!repo) {
+      this.statusBarItem.hide();
+      return;
+    }
+
+    const line = editor.selection.active.line;
+    this.blameService.getBlame(filePath, repo.rootPath).then(blameLines => {
+      // A newer cursor position or editor has taken over meanwhile.
+      if (vscode.window.activeTextEditor !== editor || editor.selection.active.line !== line) return;
+      if (!this.isStatusBarBlameEnabled()) { this.statusBarItem.hide(); return; }
+
+      const blameLine = blameLines.find(l => l.lineNumber === line);
+      if (!blameLine) {
+        this.statusBarItem.hide();
+        return;
+      }
+      if (blameLine.isUncommitted) {
+        this.statusBarItem.text = `$(git-commit) ${vscode.l10n.t('Not committed')}`;
+        this.statusBarItem.tooltip = undefined;
+        this.statusBarItem.command = undefined;
+      } else {
+        // Without the message the item stays short; the tooltip still has it.
+        const showMessage = vscode.workspace.getConfiguration(CONFIG_SECTION).get<boolean>(STATUS_BAR_BLAME_SHOW_MESSAGE, true);
+        const label = `${blameLine.author} (${formatRelativeDate(blameLine.date)})`;
+        const text = showMessage ? `${label} · ${truncate(blameLine.summary, STATUS_BAR_MAX_SUMMARY_LEN)}` : label;
+        this.statusBarItem.text = `$(git-commit) ${escapeCodicons(text)}`;
+        this.statusBarItem.tooltip = this.buildHoverMessage(blameLine, repo.repoId);
+        this.statusBarItem.command = {
+          title: vscode.l10n.t('Open in Log Panel'),
+          command: 'gitcharm.navigateToAnnotationCommit',
+          arguments: [blameLine.hash, repo.repoId],
+        };
+      }
+      this.statusBarItem.show();
+    }).catch(() => this.statusBarItem.hide());
   }
 
   async openAnnotations(editor: vscode.TextEditor): Promise<void> {
@@ -599,6 +681,12 @@ export class FileAnnotationController implements vscode.Disposable {
       .get<boolean>(GIT_GHOST_TEXT_ENABLED, true);
   }
 
+  private isStatusBarBlameEnabled(): boolean {
+    return vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<boolean>(STATUS_BAR_BLAME_ENABLED, true);
+  }
+
   private updateContextKey(editor: vscode.TextEditor): void {
     vscode.commands.executeCommand(
       'setContext',
@@ -608,6 +696,8 @@ export class FileAnnotationController implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.statusBarTimer) clearTimeout(this.statusBarTimer);
+    this.statusBarItem.dispose();
     this.ghostType.dispose();
     this.uncommittedType.dispose();
     this.codeLensUncommittedType.dispose();

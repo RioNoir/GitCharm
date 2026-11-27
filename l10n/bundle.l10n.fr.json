@@ -1959,5 +1959,8 @@
   "Token validation failed: the token was not accepted.": "Échec de la validation du jeton : le jeton n'a pas été accepté.",
   "Default Microsoft account": "Compte Microsoft par défaut",
   "{0} (token)": "{0} (jeton)",
-  "Enter the organization.": "Saisissez l'organisation."
+  "Enter the organization.": "Saisissez l'organisation.",
+  "Blame in the status bar": "Blame dans la barre d'état",
+  "GitCharm Blame": "Blame GitCharm",
+  "Commit message in the status bar": "Message du commit dans la barre d'état"
 }

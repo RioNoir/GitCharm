@@ -373,6 +373,8 @@ body { background: var(--vscode-editor-background); color: var(--vscode-foregrou
 .pv-ln { width: 3ch; text-align: right; padding: 0 8px 0 4px; color: var(--vscode-editorLineNumber-foreground); flex-shrink: 0; }
 .pv-code { overflow: hidden; text-overflow: ellipsis; }
 .pv-ghost { margin-left: 2em; color: var(--vscode-editorLineNumber-foreground); overflow: hidden; text-overflow: ellipsis; }
+.pv-statusbar { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: -1px; padding: 2px 8px; font-size: 11px; background: var(--vscode-statusBar-background); color: var(--vscode-statusBar-foreground); overflow: hidden; white-space: nowrap; }
+.pv-statusbar > span { overflow: hidden; text-overflow: ellipsis; }
 .pv-hover { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border)); background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); border-radius: 3px; }
 .pv-avatar { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; background: color-mix(in srgb, var(--vscode-charts-purple, #b180d7) 40%, transparent); flex-shrink: 0; }
 .pv-avatar.img { background: radial-gradient(circle at 50% 38%, #f1c27d 0 28%, transparent 29%), radial-gradient(circle at 50% 100%, #4a90d9 0 45%, transparent 46%), #cfe3f7; }

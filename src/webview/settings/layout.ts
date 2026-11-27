@@ -102,7 +102,7 @@ export function getCategories(): CategoryDef[] {
       id: 'editor', group: views, icon: 'code', preview: 'editor',
       label: l10n.t('Editor'),
       description: l10n.t('Blame information shown right inside your files.'),
-      keys: ['gitAnnotations.enabled', 'gitGhostText.enabled'],
+      keys: ['gitAnnotations.enabled', 'gitGhostText.enabled', 'statusBarBlame.enabled', 'statusBarBlame.showMessage'],
     },
     {
       id: 'appearance', group: views, icon: 'symbol-color', preview: 'appearance',
@@ -222,6 +222,8 @@ export function settingLabel(key: string): string {
     case 'projectColors': return l10n.t('Repository colors');
     case 'gitAnnotations.enabled': return l10n.t('Git annotations');
     case 'gitGhostText.enabled': return l10n.t('Inline blame (ghost text)');
+    case 'statusBarBlame.enabled': return l10n.t('Blame in the status bar');
+    case 'statusBarBlame.showMessage': return l10n.t('Commit message in the status bar');
     case 'avatars.enabled': return l10n.t('Author avatars');
     case 'avatars.gravatar.enabled': return l10n.t('Gravatar as fallback');
     case 'ai.enabled': return l10n.t('AI features');
