@@ -23,6 +23,7 @@ All notable changes to GitCharm are documented in this file.
 
 ### 🔧 Other
 - Dependencies updated to fix security advisories: DOMPurify, which sanitizes the Markdown shown in the panels, to 3.4.17 (critical advisories), and in the development tooling glob, minimatch, markdown-it, ip-address and the Azure identity libraries used by vsce; glob and minimatch are pinned to their fixed releases with npm overrides
+- Dependencies updated within their current major versions: the Tiptap editor of pull requests and issues to 3.35, marked to 18.2, DOMPurify to 3.4.18, turndown, React, zustand, TanStack Virtual and the Material icon theme, plus the development tooling (ESLint, typescript-eslint, the Vite React plugin, vsce). Only releases published at least a week earlier were taken
 - Acceptance tests against real git (squash and drop, branch cleanup after a merge, the MCP server and its installers), run with `npm test` — see CONTRIBUTING
 
 ## v0.8.3
